@@ -1,5 +1,9 @@
 import "dotenv/config";
-import { defineConfig, env } from "prisma/config";
+import { defineConfig } from "prisma/config";
+
+// Migrations use direct Neon URL when set; fall back to DATABASE_URL for generate/install.
+const databaseUrl =
+  process.env.DIRECT_URL ?? process.env.DATABASE_URL ?? "";
 
 export default defineConfig({
   schema: "prisma/schema.prisma",
@@ -8,6 +12,6 @@ export default defineConfig({
   },
   engine: "classic",
   datasource: {
-    url: env("DIRECT_URL"),
+    url: databaseUrl,
   },
 });
