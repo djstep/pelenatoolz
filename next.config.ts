@@ -4,7 +4,8 @@ import createNextIntlPlugin from "next-intl/plugin";
 const withNextIntl = createNextIntlPlugin("./src/shared/i18n/request.ts");
 
 const nextConfig: NextConfig = {
-  output: "standalone",
+  // Next.js 16.3 + standalone breaks Vercel onBuildComplete; keep standalone for Docker.
+  output: process.env.VERCEL ? undefined : "standalone",
   serverExternalPackages: ["sql.js"],
 };
 
