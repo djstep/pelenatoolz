@@ -1,0 +1,67 @@
+{
+  "app": {
+    "name": "PELENA [ПЕЛЕНА]",
+    "tagline": "Film production management"
+  },
+  "nav": {
+    "projects": "Projects",
+    "members": "Members",
+    "settings": "Settings",
+    "logout": "Log out",
+    "login": "Log in",
+    "register": "Sign up"
+  },
+  "auth": {
+    "loginTitle": "Log in",
+    "registerTitle": "Sign up",
+    "email": "Email",
+    "password": "Password",
+    "name": "Name",
+    "loginCta": "Log in",
+    "registerCta": "Create account",
+    "noAccount": "No account?",
+    "hasAccount": "Already have an account?",
+    "passwordHint": "At least 8 characters"
+  },
+  "projects": {
+    "title": "My projects",
+    "empty": "No projects yet. Create the first one and invite your crew.",
+    "create": "New project",
+    "name": "Title",
+    "type": "Type",
+    "status": "Status",
+    "currency": "Currency",
+    "timezone": "Timezone",
+    "membersCount": "{count, plural, one {# member} other {# members}}",
+    "open": "Open",
+    "overview": "Overview",
+    "yourRole": "Your role"
+  },
+  "members": {
+    "title": "Project members",
+    "invite": "Invite",
+    "inviteEmail": "Email (optional)",
+    "inviteRole": "Role",
+    "inviteExpires": "Link lifetime (days)",
+    "createLink": "Create link",
+    "activeInvites": "Active invites",
+    "copyLink": "Copy link",
+    "revoke": "Revoke",
+    "role": "Role",
+    "remove": "Remove",
+    "noMembers": "No members"
+  },
+  "invite": {
+    "title": "Project invitation",
+    "accept": "Accept invitation",
+    "needAuth": "Log in or sign up to accept this invitation.",
+    "role": "Role on project",
+    "project": "Project"
+  },
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "loading": "Loading…",
+    "back": "Back"
+  }
+}

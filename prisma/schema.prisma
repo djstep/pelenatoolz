@@ -1,0 +1,790 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum ProjectType {
+  SERIES
+  FEATURE
+  SHORT
+}
+
+enum ProjectStatus {
+  DRAFT
+  PREPROD
+  SHOOTING
+  POST
+  DONE
+  ARCHIVED
+}
+
+enum MembershipStatus {
+  INVITED
+  ACTIVE
+  REMOVED
+}
+
+enum TimingMode {
+  MINUTES
+  PAGES
+}
+
+enum SceneStatus {
+  SHOT
+  RESHOOT_REQUIRED
+  PLANNING
+  OFF_PLAN
+  NOT_SHOT
+}
+
+enum IntExt {
+  INT
+  EXT
+  INT_EXT
+}
+
+enum LocationKind {
+  EXT
+  INT
+  INT_EXT
+  PAV
+}
+
+enum SceneKind {
+  SCENE
+  SOUND_DUB
+  MASTER_SHOT
+  FOOTAGE
+}
+
+enum DayNight {
+  DAY
+  NIGHT
+  DAWN
+  DUSK
+}
+
+enum ElementType {
+  PROP
+  VEHICLE
+  WARDROBE
+  SFX
+  MAKEUP
+  COSTUME
+  OTHER
+}
+
+enum SceneResourceCategory {
+  EXTRAS
+  GROUP
+  STUNT
+  MAKEUP
+  COSTUME
+  PROP
+  VEHICLE
+  CAMERA
+  CUSTOM
+}
+
+enum TimeSlotType {
+  MAKEUP_COSTUME
+  REHEARSAL
+  SHOOTING
+  LUNCH
+  TRAVEL
+  IDLE
+}
+
+enum ShootDayStatus {
+  PLANNED
+  CONFIRMED
+  SHOT
+  CANCELLED
+}
+
+enum ShootDayType {
+  WORKING
+  OFF
+  REST
+  PREP
+}
+
+enum ActorRoleType {
+  LEAD
+  SUPPORTING
+  EPISODIC
+}
+
+enum ContractorType {
+  IP
+  INDIVIDUAL
+  SELF_EMPLOYED
+  UNKNOWN
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  phone        String?
+  avatarUrl    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  memberships     ProjectMembership[]
+  createdProjects Project[]           @relation("ProjectCreator")
+  createdInvites  ProjectInvite[]     @relation("InviteCreator")
+  auditLogs       AuditLog[]
+  cloudConnections CloudConnection[]
+}
+
+model Project {
+  id          String        @id @default(cuid())
+  name        String
+  fullName    String?
+  description String?
+  type        ProjectType
+  status      ProjectStatus @default(DRAFT)
+  startDate   DateTime?
+  endDate     DateTime?
+  currency    String        @default("RUB")
+  timezone    String        @default("Europe/Moscow")
+  city        String?
+
+  episodeCount         Int?
+  episodeRuntimeMin    Int?
+  shootingDaysCount    Int?
+  cameraUnits          Int?        @default(1)
+  cameraCount          Int?        @default(1)
+  timingMode           TimingMode  @default(MINUTES)
+  pageToMinuteRatio    Decimal     @default(1) @db.Decimal(6, 2)
+  plannedDailyOutputMin Decimal?   @db.Decimal(8, 2)
+  shootOnFilm          Boolean     @default(false)
+  filmType             String?
+  filmCoefficient      Decimal?    @db.Decimal(6, 2)
+  calcCalendarDays     Boolean     @default(true)
+
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  createdBy   User                    @relation("ProjectCreator", fields: [createdById], references: [id])
+  memberships ProjectMembership[]
+  invites     ProjectInvite[]
+  roles       ProjectRoleDefinition[]
+  scenes      Scene[]
+  locations   Location[]
+  characters  Character[]
+  elements    Element[]
+  shootDays   ShootDay[]
+  actors      Actor[]
+  auditLogs   AuditLog[]
+  budgetLines BudgetLine[]
+  financeOps  FinanceOperation[]
+  postTasks   PostTask[]
+  cloudFiles  CloudFileLink[]
+
+  @@index([createdById])
+  @@index([status])
+}
+
+/// Custom project role with JSON permission matrix.
+model ProjectRoleDefinition {
+  id          String   @id @default(cuid())
+  projectId   String
+  name        String
+  note        String?
+  isSystem    Boolean  @default(false)
+  permissions Json
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  project     Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  memberships ProjectMembership[]
+  invites     ProjectInvite[]
+
+  @@unique([projectId, name])
+  @@index([projectId])
+}
+
+model ProjectMembership {
+  id        String           @id @default(cuid())
+  projectId String
+  userId    String
+  roleId    String
+  status    MembershipStatus @default(ACTIVE)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  project Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role    ProjectRoleDefinition @relation(fields: [roleId], references: [id])
+
+  @@unique([projectId, userId])
+  @@index([userId])
+  @@index([projectId, status])
+}
+
+model ProjectInvite {
+  id          String    @id @default(cuid())
+  projectId   String
+  email       String?
+  roleId      String
+  token       String    @unique
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  revokedAt   DateTime?
+  createdById String
+  createdAt   DateTime  @default(now())
+
+  project   Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  role      ProjectRoleDefinition @relation(fields: [roleId], references: [id])
+  createdBy User                  @relation("InviteCreator", fields: [createdById], references: [id])
+
+  @@index([projectId])
+  @@index([email])
+}
+
+model Scene {
+  id              String      @id @default(cuid())
+  projectId       String
+  episodeNumber   Int         @default(0)
+  number          String
+  postfix         String      @default("")
+  title           String?
+  summary         String?
+  description     String?
+  scriptContent   String?
+  scriptDay       Int?
+  objectType      String?
+  sceneKind       SceneKind   @default(SCENE)
+  shootingUnit    String?
+  montageMap      String?
+  pageCount       Decimal?    @db.Decimal(6, 2)
+  planSeconds     Int?
+  factSeconds     Int?
+  preEditSeconds  Int?
+  editSeconds     Int?
+  filmFootagePlan Decimal?    @db.Decimal(10, 2)
+  filmFootageFact Decimal?    @db.Decimal(10, 2)
+  intExt          IntExt?
+  dayNight        DayNight?
+  status          SceneStatus @default(PLANNING)
+  statusDate      DateTime?
+  sortOrder       Int         @default(0)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  project        Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  locations      SceneLocation[]
+  characters     SceneCharacter[]
+  elements       SceneElement[]
+  resources      SceneResource[]
+  shootDayScenes  ShootDayScene[]
+  timeSlots       ShootDayTimeSlot[]
+
+  @@unique([projectId, episodeNumber, number, postfix])
+  @@index([projectId, sortOrder])
+}
+
+model Location {
+  id             String        @id @default(cuid())
+  projectId      String
+  name           String
+  sublocation    String?
+  locationKind   LocationKind?
+  hasDecoration  Boolean       @default(false)
+  address        String?
+  tags           String?
+  notes          String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  project Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  scenes  SceneLocation[]
+  photos  LocationPhoto[]
+
+  @@index([projectId])
+}
+
+model LocationPhoto {
+  id         String   @id @default(cuid())
+  locationId String
+  url        String
+  caption    String?
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  location Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@index([locationId, sortOrder])
+}
+
+model Character {
+  id          String   @id @default(cuid())
+  projectId   String
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  project Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  scenes  SceneCharacter[]
+  actors  Actor[]
+
+  @@index([projectId])
+}
+
+model Element {
+  id        String      @id @default(cuid())
+  projectId String
+  type      ElementType @default(PROP)
+  name      String
+  notes     String?
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  project Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  scenes  SceneElement[]
+
+  @@index([projectId])
+}
+
+model SceneLocation {
+  sceneId    String
+  locationId String
+
+  scene    Scene    @relation(fields: [sceneId], references: [id], onDelete: Cascade)
+  location Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@id([sceneId, locationId])
+}
+
+model SceneCharacter {
+  sceneId     String
+  characterId String
+
+  scene     Scene     @relation(fields: [sceneId], references: [id], onDelete: Cascade)
+  character Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@id([sceneId, characterId])
+}
+
+model SceneElement {
+  sceneId   String
+  elementId String
+
+  scene   Scene   @relation(fields: [sceneId], references: [id], onDelete: Cascade)
+  element Element @relation(fields: [elementId], references: [id], onDelete: Cascade)
+
+  @@id([sceneId, elementId])
+}
+
+model SceneResource {
+  id        String                @id @default(cuid())
+  sceneId   String
+  category  SceneResourceCategory
+  name      String
+  quantity  Int                   @default(1)
+  unitPrice Decimal               @default(0) @db.Decimal(12, 2)
+  total     Decimal               @default(0) @db.Decimal(12, 2)
+
+  scene Scene @relation(fields: [sceneId], references: [id], onDelete: Cascade)
+
+  @@index([sceneId])
+}
+
+model ShootDay {
+  id          String         @id @default(cuid())
+  projectId   String
+  date        DateTime
+  dayNumber   Int
+  unit        String?        @default("main")
+  shiftNumber Int?
+  dayType     ShootDayType   @default(WORKING)
+  isLocked    Boolean        @default(false)
+  isNightShift Boolean       @default(false)
+  callTime    String?
+  wrapTime    String?
+  shiftStartTime   String?
+  rehearsalTime    String?
+  motorOnTime      String?
+  motorOffTime     String?
+  crewMeetAddress  String?
+  crewMeetTime     String?
+  weatherNote      String?
+  weatherPrecip    String?
+  notes       String?
+  comment     String?
+  status      ShootDayStatus @default(PLANNED)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  project          Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  scenes           ShootDayScene[]
+  departmentCalls  DepartmentCallTime[]
+  transports       ShootDayTransport[]
+  timeSlots        ShootDayTimeSlot[]
+  actorCalls       ShootDayActorCall[]
+  resourceCalls    ShootDayResourceCall[]
+
+  @@unique([projectId, dayNumber])
+  @@index([projectId, date])
+}
+
+model DepartmentCallTime {
+  id         String @id @default(cuid())
+  shootDayId String
+  roleLabel  String
+  personName String?
+  phone      String?
+  callTime   String?
+  sortOrder  Int    @default(0)
+
+  shootDay ShootDay @relation(fields: [shootDayId], references: [id], onDelete: Cascade)
+
+  @@index([shootDayId, sortOrder])
+}
+
+model ShootDayTransport {
+  id         String  @id @default(cuid())
+  shootDayId String
+  name       String
+  callTime   String?
+  notes      String?
+  sortOrder  Int     @default(0)
+
+  shootDay ShootDay @relation(fields: [shootDayId], references: [id], onDelete: Cascade)
+
+  @@index([shootDayId, sortOrder])
+}
+
+model ShootDayTimeSlot {
+  id         String       @id @default(cuid())
+  shootDayId String
+  startTime  String
+  endTime    String?
+  slotType   TimeSlotType
+  sceneId    String?
+  notes      String?
+  sortOrder  Int          @default(0)
+
+  shootDay ShootDay @relation(fields: [shootDayId], references: [id], onDelete: Cascade)
+  scene    Scene?   @relation(fields: [sceneId], references: [id], onDelete: SetNull)
+
+  @@index([shootDayId, sortOrder])
+}
+
+model ShootDayActorCall {
+  id          String  @id @default(cuid())
+  shootDayId  String
+  actorId     String
+  pickupTime  String?
+  arrivalTime String?
+  makeupTime  String?
+  costumeTime String?
+  readyTime   String?
+  wrapTime    String?
+  notes       String?
+
+  shootDay ShootDay @relation(fields: [shootDayId], references: [id], onDelete: Cascade)
+  actor    Actor    @relation(fields: [actorId], references: [id], onDelete: Cascade)
+
+  @@unique([shootDayId, actorId])
+}
+
+model ShootDayResourceCall {
+  id          String @id @default(cuid())
+  shootDayId  String
+  category    String
+  name        String
+  arrivalTime String?
+  costumeTime String?
+  makeupTime  String?
+  readyTime   String?
+  wrapTime    String?
+
+  shootDay ShootDay @relation(fields: [shootDayId], references: [id], onDelete: Cascade)
+
+  @@unique([shootDayId, category, name])
+}
+
+model ShootDayScene {
+  id             String   @id @default(cuid())
+  shootDayId     String
+  sceneId        String
+  sortOrder      Int      @default(0)
+  estimatedPages Decimal? @db.Decimal(6, 2)
+  notes          String?
+
+  shootDay ShootDay @relation(fields: [shootDayId], references: [id], onDelete: Cascade)
+  scene    Scene    @relation(fields: [sceneId], references: [id], onDelete: Cascade)
+
+  @@unique([shootDayId, sceneId])
+  @@index([shootDayId, sortOrder])
+}
+
+model Actor {
+  id               String          @id @default(cuid())
+  projectId        String
+  characterId      String?
+  lastName         String
+  firstName        String?
+  middleName       String?
+  gender           Gender?
+  contractorType   ContractorType  @default(UNKNOWN)
+  roleType         ActorRoleType   @default(SUPPORTING)
+  phone1           String?
+  phone2           String?
+  email            String?
+  carPickupTime    String?
+  arrivalTime      String?
+  tags             String?
+  specialConditions String?
+  shiftRate        Decimal?        @db.Decimal(12, 2)
+  shiftHoursMin    Int?
+  unpaidOvertimeMin Int?
+  forceMajeurePct  Decimal?          @db.Decimal(6, 2)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  character Character? @relation(fields: [characterId], references: [id])
+  overtimeRates ActorOvertimeRate[]
+  extraPayments ActorExtraPayment[]
+  financeOps    FinanceOperation[]
+  shootDayCalls ShootDayActorCall[]
+
+  @@index([projectId])
+}
+
+model ActorOvertimeRate {
+  id              String   @id @default(cuid())
+  actorId         String
+  hourNumber      Int
+  percentRate     Decimal? @db.Decimal(6, 2)
+  amount          Decimal? @db.Decimal(12, 2)
+  forceMajeurePct Decimal? @db.Decimal(6, 2)
+  forceMajeureAmt Decimal? @db.Decimal(12, 2)
+  totalWithFk     Decimal? @db.Decimal(12, 2)
+
+  actor Actor @relation(fields: [actorId], references: [id], onDelete: Cascade)
+
+  @@unique([actorId, hourNumber])
+}
+
+model ActorExtraPayment {
+  id              String   @id @default(cuid())
+  actorId         String
+  paymentDate     DateTime?
+  amount          Decimal  @db.Decimal(12, 2)
+  forceMajeurePct Decimal? @db.Decimal(6, 2)
+  forceMajeureAmt Decimal? @db.Decimal(12, 2)
+  totalWithFk     Decimal? @db.Decimal(12, 2)
+  description     String?
+
+  actor Actor @relation(fields: [actorId], references: [id], onDelete: Cascade)
+}
+
+model AuditLog {
+  id         String      @id @default(cuid())
+  projectId  String?
+  userId     String
+  entityType String
+  entityId   String
+  action     AuditAction
+  summary    String?
+  changes    Json?
+  createdAt  DateTime    @default(now())
+
+  project Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  user    User     @relation(fields: [userId], references: [id])
+
+  @@index([projectId, createdAt])
+  @@index([entityType, entityId])
+}
+
+model ScriptImportJob {
+  id              String   @id @default(cuid())
+  projectId       String
+  fileName        String
+  status          String   @default("pending")
+  timingMethod    String?
+  showComparison  Boolean  @default(true)
+  previewData     Json?
+  createdAt       DateTime @default(now())
+
+  @@index([projectId])
+}
+
+enum BudgetCategory {
+  CAST
+  CREW
+  EQUIPMENT
+  LOCATIONS
+  TRANSPORT
+  CATERING
+  POST
+  OTHER
+}
+
+model BudgetLine {
+  id          String         @id @default(cuid())
+  projectId   String
+  category    BudgetCategory @default(OTHER)
+  title       String
+  description String?
+  quantity    Decimal        @default(1) @db.Decimal(12, 2)
+  unitCost    Decimal        @default(0) @db.Decimal(14, 2)
+  planned     Decimal        @default(0) @db.Decimal(14, 2)
+  actual      Decimal        @default(0) @db.Decimal(14, 2)
+  sortOrder   Int            @default(0)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, category])
+  @@index([projectId, sortOrder])
+}
+
+enum FinanceOpType {
+  INCOME
+  EXPENSE
+}
+
+enum FinanceOpCategory {
+  CAST_PAY
+  CREW_PAY
+  VENDOR
+  LOCATION
+  EQUIPMENT
+  TRANSPORT
+  CATERING
+  GRANT
+  SPONSOR
+  OTHER
+}
+
+model FinanceOperation {
+  id           String            @id @default(cuid())
+  projectId    String
+  type         FinanceOpType
+  category     FinanceOpCategory @default(OTHER)
+  title        String
+  amount       Decimal           @db.Decimal(14, 2)
+  operationDate DateTime
+  counterparty String?
+  notes        String?
+  actorId      String?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  actor   Actor?  @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([projectId, operationDate])
+  @@index([projectId, type])
+  @@index([actorId])
+}
+
+enum PostStage {
+  INGEST
+  EDIT
+  VFX
+  COLOR
+  SOUND
+  GRAPHICS
+  DELIVERY
+}
+
+enum PostTaskStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+  BLOCKED
+}
+
+enum CloudProvider {
+  GOOGLE_DRIVE
+  YANDEX_DISK
+}
+
+model PostTask {
+  id            String         @id @default(cuid())
+  projectId     String
+  stage         PostStage      @default(EDIT)
+  status        PostTaskStatus @default(TODO)
+  title         String
+  episodeNumber Int?
+  assignee      String?
+  dueDate       DateTime?
+  notes         String?
+  sortOrder     Int            @default(0)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, stage])
+  @@index([projectId, status])
+  @@index([projectId, sortOrder])
+}
+
+model CloudConnection {
+  id           String        @id @default(cuid())
+  userId       String
+  provider     CloudProvider
+  accountEmail String?
+  accountLabel String?
+  accessToken  String
+  refreshToken String?
+  expiresAt    DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fileLinks CloudFileLink[]
+
+  @@unique([userId, provider])
+  @@index([userId])
+}
+
+model CloudFileLink {
+  id           String        @id @default(cuid())
+  projectId    String
+  connectionId String?
+  provider     CloudProvider
+  externalId   String
+  path         String?
+  name         String
+  mimeType     String?
+  sizeBytes    BigInt?
+  webUrl       String?
+  notes        String?
+  createdAt    DateTime      @default(now())
+
+  project    Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  connection CloudConnection? @relation(fields: [connectionId], references: [id], onDelete: SetNull)
+
+  @@index([projectId, createdAt])
+  @@index([connectionId])
+}

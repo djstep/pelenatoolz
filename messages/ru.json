@@ -1,0 +1,67 @@
+{
+  "app": {
+    "name": "PELENA [ПЕЛЕНА]",
+    "tagline": "Управление кинопроизводством"
+  },
+  "nav": {
+    "projects": "Проекты",
+    "members": "Участники",
+    "settings": "Настройки",
+    "logout": "Выйти",
+    "login": "Войти",
+    "register": "Регистрация"
+  },
+  "auth": {
+    "loginTitle": "Вход",
+    "registerTitle": "Регистрация",
+    "email": "Email",
+    "password": "Пароль",
+    "name": "Имя",
+    "loginCta": "Войти",
+    "registerCta": "Создать аккаунт",
+    "noAccount": "Нет аккаунта?",
+    "hasAccount": "Уже есть аккаунт?",
+    "passwordHint": "Минимум 8 символов"
+  },
+  "projects": {
+    "title": "Мои проекты",
+    "empty": "Пока нет проектов. Создайте первый — и соберите команду.",
+    "create": "Новый проект",
+    "name": "Название",
+    "type": "Тип",
+    "status": "Статус",
+    "currency": "Валюта",
+    "timezone": "Часовой пояс",
+    "membersCount": "{count, plural, one {# участник} few {# участника} many {# участников} other {# участников}}",
+    "open": "Открыть",
+    "overview": "Обзор",
+    "yourRole": "Ваша роль"
+  },
+  "members": {
+    "title": "Участники проекта",
+    "invite": "Пригласить",
+    "inviteEmail": "Email (необязательно)",
+    "inviteRole": "Роль",
+    "inviteExpires": "Срок ссылки (дней)",
+    "createLink": "Создать ссылку",
+    "activeInvites": "Активные приглашения",
+    "copyLink": "Скопировать ссылку",
+    "revoke": "Отозвать",
+    "role": "Роль",
+    "remove": "Удалить",
+    "noMembers": "Нет участников"
+  },
+  "invite": {
+    "title": "Приглашение в проект",
+    "accept": "Принять приглашение",
+    "needAuth": "Чтобы принять приглашение, войдите или зарегистрируйтесь.",
+    "role": "Роль в проекте",
+    "project": "Проект"
+  },
+  "common": {
+    "save": "Сохранить",
+    "cancel": "Отмена",
+    "loading": "Загрузка…",
+    "back": "Назад"
+  }
+}
