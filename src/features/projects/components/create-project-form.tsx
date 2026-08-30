@@ -14,6 +14,7 @@ import {
 } from "@/shared/i18n/domain-labels";
 import { Button } from "@/shared/ui/button";
 import { Checkbox } from "@/shared/ui/checkbox";
+import { ProjectLocationFields } from "@/features/projects/components/project-location-fields";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { SegmentControl } from "@/shared/ui/segment-control";
@@ -73,7 +74,7 @@ export function CreateProjectForm() {
               className={cn(
                 "rounded-lg border px-4 py-2 text-sm transition",
                 projectType === type
-                  ? "border-[var(--accent)] bg-[var(--accent)]/20 text-white"
+                  ? "border-[var(--accent)] bg-[var(--accent)]/20 font-medium text-[var(--foreground)]"
                   : "border-[var(--border)] bg-white/5 hover:bg-white/10",
               )}
             >
@@ -217,34 +218,10 @@ export function CreateProjectForm() {
         ) : null}
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <Label htmlFor="city">Город</Label>
-          <Input
-            id="city"
-            name="city"
-            placeholder="Москва"
-            autoComplete="address-level2"
-          />
-        </div>
-        <div>
-          <Label htmlFor="currency">{t("currency")}</Label>
-          <Input
-            id="currency"
-            name="currency"
-            maxLength={3}
-            placeholder="RUB"
-          />
-        </div>
-        <div>
-          <Label htmlFor="timezone">{t("timezone")}</Label>
-          <Input
-            id="timezone"
-            name="timezone"
-            placeholder="Europe/Moscow"
-          />
-        </div>
-      </div>
+      <ProjectLocationFields
+        currencyLabelText={t("currency")}
+        timezoneLabelText={t("timezone")}
+      />
 
       {state.error ? (
         <p className="text-sm text-[var(--danger)]" role="alert">

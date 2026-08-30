@@ -53,7 +53,7 @@ export function CreatableSelect({
       <div className="flex gap-2">
         <button
           type="button"
-          className="glass-input glass-select-trigger flex-1 truncate rounded-xl px-3 py-2 text-left text-sm"
+          className="glass-input glass-select-trigger flex-1 truncate rounded-xl text-left text-sm"
           onClick={() => setOpen((v) => !v)}
         >
           {selected?.name ?? "Выберите…"}

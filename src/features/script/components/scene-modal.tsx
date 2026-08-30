@@ -9,10 +9,12 @@ import {
   SceneStatus,
   type DayNight,
   type IntExt,
+  type TimingMode,
 } from "@prisma/client";
-import {
-  quickCreateLocationAction,
-} from "@/features/locations/actions";
+import { quickCreateLocationAction } from "@/features/locations/actions";
+import { SceneScriptEditorModal } from "@/features/screenplay/components/scene-script-editor-modal";
+import { loadScreenplayBlocksAction } from "@/features/screenplay/actions";
+import type { ScreenplayBlock } from "@/features/screenplay/lib/block-types";
 import {
   createSceneAction,
   quickCreateCharacterAction,
@@ -119,6 +121,8 @@ export function SceneModal({
   projectId,
   projectType,
   shootOnFilm,
+  timingMode = "MINUTES",
+  pageToMinuteRatio = 1,
   open,
   onClose,
   locations: initialLocations,
@@ -128,6 +132,8 @@ export function SceneModal({
   projectId: string;
   projectType: ProjectType;
   shootOnFilm: boolean;
+  timingMode?: TimingMode;
+  pageToMinuteRatio?: number;
   open: boolean;
   onClose: () => void;
   locations: Option[];
@@ -150,6 +156,10 @@ export function SceneModal({
     () => scene?.characters.map((c) => c.characterId) ?? [],
   );
   const [formKey, setFormKey] = useState(0);
+  const [scriptEditorOpen, setScriptEditorOpen] = useState(false);
+  const [scriptBlocks, setScriptBlocks] = useState<ScreenplayBlock[]>([]);
+  const [scriptVersionId, setScriptVersionId] = useState<string | null>(null);
+  const [loadingScript, setLoadingScript] = useState(false);
 
   useEffect(() => {
     setLocations(initialLocations);
@@ -510,17 +520,64 @@ export function SceneModal({
         </div>
 
         <div>
-          <Label htmlFor="scriptContent">Сценарий</Label>
-          <textarea
-            id="scriptContent"
-            name="scriptContent"
-            rows={8}
-            className="glass-input w-full resize-y px-3 py-2 font-mono text-sm"
-            placeholder="Текст сцены…"
-            defaultValue={scene?.scriptContent ?? ""}
-          />
+          <Label>Сценарий</Label>
+          {isEdit ? (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={loadingScript}
+                onClick={async () => {
+                  setLoadingScript(true);
+                  try {
+                    const result = await loadScreenplayBlocksAction(projectId);
+                    if ("blocks" in result && result.blocks) {
+                      setScriptVersionId(result.versionId ?? null);
+                      setScriptBlocks(
+                        result.blocks.map((block) => ({
+                          id: block.id,
+                          type: block.type,
+                          content: block.content,
+                          sceneId: block.sceneId,
+                          sortOrder: block.sortOrder,
+                        })),
+                      );
+                      setScriptEditorOpen(true);
+                    }
+                  } finally {
+                    setLoadingScript(false);
+                  }
+                }}
+              >
+                {loadingScript ? "Загрузка…" : "Открыть текст сцены"}
+              </Button>
+              <span className="text-xs text-[var(--muted-fg)]">
+                Текст сцены редактируется в версии сценария; либретто — через «Обновить в либретто».
+              </span>
+            </div>
+          ) : (
+            <p className="mt-1 text-xs text-[var(--muted-fg)]">
+              Сохраните сцену, затем откройте текст в блочном редакторе.
+            </p>
+          )}
         </div>
       </form>
+      {isEdit && scene ? (
+        <SceneScriptEditorModal
+          open={scriptEditorOpen}
+          onClose={() => setScriptEditorOpen(false)}
+          projectId={projectId}
+          versionId={scriptVersionId ?? ""}
+          sceneId={scene.id}
+          sceneLabel={`${scene.number}${scene.postfix}`}
+          blocks={scriptBlocks}
+          characters={characters}
+          locations={locations}
+          timingMode={timingMode}
+          pageToMinuteRatio={pageToMinuteRatio}
+          canWrite
+        />
+      ) : null}
     </Modal>
   );
 }

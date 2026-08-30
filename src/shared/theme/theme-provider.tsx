@@ -8,7 +8,8 @@ import {
   useMemo,
   useState,
 } from "react";
-import { THEME_STORAGE_KEY, type Theme } from "@/shared/theme/constants";
+import { useServerInsertedHTML } from "next/navigation";
+import { THEME_STORAGE_KEY, themeScript, type Theme } from "@/shared/theme/constants";
 
 type ThemeContextValue = {
   theme: Theme;
@@ -38,6 +39,10 @@ function readTheme(): Theme {
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
+  useServerInsertedHTML(() => (
+    <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+  ));
+
   const [theme, setThemeState] = useState<Theme>("dark");
   const [ready, setReady] = useState(false);
 

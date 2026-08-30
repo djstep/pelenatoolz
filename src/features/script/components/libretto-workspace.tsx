@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import type { ProjectType } from "@prisma/client";
+import type { ProjectType, TimingMode } from "@prisma/client";
 import {
   bulkDeleteScenesAction,
   bulkUpdateSceneStatusAction,
@@ -53,6 +53,8 @@ export function LibrettoWorkspace({
   locale,
   projectType,
   shootOnFilm,
+  timingMode = "MINUTES",
+  pageToMinuteRatio = 1,
   scenes,
   locations,
   characters,
@@ -62,6 +64,8 @@ export function LibrettoWorkspace({
   locale: string;
   projectType: ProjectType;
   shootOnFilm: boolean;
+  timingMode?: TimingMode;
+  pageToMinuteRatio?: number;
   scenes: LibrettoScene[];
   locations: Option[];
   characters: Option[];
@@ -334,6 +338,8 @@ export function LibrettoWorkspace({
         projectId={projectId}
         projectType={projectType}
         shootOnFilm={shootOnFilm}
+        timingMode={timingMode}
+        pageToMinuteRatio={pageToMinuteRatio}
         open={modalOpen}
         onClose={() => { setModalOpen(false); setEditingScene(null); }}
         locations={locations}

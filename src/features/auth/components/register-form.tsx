@@ -29,9 +29,25 @@ export function RegisterForm({
       {callbackUrl ? (
         <input type="hidden" name="callbackUrl" value={callbackUrl} />
       ) : null}
-      <div>
-        <Label htmlFor="name">{t("name")}</Label>
-        <Input id="name" name="name" autoComplete="name" required />
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div>
+          <Label htmlFor="firstName">{t("firstName")}</Label>
+          <Input
+            id="firstName"
+            name="firstName"
+            autoComplete="given-name"
+            required
+          />
+        </div>
+        <div>
+          <Label htmlFor="lastName">{t("lastName")}</Label>
+          <Input
+            id="lastName"
+            name="lastName"
+            autoComplete="family-name"
+            required
+          />
+        </div>
       </div>
       <div>
         <Label htmlFor="email">{t("email")}</Label>

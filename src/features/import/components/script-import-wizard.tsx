@@ -1,13 +1,13 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import type { DayNight, IntExt } from "@prisma/client";
 import {
   applyScriptImportAction,
   previewScriptImportAction,
-  type ImportActionState,
-  type ImportPreviewScene,
 } from "@/features/import/actions";
+import type { ImportActionState, ImportPreviewScene } from "@/features/import/types";
 import {
   dayNightLabels,
   intExtLabels,
@@ -22,18 +22,20 @@ import { cn } from "@/shared/lib/cn";
 
 const initial: ImportActionState = {};
 
-function DiffCell({
+function EditableDiffCell({
   sceneKey,
   field,
   oldVal,
   newVal,
   defaultChecked,
+  children,
 }: {
   sceneKey: string;
   field: string;
   oldVal?: string | null;
   newVal?: string | null;
   defaultChecked?: boolean;
+  children: ReactNode;
 }) {
   const changed = (oldVal ?? "") !== (newVal ?? "");
   return (
@@ -50,7 +52,7 @@ function DiffCell({
         </>
       ) : null}
       <div className="text-[10px] text-[var(--muted-fg)]">Новое</div>
-      <div className="mb-1">{newVal || "—"}</div>
+      <div className="mb-1">{children}</div>
       {changed || !oldVal ? (
         <label className="mt-1 flex items-center gap-1.5 text-[10px] text-[var(--muted-fg)]">
           <input
@@ -68,15 +70,26 @@ function DiffCell({
 
 function PreviewTable({
   projectId,
+  locale,
   jobId,
   scenes,
 }: {
   projectId: string;
+  locale: string;
   jobId: string;
   scenes: ImportPreviewScene[];
 }) {
+  const router = useRouter();
   const bound = applyScriptImportAction.bind(null, projectId);
   const [state, action, pending] = useActionState(bound, initial);
+
+  useEffect(() => {
+    if (state.versionId) {
+      router.push(
+        `/${locale}/projects/${projectId}/screenplay/${state.versionId}`,
+      );
+    }
+  }, [state.versionId, locale, projectId, router]);
 
   return (
     <form action={action} className="space-y-4">
@@ -99,24 +112,48 @@ function PreviewTable({
             {scenes.map((row) => (
               <tr key={row.key} className="border-b border-[var(--border)]/50">
                 <td className="px-3 py-2 align-top whitespace-nowrap">
-                  <label className="flex items-center gap-2 font-medium">
+                  <label className="mb-1 flex items-center gap-2 font-medium">
                     <input
                       type="checkbox"
                       name={`sel_${row.key}`}
                       defaultChecked
                       className="accent-[var(--accent)]"
                     />
-                    {row.episodeNumber > 0 ? `${row.episodeNumber}-` : ""}
-                    {row.number}
-                    {row.postfix}
+                    <span className="text-[10px] text-[var(--muted-fg)]">№</span>
                   </label>
+                  <div className="flex items-center gap-1">
+                    {row.episodeNumber > 0 ? (
+                      <Input
+                        name={`scene_${row.key}_episodeNumber`}
+                        defaultValue={String(row.episodeNumber)}
+                        className="h-8 w-12 px-2 text-xs"
+                      />
+                    ) : (
+                      <input
+                        type="hidden"
+                        name={`scene_${row.key}_episodeNumber`}
+                        value="0"
+                      />
+                    )}
+                    <Input
+                      name={`scene_${row.key}_number`}
+                      defaultValue={row.number}
+                      className="h-8 w-14 px-2 text-xs"
+                    />
+                    <Input
+                      name={`scene_${row.key}_postfix`}
+                      defaultValue={row.postfix}
+                      placeholder="A"
+                      className="h-8 w-10 px-2 text-xs"
+                    />
+                  </div>
                   {!row.existingId ? (
                     <span className="text-[10px] text-emerald-400">новая</span>
                   ) : (
                     <span className="text-[10px] text-amber-300">есть</span>
                   )}
                 </td>
-                <DiffCell
+                <EditableDiffCell
                   sceneKey={row.key}
                   field="intExt"
                   oldVal={
@@ -130,29 +167,61 @@ function PreviewTable({
                       : undefined
                   }
                   defaultChecked={!row.existingId}
-                />
-                <DiffCell
+                >
+                  <select
+                    name={`scene_${row.key}_intExt`}
+                    defaultValue={row.intExt ?? ""}
+                    className="glass-input h-8 w-full rounded-lg px-2 text-xs"
+                  >
+                    <option value="">—</option>
+                    {Object.entries(intExtLabels).map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </EditableDiffCell>
+                <EditableDiffCell
                   sceneKey={row.key}
                   field="location"
                   oldVal={row.old?.location}
                   newVal={row.location}
                   defaultChecked={!row.existingId}
-                />
-                <DiffCell
+                >
+                  <Input
+                    name={`scene_${row.key}_location`}
+                    defaultValue={row.location ?? ""}
+                    className="h-8 px-2 text-xs"
+                  />
+                </EditableDiffCell>
+                <EditableDiffCell
                   sceneKey={row.key}
                   field="characters"
                   oldVal={row.old?.characters.join(", ")}
                   newVal={row.characters.join(", ")}
                   defaultChecked={!row.existingId}
-                />
-                <DiffCell
+                >
+                  <Input
+                    name={`scene_${row.key}_characters`}
+                    defaultValue={row.characters.join(", ")}
+                    className="h-8 px-2 text-xs"
+                  />
+                </EditableDiffCell>
+                <EditableDiffCell
                   sceneKey={row.key}
                   field="timing"
                   oldVal={row.old?.timing}
                   newVal={row.timing}
                   defaultChecked={!row.existingId}
-                />
-                <DiffCell
+                >
+                  <Input
+                    name={`scene_${row.key}_timing`}
+                    defaultValue={row.timing ?? ""}
+                    placeholder="00:00"
+                    className="h-8 w-20 px-2 text-xs"
+                  />
+                </EditableDiffCell>
+                <EditableDiffCell
                   sceneKey={row.key}
                   field="scriptDay"
                   oldVal={
@@ -164,8 +233,16 @@ function PreviewTable({
                     row.scriptDay != null ? String(row.scriptDay) : undefined
                   }
                   defaultChecked={!row.existingId}
-                />
-                <DiffCell
+                >
+                  <Input
+                    name={`scene_${row.key}_scriptDay`}
+                    type="number"
+                    min={0}
+                    defaultValue={row.scriptDay ?? ""}
+                    className="h-8 w-16 px-2 text-xs"
+                  />
+                </EditableDiffCell>
+                <EditableDiffCell
                   sceneKey={row.key}
                   field="dayNight"
                   oldVal={
@@ -180,22 +257,58 @@ function PreviewTable({
                       : undefined
                   }
                   defaultChecked={!row.existingId}
-                />
-                <DiffCell
+                >
+                  <select
+                    name={`scene_${row.key}_dayNight`}
+                    defaultValue={row.dayNight ?? ""}
+                    className="glass-input h-8 w-full rounded-lg px-2 text-xs"
+                  >
+                    <option value="">—</option>
+                    {Object.entries(dayNightLabels).map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </EditableDiffCell>
+                <EditableDiffCell
                   sceneKey={row.key}
                   field="script"
                   oldVal={row.old?.script?.slice(0, 80)}
                   newVal={row.script?.slice(0, 80)}
                   defaultChecked={!row.existingId}
-                />
+                >
+                  <textarea
+                    name={`scene_${row.key}_script`}
+                    defaultValue={row.script ?? ""}
+                    rows={3}
+                    className="glass-input w-full min-w-[12rem] resize-y rounded-lg px-2 py-1.5 text-xs"
+                  />
+                </EditableDiffCell>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+      <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)]/50 p-4">
+        <Label htmlFor="version-title" className="mb-2 block text-sm font-medium">
+          Название версии
+        </Label>
+        <Input
+          id="version-title"
+          name="versionTitle"
+          required
+          placeholder="Например: Импорт от 30.08, Черновик режиссёра"
+          className="max-w-md"
+          disabled={pending}
+        />
+        <p className="mt-2 text-xs text-[var(--muted-fg)]">
+          Обязательное поле — так версия появится в списке сценария.
+        </p>
+      </div>
       <div className="flex flex-wrap items-center gap-3">
         <Button type="submit" disabled={pending}>
-          {pending ? "Импорт…" : "Импортировать"}
+          {pending ? "Создание версии…" : "Создать версию"}
         </Button>
         {state.error ? (
           <span className="text-sm text-[var(--danger)]">{state.error}</span>
@@ -210,9 +323,11 @@ function PreviewTable({
 
 export function ScriptImportWizard({
   projectId,
+  locale,
   canWrite,
 }: {
   projectId: string;
+  locale: string;
   canWrite: boolean;
 }) {
   const bound = previewScriptImportAction.bind(null, projectId);
@@ -335,8 +450,13 @@ export function ScriptImportWizard({
               {state.preview.fileName} · {state.preview.scenes.length} сцен
             </p>
           </div>
+          <p className="text-sm text-[var(--muted-fg)]">
+            Проверьте распознанные сцены. Импорт создаст новую версию текста;
+            либретто обновляется отдельно.
+          </p>
           <PreviewTable
             projectId={projectId}
+            locale={locale}
             jobId={state.preview.jobId}
             scenes={state.preview.scenes}
           />

@@ -138,7 +138,7 @@ export function ShootDayForm({
             id="status"
             name="status"
             defaultValue={ShootDayStatus.PLANNED}
-            className="[&_.glass-select-trigger]:h-10 [&_.glass-select-trigger]:py-2"
+            className="min-w-[12rem]"
           >
             {Object.values(ShootDayStatus).map((s) => (
               <option key={s} value={s}>

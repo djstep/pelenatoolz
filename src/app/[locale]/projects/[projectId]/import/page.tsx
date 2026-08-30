@@ -1,33 +1,10 @@
-import { requireProjectContext } from "@/features/projects/lib/project-context";
-import { ScriptImportWizard } from "@/features/import/components/script-import-wizard";
-import { Card } from "@/shared/ui/card";
+import { redirect } from "next/navigation";
 
 type Props = {
-  params: Promise<{ projectId: string }>;
+  params: Promise<{ locale: string; projectId: string }>;
 };
 
-export default async function ScriptImportPage({ params }: Props) {
-  const { projectId } = await params;
-  const ctx = await requireProjectContext(projectId);
-
-  if (!ctx.can("script:read")) {
-    return <p className="text-sm text-[var(--danger)]">Нет доступа</p>;
-  }
-
-  return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="font-display text-2xl font-semibold">Импорт сценария</h2>
-        <p className="mt-1 text-sm text-[var(--muted-fg)]">
-          Загрузка Word-файла, расчёт хронометража и предпросмотр перед импортом.
-        </p>
-      </div>
-      <Card>
-        <ScriptImportWizard
-          projectId={projectId}
-          canWrite={ctx.can("script:write")}
-        />
-      </Card>
-    </div>
-  );
+export default async function ImportRedirectPage({ params }: Props) {
+  const { locale, projectId } = await params;
+  redirect(`/${locale}/projects/${projectId}/screenplay/import`);
 }

@@ -1,0 +1,1 @@
+ALTER TABLE "ScriptVersion" ADD COLUMN "isLocked" BOOLEAN NOT NULL DEFAULT false;

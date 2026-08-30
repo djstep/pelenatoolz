@@ -1,5 +1,13 @@
-import { APP_BRAND } from "@/shared/brand";
+import Image from "next/image";
 import { cn } from "@/shared/lib/cn";
+
+const LOGO_WIDTH = 1024;
+const LOGO_HEIGHT = 219;
+
+const sizes = {
+  md: { className: "h-14" },
+  lg: { className: "h-20" },
+} as const;
 
 export function AppBrand({
   className,
@@ -8,15 +16,29 @@ export function AppBrand({
   className?: string;
   size?: "md" | "lg";
 }) {
+  const { className: heightClass } = sizes[size];
+
   return (
     <span
-      className={cn(
-        "inline-block font-body font-semibold leading-none tracking-[0.04em] text-[var(--foreground)]",
-        size === "lg" ? "text-3xl" : "text-lg",
-        className,
-      )}
+      className={cn("relative inline-flex items-center", className)}
+      aria-label="PELENA"
     >
-      {APP_BRAND}
+      <Image
+        src="/brand/pelena-white.png"
+        alt=""
+        width={LOGO_WIDTH}
+        height={LOGO_HEIGHT}
+        priority
+        className={cn("brand-logo-on-dark w-auto max-w-none", heightClass)}
+      />
+      <Image
+        src="/brand/pelena-black.png"
+        alt=""
+        width={LOGO_WIDTH}
+        height={LOGO_HEIGHT}
+        priority
+        className={cn("brand-logo-on-light w-auto max-w-none", heightClass)}
+      />
     </span>
   );
 }

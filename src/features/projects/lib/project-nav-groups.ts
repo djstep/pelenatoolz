@@ -5,7 +5,7 @@ export const projectNavGroups: NavGroup[] = [
     id: "home",
     items: [
       { href: "", label: "Обзор" },
-      { href: "/import", label: "Импорт сценария" },
+      { href: "/screenplay", label: "Сценарий" },
       { href: "/files", label: "Файлы" },
     ],
   },

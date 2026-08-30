@@ -18,6 +18,7 @@ import {
 } from "@/shared/i18n/domain-labels";
 import { Button } from "@/shared/ui/button";
 import { Checkbox } from "@/shared/ui/checkbox";
+import { ProjectLocationFields } from "@/features/projects/components/project-location-fields";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { SegmentControl } from "@/shared/ui/segment-control";
@@ -111,7 +112,7 @@ export function ProjectSettingsForm({ project }: { project: Project }) {
               className={cn(
                 "rounded-lg border px-4 py-2 text-sm transition",
                 projectType === type
-                  ? "border-[var(--accent)] bg-[var(--accent)]/20 text-white"
+                  ? "border-[var(--accent)] bg-[var(--accent)]/20 font-medium text-[var(--foreground)]"
                   : "border-[var(--border)] bg-white/5 hover:bg-white/10",
                 isArchived && "opacity-50 cursor-not-allowed",
               )}
@@ -291,38 +292,12 @@ export function ProjectSettingsForm({ project }: { project: Project }) {
         ) : null}
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <Label htmlFor="city">Город</Label>
-          <Input
-            id="city"
-            name="city"
-            defaultValue={project.city ?? ""}
-            placeholder="Москва"
-            autoComplete="address-level2"
-            disabled={isArchived}
-          />
-        </div>
-        <div>
-          <Label htmlFor="currency">Валюта</Label>
-          <Input
-            id="currency"
-            name="currency"
-            defaultValue={project.currency}
-            maxLength={3}
-            disabled={isArchived}
-          />
-        </div>
-        <div>
-          <Label htmlFor="timezone">Часовой пояс</Label>
-          <Input
-            id="timezone"
-            name="timezone"
-            defaultValue={project.timezone}
-            disabled={isArchived}
-          />
-        </div>
-      </div>
+      <ProjectLocationFields
+        initialCity={project.city ?? ""}
+        initialCurrency={project.currency}
+        initialTimezone={project.timezone}
+        disabled={isArchived}
+      />
 
       {state.error ? (
         <p className="text-sm text-[var(--danger)]">{state.error}</p>

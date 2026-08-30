@@ -1,3 +1,4 @@
+import { isValidTimezone } from "@/features/projects/lib/timezones";
 import {
   ProjectStatus,
   ProjectType,
@@ -11,13 +12,29 @@ export const createProjectSchema = z.object({
   description: z.string().trim().max(5000).optional(),
   type: z.enum(ProjectType),
   status: z.enum(ProjectStatus).optional(),
-  currency: z
-    .string()
-    .trim()
-    .length(3)
-    .regex(/^[A-Z]{3}$/)
-    .optional(),
-  timezone: z.string().trim().min(1).max(64).optional(),
+  currency: z.preprocess(
+    (val) => {
+      if (val == null || String(val).trim() === "") return undefined;
+      return String(val).trim().toUpperCase();
+    },
+    z
+      .string()
+      .length(3)
+      .regex(/^[A-Z]{3}$/)
+      .optional(),
+  ),
+  timezone: z.preprocess(
+    (val) => {
+      if (val == null || String(val).trim() === "") return undefined;
+      return String(val).trim();
+    },
+    z
+      .string()
+      .min(1)
+      .max(64)
+      .refine((value) => isValidTimezone(value), "Некорректный часовой пояс")
+      .optional(),
+  ),
   city: z.string().trim().max(120).optional(),
   startDate: z.string().optional(),
   endDate: z.string().optional(),

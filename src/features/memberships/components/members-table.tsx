@@ -53,19 +53,18 @@ export function MembersTable({
               <td className="py-3 pr-3 text-[var(--muted-fg)]">
                 {member.user.email}
               </td>
-              <td className="py-3 pr-3">
+              <td className="py-3 pr-3 align-middle">
                 {canManage ? (
                   <form
                     action={async (formData) => {
                       await updateMemberRoleAction(projectId, {}, formData);
                     }}
-                    className="flex items-center gap-2"
                   >
                     <input type="hidden" name="membershipId" value={member.id} />
                     <Select
                       name="roleId"
                       defaultValue={member.role.id}
-                      className="w-auto min-w-[10rem]"
+                      className="min-w-[10rem]"
                       onChange={(e) => e.currentTarget.form?.requestSubmit()}
                     >
                       {roles.map((role) => (

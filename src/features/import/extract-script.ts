@@ -24,7 +24,7 @@ function decodeXmlEntities(value: string) {
     );
 }
 
-function readZipEntry(buffer: Buffer, entryName: string): string | null {
+export function readZipEntry(buffer: Buffer, entryName: string): string | null {
   let offset = 0;
   while (offset + 30 < buffer.length) {
     if (buffer.readUInt32LE(offset) !== 0x04034b50) break;

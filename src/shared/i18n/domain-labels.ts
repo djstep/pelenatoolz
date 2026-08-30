@@ -31,8 +31,17 @@ export const projectStatusLabels: Record<ProjectStatus, string> = {
 };
 
 export const timingModeLabels: Record<TimingMode, string> = {
-  MINUTES: "минутах",
+  MINUTES: "словах",
   PAGES: "страницах",
+  IMPORTED: "импорте",
+  MANUAL: "ручном вводе",
+};
+
+export const timingModeOptionLabels: Record<TimingMode, string> = {
+  MINUTES: "По словам",
+  PAGES: "По страницам",
+  IMPORTED: "Из файла",
+  MANUAL: "Вручную",
 };
 
 export const sceneStatusLabels: Record<SceneStatus, string> = {

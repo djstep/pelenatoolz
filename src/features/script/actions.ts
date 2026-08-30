@@ -2,6 +2,7 @@
 
 import { ElementType, SceneResourceCategory } from "@prisma/client";
 import { revalidatePath } from "next/cache";
+import { refreshAllSluglines, syncSluglineFromScene } from "@/features/screenplay/lib/sync";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { manualRenumberSchema } from "@/features/locations/schemas";
 import {
@@ -17,6 +18,7 @@ export type ActionState = { error?: string; success?: string; keepOpen?: boolean
 function revalidateScript(projectId: string) {
   revalidatePath(`/ru/projects/${projectId}/libretto`);
   revalidatePath(`/ru/projects/${projectId}/script`);
+  revalidatePath(`/ru/projects/${projectId}/screenplay`);
   revalidatePath(`/ru/projects/${projectId}`);
   revalidatePath(`/ru/projects/${projectId}/schedule`);
   revalidatePath(`/ru/projects/${projectId}/call-sheets`);
@@ -257,7 +259,9 @@ export async function updateSceneAction(
           title: parsed.data.title ?? null,
           summary: parsed.data.summary ?? null,
           description: parsed.data.description ?? null,
-          scriptContent: parsed.data.scriptContent ?? null,
+          ...(formData.has("scriptContent")
+            ? { scriptContent: parsed.data.scriptContent ?? null }
+            : {}),
           scriptDay: parsed.data.scriptDay ?? null,
           objectType: parsed.data.objectType ?? null,
           sceneKind: parsed.data.sceneKind,
@@ -307,6 +311,8 @@ export async function updateSceneAction(
     action: "UPDATE",
     summary: `Обновлена сцена ${parsed.data.number}${parsed.data.postfix ?? ""}`,
   });
+
+  await syncSluglineFromScene(sceneId).catch(() => {});
 
   revalidateScript(projectId);
   return { success: "Сцена сохранена" };
@@ -402,6 +408,8 @@ export async function renumberScenesAction(projectId: string) {
     action: "UPDATE",
     summary: `Перенумерация ${scenes.length} сцен`,
   });
+
+  await refreshAllSluglines(projectId).catch(() => {});
 
   revalidateScript(projectId);
 }

@@ -7,12 +7,12 @@ import { Card } from "@/shared/ui/card";
 
 type Props = {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ callbackUrl?: string }>;
+  searchParams: Promise<{ callbackUrl?: string; reset?: string }>;
 };
 
 export default async function LoginPage({ params, searchParams }: Props) {
   const { locale } = await params;
-  const { callbackUrl } = await searchParams;
+  const { callbackUrl, reset } = await searchParams;
   const t = await getTranslations("auth");
   const tApp = await getTranslations("app");
 
@@ -33,7 +33,11 @@ export default async function LoginPage({ params, searchParams }: Props) {
       </div>
       <Card className="glass-strong">
         <h1 className="mb-6 font-display text-2xl font-semibold">{t("loginTitle")}</h1>
-        <LoginForm callbackUrl={callbackUrl} locale={locale} />
+        <LoginForm
+          callbackUrl={callbackUrl}
+          locale={locale}
+          resetSuccess={reset === "1"}
+        />
       </Card>
     </main>
   );

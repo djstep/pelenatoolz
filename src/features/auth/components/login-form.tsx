@@ -16,9 +16,11 @@ const initial: ActionState = {};
 export function LoginForm({
   callbackUrl,
   locale,
+  resetSuccess,
 }: {
   callbackUrl?: string;
   locale: string;
+  resetSuccess?: boolean;
 }) {
   const t = useTranslations("auth");
   const tNav = useTranslations("nav");
@@ -40,7 +42,15 @@ export function LoginForm({
         />
       </div>
       <div>
-        <Label htmlFor="password">{t("password")}</Label>
+        <div className="mb-1 flex items-center justify-between gap-2">
+          <Label htmlFor="password">{t("password")}</Label>
+          <Link
+            href={`/${locale}/forgot-password`}
+            className="text-xs text-[var(--accent)] underline-offset-2 hover:underline"
+          >
+            {t("forgotPasswordLink")}
+          </Link>
+        </div>
         <Input
           id="password"
           name="password"
@@ -49,6 +59,11 @@ export function LoginForm({
           required
         />
       </div>
+      {resetSuccess ? (
+        <p className="text-sm text-emerald-400" role="status">
+          {t("resetPasswordDone")}
+        </p>
+      ) : null}
       {state.error ? (
         <p className="text-sm text-[var(--danger)]" role="alert">
           {state.error}

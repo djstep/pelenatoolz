@@ -31,7 +31,7 @@ export function SegmentControl<T extends string>({
             className={cn(
               "rounded-xl border px-4 py-2 text-sm transition-all duration-150",
               selected
-                ? "border-[var(--accent)] bg-[var(--accent)]/20 text-white shadow-[0_0_20px_rgba(110,168,255,0.12)]"
+                ? "border-[var(--accent)] bg-[var(--accent)]/20 font-medium text-[var(--foreground)] shadow-[0_0_20px_rgba(110,168,255,0.12)]"
                 : "border-[var(--border)] bg-white/5 text-[var(--muted-fg)] hover:border-[var(--border-strong)] hover:bg-white/10 hover:text-[var(--foreground)]",
               disabled && "cursor-not-allowed opacity-60",
             )}

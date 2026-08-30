@@ -192,6 +192,21 @@ function extractLeadingCharacters(line: string): {
   return characters.length ? { characters } : null;
 }
 
+function sanitizeSceneNumber(raw: string | undefined, sceneIndex: number) {
+  if (!raw) return String(sceneIndex + 1);
+  // Title pages often contain a year that gets mistaken for scene number.
+  if (/^(19|20)\d{2}$/.test(raw)) return String(sceneIndex + 1);
+  return raw;
+}
+
+function sanitizeEpisodeNumber(raw: string | undefined) {
+  if (!raw) return 0;
+  const episode = Number(raw);
+  if (!Number.isFinite(episode) || episode <= 0) return 0;
+  if (episode >= 1900 && episode <= 2099) return 0;
+  return episode;
+}
+
 function formatSeconds(sec: number) {
   const m = Math.floor(sec / 60);
   const s = sec % 60;
@@ -300,8 +315,8 @@ export function parseScenesFromText(
     }
 
     scenes.push({
-      episodeNumber: m[1] ? Number(m[1]) : 0,
-      number: m[2] ?? String(i + 1),
+      episodeNumber: sanitizeEpisodeNumber(m[1]),
+      number: sanitizeSceneNumber(m[2], i),
       postfix: m[3] ?? "",
       location,
       intExt: mapIntExt(m[4] ?? ""),

@@ -31,6 +31,8 @@ enum MembershipStatus {
 enum TimingMode {
   MINUTES
   PAGES
+  IMPORTED
+  MANUAL
 }
 
 enum SceneStatus {
@@ -59,6 +61,34 @@ enum SceneKind {
   SOUND_DUB
   MASTER_SHOT
   FOOTAGE
+}
+
+enum ScriptVersionSourceType {
+  IMPORTED_DOCX
+  IMPORTED_OTHER
+  MANUAL
+  DUPLICATED_FROM
+}
+
+/// Screenplay block types for the full-script editor.
+enum ScriptCommentStatus {
+  OPEN
+  RESOLVED
+}
+
+enum ScriptBlockType {
+  SLUGLINE
+  SCENE_CAST
+  ACTION
+  CHARACTER
+  DIALOGUE
+  PARENTHETICAL
+  SUPER
+  TRANSITION
+  NOTE
+  BONEYARD
+  SCENE_GROUP
+  FOLDER
 }
 
 enum DayNight {
@@ -153,6 +183,9 @@ model User {
   createdInvites  ProjectInvite[]     @relation("InviteCreator")
   auditLogs       AuditLog[]
   cloudConnections CloudConnection[]
+  passwordResetTokens PasswordResetToken[]
+  scriptVersions  ScriptVersion[]
+  scriptComments  ScriptComment[]
 }
 
 model Project {
@@ -200,6 +233,8 @@ model Project {
   financeOps  FinanceOperation[]
   postTasks   PostTask[]
   cloudFiles  CloudFileLink[]
+  scriptVersions ScriptVersion[]
+  scriptBlocks ScriptBlock[]
 
   @@index([createdById])
   @@index([status])
@@ -299,6 +334,7 @@ model Scene {
   resources      SceneResource[]
   shootDayScenes  ShootDayScene[]
   timeSlots       ShootDayTimeSlot[]
+  scriptBlocks    ScriptBlock[]
 
   @@unique([projectId, episodeNumber, number, postfix])
   @@index([projectId, sortOrder])
@@ -621,9 +657,82 @@ model AuditLog {
   @@index([entityType, entityId])
 }
 
+model ScriptVersion {
+  id              String                  @id @default(cuid())
+  projectId       String
+  versionNumber   Int
+  title           String?
+  note            String?
+  isCurrent       Boolean                 @default(false)
+  isLocked        Boolean                 @default(false)
+  sourceType      ScriptVersionSourceType @default(MANUAL)
+  sourceVersionId String?
+  createdById     String
+  createdAt       DateTime                @default(now())
+
+  project       Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy     User            @relation(fields: [createdById], references: [id])
+  sourceVersion ScriptVersion?  @relation("ScriptVersionCopy", fields: [sourceVersionId], references: [id], onDelete: SetNull)
+  derivedFrom   ScriptVersion[] @relation("ScriptVersionCopy")
+  blocks        ScriptBlock[]
+  comments      ScriptComment[]
+  importJobs    ScriptImportJob[]
+
+  @@unique([projectId, versionNumber])
+  @@index([projectId, isCurrent])
+  @@index([createdById])
+}
+
+model ScriptBlock {
+  id              String          @id @default(cuid())
+  projectId       String
+  scriptVersionId String
+  sceneId         String?
+  type            ScriptBlockType
+  content         String          @default("")
+  contentHtml     String?
+  sortOrder       Int             @default(0)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  project       Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  scriptVersion ScriptVersion @relation(fields: [scriptVersionId], references: [id], onDelete: Cascade)
+  scene         Scene?        @relation(fields: [sceneId], references: [id], onDelete: SetNull)
+
+  @@index([scriptVersionId, sortOrder])
+  @@index([projectId, scriptVersionId])
+  @@index([sceneId])
+}
+
+model ScriptComment {
+  id              String              @id @default(cuid())
+  scriptVersionId String
+  startBlockId    String
+  endBlockId      String
+  rangeStart      Int                 @default(0)
+  rangeEnd        Int                 @default(0)
+  content         String
+  authorId        String
+  parentCommentId String?
+  status          ScriptCommentStatus @default(OPEN)
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  scriptVersion ScriptVersion   @relation(fields: [scriptVersionId], references: [id], onDelete: Cascade)
+  author        User            @relation(fields: [authorId], references: [id])
+  parent        ScriptComment?  @relation("ScriptCommentThread", fields: [parentCommentId], references: [id], onDelete: Cascade)
+  replies       ScriptComment[] @relation("ScriptCommentThread")
+
+  @@index([scriptVersionId])
+  @@index([startBlockId])
+  @@index([authorId])
+  @@index([parentCommentId])
+}
+
 model ScriptImportJob {
   id              String   @id @default(cuid())
   projectId       String
+  scriptVersionId String?
   fileName        String
   status          String   @default("pending")
   timingMethod    String?
@@ -631,7 +740,10 @@ model ScriptImportJob {
   previewData     Json?
   createdAt       DateTime @default(now())
 
+  scriptVersion ScriptVersion? @relation(fields: [scriptVersionId], references: [id], onDelete: SetNull)
+
   @@index([projectId])
+  @@index([scriptVersionId])
 }
 
 enum BudgetCategory {
@@ -746,6 +858,19 @@ model PostTask {
   @@index([projectId, stage])
   @@index([projectId, status])
   @@index([projectId, sortOrder])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
 }
 
 model CloudConnection {

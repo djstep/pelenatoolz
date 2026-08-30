@@ -6,5 +6,5 @@ type Props = {
 
 export default async function ScriptRedirectPage({ params }: Props) {
   const { locale, projectId } = await params;
-  redirect(`/${locale}/projects/${projectId}/libretto`);
+  redirect(`/${locale}/projects/${projectId}/screenplay`);
 }

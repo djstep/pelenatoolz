@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Sans, Sora } from "next/font/google";
 import { APP_BRAND } from "@/shared/brand";
-import { themeScript } from "@/shared/theme/constants";
 import { ThemeProvider } from "@/shared/theme/theme-provider";
 import "./globals.css";
 
@@ -34,9 +33,6 @@ export default function RootLayout({
       data-theme="dark"
       suppressHydrationWarning
     >
-      <head>
-        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
-      </head>
       <body className="min-h-full antialiased">
         <ThemeProvider>{children}</ThemeProvider>
       </body>

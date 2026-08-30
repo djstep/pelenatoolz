@@ -22,7 +22,7 @@ export function Input({
     <input
       type={type}
       className={cn(
-        "glass-input w-full rounded-xl px-3 py-2.5 text-sm text-[var(--foreground)] placeholder:text-[var(--muted)]",
+        "glass-input w-full rounded-xl px-3 py-2 text-sm text-[var(--foreground)] placeholder:text-[var(--muted)]",
         className,
       )}
       {...props}

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getTranslations } from "next-intl/server";
 import { RegisterForm } from "@/features/auth/components/register-form";
+import { AppBrand } from "@/shared/ui/app-brand";
 import { Card } from "@/shared/ui/card";
 
 type Props = {
@@ -21,11 +22,8 @@ export default async function RegisterPage({ params, searchParams }: Props) {
         className="pointer-events-none absolute -top-24 left-1/2 h-64 w-64 -translate-x-1/2 rounded-full bg-[var(--accent-2)]/25 blur-[80px]"
       />
       <div className="mb-8 text-center">
-        <Link
-          href={`/${locale}`}
-          className="font-display text-3xl font-semibold tracking-tight bg-gradient-to-br from-white via-[var(--foreground)] to-[var(--accent)] bg-clip-text text-transparent"
-        >
-          {tApp("name")}
+        <Link href={`/${locale}`} className="inline-flex justify-center">
+          <AppBrand size="lg" />
         </Link>
         <p className="mt-2 text-sm text-[var(--muted-fg)]">{tApp("tagline")}</p>
       </div>

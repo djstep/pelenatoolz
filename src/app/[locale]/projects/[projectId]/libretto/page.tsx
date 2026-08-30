@@ -97,7 +97,8 @@ export default async function LibrettoPage({ params }: Props) {
           projectType={ctx.project.type}
 
           shootOnFilm={ctx.project.shootOnFilm ?? false}
-
+          timingMode={ctx.project.timingMode}
+          pageToMinuteRatio={Number(ctx.project.pageToMinuteRatio)}
           scenes={scenes}
 
           locations={locationOptions}

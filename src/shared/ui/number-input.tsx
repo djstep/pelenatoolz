@@ -1,11 +1,14 @@
 "use client";
 
 import {
+  useEffect,
   useId,
+  useRef,
   useState,
   type ChangeEvent,
   type InputHTMLAttributes,
   type KeyboardEvent,
+  type PointerEvent,
 } from "react";
 import { cn } from "@/shared/lib/cn";
 
@@ -20,6 +23,41 @@ function toNumber(value: string | number | readonly string[] | undefined) {
   if (value == null || value === "") return null;
   const n = typeof value === "number" ? value : Number(value);
   return Number.isFinite(n) ? n : null;
+}
+
+function stepDecimals(step: number) {
+  if (!Number.isFinite(step) || step <= 0 || Number.isInteger(step)) return 0;
+  const [, fraction = ""] = step.toString().split(".");
+  return fraction.length;
+}
+
+function roundToStep(value: number, step: number) {
+  if (!Number.isFinite(step) || step <= 0) return value;
+  const decimals = stepDecimals(step);
+  const rounded = Math.round(value / step) * step;
+  return Number(rounded.toFixed(decimals));
+}
+
+function formatNumberValue(value: number, step: number) {
+  return roundToStep(value, step).toFixed(stepDecimals(step));
+}
+
+const HOLD_DELAY_MS = 400;
+const HOLD_INTERVAL_MS = 75;
+
+type RepeatState = {
+  timeoutId?: ReturnType<typeof setTimeout>;
+  intervalId?: ReturnType<typeof setInterval>;
+  stopWindowListeners?: () => void;
+};
+
+function clearRepeat(state: RepeatState) {
+  if (state.timeoutId != null) clearTimeout(state.timeoutId);
+  if (state.intervalId != null) clearInterval(state.intervalId);
+  state.stopWindowListeners?.();
+  state.timeoutId = undefined;
+  state.intervalId = undefined;
+  state.stopWindowListeners = undefined;
 }
 
 export function NumberInput({
@@ -47,7 +85,7 @@ export function NumberInput({
   const isControlled = value !== undefined;
   const [internal, setInternal] = useState(() => {
     const initial = toNumber(defaultValue);
-    return initial == null ? "" : String(initial);
+    return initial == null ? "" : formatNumberValue(initial, stepN);
   });
 
   const display = isControlled
@@ -56,9 +94,16 @@ export function NumberInput({
       : String(value)
     : internal;
 
+  const valueRef = useRef(display);
+  valueRef.current = display;
+
   const current = toNumber(display);
+  const repeatRef = useRef<RepeatState>({});
+
+  useEffect(() => () => clearRepeat(repeatRef.current), []);
 
   function emit(text: string) {
+    valueRef.current = text;
     if (!isControlled) setInternal(text);
     if (!onChange) return;
     const synthetic = {
@@ -68,10 +113,53 @@ export function NumberInput({
     onChange(synthetic);
   }
 
-  function bump(direction: 1 | -1) {
-    if (disabled) return;
-    const base = current ?? minN ?? 0;
-    emit(String(clamp(base + direction * stepN, minN, maxN)));
+  function bump(direction: 1 | -1): boolean {
+    if (disabled) return false;
+    const base = toNumber(valueRef.current) ?? minN ?? 0;
+    const unclamped = base + direction * stepN;
+    const next = roundToStep(clamp(unclamped, minN, maxN), stepN);
+    const formatted = formatNumberValue(next, stepN);
+    if (formatted === formatNumberValue(base, stepN) && unclamped !== next) {
+      return false;
+    }
+    emit(formatted);
+    return true;
+  }
+
+  function stopRepeat() {
+    clearRepeat(repeatRef.current);
+  }
+
+  function startRepeat(direction: 1 | -1) {
+    stopRepeat();
+
+    const tick = () => {
+      if (!bump(direction)) stopRepeat();
+    };
+
+    tick();
+
+    const onWindowPointerEnd = () => stopRepeat();
+    window.addEventListener("pointerup", onWindowPointerEnd);
+    window.addEventListener("pointercancel", onWindowPointerEnd);
+    repeatRef.current.stopWindowListeners = () => {
+      window.removeEventListener("pointerup", onWindowPointerEnd);
+      window.removeEventListener("pointercancel", onWindowPointerEnd);
+    };
+
+    repeatRef.current.timeoutId = setTimeout(() => {
+      repeatRef.current.intervalId = setInterval(tick, HOLD_INTERVAL_MS);
+    }, HOLD_DELAY_MS);
+  }
+
+  function handleStepPointerDown(
+    event: PointerEvent<HTMLButtonElement>,
+    direction: 1 | -1,
+    blocked: boolean,
+  ) {
+    if (blocked || event.button !== 0) return;
+    event.preventDefault();
+    startRepeat(direction);
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
@@ -101,7 +189,10 @@ export function NumberInput({
         disabled={disabled || atMin}
         aria-label="Уменьшить"
         className="glass-number-btn"
-        onClick={() => bump(-1)}
+        onPointerDown={(event) => handleStepPointerDown(event, -1, disabled || atMin)}
+        onPointerUp={stopRepeat}
+        onPointerLeave={stopRepeat}
+        onPointerCancel={stopRepeat}
       >
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
           <path
@@ -132,8 +223,9 @@ export function NumberInput({
           if (raw !== "") {
             const n = Number(raw);
             if (Number.isFinite(n)) {
-              const next = clamp(n, minN, maxN);
-              if (String(next) !== raw) emit(String(next));
+              const next = roundToStep(clamp(n, minN, maxN), stepN);
+              const formatted = formatNumberValue(next, stepN);
+              if (formatted !== raw) emit(formatted);
             }
           }
           onBlur?.(e);
@@ -148,7 +240,10 @@ export function NumberInput({
         disabled={disabled || atMax}
         aria-label="Увеличить"
         className="glass-number-btn"
-        onClick={() => bump(1)}
+        onPointerDown={(event) => handleStepPointerDown(event, 1, disabled || atMax)}
+        onPointerUp={stopRepeat}
+        onPointerLeave={stopRepeat}
+        onPointerCancel={stopRepeat}
       >
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
           <path
