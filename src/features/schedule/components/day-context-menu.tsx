@@ -305,7 +305,7 @@ export function DayContextMenu({
               onClick={() => {
                 onClose();
                 router.push(
-                  `/${locale}/projects/${projectId}/actors/employment/${day.id}`,
+                  `/${locale}/projects/${projectId}/characters/employment/${day.id}`,
                 );
               }}
             >

@@ -7,7 +7,7 @@ import {
   updateLocationAction,
   type LocationActionState,
 } from "@/features/locations/actions";
-import type { LocationDetail } from "@/features/locations/queries";
+import type { LocationEditSource } from "@/features/locations/queries";
 import { locationKindLabels } from "@/shared/i18n/domain-labels";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
@@ -29,7 +29,7 @@ export function LocationModal({
   projectId: string;
   open: boolean;
   onClose: () => void;
-  location?: LocationDetail | null;
+  location?: LocationEditSource | null;
   addresses: string[];
 }) {
   const isEdit = Boolean(location);

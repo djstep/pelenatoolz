@@ -35,6 +35,7 @@ import {
 import { useBlockHistory } from "@/features/screenplay/lib/use-block-history";
 import { parseSlugline } from "@/features/screenplay/lib/slugline";
 import { cn } from "@/shared/lib/cn";
+import { useActionToast } from "@/shared/ui/toast";
 
 type Option = { id: string; name: string };
 
@@ -173,6 +174,7 @@ export function ScreenplayBlockEditor({
   const [activeIndex, setActiveIndex] = useState(0);
   const [search, setSearch] = useState("");
   const [message, setMessage] = useState<ScreenplayActionState>({});
+  useActionToast(message);
   const [pending, startTransition] = useTransition();
   const [comments, setComments] = useState(initialComments);
   const [pendingSelection, setPendingSelection] =
@@ -415,13 +417,6 @@ export function ScreenplayBlockEditor({
     >
       <div className="screenplay-editor-main">
         <div className="screenplay-editor-column">
-        {message.error ? (
-          <p className="mb-2 text-sm text-[var(--danger)]">{message.error}</p>
-        ) : null}
-        {message.success ? (
-          <p className="mb-2 text-sm text-emerald-400">{message.success}</p>
-        ) : null}
-
           <div className="screenplay-editor-document">
             <div
               ref={setPaperColumnEl}

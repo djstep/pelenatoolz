@@ -42,7 +42,7 @@ export function ActorEmploymentView({
             </Link>
             {" · "}
             <Link
-              href={`/${locale}/projects/${projectId}/actors`}
+              href={`/${locale}/projects/${projectId}/characters`}
               className="hover:text-white"
             >
               Актёры

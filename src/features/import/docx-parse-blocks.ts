@@ -1,4 +1,5 @@
 import type { ScriptBlockType } from "@prisma/client";
+import { isStageDirectionLine } from "@/features/screenplay/lib/stage-directions";
 
 export type DocxParagraph = {
   text: string;
@@ -24,7 +25,8 @@ function isCharacterLine(text: string) {
     t.length <= 40 &&
     t === t.toUpperCase() &&
     !isSlugline(t) &&
-    !isTransition(t)
+    !isTransition(t) &&
+    !isStageDirectionLine(t)
   );
 }
 

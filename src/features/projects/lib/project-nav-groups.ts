@@ -10,13 +10,21 @@ export const projectNavGroups: NavGroup[] = [
     ],
   },
   {
+    id: "preproduction",
+    title: "Препродакшн",
+    items: [
+      { href: "/preproduction/casting", label: "Кастинг" },
+      { href: "/preproduction/scout", label: "Скаут" },
+    ],
+  },
+  {
     id: "planning",
     title: "Планирование",
     defaultOpen: true,
     items: [
       { href: "/libretto", label: "Сцены (либретто)" },
       { href: "/locations", label: "Локации" },
-      { href: "/actors", label: "Актёры" },
+      { href: "/characters", label: "Персонажи" },
       { href: "/schedule", label: "КПП" },
       { href: "/call-sheets", label: "Вызывные" },
     ],

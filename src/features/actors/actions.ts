@@ -6,8 +6,15 @@ import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { prisma } from "@/shared/db/prisma";
 import { writeAuditLog } from "@/shared/audit/log";
 import { z } from "zod";
+import { parseHhMmToMinutes } from "@/shared/i18n/domain-labels";
 
 export type ActorActionState = { error?: string; success?: string };
+
+const durationMinutes = z.preprocess((val) => {
+  if (val === "" || val == null) return undefined;
+  if (typeof val === "number") return val;
+  return parseHhMmToMinutes(String(val));
+}, z.number().int().min(0).optional());
 
 const actorSchema = z.object({
   lastName: z.string().trim().min(1).max(100),
@@ -27,18 +34,31 @@ const actorSchema = z.object({
     .optional()
     .transform((v) => (v === "" || !v ? undefined : v))
     .pipe(z.email().optional()),
-  carPickupTime: z.string().trim().max(5).optional(),
-  arrivalTime: z.string().trim().max(5).optional(),
+  agentName: z.string().trim().max(100).optional(),
+  agentPhone: z.string().trim().max(30).optional(),
+  agentEmail: z
+    .string()
+    .optional()
+    .transform((v) => (v === "" || !v ? undefined : v))
+    .pipe(z.email().optional()),
   tags: z.string().trim().max(500).optional(),
   specialConditions: z.string().trim().max(5000).optional(),
   shiftRate: z.coerce.number().min(0).optional(),
-  shiftHoursMin: z.coerce.number().int().min(0).max(1440).optional(),
-  unpaidOvertimeMin: z.coerce.number().int().min(0).max(600).optional(),
+  shiftHoursMin: durationMinutes.pipe(z.number().max(1440).optional()),
+  unpaidOvertimeMin: durationMinutes.pipe(z.number().max(600).optional()),
   forceMajeurePct: z.coerce.number().min(0).max(1000).optional(),
 });
 
-function revalidateActors(projectId: string) {
+function revalidateActors(projectId: string, characterId?: string) {
   revalidatePath(`/ru/projects/${projectId}/actors`);
+  revalidatePath(`/ru/projects/${projectId}/characters`);
+  if (characterId) {
+    revalidatePath(`/ru/projects/${projectId}/characters/${characterId}`);
+  }
+}
+
+function isFormValueBlank(value: FormDataEntryValue | null) {
+  return value == null || String(value).trim() === "";
 }
 
 function parseOvertimeRows(formData: FormData, shiftRate: number, fkPct: number) {
@@ -54,23 +74,21 @@ function parseOvertimeRows(formData: FormData, shiftRate: number, fkPct: number)
   for (let i = 1; i <= 24; i++) {
     const pctRaw = formData.get(`ot_pct_${i}`);
     const amountRaw = formData.get(`ot_amount_${i}`);
-    if (pctRaw == null && amountRaw == null) continue;
-    const percentRate = pctRaw === "" || pctRaw == null ? null : Number(pctRaw);
-    let amount =
-      amountRaw === "" || amountRaw == null ? null : Number(amountRaw);
+    if (isFormValueBlank(pctRaw) && isFormValueBlank(amountRaw)) continue;
+    const percentRate = isFormValueBlank(pctRaw) ? null : Number(pctRaw);
+    let amount = isFormValueBlank(amountRaw) ? null : Number(amountRaw);
     if (amount == null && percentRate != null && shiftRate > 0) {
       amount = (shiftRate * percentRate) / 100;
     }
+    if (percentRate == null && amount == null) continue;
+    if (Number.isNaN(percentRate ?? 0) || Number.isNaN(amount ?? 0)) continue;
+
     const rowFkPctRaw = formData.get(`ot_fk_${i}`);
-    const rowFkPct =
-      rowFkPctRaw === "" || rowFkPctRaw == null
-        ? fkPct
-        : Number(rowFkPctRaw);
+    const rowFkPct = isFormValueBlank(rowFkPctRaw) ? fkPct : Number(rowFkPctRaw);
     const forceMajeureAmt =
       amount != null ? (amount * (rowFkPct || 0)) / 100 : null;
     const totalWithFk =
       amount != null ? amount + (forceMajeureAmt ?? 0) : null;
-    if (percentRate == null && amount == null) continue;
     rows.push({
       hourNumber: i,
       percentRate,
@@ -95,14 +113,15 @@ function parseExtraPayments(formData: FormData, fkPct: number) {
 
   for (let i = 0; i < 50; i++) {
     const amountRaw = formData.get(`ep_amount_${i}`);
-    if (amountRaw == null || amountRaw === "") continue;
-    const amount = Number(amountRaw);
+    const dateRaw = String(formData.get(`ep_date_${i}`) ?? "").trim();
+    const descRaw = String(formData.get(`ep_desc_${i}`) ?? "").trim();
+    if (isFormValueBlank(amountRaw) && !dateRaw && !descRaw) continue;
+    const amount = isFormValueBlank(amountRaw) ? 0 : Number(amountRaw);
     if (Number.isNaN(amount)) continue;
-    const dateRaw = String(formData.get(`ep_date_${i}`) ?? "");
-    const rowFk =
-      formData.get(`ep_fk_${i}`) === "" || formData.get(`ep_fk_${i}`) == null
-        ? fkPct
-        : Number(formData.get(`ep_fk_${i}`));
+    if (amount === 0 && !dateRaw && !descRaw) continue;
+
+    const rowFkRaw = formData.get(`ep_fk_${i}`);
+    const rowFk = isFormValueBlank(rowFkRaw) ? fkPct : Number(rowFkRaw);
     const forceMajeureAmt = (amount * (rowFk || 0)) / 100;
     rows.push({
       paymentDate: dateRaw ? new Date(dateRaw) : null,
@@ -110,7 +129,7 @@ function parseExtraPayments(formData: FormData, fkPct: number) {
       forceMajeurePct: rowFk,
       forceMajeureAmt,
       totalWithFk: amount + forceMajeureAmt,
-      description: String(formData.get(`ep_desc_${i}`) ?? "") || null,
+      description: descRaw || null,
     });
   }
   return rows;
@@ -128,8 +147,9 @@ function actorFormData(formData: FormData) {
     phone1: formData.get("phone1") || undefined,
     phone2: formData.get("phone2") || undefined,
     email: formData.get("email") || undefined,
-    carPickupTime: formData.get("carPickupTime") || undefined,
-    arrivalTime: formData.get("arrivalTime") || undefined,
+    agentName: formData.get("agentName") || undefined,
+    agentPhone: formData.get("agentPhone") || undefined,
+    agentEmail: formData.get("agentEmail") || undefined,
     tags: formData.get("tags") || undefined,
     specialConditions: formData.get("specialConditions") || undefined,
     shiftRate: formData.get("shiftRate") || undefined,
@@ -177,7 +197,7 @@ export async function createActorAction(
     summary: `Добавлен актёр ${parsed.data.lastName}`,
   });
 
-  revalidateActors(projectId);
+  revalidateActors(projectId, parsed.data.characterId);
   return { success: "Актёр добавлен" };
 }
 
@@ -229,7 +249,7 @@ export async function updateActorAction(
     summary: `Обновлён актёр ${parsed.data.lastName}`,
   });
 
-  revalidateActors(projectId);
+  revalidateActors(projectId, existing.characterId ?? undefined);
   return { success: "Актёр сохранён" };
 }
 

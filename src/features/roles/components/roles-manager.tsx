@@ -17,6 +17,7 @@ import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Modal } from "@/shared/ui/modal";
+import { useActionToast } from "@/shared/ui/toast";
 
 const initial: RoleActionState = {};
 
@@ -44,6 +45,7 @@ function RoleEditorModal({
     ? updateRoleAction.bind(null, projectId, role!.id)
     : createRoleAction.bind(null, projectId);
   const [state, action, pending] = useActionState(bound, initial);
+  useActionToast(state);
   const matrix: PermissionMatrix = role
     ? parsePermissionMatrix(role.permissions)
     : buildEmptyMatrix();
@@ -62,12 +64,6 @@ function RoleEditorModal({
           <Button type="button" variant="secondary" onClick={onClose}>
             Отмена
           </Button>
-          {state.error ? (
-            <span className="text-sm text-[var(--danger)]">{state.error}</span>
-          ) : null}
-          {state.success ? (
-            <span className="text-sm text-green-400">{state.success}</span>
-          ) : null}
         </div>
       }
     >

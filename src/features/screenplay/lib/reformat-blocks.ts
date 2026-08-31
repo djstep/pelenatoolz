@@ -3,6 +3,7 @@ import type { ScreenplayBlock } from "@/features/screenplay/lib/block-types";
 import { createEmptyBlock } from "@/features/screenplay/lib/block-types";
 import { blockPlainText } from "@/features/screenplay/lib/plain-text";
 import { classifyScriptLines } from "@/features/script/lib/screenplay-lines";
+import { isStageDirectionLine } from "@/features/screenplay/lib/stage-directions";
 
 const STRUCTURAL_TYPES = new Set<ScriptBlockType>([
   "SLUGLINE",
@@ -39,7 +40,7 @@ function detectStructuralType(text: string): ScriptBlockType | null {
   const trimmed = text.trim();
   if (!trimmed) return null;
   if (SLUGLINE_RE.test(trimmed)) return "SLUGLINE";
-  if (TRANSITION_RE.test(trimmed)) return "TRANSITION";
+  if (TRANSITION_RE.test(trimmed) || isStageDirectionLine(trimmed)) return "TRANSITION";
   if (trimmed.startsWith("[[") && trimmed.endsWith("]]")) return "BONEYARD";
   if (trimmed.startsWith("*") && trimmed.endsWith("*")) return "NOTE";
   return null;

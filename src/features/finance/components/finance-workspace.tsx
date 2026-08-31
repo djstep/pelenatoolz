@@ -18,6 +18,7 @@ import { Label } from "@/shared/ui/label";
 import { Modal } from "@/shared/ui/modal";
 import { Select } from "@/shared/ui/select";
 import { cn } from "@/shared/lib/cn";
+import { useActionToast } from "@/shared/ui/toast";
 
 const initial: FinanceActionState = {};
 
@@ -167,6 +168,7 @@ function OpModal({
     ? updateFinanceOpAction.bind(null, projectId, op.id)
     : createFinanceOpAction.bind(null, projectId);
   const [state, action, pending] = useActionState(bound, initial);
+  useActionToast(state);
 
   useEffect(() => {
     if (state.success) onClose();
@@ -185,9 +187,6 @@ function OpModal({
           <Button type="button" variant="secondary" onClick={onClose}>
             Отмена
           </Button>
-          {state.error ? (
-            <span className="text-sm text-[var(--danger)]">{state.error}</span>
-          ) : null}
         </div>
       }
     >

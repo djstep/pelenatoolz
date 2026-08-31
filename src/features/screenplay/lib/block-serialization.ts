@@ -2,6 +2,7 @@ import type { ScriptBlockType } from "@prisma/client";
 import type { ScreenplayBlock } from "@/features/screenplay/lib/block-types";
 import { blockPlainText } from "@/features/screenplay/lib/plain-text";
 import { classifyScriptLines } from "@/features/script/lib/screenplay-lines";
+import { isStageDirectionLine } from "@/features/screenplay/lib/stage-directions";
 
 export function scriptContentToBlocks(
   scriptContent: string | null | undefined,
@@ -56,7 +57,7 @@ export function extractCharacterNames(blocks: ScreenplayBlock[]) {
   for (const block of blocks) {
     if (block.type !== "CHARACTER") continue;
     const name = blockPlainText(block.content, block.contentHtml).trim().replace(/\.+$/, "");
-    if (name) names.add(name.toUpperCase());
+    if (name && !isStageDirectionLine(name)) names.add(name.toUpperCase());
   }
   return [...names];
 }

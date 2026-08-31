@@ -1,4 +1,5 @@
 import { prisma } from "@/shared/db/prisma";
+import { parseScoutSnapshot } from "@/features/preproduction/lib/snapshots";
 
 const sceneBriefSelect = {
   id: true,
@@ -49,10 +50,11 @@ export async function listProjectAddresses(projectId: string) {
 }
 
 export async function getLocationDetail(projectId: string, locationId: string) {
-  return prisma.location.findFirst({
+  const location = await prisma.location.findFirst({
     where: { id: locationId, projectId },
     include: {
       photos: { orderBy: { sortOrder: "asc" } },
+      scoutCandidates: { orderBy: { updatedAt: "desc" } },
       scenes: {
         include: {
           scene: {
@@ -66,6 +68,13 @@ export async function getLocationDetail(projectId: string, locationId: string) {
       },
     },
   });
+
+  if (!location) return null;
+
+  return {
+    ...location,
+    scoutSnapshot: parseScoutSnapshot(location.scoutSnapshot),
+  };
 }
 
 export type LocationWithStats = Awaited<
@@ -74,4 +83,16 @@ export type LocationWithStats = Awaited<
 
 export type LocationDetail = NonNullable<
   Awaited<ReturnType<typeof getLocationDetail>>
+>;
+
+export type LocationEditSource = Pick<
+  LocationDetail,
+  | "id"
+  | "name"
+  | "sublocation"
+  | "locationKind"
+  | "hasDecoration"
+  | "address"
+  | "tags"
+  | "notes"
 >;

@@ -1,9 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type InputHTMLAttributes } from "react";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
+import { cn } from "@/shared/lib/cn";
+import { formatMinutesHhMm } from "@/shared/i18n/domain-labels";
 
 type OvertimeSeed = {
   hourNumber: number;
@@ -12,16 +14,97 @@ type OvertimeSeed = {
   forceMajeurePct: number | null;
 };
 
+type OvertimeRowState = {
+  hourNumber: number;
+  pct: string;
+  amount: string;
+  fkPct: string;
+};
+
 type ExtraSeed = {
   paymentDate: string;
-  amount: number;
-  forceMajeurePct: number | null;
+  amount: string;
+  forceMajeurePct: string;
   description: string;
 };
 
 function toNum(v: { toString(): string } | number | null | undefined) {
   if (v == null) return null;
   return Number(v);
+}
+
+function PayrollTableInput({
+  className,
+  ...props
+}: InputHTMLAttributes<HTMLInputElement>) {
+  return (
+    <input
+      {...props}
+      className={cn(
+        "glass-input w-full min-w-[4.5rem] rounded-lg px-2 py-1.5 text-sm text-[var(--foreground)] placeholder:text-[var(--muted)]",
+        className,
+      )}
+    />
+  );
+}
+
+function initOvertimeRows(seeds: OvertimeSeed[]): OvertimeRowState[] {
+  const maxHour = Math.max(4, ...seeds.map((s) => s.hourNumber), 0);
+  return Array.from({ length: maxHour }, (_, idx) => {
+    const hour = idx + 1;
+    const seed = seeds.find((s) => s.hourNumber === hour);
+    return {
+      hourNumber: hour,
+      pct: seed?.percentRate != null ? String(seed.percentRate) : "",
+      amount: seed?.amount != null ? String(seed.amount) : "",
+      fkPct:
+        seed?.forceMajeurePct != null ? String(seed.forceMajeurePct) : "",
+    };
+  });
+}
+
+function isOvertimeRowFilled(row: OvertimeRowState) {
+  return row.pct.trim() !== "" || row.amount.trim() !== "";
+}
+
+function computeOvertimeRow(
+  row: OvertimeRowState,
+  shiftRate: number,
+  globalFkPct: number,
+) {
+  if (!isOvertimeRowFilled(row)) return null;
+
+  const pct = row.pct.trim() === "" ? null : Number(row.pct);
+  let amount = row.amount.trim() === "" ? null : Number(row.amount);
+  if ((amount == null || Number.isNaN(amount)) && pct != null && !Number.isNaN(pct) && shiftRate > 0) {
+    amount = (shiftRate * pct) / 100;
+  }
+  if (amount == null || Number.isNaN(amount)) return null;
+
+  const rowFk =
+    row.fkPct.trim() === "" ? globalFkPct : Number(row.fkPct) || 0;
+  const fkAmt = (amount * rowFk) / 100;
+  return { amount, fkAmt, total: amount + fkAmt };
+}
+
+function isExtraRowFilled(row: ExtraSeed) {
+  return (
+    row.amount.trim() !== "" ||
+    row.paymentDate.trim() !== "" ||
+    row.description.trim() !== ""
+  );
+}
+
+function computeExtraRow(row: ExtraSeed, globalFkPct: number) {
+  if (!isExtraRowFilled(row)) return null;
+  const amount = row.amount.trim() === "" ? 0 : Number(row.amount);
+  if (Number.isNaN(amount)) return null;
+  const rowFk =
+    row.forceMajeurePct.trim() === ""
+      ? globalFkPct
+      : Number(row.forceMajeurePct) || 0;
+  const total = amount + (amount * rowFk) / 100;
+  return total;
 }
 
 export function ActorPayrollBlock({
@@ -39,11 +122,11 @@ export function ActorPayrollBlock({
   overtime?: OvertimeSeed[];
   extras?: ExtraSeed[];
 }) {
-  const [otCount, setOtCount] = useState(Math.max(4, overtime.length || 4));
-  const [epRows, setEpRows] = useState(
+  const [otRows, setOtRows] = useState(() => initOvertimeRows(overtime));
+  const [epRows, setEpRows] = useState<ExtraSeed[]>(
     extras.length
       ? extras
-      : [{ paymentDate: "", amount: 0, forceMajeurePct: null, description: "" }],
+      : [{ paymentDate: "", amount: "", forceMajeurePct: "", description: "" }],
   );
   const [fkPct, setFkPct] = useState(forceMajeurePct);
   const [rate, setRate] = useState(shiftRate);
@@ -52,6 +135,12 @@ export function ActorPayrollBlock({
     () => rate + (rate * fkPct) / 100,
     [rate, fkPct],
   );
+
+  const updateOtRow = (hour: number, patch: Partial<OvertimeRowState>) => {
+    setOtRows((prev) =>
+      prev.map((row) => (row.hourNumber === hour ? { ...row, ...patch } : row)),
+    );
+  };
 
   return (
     <div className="space-y-4 border-t border-[var(--border)] pt-4">
@@ -83,22 +172,23 @@ export function ActorPayrollBlock({
           <Input value={amountWithFk.toFixed(2)} readOnly className="opacity-70" />
         </div>
         <div>
-          <Label htmlFor="shiftHoursMin">Продолжительность смены (мин)</Label>
+          <Label htmlFor="shiftHoursMin">Продолжительность смены</Label>
           <Input
             id="shiftHoursMin"
             name="shiftHoursMin"
-            type="number"
-            placeholder="720"
-            defaultValue={shiftHoursMin ?? undefined}
+            type="time"
+            step={60}
+            defaultValue={formatMinutesHhMm(shiftHoursMin)}
           />
         </div>
         <div>
-          <Label htmlFor="unpaidOvertimeMin">Неоплачиваемая переработка (мин)</Label>
+          <Label htmlFor="unpaidOvertimeMin">Неоплачиваемая переработка</Label>
           <Input
             id="unpaidOvertimeMin"
             name="unpaidOvertimeMin"
-            type="number"
-            defaultValue={unpaidOvertimeMin ?? undefined}
+            type="time"
+            step={60}
+            defaultValue={formatMinutesHhMm(unpaidOvertimeMin)}
           />
         </div>
       </div>
@@ -118,48 +208,51 @@ export function ActorPayrollBlock({
               </tr>
             </thead>
             <tbody>
-              {Array.from({ length: otCount }, (_, idx) => {
-                const hour = idx + 1;
-                const seed = overtime.find((o) => o.hourNumber === hour);
-                const pct = seed?.percentRate ?? "";
-                const amount =
-                  seed?.amount ??
-                  (seed?.percentRate != null && rate
-                    ? (rate * seed.percentRate) / 100
-                    : "");
-                const rowFk = seed?.forceMajeurePct ?? fkPct;
-                const amtNum = Number(amount) || 0;
-                const fkAmt = (amtNum * (Number(rowFk) || 0)) / 100;
+              {otRows.map((row) => {
+                const computed = computeOvertimeRow(row, rate, fkPct);
                 return (
-                  <tr key={hour}>
-                    <td className="py-1 pr-2 whitespace-nowrap">{hour}-й час</td>
+                  <tr key={row.hourNumber}>
+                    <td className="py-1 pr-2 whitespace-nowrap">
+                      {row.hourNumber}-й час
+                    </td>
                     <td className="py-1 pr-2">
-                      <Input
-                        name={`ot_pct_${hour}`}
-                        type="number"
-                        defaultValue={pct === "" ? undefined : pct}
-                        className="w-20"
+                      <PayrollTableInput
+                        name={`ot_pct_${row.hourNumber}`}
+                        inputMode="decimal"
+                        placeholder="—"
+                        value={row.pct}
+                        onChange={(e) =>
+                          updateOtRow(row.hourNumber, { pct: e.target.value })
+                        }
                       />
                     </td>
                     <td className="py-1 pr-2">
-                      <Input
-                        name={`ot_amount_${hour}`}
-                        type="number"
-                        defaultValue={amount === "" ? undefined : amount}
-                        className="w-28"
+                      <PayrollTableInput
+                        name={`ot_amount_${row.hourNumber}`}
+                        inputMode="decimal"
+                        placeholder="—"
+                        value={row.amount}
+                        onChange={(e) =>
+                          updateOtRow(row.hourNumber, { amount: e.target.value })
+                        }
                       />
                     </td>
                     <td className="py-1 pr-2">
-                      <Input
-                        name={`ot_fk_${hour}`}
-                        type="number"
-                        defaultValue={rowFk || undefined}
-                        className="w-20"
+                      <PayrollTableInput
+                        name={`ot_fk_${row.hourNumber}`}
+                        inputMode="decimal"
+                        placeholder={fkPct ? String(fkPct) : "—"}
+                        value={row.fkPct}
+                        onChange={(e) =>
+                          updateOtRow(row.hourNumber, { fkPct: e.target.value })
+                        }
                       />
                     </td>
-                    <td className="py-1 pr-2 opacity-70">{fkAmt.toFixed(2)}</td>
-                    <td className="py-1 pr-2 opacity-70">
-                      {(amtNum + fkAmt).toFixed(2)}
+                    <td className="py-1 pr-2 text-[var(--muted-fg)]">
+                      {computed ? computed.fkAmt.toFixed(2) : "—"}
+                    </td>
+                    <td className="py-1 pr-2 text-[var(--muted-fg)]">
+                      {computed ? computed.total.toFixed(2) : "—"}
                     </td>
                   </tr>
                 );
@@ -171,7 +264,17 @@ export function ActorPayrollBlock({
           type="button"
           variant="secondary"
           className="mt-2"
-          onClick={() => setOtCount((c) => c + 1)}
+          onClick={() =>
+            setOtRows((prev) => [
+              ...prev,
+              {
+                hourNumber: prev.length + 1,
+                pct: "",
+                amount: "",
+                fkPct: "",
+              },
+            ])
+          }
         >
           + Добавить час
         </Button>
@@ -193,8 +296,7 @@ export function ActorPayrollBlock({
             </thead>
             <tbody>
               {epRows.map((row, i) => {
-                const rowFk = row.forceMajeurePct ?? fkPct;
-                const total = row.amount + (row.amount * (rowFk || 0)) / 100;
+                const total = computeExtraRow(row, fkPct);
                 return (
                   <tr key={i}>
                     <td className="py-1 pr-2">
@@ -205,51 +307,53 @@ export function ActorPayrollBlock({
                         onChange={(e) =>
                           setEpRows((prev) =>
                             prev.map((r, idx) =>
-                              idx === i ? { ...r, paymentDate: e.target.value } : r,
+                              idx === i
+                                ? { ...r, paymentDate: e.target.value }
+                                : r,
                             ),
                           )
                         }
                       />
                     </td>
                     <td className="py-1 pr-2">
-                      <Input
+                      <PayrollTableInput
                         name={`ep_amount_${i}`}
-                        type="number"
-                        value={row.amount || ""}
+                        inputMode="decimal"
+                        placeholder="—"
+                        value={row.amount}
                         onChange={(e) =>
                           setEpRows((prev) =>
                             prev.map((r, idx) =>
-                              idx === i
-                                ? { ...r, amount: Number(e.target.value) || 0 }
-                                : r,
+                              idx === i ? { ...r, amount: e.target.value } : r,
                             ),
                           )
                         }
                       />
                     </td>
                     <td className="py-1 pr-2">
-                      <Input
+                      <PayrollTableInput
                         name={`ep_fk_${i}`}
-                        type="number"
-                        value={rowFk || ""}
+                        inputMode="decimal"
+                        placeholder={fkPct ? String(fkPct) : "—"}
+                        value={row.forceMajeurePct}
                         onChange={(e) =>
                           setEpRows((prev) =>
                             prev.map((r, idx) =>
                               idx === i
-                                ? {
-                                    ...r,
-                                    forceMajeurePct: Number(e.target.value) || 0,
-                                  }
+                                ? { ...r, forceMajeurePct: e.target.value }
                                 : r,
                             ),
                           )
                         }
                       />
                     </td>
-                    <td className="py-1 pr-2 opacity-70">{total.toFixed(2)}</td>
+                    <td className="py-1 pr-2 text-[var(--muted-fg)]">
+                      {total != null ? total.toFixed(2) : "—"}
+                    </td>
                     <td className="py-1 pr-2">
-                      <Input
+                      <PayrollTableInput
                         name={`ep_desc_${i}`}
+                        placeholder="—"
                         value={row.description}
                         onChange={(e) =>
                           setEpRows((prev) =>
@@ -293,8 +397,8 @@ export function ActorPayrollBlock({
               ...prev,
               {
                 paymentDate: "",
-                amount: 0,
-                forceMajeurePct: null,
+                amount: "",
+                forceMajeurePct: "",
                 description: "",
               },
             ])
@@ -335,8 +439,9 @@ export function seedExtras(
     paymentDate: p.paymentDate
       ? new Date(p.paymentDate).toISOString().slice(0, 10)
       : "",
-    amount: Number(p.amount),
-    forceMajeurePct: toNum(p.forceMajeurePct),
+    amount: String(p.amount),
+    forceMajeurePct:
+      p.forceMajeurePct != null ? String(p.forceMajeurePct) : "",
     description: p.description ?? "",
   }));
 }

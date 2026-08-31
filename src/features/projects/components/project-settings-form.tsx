@@ -24,6 +24,7 @@ import { Label } from "@/shared/ui/label";
 import { SegmentControl } from "@/shared/ui/segment-control";
 import { Select } from "@/shared/ui/select";
 import { cn } from "@/shared/lib/cn";
+import { useActionToast } from "@/shared/ui/toast";
 
 const initial: ActionState = {};
 
@@ -35,6 +36,7 @@ function formatDateInput(value: Date | null | undefined) {
 export function ProjectSettingsForm({ project }: { project: Project }) {
   const bound = updateProjectAction.bind(null, project.id);
   const [state, action, pending] = useActionState(bound, initial);
+  useActionToast(state);
   const [projectType, setProjectType] = useState(project.type);
   const [timingMode, setTimingMode] = useState(project.timingMode);
   const [shootOnFilm, setShootOnFilm] = useState(project.shootOnFilm);
@@ -298,13 +300,6 @@ export function ProjectSettingsForm({ project }: { project: Project }) {
         initialTimezone={project.timezone}
         disabled={isArchived}
       />
-
-      {state.error ? (
-        <p className="text-sm text-[var(--danger)]">{state.error}</p>
-      ) : null}
-      {state.success ? (
-        <p className="text-sm text-green-400">{state.success}</p>
-      ) : null}
 
       {!isArchived ? (
         <Button type="submit" disabled={pending}>

@@ -14,6 +14,7 @@ import { ScriptVersionNoteEditor } from "@/features/screenplay/components/script
 import { ScriptVersionActions, type ScriptVersionActionItem } from "@/features/screenplay/components/script-version-actions";
 import { Button } from "@/shared/ui/button";
 import { cn } from "@/shared/lib/cn";
+import { useToast } from "@/shared/ui/toast";
 
 const SOURCE_LABELS: Record<string, string> = {
   IMPORTED_DOCX: "Импорт DOCX",
@@ -36,6 +37,7 @@ export function ScreenplayVersionsList({
   canWrite,
 }: Props) {
   const router = useRouter();
+  const toast = useToast();
   const base = `/${locale}/projects/${projectId}/screenplay`;
   const [selected, setSelected] = useState<string[]>([]);
   const [pending, startTransition] = useTransition();
@@ -70,9 +72,10 @@ export function ScreenplayVersionsList({
     runAction(async () => {
       const result = await deleteScriptVersionAction(projectId, version.id);
       if (result.error) {
-        window.alert(result.error);
+        toast.error(result.error);
         return;
       }
+      toast.success(result.success ?? "Версия удалена");
       setSelected((prev) => prev.filter((id) => id !== version.id));
       router.refresh();
     });
@@ -82,9 +85,10 @@ export function ScreenplayVersionsList({
     runAction(async () => {
       const result = await duplicateScriptVersionAction(projectId, version.id);
       if (result.error) {
-        window.alert(result.error);
+        toast.error(result.error);
         return;
       }
+      toast.success(result.success ?? "Версия продублирована");
       router.refresh();
     });
   }
@@ -97,9 +101,12 @@ export function ScreenplayVersionsList({
         !version.isLocked,
       );
       if (result.error) {
-        window.alert(result.error);
+        toast.error(result.error);
         return;
       }
+      toast.success(
+        version.isLocked ? "Версия разблокирована" : "Версия заблокирована",
+      );
       router.refresh();
     });
   }

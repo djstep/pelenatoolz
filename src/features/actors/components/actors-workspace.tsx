@@ -20,7 +20,7 @@ import {
 import {
   actorRoleTypeLabels,
   contractorTypeLabels,
-  formatSecondsMmSs,
+  formatMinutesHhMm,
   genderLabels,
 } from "@/shared/i18n/domain-labels";
 import { Button } from "@/shared/ui/button";
@@ -28,6 +28,7 @@ import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Modal } from "@/shared/ui/modal";
 import { Select } from "@/shared/ui/select";
+import { useActionToast } from "@/shared/ui/toast";
 
 const initial: ActorActionState = {};
 
@@ -42,8 +43,9 @@ type ActorRow = {
   phone1: string | null;
   phone2: string | null;
   email: string | null;
-  carPickupTime: string | null;
-  arrivalTime: string | null;
+  agentName: string | null;
+  agentPhone: string | null;
+  agentEmail: string | null;
   tags: string | null;
   specialConditions: string | null;
   shiftRate: { toString(): string } | null;
@@ -187,23 +189,31 @@ function ActorFormFields({
         </div>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-2">
+      <div className="grid gap-3 md:grid-cols-3">
         <div>
-          <Label htmlFor="carPickupTime">Машина за актёром</Label>
+          <Label htmlFor="agentName">Агент</Label>
           <Input
-            id="carPickupTime"
-            name="carPickupTime"
-            type="time"
-            defaultValue={actor?.carPickupTime ?? ""}
+            id="agentName"
+            name="agentName"
+            placeholder="ФИО или агентство"
+            defaultValue={actor?.agentName ?? ""}
           />
         </div>
         <div>
-          <Label htmlFor="arrivalTime">Время прибытия</Label>
+          <Label htmlFor="agentPhone">Телефон агента</Label>
           <Input
-            id="arrivalTime"
-            name="arrivalTime"
-            type="time"
-            defaultValue={actor?.arrivalTime ?? ""}
+            id="agentPhone"
+            name="agentPhone"
+            defaultValue={actor?.agentPhone ?? ""}
+          />
+        </div>
+        <div>
+          <Label htmlFor="agentEmail">Email агента</Label>
+          <Input
+            id="agentEmail"
+            name="agentEmail"
+            type="email"
+            defaultValue={actor?.agentEmail ?? ""}
           />
         </div>
       </div>
@@ -250,6 +260,9 @@ function ActorFormFields({
   );
 }
 
+const DISCARD_ACTOR_EDITS_MESSAGE =
+  "Есть несохранённые изменения. Закрыть без сохранения?";
+
 function ActorEditorModal({
   projectId,
   actor,
@@ -268,15 +281,30 @@ function ActorEditorModal({
     ? updateActorAction.bind(null, projectId, actor!.id)
     : createActorAction.bind(null, projectId);
   const [state, action, pending] = useActionState(bound, initial);
+  const [dirty, setDirty] = useState(false);
+  useActionToast(state);
 
   useEffect(() => {
-    if (state.success) onClose();
+    if (open) setDirty(false);
+  }, [open, actor?.id]);
+
+  const guardedClose = () => {
+    if (dirty && !window.confirm(DISCARD_ACTOR_EDITS_MESSAGE)) return;
+    setDirty(false);
+    onClose();
+  };
+
+  useEffect(() => {
+    if (state.success) {
+      setDirty(false);
+      onClose();
+    }
   }, [state.success, onClose]);
 
   return (
     <Modal
       open={open}
-      onClose={onClose}
+      onClose={guardedClose}
       title={isEdit ? "Редактирование актёра" : "Добавление актёра"}
       wide
       footer={
@@ -284,16 +312,19 @@ function ActorEditorModal({
           <Button type="submit" form="actor-form" disabled={pending}>
             {pending ? "…" : "Сохранить"}
           </Button>
-          <Button type="button" variant="secondary" onClick={onClose}>
+          <Button type="button" variant="secondary" onClick={guardedClose}>
             Отмена
           </Button>
-          {state.error ? (
-            <span className="text-sm text-[var(--danger)]">{state.error}</span>
-          ) : null}
         </div>
       }
     >
-      <form id="actor-form" action={action} key={actor?.id ?? "new"}>
+      <form
+        id="actor-form"
+        action={action}
+        key={actor?.id ?? "new"}
+        onInput={() => setDirty(true)}
+        onChange={() => setDirty(true)}
+      >
         <ActorFormFields actor={actor} characters={characters} />
       </form>
     </Modal>
@@ -336,8 +367,9 @@ export function ActorsWorkspace({
               "Орг. форма",
               "Ставка смены",
               "Часы смены",
-              "Подача",
-              "Прибытие",
+              "Агент",
+              "Телефон агента",
+              "Email агента",
             ];
             const rows = actors.map((a) => [
               fullName(a),
@@ -347,9 +379,10 @@ export function ActorsWorkspace({
               a.email ?? "",
               contractorTypeLabels[a.contractorType],
               a.shiftRate?.toString() ?? "",
-              a.shiftHoursMin?.toString() ?? "",
-              a.carPickupTime ?? "",
-              a.arrivalTime ?? "",
+              formatMinutesHhMm(a.shiftHoursMin),
+              a.agentName ?? "",
+              a.agentPhone ?? "",
+              a.agentEmail ?? "",
             ]);
             const escape = (v: string) =>
               /[",\n;]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
@@ -403,16 +436,16 @@ export function ActorsWorkspace({
                   </td>
                   <td className="py-3 px-3 whitespace-nowrap">
                     {actor.shiftRate?.toString() ?? "—"}
-                    {actor.shiftHoursMin
-                      ? ` / ${formatSecondsMmSs(actor.shiftHoursMin * 60)}`
+                    {actor.shiftHoursMin != null
+                      ? ` / ${formatMinutesHhMm(actor.shiftHoursMin)}`
                       : ""}
                   </td>
                   <td className="py-3 px-3 text-xs">
                     {formatOvertime(actor.overtimeRates)}
                   </td>
                   <td className="py-3 px-3">
-                    {actor.unpaidOvertimeMin
-                      ? formatSecondsMmSs(actor.unpaidOvertimeMin * 60)
+                    {actor.unpaidOvertimeMin != null
+                      ? formatMinutesHhMm(actor.unpaidOvertimeMin)
                       : "—"}
                   </td>
                   {canWrite ? (

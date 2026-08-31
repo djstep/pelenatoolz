@@ -20,6 +20,7 @@ import {
 import { quickCreateCharacterAction } from "@/features/script/actions";
 import type { TimingMode } from "@prisma/client";
 import { cn } from "@/shared/lib/cn";
+import { useToast } from "@/shared/ui/toast";
 
 import type { SceneTimingRef } from "@/features/screenplay/lib/timing";
 
@@ -71,6 +72,7 @@ export function ScreenplayWorkspace({
   canWrite,
 }: Props) {
   const router = useRouter();
+  const toast = useToast();
   const base = `/${locale}/projects/${projectId}/screenplay`;
   const [exporting, setExporting] = useState<string | null>(null);
   const [characters, setCharacters] = useState(initialCharacters);
@@ -81,8 +83,6 @@ export function ScreenplayWorkspace({
     null,
   );
   const [librettoOpen, setLibrettoOpen] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-  const [messageIsError, setMessageIsError] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -96,8 +96,7 @@ export function ScreenplayWorkspace({
       try {
         const result = await updateProjectTimingAction(projectId, mode, ratio);
         if (result.error) {
-          setMessage(result.error);
-          setMessageIsError(true);
+          toast.error(result.error);
           return false;
         }
         setTimingModeState(mode);
@@ -107,7 +106,7 @@ export function ScreenplayWorkspace({
         setTimingSaving(false);
       }
     },
-    [projectId],
+    [projectId, toast],
   );
 
   useEffect(() => {
@@ -187,7 +186,7 @@ export function ScreenplayWorkspace({
       setSaveOpen(false);
       setSaveError(null);
       setPendingBlocks(null);
-      setMessage(result.success ?? "Сохранено");
+      toast.success(result.success ?? "Сохранено");
       if (result.versionId && result.versionId !== version.id) {
         router.push(`${base}/${result.versionId}`);
       } else {
@@ -287,17 +286,6 @@ export function ScreenplayWorkspace({
         </div>
       </div>
 
-      {message ? (
-        <p
-          className={cn(
-            "text-sm",
-            messageIsError ? "text-[var(--danger)]" : "text-emerald-400",
-          )}
-        >
-          {message}
-        </p>
-      ) : null}
-
       <ScreenplayBlockEditor
         projectId={projectId}
         versionId={version.id}
@@ -351,7 +339,7 @@ export function ScreenplayWorkspace({
         onClose={() => setLibrettoOpen(false)}
         onApplied={() => {
           setLibrettoOpen(false);
-          setMessage("Либретто обновлено");
+          toast.success("Либретто обновлено");
           router.refresh();
         }}
         projectId={projectId}

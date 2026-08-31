@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { IBM_Plex_Sans, Sora } from "next/font/google";
 import { APP_BRAND } from "@/shared/brand";
 import { ThemeProvider } from "@/shared/theme/theme-provider";
+import { ToastProvider } from "@/shared/ui/toast";
 import "./globals.css";
 
 const body = IBM_Plex_Sans({
@@ -34,7 +35,9 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body className="min-h-full antialiased">
-        <ThemeProvider>{children}</ThemeProvider>
+        <ThemeProvider>
+          <ToastProvider>{children}</ToastProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

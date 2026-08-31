@@ -6,5 +6,5 @@ type Props = {
 
 export default async function CastRedirectPage({ params }: Props) {
   const { locale, projectId } = await params;
-  redirect(`/${locale}/projects/${projectId}/actors`);
+  redirect(`/${locale}/projects/${projectId}/preproduction/casting`);
 }

@@ -14,6 +14,7 @@ import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Modal } from "@/shared/ui/modal";
 import { Select } from "@/shared/ui/select";
+import { useActionToast } from "@/shared/ui/toast";
 
 const initial: BudgetActionState = {};
 
@@ -134,6 +135,7 @@ function LineModal({
     ? updateBudgetLineAction.bind(null, projectId, line.id)
     : createBudgetLineAction.bind(null, projectId);
   const [state, action, pending] = useActionState(bound, initial);
+  useActionToast(state);
 
   useEffect(() => {
     if (state.success) onClose();
@@ -152,9 +154,6 @@ function LineModal({
           <Button type="button" variant="secondary" onClick={onClose}>
             Отмена
           </Button>
-          {state.error ? (
-            <span className="text-sm text-[var(--danger)]">{state.error}</span>
-          ) : null}
         </div>
       }
     >

@@ -1,9 +1,12 @@
+import { isStageDirectionLine } from "@/features/screenplay/lib/stage-directions";
+
 /**
  * Screenplay line classification for display (plain-text script bodies).
  */
 
 function isCharacterName(name: string): boolean {
   const n = name.trim().replace(/\.+$/, "");
+  if (isStageDirectionLine(n)) return false;
   if (n.length < 2 || n.length > 40) return false;
   if (/\d/.test(n)) return false;
   const words = n.split(/\s+/).filter(Boolean);
@@ -14,6 +17,7 @@ function isCharacterName(name: string): boolean {
 }
 
 export function isScreenplayCharacterLine(line: string): boolean {
+  if (isStageDirectionLine(line)) return false;
   if (line.length > 120) return false;
   if (/(?:ИНТ|НАТ|INT|EXT)\.?/i.test(line) && /^\d/.test(line)) return false;
   const names = line.split(/[,;]/).map((n) => n.trim()).filter(Boolean);

@@ -1,9 +1,12 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import Link from "next/link";
 import {
   addLocationPhotoAction,
   deleteLocationPhotoAction,
+  updateLocationRequirementsAction,
+  updateLocationScoutSnapshotAction,
   type LocationActionState,
 } from "@/features/locations/actions";
 import { LocationModal } from "@/features/locations/components/location-modal";
@@ -13,9 +16,12 @@ import {
   parseTags,
 } from "@/features/locations/lib/format-location";
 import type { LocationDetail } from "@/features/locations/queries";
+import { scoutStatusLabels } from "@/features/preproduction/lib/status-labels";
 import { formatSecondsMmSs } from "@/shared/i18n/domain-labels";
+import { useActionToast } from "@/shared/ui/toast";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
+import { Label } from "@/shared/ui/label";
 import { Card } from "@/shared/ui/card";
 
 const initial: LocationActionState = {};
@@ -36,6 +42,16 @@ export function LocationDetailView({
   const [editOpen, setEditOpen] = useState(false);
   const boundPhoto = addLocationPhotoAction.bind(null, projectId, location.id);
   const [photoState, photoAction, photoPending] = useActionState(boundPhoto, initial);
+
+  const reqBound = updateLocationRequirementsAction.bind(null, projectId, location.id);
+  const [reqState, reqAction, reqPending] = useActionState(reqBound, initial);
+  useActionToast(reqState);
+
+  const snapBound = updateLocationScoutSnapshotAction.bind(null, projectId, location.id);
+  const [snapState, snapAction, snapPending] = useActionState(snapBound, initial);
+  useActionToast(snapState);
+
+  const scoutSnapshot = location.scoutSnapshot;
 
   const sceneCount = location.scenes.length;
   const shiftIds = new Set<string>();
@@ -94,6 +110,123 @@ export function LocationDetailView({
         <Card className="p-4">
           <h3 className="mb-2 font-semibold">Описание</h3>
           <p className="whitespace-pre-wrap text-sm text-[var(--muted-fg)]">{location.notes}</p>
+        </Card>
+      ) : null}
+
+      <Card className="space-y-4 p-4">
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="font-semibold">Требования по сценарию</h3>
+          <Link
+            href={`/${locale}/projects/${projectId}/preproduction/scout`}
+            className="text-sm text-[var(--accent)] hover:underline"
+          >
+            Открыть скаут →
+          </Link>
+        </div>
+        <form action={reqAction} className="space-y-3">
+          <div>
+            <Label htmlFor="requirementNotes">Что нужно найти</Label>
+            <textarea
+              id="requirementNotes"
+              name="requirementNotes"
+              rows={2}
+              className="glass-input w-full resize-y px-3 py-2 text-sm"
+              placeholder="Тип площадки, декорация, особенности…"
+              defaultValue={location.requirementNotes ?? ""}
+              disabled={!canWrite}
+            />
+          </div>
+          {canWrite ? (
+            <Button type="submit" variant="secondary" disabled={reqPending}>
+              {reqPending ? "…" : "Сохранить требования"}
+            </Button>
+          ) : null}
+        </form>
+      </Card>
+
+      {location.scoutCandidates.length > 0 ? (
+        <Card className="p-4">
+          <h3 className="mb-3 font-semibold">Кандидаты скаута</h3>
+          <ul className="space-y-2 text-sm">
+            {location.scoutCandidates.map((c) => (
+              <li
+                key={c.id}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--border)] px-3 py-2"
+              >
+                <span>{c.title}</span>
+                <span className="rounded-full bg-[var(--glass-badge-bg)] px-2 py-0.5 text-xs">
+                  {scoutStatusLabels[c.status]}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ) : null}
+
+      {scoutSnapshot ? (
+        <Card className="space-y-4 p-4">
+          <h3 className="font-semibold">Утверждённая площадка (снимок)</h3>
+          <p className="text-xs text-[var(--muted-fg)]">
+            Скопировано при утверждении. Изменения здесь не затрагивают карточку в Скауте.
+          </p>
+          <form action={snapAction} className="grid gap-3 md:grid-cols-2">
+            <div>
+              <Label htmlFor="snapAddress">Адрес</Label>
+              <Input
+                id="snapAddress"
+                name="address"
+                defaultValue={scoutSnapshot.address ?? ""}
+                disabled={!canWrite}
+              />
+            </div>
+            <div>
+              <Label htmlFor="snapCost">Стоимость</Label>
+              <Input
+                id="snapCost"
+                name="cost"
+                type="number"
+                min={0}
+                defaultValue={scoutSnapshot.cost ?? undefined}
+                disabled={!canWrite}
+              />
+            </div>
+            <div>
+              <Label htmlFor="snapContactName">Контакт</Label>
+              <Input
+                id="snapContactName"
+                name="contactName"
+                defaultValue={scoutSnapshot.contactName ?? ""}
+                disabled={!canWrite}
+              />
+            </div>
+            <div>
+              <Label htmlFor="snapContactPhone">Телефон</Label>
+              <Input
+                id="snapContactPhone"
+                name="contactPhone"
+                defaultValue={scoutSnapshot.contactPhone ?? ""}
+                disabled={!canWrite}
+              />
+            </div>
+            <div className="md:col-span-2">
+              <Label htmlFor="snapNotes">Заметки</Label>
+              <textarea
+                id="snapNotes"
+                name="notes"
+                rows={2}
+                className="glass-input w-full resize-y px-3 py-2 text-sm"
+                defaultValue={scoutSnapshot.notes ?? ""}
+                disabled={!canWrite}
+              />
+            </div>
+            {canWrite ? (
+              <div className="md:col-span-2">
+                <Button type="submit" disabled={snapPending}>
+                  {snapPending ? "…" : "Сохранить снимок"}
+                </Button>
+              </div>
+            ) : null}
+          </form>
         </Card>
       ) : null}
 

@@ -15,6 +15,7 @@ import type { CastRow, DayDocBundle, ResourceTableRow } from "@/features/day-doc
 import { timeSlotTypeLabels } from "@/features/day-docs/lib/slot-labels";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
+import { useActionToast } from "@/shared/ui/toast";
 
 type DeptRow = {
   roleLabel: string;
@@ -34,12 +35,7 @@ type SlotRow = {
 };
 
 function ActionMessage({ state }: { state: CallSheetActionState }) {
-  if (state.error) {
-    return <p className="text-sm text-[var(--danger)]">{state.error}</p>;
-  }
-  if (state.success) {
-    return <p className="text-sm text-green-400">{state.success}</p>;
-  }
+  useActionToast(state);
   return null;
 }
 

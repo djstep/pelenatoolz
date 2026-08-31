@@ -162,6 +162,22 @@ enum Gender {
   OTHER
 }
 
+enum CastingCandidateStatus {
+  CONSIDERING
+  APPLICATION_SENT
+  CASTING
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+}
+
+enum ScoutCandidateStatus {
+  CONSIDERING
+  NEGOTIATION
+  APPROVED
+  REJECTED
+}
+
 enum AuditAction {
   CREATE
   UPDATE
@@ -228,6 +244,9 @@ model Project {
   elements    Element[]
   shootDays   ShootDay[]
   actors      Actor[]
+  castingPeople CastingPerson[]
+  castingCandidates CastingCandidate[]
+  scoutCandidates ScoutCandidate[]
   auditLogs   AuditLog[]
   budgetLines BudgetLine[]
   financeOps  FinanceOperation[]
@@ -350,12 +369,16 @@ model Location {
   address        String?
   tags           String?
   notes          String?
+  requirementNotes String?
+  scoutSnapshot  Json?
+  sourceScoutCandidateId String?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
   project Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
   scenes  SceneLocation[]
   photos  LocationPhoto[]
+  scoutCandidates ScoutCandidate[]
 
   @@index([projectId])
 }
@@ -378,14 +401,89 @@ model Character {
   projectId   String
   name        String
   description String?
+  roleRequirements String?
+  castSnapshot Json?
+  sourceCastingCandidateId String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   project Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
   scenes  SceneCharacter[]
   actors  Actor[]
+  castingCandidates CastingCandidate[]
 
   @@index([projectId])
+}
+
+model CastingPerson {
+  id               String   @id @default(cuid())
+  projectId        String
+  photoUrl         String?
+  lastName         String
+  firstName        String?
+  middleName       String?
+  phone            String?
+  email            String?
+  agentName        String?
+  agentPhone       String?
+  agentEmail       String?
+  physicalParams   Json?
+  skills           String[] @default([])
+  proposedRate     Decimal? @db.Decimal(12, 2)
+  proposedTerms    String?
+  tags             String?
+  notes            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  project    Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  candidates CastingCandidate[]
+
+  @@index([projectId])
+}
+
+model CastingCandidate {
+  id              String                 @id @default(cuid())
+  projectId       String
+  characterId     String
+  personId        String
+  status          CastingCandidateStatus @default(CONSIDERING)
+  statusChangedAt DateTime               @default(now())
+  notes           String?
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+
+  project   Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  character Character     @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  person    CastingPerson @relation(fields: [personId], references: [id], onDelete: Cascade)
+
+  @@unique([characterId, personId])
+  @@index([projectId, status])
+  @@index([personId])
+}
+
+model ScoutCandidate {
+  id              String               @id @default(cuid())
+  projectId       String
+  locationId      String
+  title           String
+  address         String?
+  cost            Decimal?             @db.Decimal(12, 2)
+  contactName     String?
+  contactPhone    String?
+  photos          Json?
+  videos          Json?
+  notes           String?
+  status          ScoutCandidateStatus @default(CONSIDERING)
+  statusChangedAt DateTime             @default(now())
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  project  Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  location Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, status])
+  @@index([locationId])
 }
 
 model Element {
@@ -590,6 +688,9 @@ model Actor {
   phone1           String?
   phone2           String?
   email            String?
+  agentName        String?
+  agentPhone       String?
+  agentEmail       String?
   carPickupTime    String?
   arrivalTime      String?
   tags             String?

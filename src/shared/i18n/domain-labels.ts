@@ -145,6 +145,27 @@ export function formatSecondsMmSs(seconds: number | null | undefined): string {
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
+/** Total minutes as HH:mm (e.g. 720 → "12:00"). */
+export function formatMinutesHhMm(totalMinutes: number | null | undefined): string {
+  if (totalMinutes == null || totalMinutes < 0) return "";
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+/** Parse HH:mm (or legacy plain minutes) into total minutes. */
+export function parseHhMmToMinutes(value: string): number | undefined {
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  if (/^\d+$/.test(trimmed)) return Number(trimmed);
+  const match = trimmed.match(/^(\d{1,3}):(\d{2})/);
+  if (!match) return undefined;
+  const h = Number(match[1]);
+  const m = Number(match[2]);
+  if (Number.isNaN(h) || Number.isNaN(m) || m >= 60) return undefined;
+  return h * 60 + m;
+}
+
 export function parseMmSs(value: string): number | undefined {
   const match = value.trim().match(/^(\d{1,3}):(\d{2})$/);
   if (!match) return undefined;

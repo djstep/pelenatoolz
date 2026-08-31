@@ -23,6 +23,7 @@ function revalidateScript(projectId: string) {
   revalidatePath(`/ru/projects/${projectId}/schedule`);
   revalidatePath(`/ru/projects/${projectId}/call-sheets`);
   revalidatePath(`/ru/projects/${projectId}/reports`);
+  revalidatePath(`/ru/projects/${projectId}/characters`);
 }
 
 function parseSceneForm(formData: FormData) {

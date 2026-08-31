@@ -1,4 +1,5 @@
 import type { DayNight, IntExt } from "@prisma/client";
+import { isStageDirectionLine } from "@/features/screenplay/lib/stage-directions";
 
 export type ParsedScene = {
   episodeNumber: number;
@@ -108,6 +109,7 @@ function splitLocationAndMode(rest: string): {
 /** Single cast name (any case): мама, МАМА, Mary-Jane — max 2 words */
 function isCharacterName(name: string): boolean {
   const n = name.trim().replace(/\.+$/, "");
+  if (isStageDirectionLine(n)) return false;
   if (n.length < 2 || n.length > 40) return false;
   if (/\d/.test(n)) return false;
   const words = n.split(/\s+/).filter(Boolean);

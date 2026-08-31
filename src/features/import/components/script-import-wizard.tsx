@@ -19,6 +19,7 @@ import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { SegmentControl } from "@/shared/ui/segment-control";
 import { cn } from "@/shared/lib/cn";
+import { useActionToast } from "@/shared/ui/toast";
 
 const initial: ImportActionState = {};
 
@@ -82,6 +83,7 @@ function PreviewTable({
   const router = useRouter();
   const bound = applyScriptImportAction.bind(null, projectId);
   const [state, action, pending] = useActionState(bound, initial);
+  useActionToast(state);
 
   useEffect(() => {
     if (state.versionId) {
@@ -310,12 +312,6 @@ function PreviewTable({
         <Button type="submit" disabled={pending}>
           {pending ? "Создание версии…" : "Создать версию"}
         </Button>
-        {state.error ? (
-          <span className="text-sm text-[var(--danger)]">{state.error}</span>
-        ) : null}
-        {state.success ? (
-          <span className="text-sm text-emerald-400">{state.success}</span>
-        ) : null}
       </div>
     </form>
   );
@@ -332,6 +328,7 @@ export function ScriptImportWizard({
 }) {
   const bound = previewScriptImportAction.bind(null, projectId);
   const [state, action, pending] = useActionState(bound, initial);
+  useActionToast(state);
   const [timingMethod, setTimingMethod] = useState("pages");
   const [hasFile, setHasFile] = useState(false);
   const [showComparison, setShowComparison] = useState(true);
@@ -431,15 +428,6 @@ export function ScriptImportWizard({
             </span>
           ) : null}
         </div>
-
-        {state.error ? (
-          <p
-            className="rounded-xl border border-[var(--danger)]/30 bg-[var(--danger)]/10 px-3 py-2 text-sm text-[var(--danger)]"
-            role="alert"
-          >
-            {state.error}
-          </p>
-        ) : null}
       </form>
 
       {state.preview ? (

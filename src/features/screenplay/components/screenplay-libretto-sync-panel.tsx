@@ -9,6 +9,7 @@ import {
 import { LibrettoPreviewTable } from "@/features/screenplay/components/libretto-preview-table";
 import { Modal } from "@/shared/ui/modal";
 import { Button } from "@/shared/ui/button";
+import { useActionToast, useToast } from "@/shared/ui/toast";
 
 type Props = {
   open: boolean;
@@ -25,24 +26,23 @@ export function ScreenplayLibrettoSyncPanel({
   projectId,
   versionId,
 }: Props) {
+  const toast = useToast();
   const [scenes, setScenes] = useState<ImportPreviewScene[] | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
     setLoading(true);
-    setError(null);
     void previewLibrettoSyncAction(projectId, versionId).then((result) => {
       if ("error" in result) {
-        setError(result.error ?? "Ошибка загрузки");
+        toast.error(result.error ?? "Ошибка загрузки");
         setScenes(null);
       } else {
         setScenes(result.scenes);
       }
       setLoading(false);
     });
-  }, [open, projectId, versionId]);
+  }, [open, projectId, versionId, toast]);
 
   const bound = applyLibrettoSyncAction.bind(null, projectId, versionId);
   const [state, formAction, pending] = useActionState(
@@ -52,6 +52,7 @@ export function ScreenplayLibrettoSyncPanel({
     },
     {},
   );
+  useActionToast(state);
 
   useEffect(() => {
     if (state.success) {
@@ -73,13 +74,6 @@ export function ScreenplayLibrettoSyncPanel({
 
       {loading ? (
         <p className="text-sm text-[var(--muted-fg)]">Загрузка…</p>
-      ) : null}
-      {error ? <p className="text-sm text-[var(--danger)]">{error}</p> : null}
-      {state.error ? (
-        <p className="text-sm text-[var(--danger)]">{state.error}</p>
-      ) : null}
-      {state.success ? (
-        <p className="text-sm text-emerald-400">{state.success}</p>
       ) : null}
 
       {scenes && scenes.length > 0 ? (

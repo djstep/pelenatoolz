@@ -4,6 +4,7 @@ import {
   parseDocxParagraphs,
 } from "@/features/import/docx-parse-blocks";
 import { readZipEntry } from "@/features/import/extract-script";
+import { isStageDirectionLine } from "@/features/screenplay/lib/stage-directions";
 
 export type ImportPreviewBlock = {
   type: ScriptBlockType;
@@ -30,7 +31,8 @@ function refineBlockType(
       t.length >= 2 &&
       t.length <= 40 &&
       t === t.toUpperCase() &&
-      !/^(?:ИНТ|НАТ|INT|EXT)/iu.test(t)
+      !/^(?:ИНТ|НАТ|INT|EXT)/iu.test(t) &&
+      !isStageDirectionLine(t)
     ) {
       return "CHARACTER";
     }
@@ -107,7 +109,8 @@ export function buildImportBlocksFromSceneScripts(
           previous === "SCENE_CAST") &&
         trimmed.length <= 40 &&
         trimmed === trimmed.toUpperCase() &&
-        !/^(?:ИНТ|НАТ|INT|EXT)/iu.test(trimmed)
+        !/^(?:ИНТ|НАТ|INT|EXT)/iu.test(trimmed) &&
+        !isStageDirectionLine(trimmed)
       ) {
         type = "CHARACTER";
       } else if (previous === "CHARACTER" || previous === "PARENTHETICAL") {

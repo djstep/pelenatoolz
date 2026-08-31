@@ -13,6 +13,7 @@ import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Modal } from "@/shared/ui/modal";
+import { useActionToast } from "@/shared/ui/toast";
 
 const initial: ActionState = {};
 
@@ -20,6 +21,7 @@ function ArchiveButton({ projectId, projectName }: { projectId: string; projectN
   const router = useRouter();
   const [state, setState] = useState<ActionState>({});
   const [pending, setPending] = useState(false);
+  useActionToast(state);
 
   useEffect(() => {
     if (state.success) router.refresh();
@@ -38,8 +40,6 @@ function ArchiveButton({ projectId, projectName }: { projectId: string; projectN
       <Button type="button" variant="secondary" onClick={handleClick} disabled={pending}>
         {pending ? "…" : "Архивировать проект"}
       </Button>
-      {state.error ? <p className="mt-2 text-sm text-[var(--danger)]">{state.error}</p> : null}
-      {state.success ? <p className="mt-2 text-sm text-green-400">{state.success}</p> : null}
     </>
   );
 }
@@ -48,6 +48,7 @@ function RestoreButton({ projectId }: { projectId: string }) {
   const router = useRouter();
   const [state, setState] = useState<ActionState>({});
   const [pending, setPending] = useState(false);
+  useActionToast(state);
 
   useEffect(() => {
     if (state.success) router.refresh();
@@ -65,8 +66,6 @@ function RestoreButton({ projectId }: { projectId: string }) {
       <Button type="button" variant="secondary" onClick={handleClick} disabled={pending}>
         {pending ? "…" : "Восстановить из архива"}
       </Button>
-      {state.error ? <p className="mt-2 text-sm text-[var(--danger)]">{state.error}</p> : null}
-      {state.success ? <p className="mt-2 text-sm text-green-400">{state.success}</p> : null}
     </>
   );
 }
@@ -86,6 +85,7 @@ export function ProjectDangerZone({
     boundDelete,
     initial,
   );
+  useActionToast(deleteState);
 
   const isArchived = status === ProjectStatus.ARCHIVED;
 
@@ -158,9 +158,6 @@ export function ProjectDangerZone({
             <Label htmlFor="confirmName">Название проекта</Label>
             <Input id="confirmName" name="confirmName" required autoComplete="off" />
           </div>
-          {deleteState.error ? (
-            <p className="text-sm text-[var(--danger)]">{deleteState.error}</p>
-          ) : null}
         </form>
       </Modal>
     </div>
