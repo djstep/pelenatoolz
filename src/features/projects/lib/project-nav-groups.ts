@@ -18,6 +18,11 @@ export const projectNavGroups: NavGroup[] = [
     ],
   },
   {
+    id: "resources",
+    title: "Ресурсы",
+    items: [{ href: "/resources", label: "Категории" }],
+  },
+  {
     id: "planning",
     title: "Планирование",
     defaultOpen: true,
@@ -26,6 +31,7 @@ export const projectNavGroups: NavGroup[] = [
       { href: "/locations", label: "Локации" },
       { href: "/characters", label: "Персонажи" },
       { href: "/schedule", label: "КПП" },
+      { href: "/schedule/availability", label: "Занятость" },
       { href: "/call-sheets", label: "Вызывные" },
     ],
   },

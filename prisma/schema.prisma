@@ -178,6 +178,14 @@ enum ScoutCandidateStatus {
   REJECTED
 }
 
+enum ActorAvailabilityStatus {
+  UNSET
+  FREE
+  BUSY_OTHER
+  BUSY_OUR_PROJECT
+  UNAVAILABLE
+}
+
 enum AuditAction {
   CREATE
   UPDATE
@@ -254,6 +262,8 @@ model Project {
   cloudFiles  CloudFileLink[]
   scriptVersions ScriptVersion[]
   scriptBlocks ScriptBlock[]
+  resourceCategories ResourceCategory[]
+  actorAvailabilityRows ActorAvailabilityRow[]
 
   @@index([createdById])
   @@index([status])
@@ -351,6 +361,7 @@ model Scene {
   characters     SceneCharacter[]
   elements       SceneElement[]
   resources      SceneResource[]
+  resourceItems  SceneResourceItem[]
   shootDayScenes  ShootDayScene[]
   timeSlots       ShootDayTimeSlot[]
   scriptBlocks    ScriptBlock[]
@@ -378,7 +389,7 @@ model Location {
   project Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
   scenes  SceneLocation[]
   photos  LocationPhoto[]
-  scoutCandidates ScoutCandidate[]
+  scoutCandidateLinks ScoutCandidateLocation[]
 
   @@index([projectId])
 }
@@ -402,6 +413,8 @@ model Character {
   name        String
   description String?
   roleRequirements String?
+  makeupOffsetMin  Int?
+  costumeOffsetMin Int?
   castSnapshot Json?
   sourceCastingCandidateId String?
   createdAt   DateTime @default(now())
@@ -438,6 +451,7 @@ model CastingPerson {
 
   project    Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
   candidates CastingCandidate[]
+  availabilityRows ActorAvailabilityRow[]
 
   @@index([projectId])
 }
@@ -465,7 +479,6 @@ model CastingCandidate {
 model ScoutCandidate {
   id              String               @id @default(cuid())
   projectId       String
-  locationId      String
   title           String
   address         String?
   cost            Decimal?             @db.Decimal(12, 2)
@@ -479,10 +492,20 @@ model ScoutCandidate {
   createdAt       DateTime             @default(now())
   updatedAt       DateTime             @updatedAt
 
-  project  Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  location Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  project        Project                   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  locationLinks  ScoutCandidateLocation[]
 
   @@index([projectId, status])
+}
+
+model ScoutCandidateLocation {
+  scoutCandidateId String
+  locationId       String
+
+  scoutCandidate ScoutCandidate @relation(fields: [scoutCandidateId], references: [id], onDelete: Cascade)
+  location       Location       @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@id([scoutCandidateId, locationId])
   @@index([locationId])
 }
 
@@ -545,6 +568,71 @@ model SceneResource {
   @@index([sceneId])
 }
 
+model ResourceCategory {
+  id           String   @id @default(cuid())
+  projectId    String
+  name         String
+  sortOrder    Int      @default(0)
+  fillInScenes Boolean  @default(true)
+  perShift     Boolean  @default(false)
+  countable    Boolean  @default(false)
+  showInKpp    Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  project Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  items   ResourceItem[]
+
+  @@unique([projectId, name])
+  @@index([projectId, sortOrder])
+}
+
+model ResourceItem {
+  id                String   @id @default(cuid())
+  categoryId        String
+  name              String
+  notes             String?
+  shiftRate         Decimal? @db.Decimal(12, 2)
+  shiftHoursMin     Int?
+  unpaidOvertimeMin Int?
+  arrivalOffsetMin  Int?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  category     ResourceCategory        @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  sceneLinks   SceneResourceItem[]
+  shiftUsages  ShootDayResourceUsage[]
+
+  @@unique([categoryId, name])
+  @@index([categoryId])
+}
+
+model SceneResourceItem {
+  id       String @id @default(cuid())
+  sceneId  String
+  itemId   String
+  quantity Int    @default(1)
+
+  scene Scene        @relation(fields: [sceneId], references: [id], onDelete: Cascade)
+  item  ResourceItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@unique([sceneId, itemId])
+  @@index([itemId])
+}
+
+model ShootDayResourceUsage {
+  id          String  @id @default(cuid())
+  shootDayId  String
+  itemId      String
+  isUsed      Boolean @default(true)
+  arrivalTime String?
+
+  shootDay ShootDay     @relation(fields: [shootDayId], references: [id], onDelete: Cascade)
+  item     ResourceItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@unique([shootDayId, itemId])
+}
+
 model ShootDay {
   id          String         @id @default(cuid())
   projectId   String
@@ -567,7 +655,10 @@ model ShootDay {
   weatherPrecip    String?
   notes       String?
   comment     String?
+  prepNote    String?
   status      ShootDayStatus @default(PLANNED)
+  callSheetSavedAt     DateTime?
+  callSheetPlanLocked Boolean @default(false)
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
 
@@ -578,6 +669,7 @@ model ShootDay {
   timeSlots        ShootDayTimeSlot[]
   actorCalls       ShootDayActorCall[]
   resourceCalls    ShootDayResourceCall[]
+  resourceUsages   ShootDayResourceUsage[]
 
   @@unique([projectId, dayNumber])
   @@index([projectId, date])
@@ -693,6 +785,7 @@ model Actor {
   agentEmail       String?
   carPickupTime    String?
   arrivalTime      String?
+  pickupOffsetMin  Int?
   tags             String?
   specialConditions String?
   shiftRate        Decimal?        @db.Decimal(12, 2)
@@ -708,8 +801,40 @@ model Actor {
   extraPayments ActorExtraPayment[]
   financeOps    FinanceOperation[]
   shootDayCalls ShootDayActorCall[]
+  availabilityRows ActorAvailabilityRow[]
 
   @@index([projectId])
+}
+
+model ActorAvailabilityRow {
+  id              String   @id @default(cuid())
+  projectId       String
+  actorId         String?
+  castingPersonId String?
+  sortOrder       Int      @default(0)
+  createdAt       DateTime @default(now())
+
+  project       Project                @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  actor         Actor?                 @relation(fields: [actorId], references: [id], onDelete: Cascade)
+  castingPerson CastingPerson?         @relation(fields: [castingPersonId], references: [id], onDelete: Cascade)
+  days          ActorAvailabilityDay[]
+
+  @@unique([projectId, actorId])
+  @@unique([projectId, castingPersonId])
+  @@index([projectId, sortOrder])
+}
+
+model ActorAvailabilityDay {
+  id      String                  @id @default(cuid())
+  rowId   String
+  date    DateTime                @db.Date
+  status  ActorAvailabilityStatus @default(UNSET)
+  comment String?
+
+  row ActorAvailabilityRow @relation(fields: [rowId], references: [id], onDelete: Cascade)
+
+  @@unique([rowId, date])
+  @@index([date])
 }
 
 model ActorOvertimeRate {

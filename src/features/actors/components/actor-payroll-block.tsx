@@ -112,6 +112,7 @@ export function ActorPayrollBlock({
   forceMajeurePct = 0,
   shiftHoursMin,
   unpaidOvertimeMin,
+  pickupOffsetMin,
   overtime = [],
   extras = [],
 }: {
@@ -119,6 +120,7 @@ export function ActorPayrollBlock({
   forceMajeurePct?: number;
   shiftHoursMin?: number | null;
   unpaidOvertimeMin?: number | null;
+  pickupOffsetMin?: number | null;
   overtime?: OvertimeSeed[];
   extras?: ExtraSeed[];
 }) {
@@ -190,6 +192,18 @@ export function ActorPayrollBlock({
             step={60}
             defaultValue={formatMinutesHhMm(unpaidOvertimeMin)}
           />
+        </div>
+        <div>
+          <Label htmlFor="pickupOffsetMin">Подача до готовности</Label>
+          <Input
+            id="pickupOffsetMin"
+            name="pickupOffsetMin"
+            type="time"
+            step={60}
+            defaultValue={formatMinutesHhMm(pickupOffsetMin)}
+            placeholder="01:00"
+          />
+          <p className="mt-1 text-[10px] text-[var(--muted-fg)]">ЧЧ:ММ для вызывного</p>
         </div>
       </div>
 

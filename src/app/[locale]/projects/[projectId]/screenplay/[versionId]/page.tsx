@@ -15,10 +15,12 @@ import {
 
 type Props = {
   params: Promise<{ locale: string; projectId: string; versionId: string }>;
+  searchParams: Promise<{ sceneId?: string }>;
 };
 
-export default async function ScreenplayVersionPage({ params }: Props) {
+export default async function ScreenplayVersionPage({ params, searchParams }: Props) {
   const { locale, projectId, versionId } = await params;
+  const { sceneId } = await searchParams;
   const ctx = await requireProjectContext(projectId);
 
   if (!ctx.can("script:read")) {
@@ -61,6 +63,7 @@ export default async function ScreenplayVersionPage({ params }: Props) {
       timingMode={meta.timingMode}
       pageToMinuteRatio={Number(meta.pageToMinuteRatio)}
       sceneTimings={sceneTimings}
+      scrollToSceneId={sceneId ?? null}
       canWrite={ctx.can("script:write") && !version.isLocked}
     />
   );

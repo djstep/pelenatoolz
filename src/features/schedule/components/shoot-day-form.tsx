@@ -133,12 +133,12 @@ export function ShootDayForm({
           <Input id="notes" name="notes" className={fieldClass} />
         </FieldColumn>
 
-        <FieldColumn label="Статус" labelFor="status" className="w-[7rem]">
+        <FieldColumn label="Статус" labelFor="status" className="w-[8.5rem]">
           <Select
             id="status"
             name="status"
             defaultValue={ShootDayStatus.PLANNED}
-            className="min-w-[12rem]"
+            className="w-full"
           >
             {Object.values(ShootDayStatus).map((s) => (
               <option key={s} value={s}>
@@ -148,7 +148,11 @@ export function ShootDayForm({
           </Select>
         </FieldColumn>
 
-        <Button type="submit" disabled={pending} className="h-10 shrink-0 px-4 py-0">
+        <Button
+          type="submit"
+          disabled={pending}
+          className="mb-0 h-10 shrink-0 self-end px-4 py-0"
+        >
           {pending ? "…" : dayCount === 1 ? "Добавить день" : `Добавить ${dayCount} дней`}
         </Button>
       </div>

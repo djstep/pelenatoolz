@@ -12,6 +12,11 @@ import {
   getCharacterCastStatus,
   type CharacterFilters,
 } from "@/features/characters/lib/character-filters";
+import {
+  getEstimatedShiftCount,
+  getKppShiftCount,
+  getObjectCount,
+} from "@/features/characters/lib/character-stats";
 import { CHARACTER_COLUMNS } from "@/features/characters/lib/table-columns";
 import type { CharacterWithStats } from "@/features/characters/queries";
 import { formatSceneNumber } from "@/features/script/lib/libretto-display";
@@ -27,6 +32,33 @@ const CAST_STATUS_LABELS = {
   HAS_CANDIDATES: "Кандидаты",
   OPEN: "Открыт",
 } as const;
+
+type SortDir = "asc" | "desc";
+
+function sortValue(row: CharacterWithStats, colId: string): string | number {
+  switch (colId) {
+    case "name":
+      return row.name;
+    case "sceneCount":
+      return row.sceneCount;
+    case "kppShiftCount":
+      return getKppShiftCount(row);
+    case "estimatedShiftCount":
+      return getEstimatedShiftCount(row);
+    case "objectCount":
+      return getObjectCount(row);
+    case "planSeconds":
+      return row.planSeconds;
+    case "candidateCount":
+      return row.candidateCount;
+    case "castStatus":
+      return getCharacterCastStatus(row);
+    case "approvedActor":
+      return row.approvedPersonName ?? "";
+    default:
+      return "";
+  }
+}
 
 export function CharactersWorkspace({
   projectId,
@@ -56,24 +88,37 @@ export function CharactersWorkspace({
   const [modalOpen, setModalOpen] = useState(false);
   const [editCharacter, setEditCharacter] = useState<CharacterWithStats | null>(null);
   const [columnsOpen, setColumnsOpen] = useState(false);
+  const [sortColumn, setSortColumn] = useState<string>("name");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
 
   const filtered = useMemo(() => {
     let rows = applyCharacterFilters(characters, filters);
     const q = search.trim().toLowerCase();
-    if (!q) return rows;
-    return rows.filter((row) => {
-      const blob = [
-        row.name,
-        row.description,
-        row.roleRequirements,
-        row.approvedPersonName,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-      return blob.includes(q);
+    if (q) {
+      rows = rows.filter((row) => {
+        const blob = [
+          row.name,
+          row.description,
+          row.roleRequirements,
+          row.approvedPersonName,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        return blob.includes(q);
+      });
+    }
+
+    const dir = sortDir === "asc" ? 1 : -1;
+    return [...rows].sort((a, b) => {
+      const av = sortValue(a, sortColumn);
+      const bv = sortValue(b, sortColumn);
+      if (typeof av === "number" && typeof bv === "number") {
+        return (av - bv) * dir;
+      }
+      return String(av).localeCompare(String(bv), "ru", { numeric: true }) * dir;
     });
-  }, [characters, search, filters]);
+  }, [characters, search, filters, sortColumn, sortDir]);
 
   function sceneNumbers(row: CharacterWithStats) {
     return row.scenes
@@ -110,6 +155,12 @@ export function CharactersWorkspace({
         return row.roleRequirements?.trim() || "—";
       case "sceneCount":
         return String(row.sceneCount);
+      case "kppShiftCount":
+        return String(getKppShiftCount(row));
+      case "estimatedShiftCount":
+        return String(getEstimatedShiftCount(row));
+      case "objectCount":
+        return String(getObjectCount(row));
       case "sceneNumbers":
         return sceneNumbers(row) || "—";
       case "planSeconds":
@@ -199,10 +250,25 @@ export function CharactersWorkspace({
                 {visibleColumns.map((col) => (
                   <th
                     key={col.id}
-                    className="relative px-3 py-3 font-medium"
+                    className="relative cursor-pointer select-none px-3 py-3 font-medium hover:text-[var(--foreground)]"
                     style={{ width: widths[col.id] ?? col.defaultWidth }}
+                    onClick={() => {
+                      if (sortColumn === col.id) {
+                        setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+                      } else {
+                        setSortColumn(col.id);
+                        setSortDir("asc");
+                      }
+                    }}
                   >
-                    {col.label}
+                    <span className="inline-flex items-center gap-1">
+                      {col.label}
+                      {sortColumn === col.id ? (
+                        <span className="text-[10px] text-[var(--accent)]">
+                          {sortDir === "asc" ? "▲" : "▼"}
+                        </span>
+                      ) : null}
+                    </span>
                     <span
                       className="absolute right-0 top-0 h-full w-1 cursor-col-resize hover:bg-[var(--accent)]/40"
                       onMouseDown={(e) => startResize(col.id, e.clientX)}

@@ -1,6 +1,6 @@
 "use server";
 
-import { CastingCandidateStatus } from "@prisma/client";
+import { CastingCandidateStatus, Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { approveCastingCandidate } from "@/features/preproduction/lib/approve-casting";
@@ -181,20 +181,46 @@ export async function updateCastingCandidateStatusAction(
     try {
       const result = await approveCastingCandidate(projectId, candidateId);
       revalidateCasting(projectId, result.characterId);
+      const replaced = result.replacedPrevious;
       return {
-        success: `${result.personName} утверждён на роль «${result.characterName}»`,
+        success: replaced
+          ? `${result.personName} утверждён на роль «${result.characterName}» (замена предыдущего актёра)`
+          : `${result.personName} утверждён на роль «${result.characterName}»`,
       };
     } catch {
       return { error: "Не удалось утвердить кандидата" };
     }
   }
 
+  const existing = await prisma.castingCandidate.findFirst({
+    where: { id: candidateId, projectId },
+    select: { status: true, characterId: true },
+  });
+  if (!existing) return { error: "Заявка не найдена" };
+
   await prisma.castingCandidate.updateMany({
     where: { id: candidateId, projectId },
     data: { status, statusChangedAt: new Date() },
   });
 
-  revalidateCasting(projectId);
+  if (
+    existing.status === CastingCandidateStatus.APPROVED &&
+    status === CastingCandidateStatus.REJECTED
+  ) {
+    await prisma.character.updateMany({
+      where: {
+        id: existing.characterId,
+        projectId,
+        sourceCastingCandidateId: candidateId,
+      },
+      data: {
+        castSnapshot: Prisma.DbNull,
+        sourceCastingCandidateId: null,
+      },
+    });
+  }
+
+  revalidateCasting(projectId, existing.characterId);
   return { success: "Статус обновлён" };
 }
 

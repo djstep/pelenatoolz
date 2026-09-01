@@ -9,21 +9,21 @@ import {
   updateScoutCandidateStatusAction,
   type ScoutActionState,
 } from "@/features/scout/actions";
-import { scoutStatusLabels, scoutStatusOptions } from "@/features/preproduction/lib/status-labels";
+import { ScoutFormFields } from "@/features/scout/components/scout-form-fields";
+import type { ScoutCandidateRow } from "@/features/scout/queries";
+import { scoutStatusOptions } from "@/features/preproduction/lib/status-labels";
+import { StatusSelect } from "@/features/preproduction/components/status-select";
 import { useActionToast, useToast } from "@/shared/ui/toast";
 import { Button } from "@/shared/ui/button";
-import { Input } from "@/shared/ui/input";
-import { Label } from "@/shared/ui/label";
 import { Modal } from "@/shared/ui/modal";
-import { Select } from "@/shared/ui/select";
 
 const initial: ScoutActionState = {};
 
-type ScoutRow = Awaited<
-  ReturnType<typeof import("@/features/scout/queries").listScoutCandidates>
->[number];
-
 type LocationOpt = { id: string; name: string; sublocation: string | null };
+
+function locationLabel(loc: { name: string; sublocation: string | null }) {
+  return loc.sublocation ? `${loc.name} / ${loc.sublocation}` : loc.name;
+}
 
 export function ScoutWorkspace({
   projectId,
@@ -34,7 +34,7 @@ export function ScoutWorkspace({
 }: {
   projectId: string;
   locale: string;
-  candidates: ScoutRow[];
+  candidates: ScoutCandidateRow[];
   locations: LocationOpt[];
   canWrite: boolean;
 }) {
@@ -79,7 +79,7 @@ export function ScoutWorkspace({
             <thead>
               <tr className="border-b border-[var(--border)] text-[var(--muted-fg)]">
                 <th className="py-2 px-3">Место</th>
-                <th className="py-2 px-3">Игровая локация</th>
+                <th className="py-2 px-3">Игровые объекты</th>
                 <th className="py-2 px-3">Адрес</th>
                 <th className="py-2 px-3">Стоимость</th>
                 <th className="py-2 px-3">Статус</th>
@@ -88,39 +88,36 @@ export function ScoutWorkspace({
             </thead>
             <tbody>
               {candidates.map((row) => (
-                <tr key={row.id} className="border-b border-[var(--border)]/60">
-                  <td className="py-3 px-3 font-medium">{row.title}</td>
-                  <td className="py-3 px-3">
+                <tr
+                  key={row.id}
+                  className="border-b border-[var(--border)]/60 hover:bg-[var(--glass-hover)]"
+                >
+                  <td className="py-3 px-3 font-medium">
                     <Link
-                      href={`/${locale}/projects/${projectId}/locations/${row.location.id}`}
+                      href={`/${locale}/projects/${projectId}/preproduction/scout/${row.id}`}
                       className="hover:text-[var(--accent)]"
                     >
-                      {row.location.name}
-                      {row.location.sublocation ? ` / ${row.location.sublocation}` : ""}
+                      {row.title}
                     </Link>
+                  </td>
+                  <td className="py-3 px-3 text-[var(--muted-fg)]">
+                    {row.locationLinks
+                      .map((link) => locationLabel(link.location))
+                      .join(" · ") || "—"}
                   </td>
                   <td className="py-3 px-3">{row.address ?? "—"}</td>
                   <td className="py-3 px-3">{row.cost?.toString() ?? "—"}</td>
                   <td className="py-3 px-3">
-                    <span className="rounded-full bg-[var(--glass-badge-bg)] px-2 py-0.5 text-xs">
-                      {scoutStatusLabels[row.status]}
-                    </span>
-                    {canWrite && row.status !== "APPROVED" ? (
-                      <select
-                        className="glass-input ml-2 rounded-lg px-2 py-1 text-xs"
-                        defaultValue={row.status}
-                        disabled={pending}
-                        onChange={(e) =>
-                          runStatus(row.id, e.target.value as ScoutCandidateStatus)
-                        }
-                      >
-                        {scoutStatusOptions.map((o) => (
-                          <option key={o.value} value={o.value}>
-                            {o.label}
-                          </option>
-                        ))}
-                      </select>
-                    ) : null}
+                    <StatusSelect
+                      value={row.status}
+                      options={scoutStatusOptions}
+                      disabled={!canWrite || pending || row.status === "APPROVED"}
+                      onChange={
+                        canWrite && row.status !== "APPROVED"
+                          ? (next) => runStatus(row.id, next as ScoutCandidateStatus)
+                          : undefined
+                      }
+                    />
                   </td>
                   {canWrite ? (
                     <td className="py-3 px-3 text-right">
@@ -130,6 +127,7 @@ export function ScoutWorkspace({
                           if (r.error) toast.error(r.error);
                           if (r.success) toast.success(r.success);
                         }}
+                        onClick={(e) => e.stopPropagation()}
                       >
                         <Button type="submit" variant="danger">
                           ×
@@ -148,6 +146,7 @@ export function ScoutWorkspace({
         open={open}
         onClose={() => setOpen(false)}
         title="Новый кандидат скаута"
+        wide
         footer={
           <div className="flex gap-3">
             <Button type="submit" form="scout-form" disabled={formPending}>
@@ -159,61 +158,8 @@ export function ScoutWorkspace({
           </div>
         }
       >
-        <form id="scout-form" action={action} className="space-y-4">
-          <div>
-            <Label htmlFor="locationId">Игровая локация *</Label>
-            <Select id="locationId" name="locationId" required defaultValue="">
-              <option value="" disabled>
-                Выберите…
-              </option>
-              {locations.map((loc) => (
-                <option key={loc.id} value={loc.id}>
-                  {loc.name}
-                  {loc.sublocation ? ` / ${loc.sublocation}` : ""}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <div>
-            <Label htmlFor="title">Название места *</Label>
-            <Input id="title" name="title" required />
-          </div>
-          <div>
-            <Label htmlFor="address">Адрес</Label>
-            <Input id="address" name="address" />
-          </div>
-          <div className="grid gap-3 md:grid-cols-2">
-            <div>
-              <Label htmlFor="cost">Стоимость</Label>
-              <Input id="cost" name="cost" type="number" min={0} />
-            </div>
-            <div>
-              <Label htmlFor="contactPhone">Телефон контакта</Label>
-              <Input id="contactPhone" name="contactPhone" />
-            </div>
-          </div>
-          <div>
-            <Label htmlFor="contactName">Контактное лицо</Label>
-            <Input id="contactName" name="contactName" />
-          </div>
-          <div>
-            <Label htmlFor="photoUrls">Фото (URL, по одному на строку)</Label>
-            <textarea
-              id="photoUrls"
-              name="photoUrls"
-              rows={3}
-              className="glass-input w-full resize-y px-3 py-2 text-sm"
-            />
-          </div>
-          <div>
-            <Label htmlFor="notes">Заметки</Label>
-            <textarea
-              id="notes"
-              name="notes"
-              rows={2}
-              className="glass-input w-full resize-y px-3 py-2 text-sm"
-            />
-          </div>
+        <form id="scout-form" action={action}>
+          <ScoutFormFields locations={locations} />
         </form>
       </Modal>
     </div>

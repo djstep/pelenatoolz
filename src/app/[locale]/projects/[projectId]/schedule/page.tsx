@@ -1,4 +1,5 @@
 import { requireProjectContext } from "@/features/projects/lib/project-context";
+import { getScheduleAvailabilityClientBundle } from "@/features/actor-availability/lib/serialize-bundle";
 import { ClearScheduleButton } from "@/features/schedule/components/clear-schedule-button";
 import { ScheduleDnDBoard } from "@/features/schedule/components/schedule-dnd-board";
 import { ShootDayForm } from "@/features/schedule/components/shoot-day-form";
@@ -19,10 +20,11 @@ export default async function SchedulePage({ params }: Props) {
     return <p className="text-sm text-[var(--danger)]">Нет доступа к КПП</p>;
   }
 
-  const [shootDays, unscheduled, stats] = await Promise.all([
+  const [shootDays, unscheduled, stats, availability] = await Promise.all([
     listShootDays(projectId),
     listUnscheduledScenes(projectId),
     getScheduleStats(projectId),
+    getScheduleAvailabilityClientBundle(projectId),
   ]);
   const canWrite = ctx.can("schedule:write");
   const nextDayNumber =
@@ -36,8 +38,8 @@ export default async function SchedulePage({ params }: Props) {
         <div>
           <h2 className="font-display text-2xl font-semibold">КПП и вызывные</h2>
           <p className="mt-1 text-sm text-[var(--muted-fg)]">
-            Фильтры слева · перетаскивание за ⠿ · клик — подробности сцены · ⋮ —
-            вызывной / отчёт / занятость
+            Фильтры слева · перетаскивание сцены за блок · клик — подробности · ⋮
+            — меню дня (комментарий, тип, вызывной)
           </p>
         </div>
         <div className="flex flex-wrap items-end justify-between gap-3">
@@ -62,6 +64,7 @@ export default async function SchedulePage({ params }: Props) {
           shootDays={shootDays}
           unscheduled={unscheduled}
           canWrite={canWrite}
+          availability={availability}
         />
       </div>
     </div>

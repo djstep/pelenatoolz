@@ -4,7 +4,7 @@ import {
   getCastingPerson,
   listCharactersForCasting,
 } from "@/features/casting/queries";
-import { PreproductionTabs } from "@/features/preproduction/components/preproduction-tabs";
+import { getAvailabilityMiniBundle } from "@/features/actor-availability/lib/serialize-bundle";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { Card } from "@/shared/ui/card";
 
@@ -20,19 +20,16 @@ export default async function CastingPersonPage({ params }: Props) {
     return <p className="text-sm text-[var(--danger)]">Нет доступа</p>;
   }
 
-  const [person, characters] = await Promise.all([
+  const [person, characters, availability] = await Promise.all([
     getCastingPerson(projectId, personId),
     listCharactersForCasting(projectId),
+    getAvailabilityMiniBundle(projectId),
   ]);
 
   if (!person) notFound();
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="font-display text-2xl font-semibold">Препродакшн</h2>
-        <PreproductionTabs locale={locale} projectId={projectId} />
-      </div>
       <Card>
         <CastingPersonDetail
           projectId={projectId}
@@ -40,6 +37,11 @@ export default async function CastingPersonPage({ params }: Props) {
           person={person}
           characters={characters}
           canWrite={ctx.can("cast:write")}
+          availabilityMini={{
+            rowId: availability.rowByPersonId[personId],
+            manualDays: availability.manualDays,
+            kppBusySerialized: availability.kppBusySerialized,
+          }}
         />
       </Card>
     </div>

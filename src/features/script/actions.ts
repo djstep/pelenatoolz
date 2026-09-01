@@ -11,6 +11,7 @@ import {
   createSceneSchema,
 } from "@/features/script/schemas";
 import { prisma } from "@/shared/db/prisma";
+import { syncShootDaysForScene } from "@/features/schedule/lib/sync-shoot-day-resources";
 import { writeAuditLog } from "@/shared/audit/log";
 
 export type ActionState = { error?: string; success?: string; keepOpen?: boolean };
@@ -85,6 +86,54 @@ function parseResourceRows(formData: FormData) {
   return rows;
 }
 
+function parseResourceItemLinks(formData: FormData) {
+  const links: Array<{ itemId: string; quantity: number }> = [];
+  const seen = new Set<string>();
+
+  for (const [key, value] of formData.entries()) {
+    const match = /^cri_item_([a-zA-Z0-9]+)_(\d+)$/.exec(key);
+    if (!match) continue;
+    const itemId = String(value).trim();
+    if (!itemId) continue;
+    const categoryId = match[1];
+    const index = match[2];
+    const quantity = Number(formData.get(`cri_qty_${categoryId}_${index}`)) || 1;
+    if (seen.has(itemId)) continue;
+    seen.add(itemId);
+    links.push({ itemId, quantity });
+  }
+
+  return links;
+}
+
+async function saveSceneResourceItems(
+  projectId: string,
+  sceneId: string,
+  links: Array<{ itemId: string; quantity: number }>,
+) {
+  await prisma.sceneResourceItem.deleteMany({ where: { sceneId } });
+  if (links.length === 0) return;
+
+  const valid = await prisma.resourceItem.findMany({
+    where: {
+      id: { in: links.map((l) => l.itemId) },
+      category: { projectId, fillInScenes: true },
+    },
+    select: { id: true },
+  });
+  const validIds = new Set(valid.map((v) => v.id));
+  const filtered = links.filter((l) => validIds.has(l.itemId));
+  if (filtered.length === 0) return;
+
+  await prisma.sceneResourceItem.createMany({
+    data: filtered.map((l) => ({
+      sceneId,
+      itemId: l.itemId,
+      quantity: l.quantity,
+    })),
+  });
+}
+
 const TAG_TO_ELEMENT: Record<string, ElementType> = {
   tag_makeup: ElementType.MAKEUP,
   tag_costume: ElementType.COSTUME,
@@ -139,6 +188,7 @@ export async function createSceneAction(
   });
 
   const resources = parseResourceRows(formData);
+  const resourceItemLinks = parseResourceItemLinks(formData);
   const tagElementIds = await resolveTagElements(projectId, formData);
   const allElementIds = [
     ...new Set([...(parsed.data.elementIds ?? []), ...tagElementIds]),
@@ -192,6 +242,9 @@ export async function createSceneAction(
       },
     });
 
+    await saveSceneResourceItems(projectId, scene.id, resourceItemLinks);
+    await syncShootDaysForScene(scene.id);
+
     await writeAuditLog({
       projectId,
       userId: ctx.user.id!,
@@ -239,6 +292,7 @@ export async function updateSceneAction(
   }
 
   const resources = parseResourceRows(formData);
+  const resourceItemLinks = parseResourceItemLinks(formData);
   const tagElementIds = await resolveTagElements(projectId, formData);
   const allElementIds = [
     ...new Set([...(parsed.data.elementIds ?? []), ...tagElementIds]),
@@ -251,6 +305,7 @@ export async function updateSceneAction(
       prisma.sceneCharacter.deleteMany({ where: { sceneId } }),
       prisma.sceneElement.deleteMany({ where: { sceneId } }),
       prisma.sceneResource.deleteMany({ where: { sceneId } }),
+      prisma.sceneResourceItem.deleteMany({ where: { sceneId } }),
       prisma.scene.update({
         where: { id: sceneId },
         data: {
@@ -300,6 +355,8 @@ export async function updateSceneAction(
         },
       }),
     ]);
+    await saveSceneResourceItems(projectId, sceneId, resourceItemLinks);
+    await syncShootDaysForScene(sceneId);
   } catch {
     return { error: "Сцена с таким номером уже существует" };
   }

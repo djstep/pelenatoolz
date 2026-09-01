@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useTransition } from "react";
 import Link from "next/link";
 import {
   updateCharacterCastSnapshotAction,
@@ -11,7 +11,9 @@ import {
   updateActorAction,
   type ActorActionState,
 } from "@/features/actors/actions";
-import { castingStatusLabels } from "@/features/preproduction/lib/status-labels";
+import { updateCastingCandidateStatusAction } from "@/features/casting/actions";
+import { castingStatusOptions } from "@/features/preproduction/lib/status-labels";
+import { StatusSelect } from "@/features/preproduction/components/status-select";
 import { fullNameFromParts } from "@/features/preproduction/lib/snapshots";
 import { formatSecondsMmSs } from "@/shared/i18n/domain-labels";
 import {
@@ -22,7 +24,8 @@ import {
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
-import { useActionToast } from "@/shared/ui/toast";
+import { AvailabilityMiniPreview } from "@/features/actor-availability/components/availability-mini-preview";
+import { useActionToast, useToast } from "@/shared/ui/toast";
 
 const initial: CharacterActionState = {};
 const actorInitial: ActorActionState = {};
@@ -37,13 +40,23 @@ export function CharacterDetailView({
   character,
   canWriteScript,
   canWriteCast,
+  availabilityMini,
 }: {
   projectId: string;
   locale: string;
   character: CharacterDetail;
   canWriteScript: boolean;
   canWriteCast: boolean;
+  availabilityMini?: {
+    rowId?: string;
+    actorId?: string;
+    manualDays: Record<string, Record<string, { status: string; comment: string | null }>>;
+    kppBusySerialized: Record<string, string[]>;
+  };
 }) {
+  const [pending, startTransition] = useTransition();
+  const toast = useToast();
+
   const reqBound = updateCharacterRequirementsAction.bind(
     null,
     projectId,
@@ -62,6 +75,19 @@ export function CharacterDetailView({
 
   const actor = character.actors[0];
   const snapshot = character.snapshot;
+  const hasApproved = character.castingCandidates.some((c) => c.status === "APPROVED");
+
+  function runCandidateStatus(candidateId: string, status: string) {
+    startTransition(async () => {
+      const result = await updateCastingCandidateStatusAction(
+        projectId,
+        candidateId,
+        status as import("@prisma/client").CastingCandidateStatus,
+      );
+      if (result.error) toast.error(result.error);
+      if (result.success) toast.success(result.success);
+    });
+  }
 
   return (
     <div className="space-y-6">
@@ -125,6 +151,12 @@ export function CharacterDetailView({
             Открыть кастинг →
           </Link>
         </div>
+        {hasApproved ? (
+          <p className="text-xs text-[var(--muted-fg)]">
+            Чтобы заменить утверждённого актёра, выберите «Утверждён» у другого кандидата —
+            предыдущий автоматически получит статус «Отказ», снимок на карточке обновится.
+          </p>
+        ) : null}
         {character.castingCandidates.length === 0 ? (
           <p className="text-sm text-[var(--muted-fg)]">Кандидаты не добавлены.</p>
         ) : (
@@ -134,18 +166,40 @@ export function CharacterDetailView({
                 key={c.id}
                 className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--border)] px-3 py-2"
               >
-                <span>
+                <Link
+                  href={`/${locale}/projects/${projectId}/preproduction/casting/${c.person.id}`}
+                  className="hover:text-[var(--accent)]"
+                >
                   {fullNameFromParts(c.person)}
                   {c.person.phone ? ` · ${c.person.phone}` : ""}
-                </span>
-                <span className="rounded-full bg-[var(--glass-badge-bg)] px-2 py-0.5 text-xs">
-                  {castingStatusLabels[c.status]}
-                </span>
+                </Link>
+                <StatusSelect
+                  value={c.status}
+                  options={castingStatusOptions}
+                  disabled={!canWriteCast || pending}
+                  onChange={
+                    canWriteCast
+                      ? (next) => runCandidateStatus(c.id, next)
+                      : undefined
+                  }
+                />
               </li>
             ))}
           </ul>
         )}
       </section>
+
+      {snapshot && availabilityMini?.actorId ? (
+        <AvailabilityMiniPreview
+          projectId={projectId}
+          locale={locale}
+          rowId={availabilityMini.rowId}
+          actorId={availabilityMini.actorId}
+          manualDays={availabilityMini.manualDays}
+          kppBusySerialized={availabilityMini.kppBusySerialized}
+          canWrite={canWriteCast}
+        />
+      ) : null}
 
       {snapshot ? (
         <section className="glass-card space-y-4 p-5">

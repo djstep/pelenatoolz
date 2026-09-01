@@ -12,6 +12,7 @@ import {
   financeOpCategoryLabels,
   financeOpTypeLabels,
 } from "@/shared/i18n/finance-post-labels";
+import { formatDateShort } from "@/shared/i18n/format-date";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
@@ -314,7 +315,7 @@ export function FinanceWorkspace({
             const escape = (v: string) =>
               /[",\n;]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
             const rows = operations.map((op) => [
-              new Date(op.operationDate).toLocaleDateString("ru-RU"),
+              formatDateShort(op.operationDate),
               financeOpTypeLabels[op.type],
               financeOpCategoryLabels[op.category],
               op.title,
@@ -363,7 +364,7 @@ export function FinanceWorkspace({
               {visible.map((op) => (
                 <tr key={op.id} className="border-b border-[var(--border)]/60">
                   <td className="px-4 py-3 whitespace-nowrap">
-                    {new Date(op.operationDate).toLocaleDateString("ru-RU")}
+                    {formatDateShort(op.operationDate)}
                   </td>
                   <td className="px-4 py-3">
                     <span

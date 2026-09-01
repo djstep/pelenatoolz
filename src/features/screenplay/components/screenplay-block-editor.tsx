@@ -50,6 +50,7 @@ type Props = {
   pageToMinuteRatio: number;
   sceneTimings?: SceneTimingRef[];
   sceneId?: string | null;
+  scrollToSceneId?: string | null;
   canWrite: boolean;
   timingSaving?: boolean;
   onTimingModeChange?: (mode: TimingMode) => void;
@@ -139,6 +140,7 @@ export function ScreenplayBlockEditor({
   pageToMinuteRatio,
   sceneTimings = [],
   sceneId = null,
+  scrollToSceneId = null,
   canWrite,
   timingSaving = false,
   onTimingModeChange,
@@ -196,6 +198,20 @@ export function ScreenplayBlockEditor({
   useEffect(() => {
     onDirtyChange?.(isDirty);
   }, [isDirty, onDirtyChange]);
+
+  useEffect(() => {
+    if (!scrollToSceneId) return;
+    const timer = window.setTimeout(() => {
+      const el = document.querySelector(
+        `[data-scene-id="${scrollToSceneId}"]`,
+      );
+      if (!el) return;
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      el.classList.add("screenplay-scene-highlight");
+      window.setTimeout(() => el.classList.remove("screenplay-scene-highlight"), 2400);
+    }, 120);
+    return () => window.clearTimeout(timer);
+  }, [scrollToSceneId, blocks]);
 
   useEffect(() => {
     if (!isDirty) return;

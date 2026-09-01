@@ -93,7 +93,12 @@ export type CharacterWithStats = Awaited<
 
 export type CharacterEditSource = Pick<
   CharacterWithStats,
-  "id" | "name" | "description" | "roleRequirements"
+  | "id"
+  | "name"
+  | "description"
+  | "roleRequirements"
+  | "makeupOffsetMin"
+  | "costumeOffsetMin"
 >;
 
 export async function getCharacterDetail(projectId: string, characterId: string) {

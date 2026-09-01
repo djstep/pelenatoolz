@@ -9,7 +9,6 @@ export type ResourceRow = {
   key: string;
   name: string;
   quantity: number;
-  unitPrice: number;
 };
 
 function newRow(): ResourceRow {
@@ -17,7 +16,6 @@ function newRow(): ResourceRow {
     key: Math.random().toString(36).slice(2),
     name: "",
     quantity: 1,
-    unitPrice: 0,
   };
 }
 
@@ -30,7 +28,7 @@ export function SceneResourceBlock({
   title: string;
   category: SceneResourceCategory;
   nameOptions?: string[];
-  initialRows?: Array<{ name: string; quantity: number; unitPrice: number }>;
+  initialRows?: Array<{ name: string; quantity: number; unitPrice?: number }>;
 }) {
   const [rows, setRows] = useState<ResourceRow[]>(() => {
     if (initialRows && initialRows.length > 0) {
@@ -38,7 +36,6 @@ export function SceneResourceBlock({
         key: Math.random().toString(36).slice(2),
         name: r.name,
         quantity: r.quantity,
-        unitPrice: r.unitPrice,
       }));
     }
     return [newRow()];
@@ -53,89 +50,63 @@ export function SceneResourceBlock({
             <tr className="text-[var(--muted-fg)]">
               <th className="py-1 pr-2">Название</th>
               <th className="py-1 pr-2 w-20">Кол-во</th>
-              <th className="py-1 pr-2 w-28">Цена</th>
-              <th className="py-1 pr-2 w-28">Сумма</th>
               <th className="w-8" />
             </tr>
           </thead>
           <tbody>
-            {rows.map((row, index) => {
-              const total = row.quantity * row.unitPrice;
-              return (
-                <tr key={row.key}>
-                  <td className="py-1 pr-2">
-                    <input type="hidden" name={`res_cat_${category}_${index}`} value={category} />
-                    <Input
-                      name={`res_name_${category}_${index}`}
-                      list={`opts_${category}`}
-                      value={row.name}
-                      onChange={(e) =>
-                        setRows((prev) =>
-                          prev.map((r) =>
-                            r.key === row.key ? { ...r, name: e.target.value } : r,
-                          ),
-                        )
-                      }
-                      placeholder="Название"
-                    />
-                  </td>
-                  <td className="py-1 pr-2">
-                    <Input
-                      name={`res_qty_${category}_${index}`}
-                      type="number"
-                      min={1}
-                      value={row.quantity}
-                      onChange={(e) =>
-                        setRows((prev) =>
-                          prev.map((r) =>
-                            r.key === row.key
-                              ? { ...r, quantity: Number(e.target.value) || 1 }
-                              : r,
-                          ),
-                        )
-                      }
-                    />
-                  </td>
-                  <td className="py-1 pr-2">
-                    <Input
-                      name={`res_price_${category}_${index}`}
-                      type="number"
-                      min={0}
-                      step="0.01"
-                      value={row.unitPrice}
-                      onChange={(e) =>
-                        setRows((prev) =>
-                          prev.map((r) =>
-                            r.key === row.key
-                              ? { ...r, unitPrice: Number(e.target.value) || 0 }
-                              : r,
-                          ),
-                        )
-                      }
-                    />
-                  </td>
-                  <td className="py-1 pr-2">
-                    <Input value={total.toFixed(2)} readOnly className="opacity-70" />
-                  </td>
-                  <td className="py-1">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      className="px-2"
-                      onClick={() =>
-                        setRows((prev) =>
-                          prev.length <= 1
-                            ? [newRow()]
-                            : prev.filter((r) => r.key !== row.key),
-                        )
-                      }
-                    >
-                      ×
-                    </Button>
-                  </td>
-                </tr>
-              );
-            })}
+            {rows.map((row, index) => (
+              <tr key={row.key}>
+                <td className="py-1 pr-2">
+                  <input type="hidden" name={`res_cat_${category}_${index}`} value={category} />
+                  <Input
+                    name={`res_name_${category}_${index}`}
+                    list={`opts_${category}`}
+                    value={row.name}
+                    onChange={(e) =>
+                      setRows((prev) =>
+                        prev.map((r) =>
+                          r.key === row.key ? { ...r, name: e.target.value } : r,
+                        ),
+                      )
+                    }
+                    placeholder="Название"
+                  />
+                </td>
+                <td className="py-1 pr-2">
+                  <Input
+                    name={`res_qty_${category}_${index}`}
+                    type="number"
+                    min={1}
+                    value={row.quantity}
+                    onChange={(e) =>
+                      setRows((prev) =>
+                        prev.map((r) =>
+                          r.key === row.key
+                            ? { ...r, quantity: Number(e.target.value) || 1 }
+                            : r,
+                        ),
+                      )
+                    }
+                  />
+                </td>
+                <td className="py-1">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="px-2"
+                    onClick={() =>
+                      setRows((prev) =>
+                        prev.length <= 1
+                          ? [newRow()]
+                          : prev.filter((r) => r.key !== row.key),
+                      )
+                    }
+                  >
+                    ×
+                  </Button>
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>

@@ -142,6 +142,9 @@ export function ScreenplayBlockRow({
       )}
       data-block-index={index}
       data-block-id={block.id}
+      data-scene-id={
+        block.type === "SLUGLINE" && block.sceneId ? block.sceneId : undefined
+      }
     >
       {canWrite ? (
         <div className="screenplay-block-gutter screenplay-block-gutter--left">

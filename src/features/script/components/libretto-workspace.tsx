@@ -1,7 +1,20 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useEffect, useState, useTransition } from "react";
 import type { ProjectType, TimingMode } from "@prisma/client";
+import {
+  DndContext,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragOverEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  horizontalListSortingStrategy,
+  useSortable,
+} from "@dnd-kit/sortable";
 import {
   bulkDeleteScenesAction,
   bulkUpdateSceneStatusAction,
@@ -14,6 +27,7 @@ import {
   SceneModal,
   type SceneEditData,
 } from "@/features/script/components/scene-modal";
+import type { SceneCategoryOption } from "@/features/script/components/scene-category-resource-block";
 import {
   formatSceneNumber,
   getStatusDateLabel,
@@ -26,19 +40,67 @@ import {
   emptyFilters,
   type LibrettoFilters,
 } from "@/features/script/lib/libretto-filters";
-import { LIBRETTO_COLUMNS } from "@/features/script/lib/table-columns";
+import { buildLibrettoColumns } from "@/features/script/lib/table-columns";
 import type { LibrettoExportColumn } from "@/features/script/lib/libretto-fields";
 import {
   sceneStatusColors,
   sceneStatusRowColors,
 } from "@/shared/i18n/domain-labels";
-import { useTableLayout } from "@/shared/hooks/use-table-layout";
+import { useTableLayout, type ColumnDef } from "@/shared/hooks/use-table-layout";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { cn } from "@/shared/lib/cn";
 
 type Option = { id: string; name: string };
+
+function SortableColumnHeader({
+  col,
+  width,
+  onResize,
+}: {
+  col: ColumnDef;
+  width: number;
+  onResize: (startX: number) => void;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    isDragging,
+  } = useSortable({
+    id: col.id,
+    animateLayoutChanges: () => false,
+  });
+
+  return (
+    <th
+      ref={setNodeRef}
+      style={{ width }}
+      className={cn(
+        "relative px-0 py-0 font-medium",
+        isDragging && "z-20 bg-[var(--surface-2)] ring-1 ring-[var(--accent)]/50",
+      )}
+    >
+      <div
+        className="flex h-full cursor-grab items-center px-2 py-3 touch-none select-none active:cursor-grabbing"
+        title="Перетащите заголовок для смены порядка столбцов"
+        {...attributes}
+        {...listeners}
+      >
+        <span className="truncate">{col.label}</span>
+      </div>
+      <span
+        role="separator"
+        className="absolute right-0 top-0 z-10 h-full w-1.5 cursor-col-resize hover:bg-[var(--accent)]/40"
+        onMouseDown={(e) => {
+          e.stopPropagation();
+          onResize(e.clientX);
+        }}
+      />
+    </th>
+  );
+}
 
 function cellValue(
   scene: LibrettoScene,
@@ -58,6 +120,7 @@ export function LibrettoWorkspace({
   scenes,
   locations,
   characters,
+  resourceCategories = [],
   canWrite,
 }: {
   projectId: string;
@@ -69,17 +132,45 @@ export function LibrettoWorkspace({
   scenes: LibrettoScene[];
   locations: Option[];
   characters: Option[];
+  resourceCategories?: SceneCategoryOption[];
   canWrite: boolean;
 }) {
+  const allColumns = useMemo(
+    () => buildLibrettoColumns(resourceCategories),
+    [resourceCategories],
+  );
+
   const {
     visibleIds,
     setVisibleIds,
+    reorderColumns,
+    orderedColumns,
     widths,
     colorMode,
     setColorMode,
     startResize,
     visibleColumns,
-  } = useTableLayout(`libretto:${projectId}`, LIBRETTO_COLUMNS);
+  } = useTableLayout(`libretto:${projectId}`, allColumns);
+
+  const columnSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+  );
+
+  function handleColumnDragOver(event: DragOverEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    reorderColumns(String(active.id), String(over.id));
+  }
+
+  useEffect(() => {
+    setVisibleIds((prev) => {
+      const next = new Set(prev);
+      for (const col of allColumns) {
+        if (!next.has(col.id)) next.add(col.id);
+      }
+      return next;
+    });
+  }, [allColumns, setVisibleIds]);
 
   const [filters, setFilters] = useState<LibrettoFilters>(() => emptyFilters());
   const [search, setSearch] = useState("");
@@ -169,9 +260,15 @@ export function LibrettoWorkspace({
             Столбцы
           </Button>
           {columnsOpen ? (
-            <div className="absolute right-0 top-full z-20 mt-1 min-w-[14rem] glass-panel p-2 shadow-lg">
-              {LIBRETTO_COLUMNS.map((col) => (
-                <label key={col.id} className="flex items-center gap-2 px-2 py-1 text-sm">
+            <div className="absolute right-0 top-full z-20 mt-1 max-h-[min(24rem,70vh)] min-w-[14rem] overflow-y-auto glass-panel p-2 shadow-lg">
+              <p className="mb-2 px-2 text-[10px] text-[var(--muted-fg)]">
+                Порядок столбцов — перетаскиванием заголовков в таблице
+              </p>
+              {orderedColumns.map((col) => (
+                <label
+                  key={col.id}
+                  className="flex items-center gap-2 rounded-md px-2 py-1 text-sm hover:bg-white/5"
+                >
                   <input
                     type="checkbox"
                     checked={visibleIds.has(col.id)}
@@ -184,7 +281,7 @@ export function LibrettoWorkspace({
                       });
                     }}
                   />
-                  {col.label}
+                  <span className="truncate">{col.label}</span>
                 </label>
               ))}
             </div>
@@ -247,27 +344,31 @@ export function LibrettoWorkspace({
         <p className="text-sm text-[var(--muted-fg)]">Нет сцен по текущим фильтрам.</p>
       ) : (
         <div className="overflow-x-auto glass-card">
-          <table className="glass-table w-full text-left text-sm" style={{ tableLayout: "fixed" }}>
-            <thead>
-              <tr className="border-b border-[var(--border)] text-[var(--muted-fg)]">
-                {canWrite ? <th className="w-8 px-2 py-3" /> : null}
-                {visibleColumns.map((col) => (
-                  <th
-                    key={col.id}
-                    className="relative px-2 py-3 font-medium"
-                    style={{ width: widths[col.id] ?? col.defaultWidth }}
+          <DndContext
+            sensors={columnSensors}
+            collisionDetection={closestCenter}
+            onDragOver={handleColumnDragOver}
+          >
+            <table className="glass-table w-full text-left text-sm" style={{ tableLayout: "fixed" }}>
+              <thead>
+                <tr className="border-b border-[var(--border)] text-[var(--muted-fg)]">
+                  {canWrite ? <th className="w-8 px-2 py-3" /> : null}
+                  <SortableContext
+                    items={visibleColumns.map((col) => col.id)}
+                    strategy={horizontalListSortingStrategy}
                   >
-                    {col.label}
-                    <span
-                      role="separator"
-                      className="absolute right-0 top-0 h-full w-1 cursor-col-resize hover:bg-[var(--accent)]/40"
-                      onMouseDown={(e) => startResize(col.id, e.clientX)}
-                    />
-                  </th>
-                ))}
-                {canWrite ? <th className="w-24 px-2 py-3" /> : null}
-              </tr>
-            </thead>
+                    {visibleColumns.map((col) => (
+                      <SortableColumnHeader
+                        key={col.id}
+                        col={col}
+                        width={widths[col.id] ?? col.defaultWidth}
+                        onResize={(startX) => startResize(col.id, startX)}
+                      />
+                    ))}
+                  </SortableContext>
+                  {canWrite ? <th className="w-24 px-2 py-3" /> : null}
+                </tr>
+              </thead>
             <tbody>
               {filtered.map((scene) => (
                 <tr
@@ -330,12 +431,14 @@ export function LibrettoWorkspace({
               ))}
             </tbody>
           </table>
+          </DndContext>
         </div>
       )}
 
       <SceneModal
         key={editingScene?.id ?? "create"}
         projectId={projectId}
+        locale={locale}
         projectType={projectType}
         shootOnFilm={shootOnFilm}
         timingMode={timingMode}
@@ -344,6 +447,7 @@ export function LibrettoWorkspace({
         onClose={() => { setModalOpen(false); setEditingScene(null); }}
         locations={locations}
         characters={characters}
+        resourceCategories={resourceCategories}
         scene={editingScene}
       />
 

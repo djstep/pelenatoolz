@@ -1,17 +1,19 @@
 "use client";
 
-import { useActionState, useEffect } from "react";
+import { useActionState, useEffect, useState } from "react";
 import {
   createCharacterRecordAction,
   updateCharacterRecordAction,
   type CharacterActionState,
 } from "@/features/characters/actions";
 import type { CharacterEditSource } from "@/features/characters/queries";
-import { useActionToast } from "@/shared/ui/toast";
+import { formatMinutesHhMm } from "@/shared/i18n/domain-labels";
+import { HhMmInput } from "@/shared/ui/hh-mm-input";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Modal } from "@/shared/ui/modal";
+import { useActionToast } from "@/shared/ui/toast";
 
 const initial: CharacterActionState = {};
 
@@ -31,6 +33,12 @@ export function CharacterModal({
     ? updateCharacterRecordAction.bind(null, projectId, character!.id)
     : createCharacterRecordAction.bind(null, projectId);
   const [state, action, pending] = useActionState(bound, initial);
+  const [makeupOffset, setMakeupOffset] = useState(
+    () => formatMinutesHhMm(character?.makeupOffsetMin) || "",
+  );
+  const [costumeOffset, setCostumeOffset] = useState(
+    () => formatMinutesHhMm(character?.costumeOffsetMin) || "",
+  );
   useActionToast(state);
 
   useEffect(() => {
@@ -85,6 +93,30 @@ export function CharacterModal({
             placeholder="Типаж, возраст, особенности…"
             defaultValue={character?.roleRequirements ?? ""}
           />
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <Label htmlFor="makeupOffsetMin">Грим до готовности</Label>
+            <input type="hidden" name="makeupOffsetMin" value={makeupOffset} />
+            <HhMmInput
+              id="makeupOffsetMin"
+              value={makeupOffset}
+              onChange={setMakeupOffset}
+              placeholder="01:00"
+            />
+            <p className="mt-1 text-xs text-[var(--muted-fg)]">Формат ЧЧ:ММ</p>
+          </div>
+          <div>
+            <Label htmlFor="costumeOffsetMin">Костюм до грима</Label>
+            <input type="hidden" name="costumeOffsetMin" value={costumeOffset} />
+            <HhMmInput
+              id="costumeOffsetMin"
+              value={costumeOffset}
+              onChange={setCostumeOffset}
+              placeholder="00:30"
+            />
+            <p className="mt-1 text-xs text-[var(--muted-fg)]">Формат ЧЧ:ММ</p>
+          </div>
         </div>
       </form>
     </Modal>

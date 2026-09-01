@@ -1,46 +1,40 @@
 import Link from "next/link";
 import { CallSheetEditor } from "@/features/day-docs/components/call-sheet-edit";
+import { CallSheetExportButtons } from "@/features/day-docs/components/call-sheet-export-buttons";
+import { CallSheetMoveDateButton } from "@/features/day-docs/components/call-sheet-move-date-button";
+import { CallSheetPlanner } from "@/features/day-docs/components/call-sheet-planner";
 import { PrintButton } from "@/features/day-docs/components/print-button";
 import {
   buildCastForDay,
   buildDayStats,
+  buildPerShiftResources,
   buildResourceTables,
   buildShootingSlotDetails,
   formatSceneLine,
   inferDayNightLabel,
-  sceneStatusLabel,
   slotDurationLabel,
   type DayDocBundle,
   type ResourceTableRow,
 } from "@/features/day-docs/lib/build-day-doc";
 import type { DayAstro } from "@/features/day-docs/lib/city-astro";
+import {
+  isManualActorTiming,
+  isManualResourceTiming,
+  type ActorTimingBaselines,
+  type ResourceTimingBaselines,
+} from "@/features/day-docs/lib/compute-call-timings";
 import { timeSlotTypeLabels } from "@/features/day-docs/lib/slot-labels";
 import { formatPagesMinutes } from "@/features/schedule/lib/day-summary";
 import {
   actorRoleTypeLabels,
   dayNightLabels,
-  sceneStatusColors,
   shootDayStatusLabels,
   shootDayTypeLabels,
 } from "@/shared/i18n/domain-labels";
+import { formatDateLong, formatDateShort } from "@/shared/i18n/format-date";
 import { Badge } from "@/shared/ui/badge";
+import { cn } from "@/shared/lib/cn";
 import type { getNextShootDayBrief } from "@/features/day-docs/queries";
-
-function formatDate(date: Date) {
-  return new Date(date).toLocaleDateString("ru-RU", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
-}
-
-function formatShortDate(date: Date) {
-  return new Date(date).toLocaleDateString("ru-RU", {
-    day: "numeric",
-    month: "short",
-  });
-}
 
 function DocSection({
   title,
@@ -84,14 +78,43 @@ function TimingPair({ ready, wrap }: { ready: string | null; wrap: string | null
   );
 }
 
+function ManualTimingCell({
+  value,
+  computed,
+}: {
+  value: string | null;
+  computed?: string | null;
+}) {
+  const manual = isManualActorTiming(value, computed) || isManualResourceTiming(value, computed);
+  return (
+    <td
+      className={cn(
+        "py-2 pr-3",
+        manual &&
+          "bg-amber-400/20 ring-2 ring-inset ring-amber-400/50",
+      )}
+      title={manual && computed ? `Расчётное: ${computed}` : undefined}
+    >
+      {value || "—"}
+      {manual ? (
+        <span className="ml-1.5 rounded bg-amber-500/25 px-1 py-0.5 text-[10px] font-medium text-amber-200">
+          ручн.
+        </span>
+      ) : null}
+    </td>
+  );
+}
+
 function ResourceTable({
   rows,
   showMakeup = true,
   showCostume = true,
+  timingBaselines = {},
 }: {
   rows: ResourceTableRow[];
   showMakeup?: boolean;
   showCostume?: boolean;
+  timingBaselines?: ResourceTimingBaselines;
 }) {
   if (rows.length === 0) {
     return <p className="text-sm text-[var(--muted-fg)]">Нет данных на этот день.</p>;
@@ -112,21 +135,41 @@ function ResourceTable({
           </tr>
         </thead>
         <tbody>
-          {rows.map((row) => (
+          {rows.map((row) => {
+            const baseline = timingBaselines[row.key];
+            return (
             <tr key={row.key} className="border-b border-[var(--border)]/60">
               <td className="py-2 pr-3 font-medium">{row.name}</td>
               <td className="py-2 pr-3 text-[var(--muted-fg)]">
                 {row.sceneNumbers.join(", ")}
               </td>
-              <td className="py-2 pr-3">{row.arrival || "—"}</td>
+              <ManualTimingCell
+                value={row.arrival}
+                computed={baseline?.arrivalTime}
+              />
               {showCostume ? (
-                <td className="py-2 pr-3">{row.costume || "—"}</td>
+                <ManualTimingCell
+                  value={row.costume}
+                  computed={baseline?.costumeTime}
+                />
               ) : null}
-              {showMakeup ? <td className="py-2 pr-3">{row.makeup || "—"}</td> : null}
-              <td className="py-2 pr-3">{row.ready || "—"}</td>
-              <td className="py-2">{row.wrap || "—"}</td>
+              {showMakeup ? (
+                <ManualTimingCell
+                  value={row.makeup}
+                  computed={baseline?.makeupTime}
+                />
+              ) : null}
+              <ManualTimingCell
+                value={row.ready}
+                computed={baseline?.readyTime}
+              />
+              <ManualTimingCell
+                value={row.wrap}
+                computed={baseline?.wrapTime}
+              />
             </tr>
-          ))}
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -150,6 +193,8 @@ export function CallSheetView({
   nextDay,
   nextDayAstro,
   canEdit,
+  timingBaselines = {},
+  resourceTimingBaselines = {},
 }: {
   locale: string;
   projectId: string;
@@ -158,11 +203,14 @@ export function CallSheetView({
   nextDay: Awaited<ReturnType<typeof getNextShootDayBrief>>;
   nextDayAstro: DayAstro | null;
   canEdit: boolean;
+  timingBaselines?: ActorTimingBaselines;
+  resourceTimingBaselines?: ResourceTimingBaselines;
 }) {
   const { project, day } = bundle;
   const stats = buildDayStats(day);
   const cast = buildCastForDay(bundle);
   const resources = buildResourceTables(bundle);
+  const perShiftResources = buildPerShiftResources(bundle);
   const dayNight = inferDayNightLabel(day);
 
   const weatherParts = [
@@ -207,8 +255,19 @@ export function CallSheetView({
               bundle={bundle}
               cast={cast}
               resources={resources}
+              perShiftResources={perShiftResources}
+              timingBaselines={timingBaselines}
             />
           ) : null}
+          <CallSheetMoveDateButton
+            projectId={projectId}
+            dayId={day.id}
+            dayNumber={day.dayNumber}
+            currentDate={day.date}
+            locale={locale}
+            canEdit={canEdit}
+          />
+          <CallSheetExportButtons projectId={projectId} dayId={day.id} />
           <PrintButton />
         </div>
       </div>
@@ -220,7 +279,7 @@ export function CallSheetView({
               {project.fullName || project.name}
             </h1>
             <p className="mt-1 text-sm text-[var(--muted-fg)]">
-              {formatDate(day.date)}
+              {formatDateLong(day.date)}
               {project.city ? ` · ${project.city}` : ""}
             </p>
             <div className="mt-2 flex flex-wrap gap-2">
@@ -278,6 +337,17 @@ export function CallSheetView({
           </p>
         ) : null}
       </DocSection>
+
+      {canEdit ? (
+        <DocSection title="План дня">
+          <CallSheetPlanner
+            projectId={projectId}
+            dayId={day.id}
+            bundle={bundle}
+            canEdit={canEdit}
+          />
+        </DocSection>
+      ) : null}
 
       {day.departmentCalls.length > 0 ? (
         <DocSection title="Руководители группы / контакты по цехам">
@@ -346,26 +416,15 @@ export function CallSheetView({
                   key={slot.id}
                   className="rounded-xl border border-[var(--border)] bg-black/15 p-4"
                 >
-                  <div className="flex flex-wrap items-baseline justify-between gap-2">
-                    <div className="flex flex-wrap items-baseline gap-2">
-                      <span className="font-mono text-base font-semibold">
-                        {slot.startTime}
-                        {slot.endTime ? `–${slot.endTime}` : ""}
-                      </span>
-                      <Badge>{timeSlotTypeLabels[slot.slotType]}</Badge>
-                      {slot.endTime ? (
-                        <span className="text-xs text-[var(--muted-fg)]">
-                          {slotDurationLabel(slot.startTime, slot.endTime)}
-                        </span>
-                      ) : null}
-                    </div>
-                    {details ? (
-                      <span
-                        className={`rounded-full border px-2 py-0.5 text-xs ${
-                          sceneStatusColors[assignment!.scene.status]
-                        }`}
-                      >
-                        {sceneStatusLabel(assignment!.scene.status)}
+                  <div className="flex flex-wrap items-baseline gap-2">
+                    <span className="font-mono text-base font-semibold">
+                      {slot.startTime}
+                      {slot.endTime ? `–${slot.endTime}` : ""}
+                    </span>
+                    <Badge>{timeSlotTypeLabels[slot.slotType]}</Badge>
+                    {slot.endTime ? (
+                      <span className="text-xs text-[var(--muted-fg)]">
+                        {slotDurationLabel(slot.startTime, slot.endTime)}
                       </span>
                     ) : null}
                   </div>
@@ -414,6 +473,17 @@ export function CallSheetView({
       </DocSection>
 
       <DocSection title="Актёры">
+        {cast.length > 0 && day.timeSlots.length === 0 ? (
+          <p className="mb-2 text-xs text-[var(--muted-fg)]">
+            Подсветка ручных таймингов появится после «Применить к расписанию» в
+            плане дня — если значение отличается от расчётного.
+          </p>
+        ) : Object.keys(timingBaselines).length > 0 ? (
+          <p className="mb-2 text-xs text-[var(--muted-fg)]">
+            Жёлтая ячейка и метка «ручн.» — время изменено вручную (наведите
+            для расчётного значения).
+          </p>
+        ) : null}
         {cast.length === 0 ? (
           <p className="text-sm text-[var(--muted-fg)]">
             В сценах дня нет персонажей.
@@ -435,7 +505,19 @@ export function CallSheetView({
                 </tr>
               </thead>
               <tbody>
-                {cast.map((row) => (
+                {cast.map((row) => {
+                  const baseline = row.actorId
+                    ? timingBaselines[row.actorId]
+                    : undefined;
+                  const manualReady = isManualActorTiming(
+                    row.ready,
+                    baseline?.readyTime,
+                  );
+                  const manualWrap = isManualActorTiming(
+                    row.wrap,
+                    baseline?.wrapTime,
+                  );
+                  return (
                   <tr
                     key={`${row.characterName}-${row.actorId ?? "na"}`}
                     className="border-b border-[var(--border)]/60"
@@ -460,39 +542,118 @@ export function CallSheetView({
                     <td className="py-2 pr-3 text-[var(--muted-fg)]">
                       {row.sceneNumbers.join(", ")}
                     </td>
-                    <td className="py-2 pr-3">{row.pickup || "—"}</td>
+                    <ManualTimingCell
+                      value={row.pickup}
+                      computed={baseline?.pickupTime}
+                    />
                     <td className="py-2 pr-3">{row.arrival || "—"}</td>
-                    <td className="py-2 pr-3">{row.costume || "—"}</td>
-                    <td className="py-2 pr-3">{row.makeup || "—"}</td>
-                    <td className="py-2 pr-3">
+                    <ManualTimingCell
+                      value={row.costume}
+                      computed={baseline?.costumeTime}
+                    />
+                    <ManualTimingCell
+                      value={row.makeup}
+                      computed={baseline?.makeupTime}
+                    />
+                    <td
+                      className={cn(
+                        "py-2 pr-3",
+                        (manualReady || manualWrap) &&
+                          "bg-amber-400/20 ring-2 ring-inset ring-amber-400/50",
+                      )}
+                      title={
+                        manualReady || manualWrap
+                          ? [
+                              manualReady && baseline?.readyTime
+                                ? `Готовность (расч.): ${baseline.readyTime}`
+                                : null,
+                              manualWrap && baseline?.wrapTime
+                                ? `Конец (расч.): ${baseline.wrapTime}`
+                                : null,
+                            ]
+                              .filter(Boolean)
+                              .join(" · ")
+                          : undefined
+                      }
+                    >
                       <TimingPair ready={row.ready} wrap={row.wrap} />
                     </td>
                     <td className="py-2 text-[var(--muted-fg)]">
                       {[row.phone, row.email].filter(Boolean).join(" · ") || "—"}
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
         )}
       </DocSection>
 
+      {perShiftResources.length > 0 ? (
+        <DocSection title="Посменные ресурсы">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[480px] text-left text-sm">
+              <thead>
+                <tr className="border-b border-[var(--border)] text-[var(--muted-fg)]">
+                  <th className="py-2 pr-3">Категория</th>
+                  <th className="py-2 pr-3">Ресурс</th>
+                  <th className="py-2 pr-3">Исп.</th>
+                  <th className="py-2">Прибытие</th>
+                </tr>
+              </thead>
+              <tbody>
+                {perShiftResources.map((row) => (
+                  <tr
+                    key={row.usageId}
+                    className={cn(
+                      "border-b border-[var(--border)]/60",
+                      !row.isUsed && "opacity-50",
+                    )}
+                  >
+                    <td className="py-2 pr-3 text-[var(--muted-fg)]">{row.categoryName}</td>
+                    <td className="py-2 pr-3 font-medium">
+                      {row.itemName}
+                      {row.notes ? (
+                        <span className="ml-1 text-xs text-[var(--muted-fg)]">
+                          ({row.notes})
+                        </span>
+                      ) : null}
+                    </td>
+                    <td className="py-2 pr-3">{row.isUsed ? "да" : "нет"}</td>
+                    <td className="py-2">{row.arrival || "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </DocSection>
+      ) : null}
+
       {resources.extras.length > 0 ? (
         <DocSection title="Массовка">
-          <ResourceTable rows={resources.extras} />
+          <ResourceTable rows={resources.extras} timingBaselines={resourceTimingBaselines} />
         </DocSection>
       ) : null}
 
       {resources.stunts.length > 0 ? (
         <DocSection title="Трюк / каскадёры">
-          <ResourceTable rows={resources.stunts} showCostume={false} showMakeup={false} />
+          <ResourceTable
+            rows={resources.stunts}
+            showCostume={false}
+            showMakeup={false}
+            timingBaselines={resourceTimingBaselines}
+          />
         </DocSection>
       ) : null}
 
       {resources.art.length > 0 ? (
         <DocSection title="Художественный цех">
-          <ResourceTable rows={resources.art} showMakeup={false} />
+          <ResourceTable
+            rows={resources.art}
+            showMakeup={false}
+            timingBaselines={resourceTimingBaselines}
+          />
         </DocSection>
       ) : null}
 
@@ -502,13 +663,18 @@ export function CallSheetView({
             rows={resources.camera}
             showCostume={false}
             showMakeup={false}
+            timingBaselines={resourceTimingBaselines}
           />
         </DocSection>
       ) : null}
 
       {resources.props.length > 0 ? (
         <DocSection title="Реквизит">
-          <ResourceTable rows={resources.props} showMakeup={false} />
+          <ResourceTable
+            rows={resources.props}
+            showMakeup={false}
+            timingBaselines={resourceTimingBaselines}
+          />
         </DocSection>
       ) : null}
 
@@ -518,9 +684,21 @@ export function CallSheetView({
             rows={resources.vehicles}
             showCostume={false}
             showMakeup={false}
+            timingBaselines={resourceTimingBaselines}
           />
         </DocSection>
       ) : null}
+
+      {resources.catalog.map((section) =>
+        section.rows.length > 0 ? (
+          <DocSection key={section.categoryName} title={section.categoryName}>
+            <ResourceTable
+              rows={section.rows}
+              timingBaselines={resourceTimingBaselines}
+            />
+          </DocSection>
+        ) : null,
+      )}
 
       <DocSection title="Сцены дня (сводка)">
         {day.scenes.length === 0 ? (
@@ -532,8 +710,7 @@ export function CallSheetView({
                 <tr className="border-b border-[var(--border)] text-[var(--muted-fg)]">
                   <th className="py-2 pr-3">Сцена</th>
                   <th className="py-2 pr-3">Персонажи</th>
-                  <th className="py-2 pr-3">Хрон.</th>
-                  <th className="py-2">Статус</th>
+                  <th className="py-2">Хрон.</th>
                 </tr>
               </thead>
               <tbody>
@@ -547,20 +724,11 @@ export function CallSheetView({
                         .map((c) => c.character.name)
                         .join(", ") || "—"}
                     </td>
-                    <td className="py-2 pr-3">
+                    <td className="py-2">
                       {formatPagesMinutes(
                         row.estimatedPages ?? row.scene.pageCount,
                         row.scene.planSeconds,
                       )}
-                    </td>
-                    <td className="py-2">
-                      <span
-                        className={`rounded-full border px-2 py-0.5 text-xs ${
-                          sceneStatusColors[row.scene.status]
-                        }`}
-                      >
-                        {sceneStatusLabel(row.scene.status)}
-                      </span>
                     </td>
                   </tr>
                 ))}
@@ -579,7 +747,7 @@ export function CallSheetView({
         <DocSection title="Следующий съёмочный день" className="print:break-before-page">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <p className="font-medium">
-              День {nextDay.dayNumber} · {formatShortDate(nextDay.date)}
+              День {nextDay.dayNumber} · {formatDateShort(nextDay.date)}
             </p>
             {nextDayAstro ? (
               <p className="text-sm text-[var(--muted-fg)]">

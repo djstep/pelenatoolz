@@ -22,6 +22,7 @@ import {
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import { Select } from "@/shared/ui/select";
+import { formatDateShort } from "@/shared/i18n/format-date";
 import { cn } from "@/shared/lib/cn";
 
 type SceneInDay = {
@@ -54,15 +55,6 @@ type ShootDayRow = {
 type UnscheduledScene = SceneInDay["scene"];
 
 const initial: ActionState = {};
-
-function formatDate(date: Date) {
-  return new Date(date).toLocaleDateString("ru-RU", {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-}
 
 function AssignSceneForm({
   projectId,
@@ -207,7 +199,7 @@ function ShootDayAccordionRow({
           <span className="mr-2 text-[var(--muted-fg)]">{expanded ? "▾" : "▸"}</span>
           День {day.dayNumber}
         </td>
-        <td className="py-3 pr-3 whitespace-nowrap">{formatDate(day.date)}</td>
+        <td className="py-3 pr-3 whitespace-nowrap">{formatDateShort(day.date)}</td>
         <td className="py-3 pr-3">
           <Badge>{shootDayStatusLabels[day.status]}</Badge>
         </td>

@@ -36,18 +36,23 @@ export async function approveScoutCandidate(
 ) {
   const candidate = await prisma.scoutCandidate.findFirst({
     where: { id: candidateId, projectId },
-    include: { location: true },
+    include: {
+      locationLinks: { include: { location: true } },
+    },
   });
   if (!candidate) throw new Error("SCOUT_NOT_FOUND");
+  if (candidate.locationLinks.length === 0) throw new Error("SCOUT_NO_LOCATIONS");
 
+  const locationIds = candidate.locationLinks.map((l) => l.locationId);
   const snapshot = buildScoutSnapshot(candidate);
 
   await prisma.$transaction(async (tx) => {
     await tx.scoutCandidate.updateMany({
       where: {
-        locationId: candidate.locationId,
         id: { not: candidateId },
+        projectId,
         status: { not: ScoutCandidateStatus.REJECTED },
+        locationLinks: { some: { locationId: { in: locationIds } } },
       },
       data: {
         status: ScoutCandidateStatus.REJECTED,
@@ -63,20 +68,22 @@ export async function approveScoutCandidate(
       },
     });
 
-    await tx.location.update({
-      where: { id: candidate.locationId },
-      data: {
-        scoutSnapshot: snapshot as unknown as Prisma.InputJsonValue,
-        sourceScoutCandidateId: candidateId,
-        address: snapshot.address ?? undefined,
-        notes: snapshot.notes ?? undefined,
-      },
-    });
+    for (const locationId of locationIds) {
+      await tx.location.update({
+        where: { id: locationId },
+        data: {
+          scoutSnapshot: snapshot as unknown as Prisma.InputJsonValue,
+          sourceScoutCandidateId: candidateId,
+          address: snapshot.address ?? undefined,
+          notes: snapshot.notes ?? undefined,
+        },
+      });
+    }
   });
 
   return {
-    locationId: candidate.locationId,
-    locationName: candidate.location.name,
+    locationIds,
+    locationNames: candidate.locationLinks.map((l) => l.location.name),
     scoutTitle: candidate.title,
   };
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, useEffect } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -32,7 +32,10 @@ import {
   formatDaySummary,
   formatSceneBrief,
   formatPagesMinutes,
+  buildDaySceneVisualBlocks,
   groupScenesByLocation,
+  groupScenesByActor,
+  type SceneGroupMode,
 } from "@/features/schedule/lib/day-summary";
 import {
   dayNightLabels,
@@ -42,6 +45,17 @@ import {
 import { Badge } from "@/shared/ui/badge";
 import { Input } from "@/shared/ui/input";
 import { Select } from "@/shared/ui/select";
+import {
+  computePlanningHint,
+  resolveRowIdByActor,
+} from "@/features/actor-availability/lib/planning-hint";
+import {
+  planningHintClass,
+  type PlanningHint,
+} from "@/features/actor-availability/lib/status";
+import type { ScheduleAvailabilityBundle } from "@/features/actor-availability/lib/serialize-bundle";
+import { isWorkingShootDay } from "@/features/schedule/lib/shoot-day-type";
+import { formatDateShort } from "@/shared/i18n/format-date";
 import { cn } from "@/shared/lib/cn";
 
 type SceneCard = SceneDetails;
@@ -60,29 +74,122 @@ type ShootDay = {
   isLocked: boolean;
   isNightShift: boolean;
   comment: string | null;
+  prepNote?: string | null;
   scenes: DayScene[];
 };
 
-type GroupBy = "none" | "location";
+type UnscheduledGroupBy = "none" | SceneGroupMode;
+type DayGroupBy = "none" | SceneGroupMode;
 
-function DragHandle({
-  listeners,
-  attributes,
+function DraggableSceneCard({
+  scene,
+  dragId,
+  canWrite,
+  onOpen,
 }: {
-  listeners?: object;
-  attributes?: object;
+  scene: SceneCard;
+  dragId: string;
+  canWrite: boolean;
+  onOpen: (scene: SceneCard) => void;
 }) {
+  const skipClickRef = useRef(false);
+  const { attributes, listeners, setNodeRef, transform, isDragging } =
+    useDraggable({ id: dragId, data: { sceneId: scene.id }, disabled: !canWrite });
+
+  useEffect(() => {
+    if (isDragging) skipClickRef.current = true;
+  }, [isDragging]);
+
+  const style = transform
+    ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` }
+    : undefined;
+
   return (
-    <button
-      type="button"
-      className="shrink-0 cursor-grab touch-none rounded px-0.5 py-1 text-[var(--muted-fg)] hover:bg-white/10 hover:text-white active:cursor-grabbing"
-      aria-label="Перетащить"
-      {...attributes}
-      {...listeners}
-      onClick={(e) => e.stopPropagation()}
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...(canWrite ? listeners : {})}
+      {...(canWrite ? attributes : {})}
+      className={cn(
+        sceneCardClass(isDragging),
+        "border-l-[3px] border-l-teal-400/70",
+        canWrite && "cursor-grab touch-none active:cursor-grabbing",
+      )}
+      onClick={() => {
+        if (skipClickRef.current) {
+          skipClickRef.current = false;
+          return;
+        }
+        onOpen(scene);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onOpen(scene);
+        }
+      }}
+      role="button"
+      tabIndex={0}
     >
-      ⠿
-    </button>
+      <SceneCardBody scene={scene} />
+    </div>
+  );
+}
+
+function SortableDayScene({
+  row,
+  canWrite,
+  onOpen,
+}: {
+  row: DayScene;
+  canWrite: boolean;
+  onOpen: (scene: SceneCard) => void;
+}) {
+  const skipClickRef = useRef(false);
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({
+      id: row.id,
+      data: { sceneId: row.scene.id },
+      disabled: !canWrite,
+    });
+
+  useEffect(() => {
+    if (isDragging) skipClickRef.current = true;
+  }, [isDragging]);
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+      }}
+      {...(canWrite ? listeners : {})}
+      {...(canWrite ? attributes : {})}
+      className={cn(
+        sceneCardClass(isDragging),
+        "border-l-[3px] border-l-sky-400/70",
+        isDragging && "opacity-50",
+        canWrite && "cursor-grab touch-none active:cursor-grabbing",
+      )}
+      onClick={() => {
+        if (skipClickRef.current) {
+          skipClickRef.current = false;
+          return;
+        }
+        onOpen(row.scene);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onOpen(row.scene);
+        }
+      }}
+      role="button"
+      tabIndex={0}
+    >
+      <SceneCardBody scene={row.scene} />
+    </div>
   );
 }
 
@@ -133,89 +240,29 @@ function SceneCardBody({ scene }: { scene: SceneCard }) {
 
 function sceneCardClass(isDragging?: boolean) {
   return cn(
-    "flex gap-1.5 rounded-xl border border-white/10 bg-[#121a2a]/95 p-2 text-xs",
+    "rounded-xl border border-white/10 bg-[#121a2a]/95 p-2 text-xs",
     "shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]",
     isDragging && "opacity-40",
   );
 }
 
-function DraggableSceneCard({
-  scene,
-  dragId,
-  canWrite,
-  onOpen,
+function DaySceneGroupHeader({
+  label,
+  mode,
 }: {
-  scene: SceneCard;
-  dragId: string;
-  canWrite: boolean;
-  onOpen: (scene: SceneCard) => void;
+  label: string;
+  mode: SceneGroupMode;
 }) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } =
-    useDraggable({ id: dragId, data: { sceneId: scene.id }, disabled: !canWrite });
-
-  const style = transform
-    ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` }
-    : undefined;
-
   return (
     <div
-      ref={setNodeRef}
-      style={style}
-      className={cn(sceneCardClass(isDragging), "border-l-[3px] border-l-teal-400/70")}
-    >
-      {canWrite ? (
-        <DragHandle listeners={listeners} attributes={attributes} />
-      ) : null}
-      <button
-        type="button"
-        className="min-w-0 flex-1 cursor-pointer text-left"
-        onClick={() => onOpen(scene)}
-      >
-        <SceneCardBody scene={scene} />
-      </button>
-    </div>
-  );
-}
-
-function SortableDayScene({
-  row,
-  canWrite,
-  onOpen,
-}: {
-  row: DayScene;
-  canWrite: boolean;
-  onOpen: (scene: SceneCard) => void;
-}) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({
-      id: row.id,
-      data: { sceneId: row.scene.id },
-      disabled: !canWrite,
-    });
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={{
-        transform: CSS.Transform.toString(transform),
-        transition,
-      }}
       className={cn(
-        sceneCardClass(isDragging),
-        "border-l-[3px] border-l-sky-400/70",
-        isDragging && "opacity-50",
+        "rounded-md px-2 py-1 text-[10px] font-semibold leading-snug",
+        mode === "location"
+          ? "bg-sky-900/55 text-sky-100/90"
+          : "bg-violet-900/55 text-violet-100/90",
       )}
     >
-      {canWrite ? (
-        <DragHandle listeners={listeners} attributes={attributes} />
-      ) : null}
-      <button
-        type="button"
-        className="min-w-0 flex-1 cursor-pointer text-left"
-        onClick={() => onOpen(row.scene)}
-      >
-        <SceneCardBody scene={row.scene} />
-      </button>
+      {label}
     </div>
   );
 }
@@ -225,21 +272,41 @@ function DayColumn({
   canWrite,
   onMenu,
   onOpenScene,
+  planningHint,
+  dayGroupBy,
+  characterToActor,
+  actorNames,
 }: {
   day: ShootDay;
   canWrite: boolean;
   onMenu: (dayId: string, anchor: MenuAnchor) => void;
   onOpenScene: (scene: SceneCard) => void;
+  planningHint?: PlanningHint;
+  dayGroupBy: DayGroupBy;
+  characterToActor: Record<string, string>;
+  actorNames: Record<string, string>;
 }) {
   const columnRef = useRef<HTMLDivElement>(null);
-  const { setNodeRef, isOver } = useDroppable({ id: `day-${day.id}` });
+  const acceptsScenes =
+    isWorkingShootDay(day.dayType) && !day.isLocked;
+  const canDragScenes = canWrite && acceptsScenes;
+  const { setNodeRef, isOver } = useDroppable({
+    id: `day-${day.id}`,
+    disabled: !acceptsScenes,
+  });
   const summary = computeDaySummary(day.scenes);
   const tone = dayTypeTone(day.dayType);
-  const dateStr = new Date(day.date).toLocaleDateString("ru-RU", {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-  });
+  const dateStr = formatDateShort(day.date);
+  const visualBlocks = useMemo(
+    () =>
+      buildDaySceneVisualBlocks(
+        day.scenes,
+        dayGroupBy,
+        characterToActor,
+        actorNames,
+      ),
+    [day.scenes, dayGroupBy, characterToActor, actorNames],
+  );
 
   return (
     <div
@@ -248,7 +315,8 @@ function DayColumn({
         "flex h-full w-56 shrink-0 flex-col overflow-hidden rounded-xl border shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]",
         tone.column,
         day.isNightShift && "ring-1 ring-indigo-400/40",
-        isOver && "ring-2 ring-[var(--accent)]",
+        isOver && acceptsScenes && "ring-2 ring-[var(--accent)]",
+        planningHint && planningHint !== "neutral" && planningHintClass[planningHint],
       )}
     >
       <div className={cn("border-b p-2", tone.header)}>
@@ -286,6 +354,11 @@ function DayColumn({
           {formatDaySummary(summary)}
         </div>
         {day.isLocked ? <Badge className="mt-1">Зафиксирован</Badge> : null}
+        {day.dayType === "PREP" && day.prepNote ? (
+          <p className="mt-1 line-clamp-2 text-[10px] text-emerald-100/85">
+            {day.prepNote}
+          </p>
+        ) : null}
         {day.comment ? (
           <p className="mt-1 line-clamp-2 text-[10px] text-[var(--muted-fg)]">
             {day.comment}
@@ -294,24 +367,37 @@ function DayColumn({
       </div>
       <div
         ref={setNodeRef}
-        className="flex min-h-[8rem] flex-1 flex-col gap-2 bg-black/20 p-2"
+        className={cn(
+          "flex min-h-[8rem] flex-1 flex-col gap-2 bg-black/20 p-2",
+          !acceptsScenes && "opacity-90",
+        )}
       >
         <SortableContext
           items={day.scenes.map((s) => s.id)}
           strategy={verticalListSortingStrategy}
         >
-          {day.scenes.map((row) => (
-            <SortableDayScene
-              key={row.id}
-              row={row}
-              canWrite={canWrite && !day.isLocked}
-              onOpen={onOpenScene}
-            />
-          ))}
+          {visualBlocks.map((block, index) =>
+            block.type === "header" ? (
+              <DaySceneGroupHeader
+                key={`${day.id}-hdr-${block.label}-${index}`}
+                label={block.label}
+                mode={dayGroupBy as SceneGroupMode}
+              />
+            ) : (
+              <SortableDayScene
+                key={block.row.id}
+                row={block.row}
+                canWrite={canDragScenes}
+                onOpen={onOpenScene}
+              />
+            ),
+          )}
         </SortableContext>
         {day.scenes.length === 0 ? (
           <p className="py-4 text-center text-[10px] text-[var(--muted-fg)]">
-            Перетащите сцену сюда
+            {acceptsScenes
+              ? "Перетащите сцену сюда"
+              : "Сцены только в рабочие дни"}
           </p>
         ) : null}
       </div>
@@ -356,12 +442,14 @@ export function ScheduleDnDBoard({
   shootDays,
   unscheduled,
   canWrite,
+  availability,
 }: {
   projectId: string;
   locale: string;
   shootDays: ShootDay[];
   unscheduled: SceneCard[];
   canWrite: boolean;
+  availability?: ScheduleAvailabilityBundle;
 }) {
   const [activeScene, setActiveScene] = useState<SceneCard | null>(null);
   const [menuState, setMenuState] = useState<{
@@ -373,8 +461,13 @@ export function ScheduleDnDBoard({
   const [location, setLocation] = useState("");
   const [intExt, setIntExt] = useState("");
   const [dayNight, setDayNight] = useState("");
-  const [groupBy, setGroupBy] = useState<GroupBy>("none");
+  const [unscheduledGroupBy, setUnscheduledGroupBy] =
+    useState<UnscheduledGroupBy>("none");
+  const [dayGroupBy, setDayGroupBy] = useState<DayGroupBy>("none");
   const [filtersOpen, setFiltersOpen] = useState(false);
+
+  const characterToActor = availability?.characterToActor ?? {};
+  const actorNames = availability?.actorNames ?? {};
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -401,11 +494,42 @@ export function ScheduleDnDBoard({
   const hasActiveFilters = Boolean(q || location || intExt || dayNight);
 
   const displayBlocks = useMemo(() => {
-    if (groupBy === "location") {
+    if (unscheduledGroupBy === "location") {
       return groupScenesByLocation(filtered);
     }
+    if (unscheduledGroupBy === "actor") {
+      return groupScenesByActor(filtered, characterToActor, actorNames);
+    }
     return [["", filtered] as [string, SceneCard[]]];
-  }, [filtered, groupBy]);
+  }, [filtered, unscheduledGroupBy, characterToActor, actorNames]);
+
+  const availContext = useMemo(() => {
+    if (!availability) return null;
+    const kppBusy = new Map(
+      Object.entries(availability.kppBusySerialized).map(
+        ([k, v]) => [k, new Set(v)] as const,
+      ),
+    );
+    return {
+      characterToActor: availability.characterToActor,
+      manualDays: availability.manualDays,
+      kppBusy,
+      rowIdByActor: resolveRowIdByActor(availability.rows),
+    };
+  }, [availability]);
+
+  function hintForDay(day: ShootDay): PlanningHint | undefined {
+    if (!activeScene || !availContext) return undefined;
+    const charIds = activeScene.characters.map((c) => c.character.id);
+    return computePlanningHint(
+      charIds,
+      new Date(day.date),
+      availContext.characterToActor,
+      availContext.manualDays,
+      availContext.rowIdByActor,
+      availContext.kppBusy,
+    );
+  }
 
   async function handleDragEnd(event: DragEndEvent) {
     setActiveScene(null);
@@ -417,6 +541,14 @@ export function ScheduleDnDBoard({
 
     if (overId.startsWith("day-") && sceneId) {
       const shootDayId = overId.replace("day-", "");
+      const targetDay = shootDays.find((d) => d.id === shootDayId);
+      if (
+        !targetDay ||
+        !isWorkingShootDay(targetDay.dayType) ||
+        targetDay.isLocked
+      ) {
+        return;
+      }
       await assignSceneToDayByDnDAction(projectId, shootDayId, sceneId);
       return;
     }
@@ -425,7 +557,7 @@ export function ScheduleDnDBoard({
       const day = shootDays.find((d) =>
         d.scenes.some((s) => s.id === active.id),
       );
-      if (!day) return;
+      if (!day || !isWorkingShootDay(day.dayType) || day.isLocked) return;
       const ids = day.scenes.map((s) => s.id);
       const oldIndex = ids.indexOf(String(active.id));
       const newIndex = ids.indexOf(String(over.id));
@@ -461,7 +593,7 @@ export function ScheduleDnDBoard({
     setLocation("");
     setIntExt("");
     setDayNight("");
-    setGroupBy("none");
+    setUnscheduledGroupBy("none");
   }
 
   return (
@@ -550,14 +682,17 @@ export function ScheduleDnDBoard({
                   ))}
                 </Select>
                 <Select
-                  value={groupBy}
-                  onChange={(e) => setGroupBy(e.target.value as GroupBy)}
+                  value={unscheduledGroupBy}
+                  onChange={(e) =>
+                    setUnscheduledGroupBy(e.target.value as UnscheduledGroupBy)
+                  }
                   className="text-xs"
                 >
                   <option value="none">Без группировки</option>
                   <option value="location">Группировать по объекту</option>
+                  <option value="actor">Группировать по актёру</option>
                 </Select>
-                {hasActiveFilters || groupBy !== "none" ? (
+                {hasActiveFilters || unscheduledGroupBy !== "none" ? (
                   <button
                     type="button"
                     className="text-[11px] text-[var(--muted-fg)] underline-offset-2 hover:text-white hover:underline"
@@ -573,8 +708,13 @@ export function ScheduleDnDBoard({
           <div className="flex-1 space-y-4 overflow-y-auto p-3">
             {displayBlocks.map(([loc, items]) => (
               <div key={loc || "__flat"}>
-                {groupBy === "location" && loc ? (
+                {unscheduledGroupBy === "location" && loc ? (
                   <div className="mb-2 rounded-md bg-teal-900/45 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-teal-100/90">
+                    {loc} ({items.length})
+                  </div>
+                ) : null}
+                {unscheduledGroupBy === "actor" && loc ? (
+                  <div className="mb-2 rounded-md bg-violet-900/45 px-2 py-1 text-[11px] font-semibold tracking-wide text-violet-100/90">
                     {loc} ({items.length})
                   </div>
                 ) : null}
@@ -601,7 +741,56 @@ export function ScheduleDnDBoard({
           </div>
         </aside>
 
-        <div className="flex min-h-0 min-w-0 flex-1 gap-3 overflow-x-auto bg-gradient-to-br from-slate-950 via-[#0a1224] to-indigo-950/50 p-3">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-b border-white/10 bg-black/30 px-3 py-2 text-[10px] text-[var(--muted-fg)]">
+            <label className="inline-flex items-center gap-2">
+              <span className="shrink-0 text-[var(--foreground)]/80">
+                Сцены в дне:
+              </span>
+              <select
+                value={dayGroupBy}
+                onChange={(e) => setDayGroupBy(e.target.value as DayGroupBy)}
+                className="glass-input h-7 w-[9.5rem] shrink-0 rounded-lg px-2 text-[10px] leading-none text-[var(--foreground)]"
+              >
+                <option value="none">Список</option>
+                <option value="location">По объекту</option>
+                <option value="actor">По актёру</option>
+              </select>
+            </label>
+            <span className="hidden h-3 w-px bg-white/15 sm:inline" aria-hidden />
+            <span className="text-[var(--foreground)]/80">Типы дней:</span>
+            <span className="inline-flex items-center gap-1">
+              <span className="h-2.5 w-5 rounded border border-sky-500/40 bg-sky-950/60" />
+              {shootDayTypeLabels.WORKING}
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <span className="h-2.5 w-5 rounded border border-zinc-500/40 bg-zinc-900/60" />
+              {shootDayTypeLabels.OFF}
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <span className="h-2.5 w-5 rounded border border-amber-500/40 bg-amber-950/50" />
+              {shootDayTypeLabels.REST}
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <span className="h-2.5 w-5 rounded border border-emerald-500/40 bg-emerald-950/50" />
+              {shootDayTypeLabels.PREP}
+            </span>
+          </div>
+          {activeScene && availContext ? (
+            <div className="flex shrink-0 flex-wrap gap-3 border-b border-white/10 bg-black/30 px-3 py-2 text-[10px] text-[var(--muted-fg)]">
+              <span>Занятость актёров сцены:</span>
+              <span className="inline-flex items-center gap-1">
+                <span className="h-2 w-6 rounded ring-2 ring-emerald-400/70" /> все свободны
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <span className="h-2 w-6 rounded ring-2 ring-amber-400/70" /> частично
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <span className="h-2 w-6 rounded ring-2 ring-rose-400/70" /> заняты
+              </span>
+            </div>
+          ) : null}
+          <div className="flex min-h-0 min-w-0 flex-1 gap-3 overflow-x-auto bg-gradient-to-br from-slate-950 via-[#0a1224] to-indigo-950/50 p-3">
           {shootDays.map((day) => (
             <DayColumn
               key={day.id}
@@ -609,6 +798,10 @@ export function ScheduleDnDBoard({
               canWrite={canWrite}
               onMenu={(dayId, anchor) => setMenuState({ dayId, anchor })}
               onOpenScene={setDetailScene}
+              planningHint={hintForDay(day)}
+              dayGroupBy={dayGroupBy}
+              characterToActor={characterToActor}
+              actorNames={actorNames}
             />
           ))}
           {shootDays.length === 0 ? (
@@ -616,6 +809,7 @@ export function ScheduleDnDBoard({
               Создайте съёмочные дни, чтобы начать планирование.
             </p>
           ) : null}
+          </div>
         </div>
       </div>
 

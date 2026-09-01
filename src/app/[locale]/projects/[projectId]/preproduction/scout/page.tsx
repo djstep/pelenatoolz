@@ -1,6 +1,5 @@
 import { ScoutWorkspace } from "@/features/scout/components/scout-workspace";
 import { listScoutCandidates } from "@/features/scout/queries";
-import { PreproductionTabs } from "@/features/preproduction/components/preproduction-tabs";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { prisma } from "@/shared/db/prisma";
 import { Card } from "@/shared/ui/card";
@@ -29,12 +28,11 @@ export default async function ScoutPage({ params }: Props) {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="font-display text-2xl font-semibold">Препродакшн</h2>
+        <h2 className="font-display text-2xl font-semibold">Скаут</h2>
         <p className="mt-1 text-sm text-[var(--muted-fg)]">
-          Скаутинг реальных площадок для игровых локаций.
+          Реальные площадки-кандидаты для игровых локаций.
         </p>
       </div>
-      <PreproductionTabs locale={locale} projectId={projectId} />
       <Card>
         <ScoutWorkspace
           projectId={projectId}

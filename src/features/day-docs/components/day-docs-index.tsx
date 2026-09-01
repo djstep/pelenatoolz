@@ -3,6 +3,7 @@ import {
   shootDayStatusLabels,
   shootDayTypeLabels,
 } from "@/shared/i18n/domain-labels";
+import { formatDateShort } from "@/shared/i18n/format-date";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 
@@ -42,7 +43,9 @@ export function DayDocsIndex({
         <div>
           <h2 className="font-display text-2xl font-semibold">{title}</h2>
           <p className="mt-1 text-sm text-[var(--muted-fg)]">
-            Формируются из съёмочных дней КПП
+            {kind === "call-sheets"
+              ? "Только рабочие смены. Выходные, отсыпные и подготовительные дни — в КПП без вызывного."
+              : "Формируются из съёмочных дней КПП"}
           </p>
         </div>
         <Link href={`/${locale}/projects/${projectId}/schedule`}>
@@ -74,13 +77,7 @@ export function DayDocsIndex({
                     День {day.dayNumber}
                     {day.isNightShift ? " · ночь" : ""}
                   </td>
-                  <td className="px-4 py-3">
-                    {new Date(day.date).toLocaleDateString("ru-RU", {
-                      weekday: "short",
-                      day: "numeric",
-                      month: "short",
-                    })}
-                  </td>
+                  <td className="px-4 py-3">{formatDateShort(day.date)}</td>
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap gap-1">
                       <Badge>{shootDayTypeLabels[day.dayType]}</Badge>

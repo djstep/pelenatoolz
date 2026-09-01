@@ -79,3 +79,13 @@ export const saveActorCallsSchema = z.object({
 export const saveResourceCallsSchema = z.object({
   rows: z.array(resourceCallRowSchema),
 });
+
+export const resourceUsageRowSchema = z.object({
+  itemId: z.string().cuid(),
+  isUsed: z.boolean(),
+  arrivalTime: timeString,
+});
+
+export const saveResourceUsagesSchema = z.object({
+  rows: z.array(resourceUsageRowSchema),
+});

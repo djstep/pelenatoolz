@@ -1,5 +1,10 @@
 import type { SceneStatus } from "@prisma/client";
 import type { CharacterWithStats } from "@/features/characters/queries";
+import {
+  getEstimatedShiftCount,
+  getKppShiftCount,
+  getObjectCount,
+} from "@/features/characters/lib/character-stats";
 
 export type CastFilterStatus = "APPROVED" | "OPEN" | "HAS_CANDIDATES";
 
@@ -12,6 +17,12 @@ export type CharacterFilters = {
   sceneCountTo: string;
   planMinutesFrom: string;
   planMinutesTo: string;
+  kppShiftCountFrom: string;
+  kppShiftCountTo: string;
+  estimatedShiftCountFrom: string;
+  estimatedShiftCountTo: string;
+  objectCountFrom: string;
+  objectCountTo: string;
   hasRoleRequirements: boolean | null;
   hasDescription: boolean | null;
 };
@@ -25,6 +36,12 @@ export const emptyCharacterFilters = (): CharacterFilters => ({
   sceneCountTo: "",
   planMinutesFrom: "",
   planMinutesTo: "",
+  kppShiftCountFrom: "",
+  kppShiftCountTo: "",
+  estimatedShiftCountFrom: "",
+  estimatedShiftCountTo: "",
+  objectCountFrom: "",
+  objectCountTo: "",
   hasRoleRequirements: null,
   hasDescription: null,
 });
@@ -96,6 +113,24 @@ export function applyCharacterFilters(
 
     const planMinutes = row.planSeconds / 60;
     if (!inRange(planMinutes, filters.planMinutesFrom, filters.planMinutesTo)) {
+      return false;
+    }
+
+    if (!inRange(getKppShiftCount(row), filters.kppShiftCountFrom, filters.kppShiftCountTo)) {
+      return false;
+    }
+
+    if (
+      !inRange(
+        getEstimatedShiftCount(row),
+        filters.estimatedShiftCountFrom,
+        filters.estimatedShiftCountTo,
+      )
+    ) {
+      return false;
+    }
+
+    if (!inRange(getObjectCount(row), filters.objectCountFrom, filters.objectCountTo)) {
       return false;
     }
 

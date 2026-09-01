@@ -14,9 +14,9 @@ import {
 import { fullNameFromParts } from "@/features/preproduction/lib/snapshots";
 import { PersonFormFields } from "@/features/casting/components/casting-person-form-fields";
 import {
-  castingStatusLabels,
   castingStatusOptions,
 } from "@/features/preproduction/lib/status-labels";
+import { StatusSelect } from "@/features/preproduction/components/status-select";
 import { useActionToast, useToast } from "@/shared/ui/toast";
 import { Button } from "@/shared/ui/button";
 import { Modal } from "@/shared/ui/modal";
@@ -72,6 +72,7 @@ function PersonModal({
     >
       <form id="casting-person-form" action={action} key={person?.id ?? "new"}>
         <PersonFormFields
+          projectId={projectId}
           person={person}
           characters={characters}
           showCharacterPicker={!isEdit}
@@ -174,28 +175,17 @@ export function CastingWorkspace({
                           >
                             {c.character.name}
                           </Link>
-                          <span className="rounded-full bg-[var(--glass-badge-bg)] px-2 py-0.5">
-                            {castingStatusLabels[c.status]}
-                          </span>
-                          {canWrite && c.status !== "APPROVED" ? (
-                            <select
-                              className="glass-input rounded-lg px-2 py-1 text-xs"
-                              defaultValue={c.status}
-                              disabled={pending}
-                              onChange={(e) =>
-                                runStatus(
-                                  c.id,
-                                  e.target.value as CastingCandidateStatus,
-                                )
-                              }
-                            >
-                              {castingStatusOptions.map((o) => (
-                                <option key={o.value} value={o.value}>
-                                  {o.label}
-                                </option>
-                              ))}
-                            </select>
-                          ) : null}
+                          <StatusSelect
+                            value={c.status}
+                            options={castingStatusOptions}
+                            disabled={!canWrite || pending}
+                            onChange={
+                              canWrite
+                                ? (next) =>
+                                    runStatus(c.id, next as CastingCandidateStatus)
+                                : undefined
+                            }
+                          />
                         </li>
                       ))}
                     </ul>

@@ -51,6 +51,7 @@ type ActorRow = {
   shiftRate: { toString(): string } | null;
   shiftHoursMin: number | null;
   unpaidOvertimeMin: number | null;
+  pickupOffsetMin: number | null;
   forceMajeurePct: { toString(): string } | null;
   characterId: string | null;
   character: { name: string } | null;
@@ -253,6 +254,7 @@ function ActorFormFields({
         }
         shiftHoursMin={actor?.shiftHoursMin}
         unpaidOvertimeMin={actor?.unpaidOvertimeMin}
+        pickupOffsetMin={actor?.pickupOffsetMin}
         overtime={actor ? seedOvertime(actor.overtimeRates) : []}
         extras={actor ? seedExtras(actor.extraPayments) : []}
       />

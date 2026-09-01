@@ -47,6 +47,7 @@ const actorSchema = z.object({
   shiftHoursMin: durationMinutes.pipe(z.number().max(1440).optional()),
   unpaidOvertimeMin: durationMinutes.pipe(z.number().max(600).optional()),
   forceMajeurePct: z.coerce.number().min(0).max(1000).optional(),
+  pickupOffsetMin: durationMinutes.pipe(z.number().max(600).optional()),
 });
 
 function revalidateActors(projectId: string, characterId?: string) {
@@ -156,6 +157,7 @@ function actorFormData(formData: FormData) {
     shiftHoursMin: formData.get("shiftHoursMin") || undefined,
     unpaidOvertimeMin: formData.get("unpaidOvertimeMin") || undefined,
     forceMajeurePct: formData.get("forceMajeurePct") || undefined,
+    pickupOffsetMin: formData.get("pickupOffsetMin") || undefined,
   };
 }
 

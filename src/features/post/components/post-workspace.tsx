@@ -14,6 +14,7 @@ import {
   postTaskStatusColors,
   postTaskStatusLabels,
 } from "@/shared/i18n/finance-post-labels";
+import { formatDateShort } from "@/shared/i18n/format-date";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
@@ -247,10 +248,7 @@ export function PostWorkspace({
                           {task.assignee ? <span>{task.assignee}</span> : null}
                           {task.dueDate ? (
                             <span>
-                              до{" "}
-                              {new Date(task.dueDate).toLocaleDateString(
-                                "ru-RU",
-                              )}
+                              до {formatDateShort(task.dueDate)}
                             </span>
                           ) : null}
                         </div>

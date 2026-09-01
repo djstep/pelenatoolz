@@ -1,4 +1,13 @@
 import { prisma } from "@/shared/db/prisma";
+import { serializeForClient } from "@/shared/db/serialize-decimal";
+import {
+  computeActorTimingBaselines,
+  computeResourceTimingBaselines,
+  type ActorTimingBaselines,
+  type ResourceTimingBaselines,
+} from "@/features/day-docs/lib/compute-call-timings";
+
+export type { ActorTimingBaselines, ResourceTimingBaselines };
 
 const sceneSelect = {
   id: true,
@@ -16,6 +25,15 @@ const sceneSelect = {
   locations: { include: { location: true } },
   characters: { include: { character: true } },
   resources: true,
+  resourceItems: {
+    include: {
+      item: {
+        include: {
+          category: { select: { id: true, name: true, perShift: true } },
+        },
+      },
+    },
+  },
   elements: { include: { element: true } },
 } as const;
 
@@ -32,6 +50,22 @@ const shootDayInclude = {
   },
   actorCalls: true,
   resourceCalls: true,
+  resourceUsages: {
+    include: {
+      item: {
+        include: {
+          category: {
+            select: {
+              id: true,
+              name: true,
+              perShift: true,
+              sortOrder: true,
+            },
+          },
+        },
+      },
+    },
+  },
 } as const;
 
 export async function getShootDayDocument(projectId: string, shootDayId: string) {
@@ -60,7 +94,7 @@ export async function getShootDayDocument(projectId: string, shootDayId: string)
 
   if (!project || !day) return null;
 
-  return { project, day, actors };
+  return serializeForClient({ project, day, actors });
 }
 
 export async function getNextShootDayBrief(
@@ -111,5 +145,121 @@ export async function listShootDaysBrief(projectId: string) {
       _count: { select: { scenes: true } },
     },
     orderBy: { dayNumber: "asc" },
+  });
+}
+
+export async function getActorTimingBaselines(
+  projectId: string,
+  shootDayId: string,
+): Promise<ActorTimingBaselines> {
+  const day = await prisma.shootDay.findFirst({
+    where: { id: shootDayId, projectId },
+    include: {
+      timeSlots: { orderBy: { sortOrder: "asc" } },
+      scenes: {
+        include: {
+          scene: {
+            select: {
+              id: true,
+              characters: { select: { characterId: true } },
+            },
+          },
+        },
+      },
+    },
+  });
+  if (!day || day.timeSlots.length === 0) return {};
+
+  const characterIds = new Set<string>();
+  const sceneCharacters: Array<{ sceneId: string; characterId: string }> = [];
+  for (const row of day.scenes) {
+    for (const link of row.scene.characters) {
+      characterIds.add(link.characterId);
+      sceneCharacters.push({
+        sceneId: row.scene.id,
+        characterId: link.characterId,
+      });
+    }
+  }
+  if (characterIds.size === 0) return {};
+
+  const [actors, characters] = await Promise.all([
+    prisma.actor.findMany({
+      where: { projectId, characterId: { in: [...characterIds] } },
+      select: {
+        id: true,
+        characterId: true,
+        pickupOffsetMin: true,
+        lastName: true,
+        firstName: true,
+        middleName: true,
+      },
+    }),
+    prisma.character.findMany({
+      where: { id: { in: [...characterIds] } },
+      select: {
+        id: true,
+        makeupOffsetMin: true,
+        costumeOffsetMin: true,
+      },
+    }),
+  ]);
+
+  return computeActorTimingBaselines({
+    timeSlots: day.timeSlots,
+    sceneCharacters,
+    actors: actors.map((a) => ({
+      id: a.id,
+      characterId: a.characterId,
+      pickupOffsetMin: a.pickupOffsetMin,
+      label: [a.lastName, a.firstName, a.middleName].filter(Boolean).join(" "),
+    })),
+    characters,
+  });
+}
+
+export async function getResourceTimingBaselines(
+  projectId: string,
+  shootDayId: string,
+): Promise<ResourceTimingBaselines> {
+  const day = await prisma.shootDay.findFirst({
+    where: { id: shootDayId, projectId },
+    include: {
+      timeSlots: { orderBy: { sortOrder: "asc" } },
+      scenes: {
+        include: {
+          scene: {
+            select: {
+              id: true,
+              resources: { select: { category: true, name: true } },
+              elements: {
+                select: {
+                  element: { select: { name: true, type: true } },
+                },
+              },
+              resourceItems: {
+                select: {
+                  quantity: true,
+                  item: {
+                    select: {
+                      name: true,
+                      category: { select: { name: true, perShift: true } },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+  if (!day || day.timeSlots.length === 0) return {};
+
+  return computeResourceTimingBaselines({
+    timeSlots: day.timeSlots,
+    dayScenes: day.scenes,
+    shiftStartTime: day.shiftStartTime,
+    callTime: day.callTime,
   });
 }

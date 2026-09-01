@@ -1,3 +1,4 @@
+import { isWorkingShootDay } from "@/features/schedule/lib/shoot-day-type";
 import { DayDocsIndex } from "@/features/day-docs/components/day-docs-index";
 import { listShootDaysBrief } from "@/features/day-docs/queries";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
@@ -14,7 +15,9 @@ export default async function CallSheetsPage({ params }: Props) {
     return <p className="text-sm text-[var(--danger)]">Нет доступа к вызывным</p>;
   }
 
-  const days = await listShootDaysBrief(projectId);
+  const days = (await listShootDaysBrief(projectId)).filter((d) =>
+    isWorkingShootDay(d.dayType),
+  );
 
   return (
     <DayDocsIndex

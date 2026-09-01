@@ -474,6 +474,9 @@ input[type="datetime-local"] {
 }
 
 .glass-header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
   background: var(--glass-header-bg);
   backdrop-filter: blur(20px) saturate(1.4);
   -webkit-backdrop-filter: blur(20px) saturate(1.4);
@@ -518,8 +521,7 @@ input[type="datetime-local"] {
 }
 
 /* Page content above noise layer */
-main,
-header {
+main {
   position: relative;
   z-index: 1;
 }
@@ -839,6 +841,12 @@ header {
 .screenplay-block-row--commented .screenplay-block-input {
   box-decoration-break: clone;
   background: color-mix(in srgb, #fbbf24 18%, transparent);
+}
+
+.screenplay-scene-highlight {
+  border-color: color-mix(in srgb, #fbbf24 55%, transparent) !important;
+  background: color-mix(in srgb, #fbbf24 14%, transparent) !important;
+  box-shadow: 0 0 0 2px color-mix(in srgb, #fbbf24 35%, transparent);
 }
 
 .screenplay-block-gutter {

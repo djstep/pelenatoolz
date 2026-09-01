@@ -11,6 +11,8 @@ import {
 import { prisma } from "@/shared/db/prisma";
 import { writeAuditLog } from "@/shared/audit/log";
 import { eachCalendarDay, parseDateInput } from "@/features/schedule/lib/date-range";
+import { isWorkingShootDay } from "@/features/schedule/lib/shoot-day-type";
+import { syncShootDayResourceUsages } from "@/features/schedule/lib/sync-shoot-day-resources";
 
 export type ActionState = { error?: string; success?: string };
 
@@ -138,6 +140,10 @@ export async function assignSceneToDayAction(
     return { error: "Сцена или день не найдены" };
   }
 
+  if (!isWorkingShootDay(shootDay.dayType)) {
+    return { error: "Сцены можно добавлять только в рабочие дни" };
+  }
+
   const maxOrder = await prisma.shootDayScene.aggregate({
     where: { shootDayId: parsed.data.shootDayId },
     _max: { sortOrder: true },
@@ -155,6 +161,8 @@ export async function assignSceneToDayAction(
   } catch {
     return { error: "Сцена уже в этом дне" };
   }
+
+  await syncShootDayResourceUsages(parsed.data.shootDayId);
 
   revalidateSchedule(projectId);
   return { success: "Сцена добавлена в день" };
@@ -179,11 +187,15 @@ export async function assignSceneToDayByDnDAction(
 
   if (!shootDay || !scene) return;
 
+  if (!isWorkingShootDay(shootDay.dayType)) return;
+
   const existing = await prisma.shootDayScene.findFirst({
     where: { sceneId },
   });
+  let previousDayId: string | null = null;
   if (existing) {
     if (existing.shootDayId === shootDayId) return;
+    previousDayId = existing.shootDayId;
     await prisma.shootDayScene.delete({ where: { id: existing.id } });
   }
 
@@ -200,6 +212,11 @@ export async function assignSceneToDayByDnDAction(
       estimatedPages: scene.pageCount,
     },
   });
+
+  await syncShootDayResourceUsages(shootDayId);
+  if (previousDayId) {
+    await syncShootDayResourceUsages(previousDayId);
+  }
 
   await writeAuditLog({
     projectId,
@@ -221,6 +238,7 @@ export async function updateShootDayAction(
     isLocked?: boolean;
     isNightShift?: boolean;
     comment?: string;
+    prepNote?: string;
     date?: string;
   },
 ) {
@@ -239,8 +257,9 @@ export async function updateShootDayAction(
       isLocked: parsed.data.isLocked,
       isNightShift: parsed.data.isNightShift,
       comment: parsed.data.comment,
+      prepNote: parsed.data.prepNote,
       date: parsed.data.date ? new Date(parsed.data.date) : undefined,
-    },
+    } as Parameters<typeof prisma.shootDay.updateMany>[0]["data"],
   });
 
   await writeAuditLog({
@@ -265,12 +284,24 @@ export async function removeSceneFromDayAction(
     throw new Error("FORBIDDEN");
   }
 
+  const row = await prisma.shootDayScene.findFirst({
+    where: {
+      id: shootDaySceneId,
+      shootDay: { projectId },
+    },
+    select: { shootDayId: true },
+  });
+
   await prisma.shootDayScene.deleteMany({
     where: {
       id: shootDaySceneId,
       shootDay: { projectId },
     },
   });
+
+  if (row) {
+    await syncShootDayResourceUsages(row.shootDayId);
+  }
 
   revalidateSchedule(projectId);
 }
@@ -328,6 +359,18 @@ export async function reorderScenesAction(
   const parsed = reorderScenesSchema.safeParse({ shootDayId, orderedIds });
   if (!parsed.success) return;
 
+  const shootDay = await prisma.shootDay.findFirst({
+    where: { id: parsed.data.shootDayId, projectId },
+    select: { dayType: true, isLocked: true },
+  });
+  if (
+    !shootDay ||
+    !isWorkingShootDay(shootDay.dayType) ||
+    shootDay.isLocked
+  ) {
+    return;
+  }
+
   await prisma.$transaction(
     parsed.data.orderedIds.map((id, index) =>
       prisma.shootDayScene.updateMany({
@@ -356,6 +399,8 @@ export async function clearShootDayAction(
   await prisma.shootDayScene.deleteMany({
     where: { shootDayId, shootDay: { projectId } },
   });
+
+  await syncShootDayResourceUsages(shootDayId);
 
   await writeAuditLog({
     projectId,
@@ -548,5 +593,109 @@ export async function clearScheduleCalendarAction(
       assignedCount > 0
         ? `Календарь очищен: ${dayCount} дн., ${assignedCount} сцен возвращено в неспланированные`
         : `Календарь очищен: удалено ${dayCount} съёмочных дней`,
+  };
+}
+
+function calendarDateKey(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+/** Перенос даты съёмочного дня; если дата занята — меняет даты местами. */
+export async function moveShootDayToDateAction(
+  projectId: string,
+  shootDayId: string,
+  targetDate: string,
+): Promise<ActionState & { redirectDayId?: string }> {
+  const ctx = await requireProjectContext(projectId);
+  if (!ctx.can("schedule:write") && !ctx.can("callsheet:write")) {
+    return { error: "Недостаточно прав" };
+  }
+
+  const parsedDate = parseDateInput(targetDate);
+  if (!parsedDate) return { error: "Укажите корректную дату" };
+
+  const source = await prisma.shootDay.findFirst({
+    where: { id: shootDayId, projectId },
+    select: {
+      id: true,
+      dayNumber: true,
+      date: true,
+      isLocked: true,
+      callSheetPlanLocked: true,
+    },
+  });
+  if (!source) return { error: "Съёмочный день не найден" };
+  if (source.isLocked || source.callSheetPlanLocked) {
+    return { error: "День зафиксирован — сначала снимите блокировку" };
+  }
+
+  const targetKey = calendarDateKey(parsedDate);
+  if (calendarDateKey(source.date) === targetKey) {
+    return { error: "День уже на этой дате" };
+  }
+
+  const siblings = await prisma.shootDay.findMany({
+    where: { projectId, id: { not: shootDayId } },
+    select: { id: true, dayNumber: true, date: true, isLocked: true, callSheetPlanLocked: true },
+  });
+
+  const occupant = siblings.find((day) => calendarDateKey(day.date) === targetKey);
+
+  if (!occupant) {
+    await prisma.shootDay.update({
+      where: { id: source.id },
+      data: { date: parsedDate },
+    });
+
+    await writeAuditLog({
+      projectId,
+      userId: ctx.user.id!,
+      entityType: "ShootDay",
+      entityId: source.id,
+      action: "UPDATE",
+      summary: `День ${source.dayNumber} перенесён на ${targetKey}`,
+    });
+
+    revalidateSchedule(projectId);
+    revalidatePath(`/ru/projects/${projectId}/call-sheets/${source.id}`);
+    return {
+      success: `День ${source.dayNumber} перенесён на ${targetKey}`,
+      redirectDayId: source.id,
+    };
+  }
+
+  if (occupant.isLocked || occupant.callSheetPlanLocked) {
+    return {
+      error: `На ${targetKey} уже день ${occupant.dayNumber} (зафиксирован) — сначала снимите блокировку`,
+    };
+  }
+
+  const sourceDate = source.date;
+  await prisma.$transaction([
+    prisma.shootDay.update({
+      where: { id: source.id },
+      data: { date: occupant.date },
+    }),
+    prisma.shootDay.update({
+      where: { id: occupant.id },
+      data: { date: sourceDate },
+    }),
+  ]);
+
+  await writeAuditLog({
+    projectId,
+    userId: ctx.user.id!,
+    entityType: "ShootDay",
+    entityId: source.id,
+    action: "UPDATE",
+    summary: `Дни ${source.dayNumber} и ${occupant.dayNumber} поменялись датами (${targetKey})`,
+  });
+
+  revalidateSchedule(projectId);
+  revalidatePath(`/ru/projects/${projectId}/call-sheets/${source.id}`);
+  revalidatePath(`/ru/projects/${projectId}/call-sheets/${occupant.id}`);
+  return {
+    success: `Дни ${source.dayNumber} и ${occupant.dayNumber} поменялись датами`,
+    redirectDayId: source.id,
   };
 }

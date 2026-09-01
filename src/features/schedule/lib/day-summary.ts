@@ -92,6 +92,33 @@ export function formatDaySummary(summary: ReturnType<typeof computeDaySummary>) 
   return parts.join(" · ");
 }
 
+type SceneWithCharacters = SceneLike & {
+  characters?: { character: { id: string; name: string } }[];
+};
+
+export type SceneGroupMode = "location" | "actor";
+
+export function resolveSceneGroupKey(
+  scene: SceneWithCharacters,
+  mode: SceneGroupMode,
+  characterToActor: Record<string, string> = {},
+  actorNames: Record<string, string> = {},
+): string {
+  if (mode === "location") {
+    return scene.locations?.[0]?.location.name ?? "Без объекта";
+  }
+  for (const link of scene.characters ?? []) {
+    const actorId = characterToActor[link.character.id];
+    if (actorId && actorNames[actorId]) {
+      return actorNames[actorId];
+    }
+  }
+  if (scene.characters?.[0]) {
+    return scene.characters[0].character.name;
+  }
+  return "Без актёра";
+}
+
 export function groupScenesByLocation<T extends SceneLike>(scenes: T[]) {
   const groups = new Map<string, T[]>();
   for (const scene of scenes) {
@@ -101,4 +128,52 @@ export function groupScenesByLocation<T extends SceneLike>(scenes: T[]) {
     groups.set(key, list);
   }
   return Array.from(groups.entries()).sort(([a], [b]) => a.localeCompare(b, "ru"));
+}
+
+export function groupScenesByActor<T extends SceneWithCharacters>(
+  scenes: T[],
+  characterToActor: Record<string, string>,
+  actorNames: Record<string, string>,
+) {
+  const groups = new Map<string, T[]>();
+  for (const scene of scenes) {
+    const key = resolveSceneGroupKey(scene, "actor", characterToActor, actorNames);
+    const list = groups.get(key) ?? [];
+    list.push(scene);
+    groups.set(key, list);
+  }
+  return Array.from(groups.entries()).sort(([a], [b]) => a.localeCompare(b, "ru"));
+}
+
+export type DaySceneVisualBlock<T> =
+  | { type: "header"; label: string }
+  | { type: "row"; row: T };
+
+/** Visual subsections along sort order; DnD order stays on `rows`. */
+export function buildDaySceneVisualBlocks<T extends { scene: SceneWithCharacters }>(
+  rows: T[],
+  mode: SceneGroupMode | "none",
+  characterToActor: Record<string, string> = {},
+  actorNames: Record<string, string> = {},
+): DaySceneVisualBlock<T>[] {
+  if (mode === "none") {
+    return rows.map((row) => ({ type: "row", row }));
+  }
+
+  const blocks: DaySceneVisualBlock<T>[] = [];
+  let prevKey: string | null = null;
+  for (const row of rows) {
+    const key = resolveSceneGroupKey(
+      row.scene,
+      mode,
+      characterToActor,
+      actorNames,
+    );
+    if (key !== prevKey) {
+      blocks.push({ type: "header", label: key });
+      prevKey = key;
+    }
+    blocks.push({ type: "row", row });
+  }
+  return blocks;
 }

@@ -9,6 +9,8 @@ import {
   insertShootDayBeforeAction,
   updateShootDayAction,
 } from "@/features/schedule/actions";
+import { isWorkingShootDay } from "@/features/schedule/lib/shoot-day-type";
+import { formatDateLong } from "@/shared/i18n/format-date";
 import { shootDayTypeLabels } from "@/shared/i18n/domain-labels";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
@@ -29,6 +31,7 @@ type MenuDay = {
   isLocked: boolean;
   isNightShift: boolean;
   comment: string | null;
+  prepNote?: string | null;
 };
 
 type DayType = keyof typeof shootDayTypeLabels;
@@ -121,11 +124,12 @@ export function DayContextMenu({
   const panelRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const [pos, setPos] = useState(() => clampMenuPosition(anchor, 360));
-  const [mode, setMode] = useState<"menu" | "move" | "comment">("menu");
+  const [mode, setMode] = useState<"menu" | "move" | "comment" | "prep">("menu");
   const [dateValue, setDateValue] = useState(
     new Date(day.date).toISOString().slice(0, 10),
   );
   const [comment, setComment] = useState(day.comment ?? "");
+  const [prepNote, setPrepNote] = useState(day.prepNote ?? "");
   const [busy, setBusy] = useState(false);
 
   useLayoutEffect(() => {
@@ -162,11 +166,7 @@ export function DayContextMenu({
         <div className="border-b border-[var(--border)] px-3 py-2.5">
           <p className="text-sm font-semibold">День {day.dayNumber}</p>
           <p className="text-[11px] text-[var(--muted-fg)]">
-            {new Date(day.date).toLocaleDateString("ru-RU", {
-              weekday: "short",
-              day: "numeric",
-              month: "long",
-            })}
+            {formatDateLong(day.date)}
           </p>
         </div>
 
@@ -280,7 +280,9 @@ export function DayContextMenu({
 
             <MenuItem
               icon="📋"
+              disabled={!isWorkingShootDay(day.dayType)}
               onClick={() => {
+                if (!isWorkingShootDay(day.dayType)) return;
                 onClose();
                 router.push(
                   `/${locale}/projects/${projectId}/call-sheets/${day.id}`,
@@ -288,6 +290,7 @@ export function DayContextMenu({
               }}
             >
               Вызывной
+              {!isWorkingShootDay(day.dayType) ? " (только рабочий день)" : ""}
             </MenuItem>
             <MenuItem
               icon="📊"
@@ -315,6 +318,12 @@ export function DayContextMenu({
               Комментарий
               {day.comment ? "…" : ""}
             </MenuItem>
+            {day.dayType === "PREP" ? (
+              <MenuItem icon="📝" disabled={busy} onClick={() => setMode("prep")}>
+                Заметка подготовки
+                {day.prepNote ? "…" : ""}
+              </MenuItem>
+            ) : null}
           </div>
         ) : null}
 
@@ -379,6 +388,42 @@ export function DayContextMenu({
                   run(() =>
                     updateShootDayAction(projectId, day.id, {
                       comment: comment.trim(),
+                    }),
+                  )
+                }
+              >
+                Сохранить
+              </Button>
+            </div>
+          </div>
+        ) : null}
+
+        {mode === "prep" ? (
+          <div className="space-y-3 p-3">
+            <p className="text-sm font-medium">Заметка подготовительного дня</p>
+            <textarea
+              className="glass-input min-h-[6rem] w-full rounded-xl px-3 py-2.5 text-sm"
+              value={prepNote}
+              onChange={(e) => setPrepNote(e.target.value)}
+              placeholder="Репетиция, примерка, техосмотр…"
+            />
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                className="flex-1"
+                onClick={() => setMode("menu")}
+              >
+                Назад
+              </Button>
+              <Button
+                type="button"
+                className="flex-1"
+                disabled={busy}
+                onClick={() =>
+                  run(() =>
+                    updateShootDayAction(projectId, day.id, {
+                      prepNote: prepNote.trim(),
                     }),
                   )
                 }

@@ -64,7 +64,16 @@ export const LIBRETTO_COLUMNS: ColumnDef[] = LIBRETTO_EXPORT_FIELDS.filter(
   minWidth: TABLE_WIDTHS[field.id]?.minWidth ?? 80,
 }));
 
-export function getLibrettoFieldLabel(fieldId: string) {
+export function getLibrettoFieldLabel(
+  fieldId: string,
+  resourceLabels?: Record<string, string>,
+) {
+  const resourceId = fieldId.startsWith("rescat:")
+    ? fieldId.slice("rescat:".length)
+    : null;
+  if (resourceId && resourceLabels?.[resourceId]) {
+    return resourceLabels[resourceId];
+  }
   return (
     LIBRETTO_EXPORT_FIELDS.find((field) => field.id === fieldId)?.label ?? fieldId
   );
@@ -94,4 +103,32 @@ export function suggestedExportColumnTitle(fieldIds: string[]) {
     return getLibrettoFieldLabel(fieldIds[0]!);
   }
   return fieldIds.map((id) => getLibrettoFieldLabel(id)).join(" / ");
+}
+
+export const RESOURCE_COLUMN_PREFIX = "rescat:";
+
+export function resourceColumnId(categoryId: string) {
+  return `${RESOURCE_COLUMN_PREFIX}${categoryId}`;
+}
+
+export function isResourceColumnId(fieldId: string) {
+  return fieldId.startsWith(RESOURCE_COLUMN_PREFIX);
+}
+
+export function parseResourceColumnId(fieldId: string): string | null {
+  if (!isResourceColumnId(fieldId)) return null;
+  return fieldId.slice(RESOURCE_COLUMN_PREFIX.length);
+}
+
+/** Базовые столбцы + категории ресурсов проекта. */
+export function buildLibrettoColumns(
+  resourceCategories: { id: string; name: string }[] = [],
+): ColumnDef[] {
+  const resourceCols: ColumnDef[] = resourceCategories.map((cat) => ({
+    id: resourceColumnId(cat.id),
+    label: cat.name,
+    defaultWidth: 120,
+    minWidth: 80,
+  }));
+  return [...LIBRETTO_COLUMNS, ...resourceCols];
 }

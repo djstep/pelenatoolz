@@ -3,9 +3,13 @@ import type { ColumnDef } from "@/shared/hooks/use-table-layout";
 export {
   LIBRETTO_COLUMNS,
   LIBRETTO_EXPORT_FIELDS,
+  buildLibrettoColumns,
   createDefaultExportColumns,
   createExportColumnId,
   getLibrettoFieldLabel,
+  isResourceColumnId,
+  parseResourceColumnId,
+  resourceColumnId,
   type LibrettoExportColumn,
   type LibrettoFieldDef,
   suggestedExportColumnTitle,

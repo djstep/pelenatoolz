@@ -3,7 +3,6 @@ import {
   listCastingPeople,
   listCharactersForCasting,
 } from "@/features/casting/queries";
-import { PreproductionTabs } from "@/features/preproduction/components/preproduction-tabs";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { Card } from "@/shared/ui/card";
 
@@ -27,12 +26,11 @@ export default async function CastingPage({ params }: Props) {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="font-display text-2xl font-semibold">Препродакшн</h2>
+        <h2 className="font-display text-2xl font-semibold">Кастинг</h2>
         <p className="mt-1 text-sm text-[var(--muted-fg)]">
-          Воронка подбора: кандидаты на роли и реальные локации.
+          Воронка кандидатов на роли: реальные люди и заявки на персонажей.
         </p>
       </div>
-      <PreproductionTabs locale={locale} projectId={projectId} />
       <Card>
         <CastingWorkspace
           projectId={projectId}

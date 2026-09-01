@@ -47,6 +47,12 @@ export function CharactersFiltersModal({
             sceneCountTo: String(fd.get("sceneCountTo") ?? ""),
             planMinutesFrom: String(fd.get("planMinutesFrom") ?? ""),
             planMinutesTo: String(fd.get("planMinutesTo") ?? ""),
+            kppShiftCountFrom: String(fd.get("kppShiftCountFrom") ?? ""),
+            kppShiftCountTo: String(fd.get("kppShiftCountTo") ?? ""),
+            estimatedShiftCountFrom: String(fd.get("estimatedShiftCountFrom") ?? ""),
+            estimatedShiftCountTo: String(fd.get("estimatedShiftCountTo") ?? ""),
+            objectCountFrom: String(fd.get("objectCountFrom") ?? ""),
+            objectCountTo: String(fd.get("objectCountTo") ?? ""),
             hasRoleRequirements:
               roleReq === "yes" ? true : roleReq === "no" ? false : null,
             hasDescription: desc === "yes" ? true : desc === "no" ? false : null,
@@ -187,6 +193,60 @@ export function CharactersFiltersModal({
               min={0}
               defaultValue={filters.planMinutesTo}
             />
+          </div>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-3">
+          <div>
+            <Label>Смен по КПП</Label>
+            <div className="mt-1 flex gap-2">
+              <Input
+                name="kppShiftCountFrom"
+                type="number"
+                min={0}
+                defaultValue={filters.kppShiftCountFrom}
+              />
+              <Input
+                name="kppShiftCountTo"
+                type="number"
+                min={0}
+                defaultValue={filters.kppShiftCountTo}
+              />
+            </div>
+          </div>
+          <div>
+            <Label>Смен (оценка)</Label>
+            <div className="mt-1 flex gap-2">
+              <Input
+                name="estimatedShiftCountFrom"
+                type="number"
+                min={0}
+                defaultValue={filters.estimatedShiftCountFrom}
+              />
+              <Input
+                name="estimatedShiftCountTo"
+                type="number"
+                min={0}
+                defaultValue={filters.estimatedShiftCountTo}
+              />
+            </div>
+          </div>
+          <div>
+            <Label>Объектов (локаций)</Label>
+            <div className="mt-1 flex gap-2">
+              <Input
+                name="objectCountFrom"
+                type="number"
+                min={0}
+                defaultValue={filters.objectCountFrom}
+              />
+              <Input
+                name="objectCountTo"
+                type="number"
+                min={0}
+                defaultValue={filters.objectCountTo}
+              />
+            </div>
           </div>
         </div>
 

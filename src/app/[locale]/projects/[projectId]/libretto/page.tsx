@@ -2,6 +2,8 @@ import { requireProjectContext } from "@/features/projects/lib/project-context";
 
 import { formatLocationTitle } from "@/features/locations/lib/format-location";
 
+import { listResourceCategoriesForScenes } from "@/features/resources/queries";
+
 import { LibrettoWorkspace } from "@/features/script/components/libretto-workspace";
 
 import {
@@ -42,13 +44,15 @@ export default async function LibrettoPage({ params }: Props) {
 
 
 
-  const [scenes, locations, characters] = await Promise.all([
+  const [scenes, locations, characters, resourceCategories] = await Promise.all([
 
     listScenes(projectId),
 
     listLocations(projectId),
 
     listCharacters(projectId),
+
+    listResourceCategoriesForScenes(projectId),
 
   ]);
 
@@ -65,6 +69,13 @@ export default async function LibrettoPage({ params }: Props) {
 
 
   const canWrite = ctx.can("script:write");
+
+  const sceneResourceCategories = resourceCategories.map((c) => ({
+    id: c.id,
+    name: c.name,
+    countable: c.countable,
+    items: c.items,
+  }));
 
 
 
@@ -104,6 +115,8 @@ export default async function LibrettoPage({ params }: Props) {
           locations={locationOptions}
 
           characters={characters}
+
+          resourceCategories={sceneResourceCategories}
 
           canWrite={canWrite}
 

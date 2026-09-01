@@ -14,9 +14,10 @@ import {
   fullNameFromParts,
 } from "@/features/preproduction/lib/snapshots";
 import {
-  castingStatusLabels,
   castingStatusOptions,
 } from "@/features/preproduction/lib/status-labels";
+import { StatusSelect } from "@/features/preproduction/components/status-select";
+import { AvailabilityMiniPreview } from "@/features/actor-availability/components/availability-mini-preview";
 import { useActionToast, useToast } from "@/shared/ui/toast";
 import { Button } from "@/shared/ui/button";
 import { Label } from "@/shared/ui/label";
@@ -37,12 +38,18 @@ export function CastingPersonDetail({
   person,
   characters,
   canWrite,
+  availabilityMini,
 }: {
   projectId: string;
   locale: string;
   person: PersonDetail;
   characters: CharacterOpt[];
   canWrite: boolean;
+  availabilityMini?: {
+    rowId?: string;
+    manualDays: Record<string, Record<string, { status: string; comment: string | null }>>;
+    kppBusySerialized: Record<string, string[]>;
+  };
 }) {
   const [editOpen, setEditOpen] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -124,6 +131,18 @@ export function CastingPersonDetail({
         />
       ) : null}
 
+      {availabilityMini ? (
+        <AvailabilityMiniPreview
+          projectId={projectId}
+          locale={locale}
+          rowId={availabilityMini.rowId}
+          castingPersonId={person.id}
+          manualDays={availabilityMini.manualDays}
+          kppBusySerialized={availabilityMini.kppBusySerialized}
+          canWrite={canWrite}
+        />
+      ) : null}
+
       <section className="glass-card grid gap-4 p-5 md:grid-cols-2 text-sm">
         <div>
           <p className="text-[var(--muted-fg)]">Email</p>
@@ -182,27 +201,16 @@ export function CastingPersonDetail({
                 >
                   {c.character.name}
                 </Link>
-                <div className="flex items-center gap-2">
-                  <span className="rounded-full bg-[var(--glass-badge-bg)] px-2 py-0.5 text-xs">
-                    {castingStatusLabels[c.status]}
-                  </span>
-                  {canWrite && c.status !== "APPROVED" ? (
-                    <select
-                      className="glass-input rounded-lg px-2 py-1 text-xs"
-                      defaultValue={c.status}
-                      disabled={pending}
-                      onChange={(e) =>
-                        runStatus(c.id, e.target.value as CastingCandidateStatus)
-                      }
-                    >
-                      {castingStatusOptions.map((o) => (
-                        <option key={o.value} value={o.value}>
-                          {o.label}
-                        </option>
-                      ))}
-                    </select>
-                  ) : null}
-                </div>
+                <StatusSelect
+                  value={c.status}
+                  options={castingStatusOptions}
+                  disabled={!canWrite || pending}
+                  onChange={
+                    canWrite
+                      ? (next) => runStatus(c.id, next as CastingCandidateStatus)
+                      : undefined
+                  }
+                />
               </li>
             ))}
           </ul>
@@ -239,7 +247,7 @@ export function CastingPersonDetail({
         <div className="glass-card space-y-4 p-5">
           <h2 className="font-semibold">Редактирование</h2>
           <form action={action} className="space-y-4">
-            <PersonFormFields person={person} />
+            <PersonFormFields projectId={projectId} person={person} />
             <div className="flex gap-3">
               <Button type="submit" disabled={formPending}>
                 {formPending ? "…" : "Сохранить"}

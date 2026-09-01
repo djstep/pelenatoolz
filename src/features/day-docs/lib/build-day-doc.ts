@@ -6,6 +6,7 @@ import {
   intExtLabels,
   sceneStatusLabels,
 } from "@/shared/i18n/domain-labels";
+import { defaultArrivalTime } from "@/features/day-docs/lib/time-utils";
 
 export type DayDocBundle = NonNullable<
   Awaited<ReturnType<typeof getShootDayDocument>>
@@ -39,6 +40,17 @@ export type ResourceTableRow = {
   makeup: string | null;
   ready: string | null;
   wrap: string | null;
+};
+
+export type PerShiftResourceRow = {
+  usageId: string;
+  itemId: string;
+  categoryName: string;
+  itemName: string;
+  isUsed: boolean;
+  arrival: string | null;
+  defaultArrival: string | null;
+  notes: string | null;
 };
 
 export type ShootingSlotDetails = {
@@ -277,7 +289,85 @@ export function buildResourceTables(bundle: DayDocBundle) {
     camera: mapResourcesToRows(bundle, camera),
     props: mapResourcesToRows(bundle, props),
     vehicles: mapResourcesToRows(bundle, vehicles),
+    catalog: buildCatalogResourceSections(bundle),
   };
+}
+
+function buildCatalogResourceSections(bundle: DayDocBundle) {
+  const byCategory = new Map<
+    string,
+    Map<string, { name: string; sceneNumbers: Set<string> }>
+  >();
+
+  for (const row of bundle.day.scenes) {
+    const num = formatSceneNumber(row.scene);
+    for (const link of row.scene.resourceItems ?? []) {
+      if (link.item.category.perShift) continue;
+      const catName = link.item.category.name;
+      if (!byCategory.has(catName)) byCategory.set(catName, new Map());
+      const items = byCategory.get(catName)!;
+      const label =
+        link.quantity > 1 ? `${link.item.name} ×${link.quantity}` : link.item.name;
+      if (!items.has(link.itemId)) {
+        items.set(link.itemId, { name: label, sceneNumbers: new Set() });
+      }
+      items.get(link.itemId)!.sceneNumbers.add(num);
+    }
+  }
+
+  return [...byCategory.entries()]
+    .sort(([a], [b]) => a.localeCompare(b, "ru"))
+    .map(([categoryName, items]) => ({
+      categoryName,
+      rows: [...items.values()]
+        .map((entry) => {
+          const call = lookupResourceCall(bundle, categoryName, entry.name);
+          return {
+            key: `${categoryName}::${entry.name}`,
+            category: categoryName,
+            name: entry.name,
+            sceneNumbers: Array.from(entry.sceneNumbers).sort((a, b) =>
+              a.localeCompare(b, "ru", { numeric: true }),
+            ),
+            arrival: call?.arrivalTime ?? null,
+            costume: call?.costumeTime ?? null,
+            makeup: call?.makeupTime ?? null,
+            ready: call?.readyTime ?? null,
+            wrap: call?.wrapTime ?? null,
+          };
+        })
+        .sort((a, b) => a.name.localeCompare(b.name, "ru")),
+    }));
+}
+
+export function buildPerShiftResources(bundle: DayDocBundle): PerShiftResourceRow[] {
+  const { day } = bundle;
+  const shiftStart = day.shiftStartTime ?? day.callTime;
+
+  return (day.resourceUsages ?? [])
+    .filter((usage) => usage.item.category.perShift)
+    .map((usage) => {
+      const defaultArr = defaultArrivalTime(
+        day.shiftStartTime,
+        day.callTime,
+        usage.item.arrivalOffsetMin,
+      );
+      return {
+        usageId: usage.id,
+        itemId: usage.itemId,
+        categoryName: usage.item.category.name,
+        itemName: usage.item.name,
+        isUsed: usage.isUsed,
+        arrival: usage.arrivalTime ?? defaultArr,
+        defaultArrival: defaultArr,
+        notes: usage.item.notes,
+      };
+    })
+    .sort((a, b) => {
+      const cat = a.categoryName.localeCompare(b.categoryName, "ru");
+      if (cat !== 0) return cat;
+      return a.itemName.localeCompare(b.itemName, "ru");
+    });
 }
 
 export function buildShootingSlotDetails(
@@ -293,6 +383,12 @@ export function buildShootingSlotDetails(
   const vehicles: string[] = [];
   const camera: string[] = [];
   const custom: string[] = [];
+
+  for (const link of scene.resourceItems ?? []) {
+    const label =
+      link.quantity > 1 ? `${link.item.name} ×${link.quantity}` : link.item.name;
+    custom.push(`${link.item.category.name}: ${label}`);
+  }
 
   for (const res of scene.resources) {
     const label =

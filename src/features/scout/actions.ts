@@ -10,7 +10,7 @@ import { prisma } from "@/shared/db/prisma";
 export type ScoutActionState = { error?: string; success?: string };
 
 const scoutSchema = z.object({
-  locationId: z.string().cuid(),
+  locationIds: z.array(z.string().cuid()).min(1),
   title: z.string().trim().min(1).max(200),
   address: z.string().trim().max(500).optional(),
   cost: z.coerce.number().min(0).optional(),
@@ -18,6 +18,7 @@ const scoutSchema = z.object({
   contactPhone: z.string().trim().max(30).optional(),
   notes: z.string().trim().max(5000).optional(),
   photoUrls: z.string().trim().optional(),
+  videoUrls: z.string().trim().optional(),
 });
 
 function parseMediaUrls(raw: string | undefined) {
@@ -29,12 +30,27 @@ function parseMediaUrls(raw: string | undefined) {
     .map((url) => ({ url }));
 }
 
-function revalidateScout(projectId: string, locationId?: string) {
+function parseLocationIds(formData: FormData) {
+  return formData.getAll("locationIds").map(String).filter(Boolean);
+}
+
+function revalidateScout(projectId: string, candidateId?: string, locationIds?: string[]) {
   revalidatePath(`/ru/projects/${projectId}/preproduction/scout`);
+  if (candidateId) {
+    revalidatePath(`/ru/projects/${projectId}/preproduction/scout/${candidateId}`);
+  }
   revalidatePath(`/ru/projects/${projectId}/locations`);
-  if (locationId) {
+  for (const locationId of locationIds ?? []) {
     revalidatePath(`/ru/projects/${projectId}/locations/${locationId}`);
   }
+}
+
+async function assertLocations(projectId: string, locationIds: string[]) {
+  const count = await prisma.location.count({
+    where: { projectId, id: { in: locationIds } },
+  });
+  if (count !== locationIds.length) return false;
+  return true;
 }
 
 export async function createScoutCandidateAction(
@@ -45,8 +61,9 @@ export async function createScoutCandidateAction(
   const ctx = await requireProjectContext(projectId);
   if (!ctx.can("script:write")) return { error: "Недостаточно прав" };
 
+  const locationIds = parseLocationIds(formData);
   const parsed = scoutSchema.safeParse({
-    locationId: formData.get("locationId"),
+    locationIds,
     title: formData.get("title"),
     address: formData.get("address") || undefined,
     cost: formData.get("cost") || undefined,
@@ -54,18 +71,17 @@ export async function createScoutCandidateAction(
     contactPhone: formData.get("contactPhone") || undefined,
     notes: formData.get("notes") || undefined,
     photoUrls: formData.get("photoUrls") || undefined,
+    videoUrls: formData.get("videoUrls") || undefined,
   });
   if (!parsed.success) return { error: "Проверьте данные" };
 
-  const location = await prisma.location.findFirst({
-    where: { id: parsed.data.locationId, projectId },
-  });
-  if (!location) return { error: "Локация не найдена" };
+  if (!(await assertLocations(projectId, parsed.data.locationIds))) {
+    return { error: "Одна или несколько локаций не найдены" };
+  }
 
   await prisma.scoutCandidate.create({
     data: {
       projectId,
-      locationId: parsed.data.locationId,
       title: parsed.data.title,
       address: parsed.data.address,
       cost: parsed.data.cost,
@@ -73,11 +89,75 @@ export async function createScoutCandidateAction(
       contactPhone: parsed.data.contactPhone,
       notes: parsed.data.notes,
       photos: parseMediaUrls(parsed.data.photoUrls),
+      videos: parseMediaUrls(parsed.data.videoUrls),
+      locationLinks: {
+        create: parsed.data.locationIds.map((locationId) => ({ locationId })),
+      },
     },
   });
 
-  revalidateScout(projectId);
+  revalidateScout(projectId, undefined, parsed.data.locationIds);
   return { success: "Кандидат-локация добавлен" };
+}
+
+export async function updateScoutCandidateAction(
+  projectId: string,
+  candidateId: string,
+  _prev: ScoutActionState,
+  formData: FormData,
+): Promise<ScoutActionState> {
+  const ctx = await requireProjectContext(projectId);
+  if (!ctx.can("script:write")) return { error: "Недостаточно прав" };
+
+  const existing = await prisma.scoutCandidate.findFirst({
+    where: { id: candidateId, projectId },
+    select: { status: true },
+  });
+  if (!existing) return { error: "Кандидат не найден" };
+  if (existing.status === ScoutCandidateStatus.APPROVED) {
+    return { error: "Утверждённого кандидата нельзя редактировать" };
+  }
+
+  const locationIds = parseLocationIds(formData);
+  const parsed = scoutSchema.safeParse({
+    locationIds,
+    title: formData.get("title"),
+    address: formData.get("address") || undefined,
+    cost: formData.get("cost") || undefined,
+    contactName: formData.get("contactName") || undefined,
+    contactPhone: formData.get("contactPhone") || undefined,
+    notes: formData.get("notes") || undefined,
+    photoUrls: formData.get("photoUrls") || undefined,
+    videoUrls: formData.get("videoUrls") || undefined,
+  });
+  if (!parsed.success) return { error: "Проверьте данные" };
+
+  if (!(await assertLocations(projectId, parsed.data.locationIds))) {
+    return { error: "Одна или несколько локаций не найдены" };
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.scoutCandidateLocation.deleteMany({ where: { scoutCandidateId: candidateId } });
+    await tx.scoutCandidate.update({
+      where: { id: candidateId },
+      data: {
+        title: parsed.data.title,
+        address: parsed.data.address,
+        cost: parsed.data.cost,
+        contactName: parsed.data.contactName,
+        contactPhone: parsed.data.contactPhone,
+        notes: parsed.data.notes,
+        photos: parseMediaUrls(parsed.data.photoUrls),
+        videos: parseMediaUrls(parsed.data.videoUrls),
+        locationLinks: {
+          create: parsed.data.locationIds.map((locationId) => ({ locationId })),
+        },
+      },
+    });
+  });
+
+  revalidateScout(projectId, candidateId, parsed.data.locationIds);
+  return { success: "Кандидат обновлён" };
 }
 
 export async function updateScoutCandidateStatusAction(
@@ -91,9 +171,13 @@ export async function updateScoutCandidateStatusAction(
   if (status === ScoutCandidateStatus.APPROVED) {
     try {
       const result = await approveScoutCandidate(projectId, candidateId);
-      revalidateScout(projectId, result.locationId);
-      return { success: `«${result.scoutTitle}» утверждена для локации` };
-    } catch {
+      revalidateScout(projectId, candidateId, result.locationIds);
+      const names = result.locationNames.join(", ");
+      return { success: `«${result.scoutTitle}» утверждена для: ${names}` };
+    } catch (e) {
+      if (e instanceof Error && e.message === "SCOUT_NO_LOCATIONS") {
+        return { error: "Привяжите хотя бы один игровой объект" };
+      }
       return { error: "Не удалось утвердить локацию" };
     }
   }
@@ -103,7 +187,7 @@ export async function updateScoutCandidateStatusAction(
     data: { status, statusChangedAt: new Date() },
   });
 
-  revalidateScout(projectId);
+  revalidateScout(projectId, candidateId);
   return { success: "Статус обновлён" };
 }
 
@@ -117,6 +201,6 @@ export async function deleteScoutCandidateAction(
   await prisma.scoutCandidate.deleteMany({
     where: { id: candidateId, projectId },
   });
-  revalidateScout(projectId);
+  revalidateScout(projectId, candidateId);
   return { success: "Кандидат удалён" };
 }

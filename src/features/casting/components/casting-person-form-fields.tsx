@@ -1,7 +1,11 @@
+"use client";
+
+import { useState } from "react";
 import {
   PHYSICAL_PARAM_LABELS,
   STANDARD_PHYSICAL_PARAM_KEYS,
 } from "@/features/preproduction/lib/snapshots";
+import { ImageUpload } from "@/shared/ui/image-upload";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Select } from "@/shared/ui/select";
@@ -26,14 +30,17 @@ type PersonLike = {
 type CharacterOpt = { id: string; name: string };
 
 export function PersonFormFields({
+  projectId,
   person,
   characters,
   showCharacterPicker,
 }: {
+  projectId: string;
   person?: PersonLike;
   characters?: CharacterOpt[];
   showCharacterPicker?: boolean;
 }) {
+  const [photoUrl, setPhotoUrl] = useState(person?.photoUrl ?? "");
   const physical =
     person?.physicalParams && typeof person.physicalParams === "object"
       ? (person.physicalParams as Record<string, string>)
@@ -101,15 +108,13 @@ export function PersonFormFields({
         </div>
       </div>
 
-      <div>
-        <Label htmlFor="photoUrl">Фото (URL)</Label>
-        <Input
-          id="photoUrl"
-          name="photoUrl"
-          defaultValue={person?.photoUrl ?? ""}
-          placeholder="https://…"
-        />
-      </div>
+      <ImageUpload
+        projectId={projectId}
+        name="photoUrl"
+        label="Фото"
+        value={photoUrl}
+        onChange={setPhotoUrl}
+      />
 
       <div>
         <p className="mb-2 text-sm font-medium">Физические параметры</p>

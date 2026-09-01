@@ -46,6 +46,7 @@ type Props = {
   timingMode: TimingMode;
   pageToMinuteRatio: number;
   sceneTimings: SceneTimingRef[];
+  scrollToSceneId?: string | null;
   canWrite: boolean;
 };
 
@@ -69,6 +70,7 @@ export function ScreenplayWorkspace({
   timingMode,
   pageToMinuteRatio,
   sceneTimings,
+  scrollToSceneId = null,
   canWrite,
 }: Props) {
   const router = useRouter();
@@ -296,6 +298,7 @@ export function ScreenplayWorkspace({
         timingMode={timingModeState}
         pageToMinuteRatio={pageRatioState}
         sceneTimings={sceneTimings}
+        scrollToSceneId={scrollToSceneId}
         canWrite={canWrite}
         timingSaving={timingSaving}
         onTimingModeChange={handleTimingModeChange}

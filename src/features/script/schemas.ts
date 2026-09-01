@@ -146,6 +146,7 @@ export const updateShootDaySchema = z
     isLocked: z.boolean().optional(),
     isNightShift: z.boolean().optional(),
     comment: z.string().trim().max(2000).optional(),
+    prepNote: z.string().trim().max(2000).optional(),
     date: z.string().optional(),
   })
   .partial();

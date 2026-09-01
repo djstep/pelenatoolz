@@ -20,3 +20,35 @@ export function mapDecFields<T extends Record<string, unknown>>(
   }
   return next;
 }
+
+function isPrismaDecimal(value: unknown): value is { toString(): string } {
+  return (
+    value != null &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    !(value instanceof Date) &&
+    "toFixed" in value &&
+    "toString" in value
+  );
+}
+
+/** Deep-clone data for RSC → Client props (Decimal → number). */
+export function serializeForClient<T>(data: T): T {
+  if (isPrismaDecimal(data)) {
+    return Number(data) as T;
+  }
+  if (Array.isArray(data)) {
+    return data.map((item) => serializeForClient(item)) as T;
+  }
+  if (data instanceof Date) {
+    return data;
+  }
+  if (data != null && typeof data === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(data)) {
+      out[key] = serializeForClient(value);
+    }
+    return out as T;
+  }
+  return data;
+}

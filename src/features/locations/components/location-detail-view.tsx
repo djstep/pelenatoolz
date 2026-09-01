@@ -10,6 +10,7 @@ import {
   type LocationActionState,
 } from "@/features/locations/actions";
 import { LocationModal } from "@/features/locations/components/location-modal";
+import { LocationPhotoAddForm } from "@/features/locations/components/location-photo-add-form";
 import {
   formatLocationKind,
   formatLocationTitle,
@@ -144,21 +145,35 @@ export function LocationDetailView({
         </form>
       </Card>
 
-      {location.scoutCandidates.length > 0 ? (
+      {location.scoutCandidateLinks.length > 0 ? (
         <Card className="p-4">
           <h3 className="mb-3 font-semibold">Кандидаты скаута</h3>
           <ul className="space-y-2 text-sm">
-            {location.scoutCandidates.map((c) => (
+            {[...location.scoutCandidateLinks]
+              .sort(
+                (a, b) =>
+                  b.scoutCandidate.updatedAt.getTime() -
+                  a.scoutCandidate.updatedAt.getTime(),
+              )
+              .map((link) => {
+                const c = link.scoutCandidate;
+                return (
               <li
                 key={c.id}
                 className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--border)] px-3 py-2"
               >
-                <span>{c.title}</span>
+                <Link
+                  href={`/${locale}/projects/${projectId}/preproduction/scout/${c.id}`}
+                  className="hover:text-[var(--accent)]"
+                >
+                  {c.title}
+                </Link>
                 <span className="rounded-full bg-[var(--glass-badge-bg)] px-2 py-0.5 text-xs">
                   {scoutStatusLabels[c.status]}
                 </span>
               </li>
-            ))}
+                );
+              })}
           </ul>
         </Card>
       ) : null}
@@ -277,16 +292,12 @@ export function LocationDetailView({
           <p className="text-sm text-[var(--muted-fg)]">Фото пока нет.</p>
         )}
         {canWrite ? (
-          <form action={photoAction} className="mt-4 flex flex-wrap gap-2">
-            <Input name="url" placeholder="URL изображения" className="min-w-[16rem] flex-1" required />
-            <Input name="caption" placeholder="Подпись" className="max-w-[12rem]" />
-            <Button type="submit" variant="secondary" disabled={photoPending}>
-              {photoPending ? "…" : "Добавить фото"}
-            </Button>
-            {photoState.error ? (
-              <span className="w-full text-sm text-[var(--danger)]">{photoState.error}</span>
-            ) : null}
-          </form>
+          <LocationPhotoAddForm
+            projectId={projectId}
+            action={photoAction}
+            pending={photoPending}
+            error={photoState.error}
+          />
         ) : null}
       </Card>
 

@@ -156,14 +156,23 @@ export function ProjectNav({
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
   const [ready, setReady] = useState(false);
 
+  const allItems = useMemo(() => groups.flatMap((group) => group.items), [groups]);
+
+  const activeHref = useMemo(() => {
+    const base = `/${locale}/projects/${projectId}`;
+    const matches = allItems
+      .filter((item) => {
+        const full = `${base}${item.href}`;
+        if (item.href === "") return pathname === full;
+        return pathname === full || pathname.startsWith(`${full}/`);
+      })
+      .sort((a, b) => b.href.length - a.href.length);
+    return matches[0]?.href ?? null;
+  }, [allItems, locale, projectId, pathname]);
+
   const isActive = useCallback(
-    (href: string) => {
-      const full = `/${locale}/projects/${projectId}${href}`;
-      return href === ""
-        ? pathname === full
-        : pathname === full || pathname.startsWith(`${full}/`);
-    },
-    [locale, projectId, pathname],
+    (href: string) => activeHref === href,
+    [activeHref],
   );
 
   const collapsibleGroups = useMemo(

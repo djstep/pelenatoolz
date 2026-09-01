@@ -23,6 +23,11 @@ export async function listScenes(projectId: string) {
       },
       elements: { include: { element: true } },
       resources: true,
+      resourceItems: {
+        include: {
+          item: { include: { category: { select: { id: true, name: true } } } },
+        },
+      },
       shootDayScenes: {
         include: {
           shootDay: {
@@ -48,6 +53,11 @@ export async function getSceneForEdit(projectId: string, sceneId: string) {
       characters: { include: { character: true } },
       elements: { include: { element: true } },
       resources: true,
+      resourceItems: {
+        include: {
+          item: { include: { category: { select: { id: true, name: true } } } },
+        },
+      },
     },
   });
 }

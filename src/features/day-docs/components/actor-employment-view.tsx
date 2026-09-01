@@ -5,15 +5,7 @@ import {
 } from "@/features/day-docs/lib/build-day-doc";
 import { PrintButton } from "@/features/day-docs/components/print-button";
 import { actorRoleTypeLabels } from "@/shared/i18n/domain-labels";
-
-function formatDate(date: Date) {
-  return new Date(date).toLocaleDateString("ru-RU", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
-}
+import { formatDateLong } from "@/shared/i18n/format-date";
 
 export function ActorEmploymentView({
   locale,
@@ -52,7 +44,7 @@ export function ActorEmploymentView({
             Занятость актёров · День {day.dayNumber}
           </h2>
           <p className="mt-1 text-sm text-[var(--muted-fg)]">
-            {project.name} · {formatDate(day.date)}
+            {project.name} · {formatDateLong(day.date)}
           </p>
         </div>
         <PrintButton />

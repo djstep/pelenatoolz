@@ -1,6 +1,7 @@
 import type { SceneStatus } from "@prisma/client";
 import type { ProjectType } from "@prisma/client";
 import { sceneKindLabels, sceneStatusLabels } from "@/shared/i18n/domain-labels";
+import { formatDateShort } from "@/shared/i18n/format-date";
 import type { listScenes } from "@/features/script/queries";
 
 export type LibrettoScene = Awaited<ReturnType<typeof listScenes>>[number];
@@ -84,8 +85,22 @@ export function getStatusDateLabel(scene: LibrettoScene): string {
   }
 
   if (!date) return statusLabel;
-  const d = new Date(date).toLocaleDateString("ru-RU");
-  return `${statusLabel} (${d})`;
+  return `${statusLabel} (${formatDateShort(date)})`;
+}
+
+export function getResourceCategoryCell(
+  scene: LibrettoScene,
+  categoryId: string,
+): string {
+  const links = (scene.resourceItems ?? []).filter(
+    (l) => l.item.category.id === categoryId,
+  );
+  if (links.length === 0) return "—";
+  return links
+    .map((l) =>
+      l.quantity > 1 ? `${l.item.name} ×${l.quantity}` : l.item.name,
+    )
+    .join(", ");
 }
 
 export function getPlannedShootDates(scene: LibrettoScene): Date[] {

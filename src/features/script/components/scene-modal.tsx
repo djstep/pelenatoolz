@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useActionState, useEffect, useState } from "react";
 import {
   ElementType,
@@ -12,9 +13,7 @@ import {
   type TimingMode,
 } from "@prisma/client";
 import { quickCreateLocationAction } from "@/features/locations/actions";
-import { SceneScriptEditorModal } from "@/features/screenplay/components/scene-script-editor-modal";
 import { loadScreenplayBlocksAction } from "@/features/screenplay/actions";
-import type { ScreenplayBlock } from "@/features/screenplay/lib/block-types";
 import {
   createSceneAction,
   quickCreateCharacterAction,
@@ -25,6 +24,10 @@ import {
   SceneResourceBlock,
   TagMultiField,
 } from "@/features/script/components/scene-resource-blocks";
+import {
+  SceneCategoryResourceBlock,
+  type SceneCategoryOption,
+} from "@/features/script/components/scene-category-resource-block";
 import {
   dayNightLabels,
   formatSecondsMmSs,
@@ -80,6 +83,15 @@ export type SceneEditData = {
     quantity: number;
     unitPrice: { toString(): string } | number;
   }>;
+  resourceItems?: Array<{
+    itemId: string;
+    quantity: number;
+    item: {
+      id: string;
+      name: string;
+      category: { id: string; name: string };
+    };
+  }>;
 };
 
 function timingValue(seconds: number | null | undefined) {
@@ -117,8 +129,19 @@ function tagsFor(
     .map((e) => e.element.name);
 }
 
+function resourceItemsForCategory(
+  scene: SceneEditData | null | undefined,
+  categoryId: string,
+) {
+  if (!scene?.resourceItems) return [];
+  return scene.resourceItems
+    .filter((l) => l.item.category.id === categoryId)
+    .map((l) => ({ itemId: l.itemId, quantity: l.quantity }));
+}
+
 export function SceneModal({
   projectId,
+  locale,
   projectType,
   shootOnFilm,
   timingMode = "MINUTES",
@@ -127,9 +150,11 @@ export function SceneModal({
   onClose,
   locations: initialLocations,
   characters: initialCharacters,
+  resourceCategories = [],
   scene = null,
 }: {
   projectId: string;
+  locale: string;
   projectType: ProjectType;
   shootOnFilm: boolean;
   timingMode?: TimingMode;
@@ -138,8 +163,10 @@ export function SceneModal({
   onClose: () => void;
   locations: Option[];
   characters: Option[];
+  resourceCategories?: SceneCategoryOption[];
   scene?: SceneEditData | null;
 }) {
+  const router = useRouter();
   const boundAction = scene
     ? updateSceneAction.bind(null, projectId, scene.id)
     : createSceneAction.bind(null, projectId);
@@ -156,9 +183,6 @@ export function SceneModal({
     () => scene?.characters.map((c) => c.characterId) ?? [],
   );
   const [formKey, setFormKey] = useState(0);
-  const [scriptEditorOpen, setScriptEditorOpen] = useState(false);
-  const [scriptBlocks, setScriptBlocks] = useState<ScreenplayBlock[]>([]);
-  const [scriptVersionId, setScriptVersionId] = useState<string | null>(null);
   const [loadingScript, setLoadingScript] = useState(false);
 
   useEffect(() => {
@@ -365,6 +389,43 @@ export function SceneModal({
           />
         </div>
 
+        <div className="rounded-xl border border-[var(--border)] bg-white/[0.02] p-4">
+          <Label>Сценарий</Label>
+          {isEdit ? (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={loadingScript}
+                onClick={async () => {
+                  if (!scene) return;
+                  setLoadingScript(true);
+                  try {
+                    const result = await loadScreenplayBlocksAction(projectId);
+                    if ("versionId" in result && result.versionId) {
+                      router.push(
+                        `/${locale}/projects/${projectId}/screenplay/${result.versionId}?sceneId=${scene.id}`,
+                      );
+                    }
+                  } finally {
+                    setLoadingScript(false);
+                  }
+                }}
+              >
+                {loadingScript ? "Загрузка…" : "Открыть текст сцены"}
+              </Button>
+              <span className="text-xs text-[var(--muted-fg)]">
+                Текст сцены редактируется в версии сценария; либретто — через «Обновить в
+                либретто».
+              </span>
+            </div>
+          ) : (
+            <p className="mt-1 text-xs text-[var(--muted-fg)]">
+              Сохраните сцену, затем откройте текст в блочном редакторе.
+            </p>
+          )}
+        </div>
+
         <div>
           <Label className="mb-2 block">Хронометраж сцены (мм:сс)</Label>
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -471,6 +532,26 @@ export function SceneModal({
         </div>
 
         <div className="space-y-4 border-t border-[var(--border)] pt-4">
+          {resourceCategories.length > 0 ? (
+            <>
+              <p className="text-xs text-[var(--muted-fg)]">
+                Ресурсы из каталога (раздел «Ресурсы»). Старые блоки ниже — для
+                совместимости.
+              </p>
+              {resourceCategories.map((cat) => (
+                <SceneCategoryResourceBlock
+                  key={cat.id}
+                  projectId={projectId}
+                  category={cat}
+                  initialLinks={resourceItemsForCategory(scene, cat.id)}
+                />
+              ))}
+            </>
+          ) : (
+            <p className="text-xs text-[var(--muted-fg)]">
+              Добавьте категории ресурсов с флагом «в сценах» в разделе Ресурсы.
+            </p>
+          )}
           <SceneResourceBlock
             title="Массовка"
             category={SceneResourceCategory.EXTRAS}
@@ -519,65 +600,7 @@ export function SceneModal({
           />
         </div>
 
-        <div>
-          <Label>Сценарий</Label>
-          {isEdit ? (
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <Button
-                type="button"
-                variant="secondary"
-                disabled={loadingScript}
-                onClick={async () => {
-                  setLoadingScript(true);
-                  try {
-                    const result = await loadScreenplayBlocksAction(projectId);
-                    if ("blocks" in result && result.blocks) {
-                      setScriptVersionId(result.versionId ?? null);
-                      setScriptBlocks(
-                        result.blocks.map((block) => ({
-                          id: block.id,
-                          type: block.type,
-                          content: block.content,
-                          sceneId: block.sceneId,
-                          sortOrder: block.sortOrder,
-                        })),
-                      );
-                      setScriptEditorOpen(true);
-                    }
-                  } finally {
-                    setLoadingScript(false);
-                  }
-                }}
-              >
-                {loadingScript ? "Загрузка…" : "Открыть текст сцены"}
-              </Button>
-              <span className="text-xs text-[var(--muted-fg)]">
-                Текст сцены редактируется в версии сценария; либретто — через «Обновить в либретто».
-              </span>
-            </div>
-          ) : (
-            <p className="mt-1 text-xs text-[var(--muted-fg)]">
-              Сохраните сцену, затем откройте текст в блочном редакторе.
-            </p>
-          )}
-        </div>
       </form>
-      {isEdit && scene ? (
-        <SceneScriptEditorModal
-          open={scriptEditorOpen}
-          onClose={() => setScriptEditorOpen(false)}
-          projectId={projectId}
-          versionId={scriptVersionId ?? ""}
-          sceneId={scene.id}
-          sceneLabel={`${scene.number}${scene.postfix}`}
-          blocks={scriptBlocks}
-          characters={characters}
-          locations={locations}
-          timingMode={timingMode}
-          pageToMinuteRatio={pageToMinuteRatio}
-          canWrite
-        />
-      ) : null}
     </Modal>
   );
 }

@@ -58,6 +58,15 @@ export async function approveCastingCandidate(
   });
   if (!candidate) throw new Error("CANDIDATE_NOT_FOUND");
 
+  const hadApproved = await prisma.castingCandidate.findFirst({
+    where: {
+      characterId: candidate.characterId,
+      status: CastingCandidateStatus.APPROVED,
+      id: { not: candidateId },
+    },
+    select: { id: true },
+  });
+
   const snapshot = buildCastSnapshotFromPerson(candidate.person);
 
   await prisma.$transaction(async (tx) => {
@@ -127,5 +136,6 @@ export async function approveCastingCandidate(
     characterId: candidate.characterId,
     characterName: candidate.character.name,
     personName: fullNameFromParts(candidate.person),
+    replacedPrevious: Boolean(hadApproved),
   };
 }

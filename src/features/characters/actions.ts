@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { parseHhMmToMinutes } from "@/shared/i18n/domain-labels";
 import type { CharacterCastSnapshot } from "@/features/preproduction/lib/snapshots";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { prisma } from "@/shared/db/prisma";
@@ -20,10 +21,18 @@ const snapshotSchema = z.object({
   skills: z.string().trim().optional(),
 });
 
+const durationMinutes = z.preprocess((val) => {
+  if (val === "" || val == null) return undefined;
+  if (typeof val === "number") return val;
+  return parseHhMmToMinutes(String(val));
+}, z.number().int().min(0).optional());
+
 const characterRecordSchema = z.object({
   name: z.string().trim().min(1).max(200),
   description: z.string().trim().max(5000).optional(),
   roleRequirements: z.string().trim().max(5000).optional(),
+  makeupOffsetMin: durationMinutes.pipe(z.number().max(600).optional()),
+  costumeOffsetMin: durationMinutes.pipe(z.number().max(600).optional()),
 });
 
 function revalidateCharacters(projectId: string, characterId?: string) {
@@ -137,6 +146,8 @@ export async function createCharacterRecordAction(
     name: formData.get("name"),
     description: formData.get("description") || undefined,
     roleRequirements: formData.get("roleRequirements") || undefined,
+    makeupOffsetMin: formData.get("makeupOffsetMin") || undefined,
+    costumeOffsetMin: formData.get("costumeOffsetMin") || undefined,
   });
   if (!parsed.success) return { error: "Укажите имя персонажа" };
 
@@ -161,6 +172,8 @@ export async function updateCharacterRecordAction(
     name: formData.get("name"),
     description: formData.get("description") || undefined,
     roleRequirements: formData.get("roleRequirements") || undefined,
+    makeupOffsetMin: formData.get("makeupOffsetMin") || undefined,
+    costumeOffsetMin: formData.get("costumeOffsetMin") || undefined,
   });
   if (!parsed.success) return { error: "Проверьте данные" };
 

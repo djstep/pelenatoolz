@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { ScriptCommentThread } from "@/features/screenplay/lib/comment-types";
 import { cn } from "@/shared/lib/cn";
+import { formatDateTimeShort } from "@/shared/i18n/format-date";
 
 type Props = {
   threads: ScriptCommentThread[];
@@ -13,12 +14,7 @@ type Props = {
 };
 
 function formatDate(iso: string) {
-  return new Date(iso).toLocaleString("ru-RU", {
-    day: "2-digit",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return formatDateTimeShort(iso);
 }
 
 export function ScreenplayCommentsMargin({

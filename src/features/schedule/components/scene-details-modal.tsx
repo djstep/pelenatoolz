@@ -28,7 +28,7 @@ export type SceneDetails = {
   status: keyof typeof sceneStatusLabels | string;
   scriptDay: number | null;
   locations: { location: { name: string } }[];
-  characters: { character: { name: string } }[];
+  characters: { character: { id: string; name: string } }[];
 };
 
 export function SceneDetailsModal({

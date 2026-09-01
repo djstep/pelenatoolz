@@ -13,16 +13,8 @@ import {
   shootDayStatusLabels,
   shootDayTypeLabels,
 } from "@/shared/i18n/domain-labels";
+import { formatDateLong } from "@/shared/i18n/format-date";
 import { Badge } from "@/shared/ui/badge";
-
-function formatDate(date: Date) {
-  return new Date(date).toLocaleDateString("ru-RU", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
-}
 
 export function ProductionReportView({
   locale,
@@ -68,7 +60,7 @@ export function ProductionReportView({
           {project.fullName || project.name}
         </h1>
         <p className="mt-1 text-sm text-[var(--muted-fg)]">
-          {formatDate(day.date)}
+          {formatDateLong(day.date)}
           {project.city ? ` · ${project.city}` : ""}
         </p>
         <div className="mt-3 flex flex-wrap gap-2">

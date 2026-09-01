@@ -6,16 +6,24 @@ import {
   saveActorCallsAction,
   saveDepartmentCallsAction,
   saveResourceCallsAction,
+  saveResourceUsagesAction,
   saveTimeSlotsAction,
   saveTransportsAction,
   updateCallSheetHeaderAction,
   type CallSheetActionState,
 } from "@/features/day-docs/actions";
-import type { CastRow, DayDocBundle, ResourceTableRow } from "@/features/day-docs/lib/build-day-doc";
+import type { CastRow, DayDocBundle, PerShiftResourceRow, ResourceTableRow } from "@/features/day-docs/lib/build-day-doc";
+import {
+  isManualActorTiming,
+  type ActorTimingBaselines,
+  type ActorTimingField,
+} from "@/features/day-docs/lib/compute-call-timings";
 import { timeSlotTypeLabels } from "@/features/day-docs/lib/slot-labels";
 import { Button } from "@/shared/ui/button";
+import { HhMmInput } from "@/shared/ui/hh-mm-input";
 import { Input } from "@/shared/ui/input";
 import { useActionToast } from "@/shared/ui/toast";
+import { cn } from "@/shared/lib/cn";
 
 type DeptRow = {
   roleLabel: string;
@@ -66,6 +74,8 @@ export function CallSheetEditor({
   bundle,
   cast,
   resources,
+  perShiftResources,
+  timingBaselines = {},
 }: {
   projectId: string;
   dayId: string;
@@ -79,9 +89,20 @@ export function CallSheetEditor({
     props: ResourceTableRow[];
     vehicles: ResourceTableRow[];
   };
+  perShiftResources: PerShiftResourceRow[];
+  timingBaselines?: ActorTimingBaselines;
 }) {
   const { day } = bundle;
   const [open, setOpen] = useState(false);
+  const [headerTimes, setHeaderTimes] = useState({
+    callTime: day.callTime ?? "",
+    shiftStartTime: day.shiftStartTime ?? "",
+    rehearsalTime: day.rehearsalTime ?? "",
+    motorOnTime: day.motorOnTime ?? "",
+    motorOffTime: day.motorOffTime ?? "",
+    wrapTime: day.wrapTime ?? "",
+    crewMeetTime: day.crewMeetTime ?? "",
+  });
 
   const [depts, setDepts] = useState<DeptRow[]>(
     day.departmentCalls.map((d) => ({
@@ -147,12 +168,23 @@ export function CallSheetEditor({
     })),
   );
 
+  const [perShiftRows, setPerShiftRows] = useState(
+    perShiftResources.map((r) => ({
+      itemId: r.itemId,
+      label: `${r.categoryName} · ${r.itemName}`,
+      isUsed: r.isUsed,
+      arrivalTime: r.arrival ?? "",
+      defaultArrival: r.defaultArrival ?? "",
+    })),
+  );
+
   const headerAction = updateCallSheetHeaderAction.bind(null, projectId, dayId);
   const deptAction = saveDepartmentCallsAction.bind(null, projectId, dayId);
   const transportAction = saveTransportsAction.bind(null, projectId, dayId);
   const slotAction = saveTimeSlotsAction.bind(null, projectId, dayId);
   const actorAction = saveActorCallsAction.bind(null, projectId, dayId);
   const resourceAction = saveResourceCallsAction.bind(null, projectId, dayId);
+  const perShiftAction = saveResourceUsagesAction.bind(null, projectId, dayId);
 
   const [headerState, headerFormAction, headerPending] = useActionState(
     headerAction,
@@ -188,31 +220,75 @@ export function CallSheetEditor({
             </label>
             <label className="space-y-1 text-xs">
               <span className="text-[var(--muted-fg)]">Сбор</span>
-              <Input name="callTime" defaultValue={day.callTime ?? ""} placeholder="07:00" />
+              <HhMmInput
+                value={headerTimes.callTime}
+                onChange={(callTime) =>
+                  setHeaderTimes((p) => ({ ...p, callTime }))
+                }
+                placeholder="07:00"
+              />
+              <input type="hidden" name="callTime" value={headerTimes.callTime} />
             </label>
             <label className="space-y-1 text-xs">
               <span className="text-[var(--muted-fg)]">Начало смены</span>
-              <Input name="shiftStartTime" defaultValue={day.shiftStartTime ?? ""} />
+              <HhMmInput
+                value={headerTimes.shiftStartTime}
+                onChange={(shiftStartTime) =>
+                  setHeaderTimes((p) => ({ ...p, shiftStartTime }))
+                }
+                placeholder="08:00"
+              />
+              <input type="hidden" name="shiftStartTime" value={headerTimes.shiftStartTime} />
             </label>
             <label className="space-y-1 text-xs">
               <span className="text-[var(--muted-fg)]">Репетиция</span>
-              <Input name="rehearsalTime" defaultValue={day.rehearsalTime ?? ""} />
+              <HhMmInput
+                value={headerTimes.rehearsalTime}
+                onChange={(rehearsalTime) =>
+                  setHeaderTimes((p) => ({ ...p, rehearsalTime }))
+                }
+              />
+              <input type="hidden" name="rehearsalTime" value={headerTimes.rehearsalTime} />
             </label>
             <label className="space-y-1 text-xs">
               <span className="text-[var(--muted-fg)]">Мотор</span>
-              <Input name="motorOnTime" defaultValue={day.motorOnTime ?? ""} />
+              <HhMmInput
+                value={headerTimes.motorOnTime}
+                onChange={(motorOnTime) =>
+                  setHeaderTimes((p) => ({ ...p, motorOnTime }))
+                }
+              />
+              <input type="hidden" name="motorOnTime" value={headerTimes.motorOnTime} />
             </label>
             <label className="space-y-1 text-xs">
               <span className="text-[var(--muted-fg)]">Стоп-мотор</span>
-              <Input name="motorOffTime" defaultValue={day.motorOffTime ?? ""} />
+              <HhMmInput
+                value={headerTimes.motorOffTime}
+                onChange={(motorOffTime) =>
+                  setHeaderTimes((p) => ({ ...p, motorOffTime }))
+                }
+              />
+              <input type="hidden" name="motorOffTime" value={headerTimes.motorOffTime} />
             </label>
             <label className="space-y-1 text-xs">
               <span className="text-[var(--muted-fg)]">Конец</span>
-              <Input name="wrapTime" defaultValue={day.wrapTime ?? ""} />
+              <HhMmInput
+                value={headerTimes.wrapTime}
+                onChange={(wrapTime) =>
+                  setHeaderTimes((p) => ({ ...p, wrapTime }))
+                }
+              />
+              <input type="hidden" name="wrapTime" value={headerTimes.wrapTime} />
             </label>
             <label className="space-y-1 text-xs">
               <span className="text-[var(--muted-fg)]">Сбор группы</span>
-              <Input name="crewMeetTime" defaultValue={day.crewMeetTime ?? ""} />
+              <HhMmInput
+                value={headerTimes.crewMeetTime}
+                onChange={(crewMeetTime) =>
+                  setHeaderTimes((p) => ({ ...p, crewMeetTime }))
+                }
+              />
+              <input type="hidden" name="crewMeetTime" value={headerTimes.crewMeetTime} />
             </label>
             <label className="space-y-1 text-xs sm:col-span-2">
               <span className="text-[var(--muted-fg)]">Адрес сбора / выезд</span>
@@ -272,14 +348,14 @@ export function CallSheetEditor({
                 }
                 placeholder="Телефон"
               />
-              <Input
+              <HhMmInput
                 value={row.callTime}
-                onChange={(e) =>
+                onChange={(callTime) =>
                   setDepts((p) =>
-                    p.map((r, j) => (j === i ? { ...r, callTime: e.target.value } : r)),
+                    p.map((r, j) => (j === i ? { ...r, callTime } : r)),
                   )
                 }
-                placeholder="Явка"
+                placeholder="07:00"
               />
               <Button
                 type="button"
@@ -319,14 +395,14 @@ export function CallSheetEditor({
                 }
                 placeholder="Техника"
               />
-              <Input
+              <HhMmInput
                 value={row.callTime}
-                onChange={(e) =>
+                onChange={(callTime) =>
                   setTransports((p) =>
-                    p.map((r, j) => (j === i ? { ...r, callTime: e.target.value } : r)),
+                    p.map((r, j) => (j === i ? { ...r, callTime } : r)),
                   )
                 }
-                placeholder="Прибытие"
+                placeholder="07:00"
               />
               <Input
                 value={row.notes}
@@ -364,23 +440,23 @@ export function CallSheetEditor({
           <h4 className="text-sm font-semibold text-[var(--muted-fg)]">Расписание по слотам</h4>
           {slots.map((row, i) => (
             <div key={i} className="grid gap-2 lg:grid-cols-6">
-              <Input
+              <HhMmInput
                 value={row.startTime}
-                onChange={(e) =>
+                onChange={(startTime) =>
                   setSlots((p) =>
-                    p.map((r, j) => (j === i ? { ...r, startTime: e.target.value } : r)),
+                    p.map((r, j) => (j === i ? { ...r, startTime } : r)),
                   )
                 }
-                placeholder="Начало"
+                placeholder="08:00"
               />
-              <Input
+              <HhMmInput
                 value={row.endTime}
-                onChange={(e) =>
+                onChange={(endTime) =>
                   setSlots((p) =>
-                    p.map((r, j) => (j === i ? { ...r, endTime: e.target.value } : r)),
+                    p.map((r, j) => (j === i ? { ...r, endTime } : r)),
                   )
                 }
-                placeholder="Конец"
+                placeholder="09:00"
               />
               <select
                 className="glass-input rounded-lg px-3 py-2 text-sm"
@@ -460,7 +536,9 @@ export function CallSheetEditor({
         {actorTimings.length > 0 ? (
           <div className="space-y-3">
             <h4 className="text-sm font-semibold text-[var(--muted-fg)]">Тайминги актёров</h4>
-            {actorTimings.map((row, i) => (
+            {actorTimings.map((row, i) => {
+              const baseline = timingBaselines[row.actorId];
+              return (
               <div key={row.actorId} className="rounded-xl border border-[var(--border)] p-3">
                 <p className="mb-2 text-sm font-medium">{row.label}</p>
                 <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
@@ -473,24 +551,44 @@ export function CallSheetEditor({
                       ["readyTime", "Готовность"],
                       ["wrapTime", "Конец"],
                     ] as const
-                  ).map(([field, label]) => (
+                  ).map(([field, label]) => {
+                    const computed =
+                      field !== "arrivalTime"
+                        ? baseline?.[field as ActorTimingField]
+                        : undefined;
+                    const manual = isManualActorTiming(row[field], computed);
+                    return (
                     <label key={field} className="space-y-1 text-xs">
-                      <span className="text-[var(--muted-fg)]">{label}</span>
-                      <Input
+                      <span className="text-[var(--muted-fg)]">
+                        {label}
+                        {manual && computed ? (
+                          <span className="ml-1 text-amber-300/90" title={`Расчётное: ${computed}`}>
+                            · ручн.
+                          </span>
+                        ) : null}
+                      </span>
+                      <HhMmInput
                         value={row[field]}
-                        onChange={(e) =>
+                        onChange={(v) =>
                           setActorTimings((p) =>
                             p.map((r, j) =>
-                              j === i ? { ...r, [field]: e.target.value } : r,
+                              j === i ? { ...r, [field]: v } : r,
                             ),
                           )
                         }
+                        placeholder="00:00"
+                        className={cn(
+                          manual && "border-amber-400/50 bg-amber-500/10",
+                        )}
+                        title={manual && computed ? `Расчётное: ${computed}` : undefined}
                       />
                     </label>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
-            ))}
+              );
+            })}
             <JsonRowsForm
               action={actorAction}
               rowsJson={JSON.stringify(
@@ -529,15 +627,16 @@ export function CallSheetEditor({
                   ).map(([field, label]) => (
                     <label key={field} className="space-y-1 text-xs">
                       <span className="text-[var(--muted-fg)]">{label}</span>
-                      <Input
+                      <HhMmInput
                         value={row[field]}
-                        onChange={(e) =>
+                        onChange={(v) =>
                           setResourceTimings((p) =>
                             p.map((r, j) =>
-                              j === i ? { ...r, [field]: e.target.value } : r,
+                              j === i ? { ...r, [field]: v } : r,
                             ),
                           )
                         }
+                        placeholder="00:00"
                       />
                     </label>
                   ))}
@@ -560,6 +659,63 @@ export function CallSheetEditor({
                 ),
               )}
               label="Сохранить тайминги ресурсов"
+            />
+          </div>
+        ) : null}
+
+        {perShiftRows.length > 0 ? (
+          <div className="space-y-3">
+            <h4 className="text-sm font-semibold text-[var(--muted-fg)]">
+              Посменные ресурсы
+            </h4>
+            {perShiftRows.map((row, i) => (
+              <div
+                key={row.itemId}
+                className="grid gap-2 rounded-xl border border-[var(--border)] p-3 sm:grid-cols-[1fr_auto_8rem]"
+              >
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={row.isUsed}
+                    onChange={(e) =>
+                      setPerShiftRows((p) =>
+                        p.map((r, j) =>
+                          j === i ? { ...r, isUsed: e.target.checked } : r,
+                        ),
+                      )
+                    }
+                  />
+                  <span>{row.label}</span>
+                </label>
+                <span className="self-center text-xs text-[var(--muted-fg)]">
+                  {row.defaultArrival ? `по умолч. ${row.defaultArrival}` : ""}
+                </span>
+                <label className="space-y-1 text-xs">
+                  <span className="text-[var(--muted-fg)]">Прибытие</span>
+                  <HhMmInput
+                    value={row.arrivalTime}
+                    placeholder={row.defaultArrival || "08:00"}
+                    onChange={(arrivalTime) =>
+                      setPerShiftRows((p) =>
+                        p.map((r, j) =>
+                          j === i ? { ...r, arrivalTime } : r,
+                        ),
+                      )
+                    }
+                  />
+                </label>
+              </div>
+            ))}
+            <JsonRowsForm
+              action={perShiftAction}
+              rowsJson={JSON.stringify(
+                perShiftRows.map(({ itemId, isUsed, arrivalTime }) => ({
+                  itemId,
+                  isUsed,
+                  arrivalTime,
+                })),
+              )}
+              label="Сохранить посменные ресурсы"
             />
           </div>
         ) : null}

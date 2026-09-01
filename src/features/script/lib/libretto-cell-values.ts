@@ -8,6 +8,7 @@ import {
   getExtras,
   getGroup,
   getMakeup,
+  getResourceCategoryCell,
   getStatusDateLabel,
   getStunt,
   type LibrettoScene,
@@ -17,7 +18,7 @@ import {
   formatSecondsMmSs,
   intExtLabels,
 } from "@/shared/i18n/domain-labels";
-import { getLibrettoFieldLabel } from "@/features/script/lib/libretto-fields";
+import { getLibrettoFieldLabel, parseResourceColumnId } from "@/features/script/lib/libretto-fields";
 
 const CELL_FONT = { name: "Calibri", size: 11 } as const;
 
@@ -71,8 +72,11 @@ export function getLibrettoCellValue(
       return getStunt(scene);
     case "makeup":
       return getMakeup(scene);
-    default:
+    default: {
+      const categoryId = parseResourceColumnId(fieldId);
+      if (categoryId) return getResourceCategoryCell(scene, categoryId);
       return "—";
+    }
   }
 }
 
