@@ -8,6 +8,7 @@ import {
   getShootDayDocument,
   getActorTimingBaselines,
   getResourceTimingBaselines,
+  listPerShiftCatalogForDay,
 } from "@/features/day-docs/queries";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 
@@ -59,7 +60,8 @@ export default async function CallSheetDayPage({ params }: Props) {
     );
   }
 
-  const [astro, nextDay, timingBaselines, resourceTimingBaselines] = await Promise.all([
+  const [astro, nextDay, timingBaselines, resourceTimingBaselines, perShiftCatalog] =
+    await Promise.all([
     fetchCityAstro(
       bundleFresh.project.city,
       bundleFresh.day.date,
@@ -68,6 +70,7 @@ export default async function CallSheetDayPage({ params }: Props) {
     getNextShootDayBrief(projectId, bundleFresh.day.dayNumber),
     getActorTimingBaselines(projectId, dayId),
     getResourceTimingBaselines(projectId, dayId),
+    listPerShiftCatalogForDay(projectId, dayId),
   ]);
 
   const nextDayAstro = nextDay
@@ -92,6 +95,7 @@ export default async function CallSheetDayPage({ params }: Props) {
       canEdit={canEdit}
       timingBaselines={timingBaselines}
       resourceTimingBaselines={resourceTimingBaselines}
+      perShiftCatalog={perShiftCatalog}
     />
   );
 }

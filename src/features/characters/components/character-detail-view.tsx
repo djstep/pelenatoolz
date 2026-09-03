@@ -26,6 +26,10 @@ import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { AvailabilityMiniPreview } from "@/features/actor-availability/components/availability-mini-preview";
 import { useActionToast, useToast } from "@/shared/ui/toast";
+import { CharacterScriptButton } from "@/features/screenplay/components/character-script-button";
+import { CastListExportButton } from "@/features/casting/components/cast-list-export-button";
+import { CastingCandidateComments } from "@/features/casting/components/casting-candidate-comments";
+import type { CastListExportBundleClient } from "@/features/casting/lib/cast-list-export-data";
 
 const initial: CharacterActionState = {};
 const actorInitial: ActorActionState = {};
@@ -38,6 +42,7 @@ export function CharacterDetailView({
   projectId,
   locale,
   character,
+  castListBundle,
   canWriteScript,
   canWriteCast,
   availabilityMini,
@@ -45,6 +50,7 @@ export function CharacterDetailView({
   projectId: string;
   locale: string;
   character: CharacterDetail;
+  castListBundle: CastListExportBundleClient | null;
   canWriteScript: boolean;
   canWriteCast: boolean;
   availabilityMini?: {
@@ -105,6 +111,31 @@ export function CharacterDetailView({
             ? formatSecondsMmSs(character.planSeconds)
             : "—"}
         </p>
+        {canWriteScript && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            <CharacterScriptButton
+              projectId={projectId}
+              characterId={character.id}
+              characterName={character.name}
+            />
+            {castListBundle ? (
+              <CastListExportButton
+                projectId={projectId}
+                locale={locale}
+                bundle={castListBundle}
+              />
+            ) : null}
+          </div>
+        )}
+        {!canWriteScript && castListBundle ? (
+          <div className="mt-3">
+            <CastListExportButton
+              projectId={projectId}
+              locale={locale}
+              bundle={castListBundle}
+            />
+          </div>
+        ) : null}
       </div>
 
       <section className="glass-card space-y-4 p-5">
@@ -160,28 +191,36 @@ export function CharacterDetailView({
         {character.castingCandidates.length === 0 ? (
           <p className="text-sm text-[var(--muted-fg)]">Кандидаты не добавлены.</p>
         ) : (
-          <ul className="space-y-2 text-sm">
+          <ul className="space-y-3 text-sm">
             {character.castingCandidates.map((c) => (
               <li
                 key={c.id}
-                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--border)] px-3 py-2"
+                className="space-y-2 rounded-lg border border-[var(--border)] px-3 py-2"
               >
-                <Link
-                  href={`/${locale}/projects/${projectId}/preproduction/casting/${c.person.id}`}
-                  className="hover:text-[var(--accent)]"
-                >
-                  {fullNameFromParts(c.person)}
-                  {c.person.phone ? ` · ${c.person.phone}` : ""}
-                </Link>
-                <StatusSelect
-                  value={c.status}
-                  options={castingStatusOptions}
-                  disabled={!canWriteCast || pending}
-                  onChange={
-                    canWriteCast
-                      ? (next) => runCandidateStatus(c.id, next)
-                      : undefined
-                  }
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <Link
+                    href={`/${locale}/projects/${projectId}/preproduction/casting/${c.person.id}`}
+                    className="hover:text-[var(--accent)]"
+                  >
+                    {fullNameFromParts(c.person)}
+                    {c.person.phone ? ` · ${c.person.phone}` : ""}
+                  </Link>
+                  <StatusSelect
+                    value={c.status}
+                    options={castingStatusOptions}
+                    disabled={!canWriteCast || pending}
+                    onChange={
+                      canWriteCast
+                        ? (next) => runCandidateStatus(c.id, next)
+                        : undefined
+                    }
+                  />
+                </div>
+                <CastingCandidateComments
+                  projectId={projectId}
+                  candidateId={c.id}
+                  comments={c.comments}
+                  canWrite={canWriteCast}
                 />
               </li>
             ))}

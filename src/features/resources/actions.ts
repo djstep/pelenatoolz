@@ -3,9 +3,18 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
+import { parseHhMmToMinutes } from "@/shared/i18n/domain-labels";
+import { AuditEntityType } from "@/shared/audit/entity-types";
+import { auditMutation } from "@/shared/audit/with-audit";
+import { resourcesRevalidatePaths } from "@/features/resources/lib/paths";
 import { prisma } from "@/shared/db/prisma";
 
 export type ResourceActionState = { error?: string; success?: string };
+
+const durationMinutes = z.preprocess((val) => {
+  if (val == null || String(val).trim() === "") return undefined;
+  return parseHhMmToMinutes(String(val));
+}, z.number().int().min(0).optional());
 
 const categorySchema = z.object({
   name: z.string().trim().min(1).max(100),
@@ -19,9 +28,9 @@ const itemSchema = z.object({
   name: z.string().trim().min(1).max(200),
   notes: z.string().trim().max(5000).optional(),
   shiftRate: z.coerce.number().min(0).optional(),
-  shiftHoursMin: z.coerce.number().int().min(0).max(1440).optional(),
-  unpaidOvertimeMin: z.coerce.number().int().min(0).max(600).optional(),
-  arrivalOffsetMin: z.coerce.number().int().min(0).max(1440).optional(),
+  shiftHoursMin: durationMinutes.pipe(z.number().max(1440).optional()),
+  unpaidOvertimeMin: durationMinutes.pipe(z.number().max(600).optional()),
+  arrivalOffsetMin: durationMinutes.pipe(z.number().max(1440).optional()),
 });
 
 function checkbox(formData: FormData, key: string) {
@@ -30,11 +39,17 @@ function checkbox(formData: FormData, key: string) {
 }
 
 function revalidateResources(projectId: string, categoryId?: string, itemId?: string) {
-  revalidatePath(`/ru/projects/${projectId}/resources`);
+  for (const base of resourcesRevalidatePaths(projectId)) {
+    revalidatePath(base);
+  }
   if (categoryId) {
+    revalidatePath(`/ru/projects/${projectId}/settings/resources/${categoryId}`);
     revalidatePath(`/ru/projects/${projectId}/resources/${categoryId}`);
   }
   if (categoryId && itemId) {
+    revalidatePath(
+      `/ru/projects/${projectId}/settings/resources/${categoryId}/items/${itemId}`,
+    );
     revalidatePath(
       `/ru/projects/${projectId}/resources/${categoryId}/items/${itemId}`,
     );
@@ -59,22 +74,34 @@ export async function createResourceCategoryAction(
   });
   if (!parsed.success) return { error: "Укажите название категории" };
 
-  const maxOrder = await prisma.resourceCategory.aggregate({
-    where: { projectId },
-    _max: { sortOrder: true },
-  });
-
-  await prisma.resourceCategory.create({
-    data: {
-      projectId,
-      name: parsed.data.name,
-      sortOrder: (maxOrder._max.sortOrder ?? -1) + 1,
-      fillInScenes: parsed.data.fillInScenes ?? true,
-      perShift: parsed.data.perShift ?? false,
-      countable: parsed.data.countable ?? false,
-      showInKpp: parsed.data.showInKpp ?? true,
+  await auditMutation(
+    ctx,
+    async (data) => {
+      const maxOrder = await prisma.resourceCategory.aggregate({
+        where: { projectId },
+        _max: { sortOrder: true },
+      });
+      return prisma.resourceCategory.create({
+        data: {
+          projectId,
+          name: data.name,
+          sortOrder: (maxOrder._max.sortOrder ?? -1) + 1,
+          fillInScenes: data.fillInScenes ?? true,
+          perShift: data.perShift ?? false,
+          countable: data.countable ?? false,
+          showInKpp: data.showInKpp ?? true,
+        },
+      });
     },
-  });
+    parsed.data,
+    {
+      projectId,
+      entityType: AuditEntityType.resourceCategory,
+      action: "CREATE",
+      entityId: (_, c) => c.id,
+      summary: (_, c) => `Создана категория ресурсов «${c.name}»`,
+    },
+  );
 
   revalidateResources(projectId);
   return { success: "Категория добавлена" };
@@ -98,16 +125,30 @@ export async function updateResourceCategoryAction(
   });
   if (!parsed.success) return { error: "Проверьте данные" };
 
-  await prisma.resourceCategory.updateMany({
-    where: { id: categoryId, projectId },
-    data: {
-      name: parsed.data.name,
-      fillInScenes: parsed.data.fillInScenes ?? true,
-      perShift: parsed.data.perShift ?? false,
-      countable: parsed.data.countable ?? false,
-      showInKpp: parsed.data.showInKpp ?? true,
+  await auditMutation(
+    ctx,
+    async (data) => {
+      await prisma.resourceCategory.updateMany({
+        where: { id: categoryId, projectId },
+        data: {
+          name: data.name,
+          fillInScenes: data.fillInScenes ?? true,
+          perShift: data.perShift ?? false,
+          countable: data.countable ?? false,
+          showInKpp: data.showInKpp ?? true,
+        },
+      });
+      return data;
     },
-  });
+    parsed.data,
+    {
+      projectId,
+      entityType: AuditEntityType.resourceCategory,
+      action: "UPDATE",
+      entityId: categoryId,
+      summary: (_, d) => `Обновлена категория «${d.name}»`,
+    },
+  );
 
   revalidateResources(projectId, categoryId);
   return { success: "Категория сохранена" };
@@ -127,7 +168,20 @@ export async function deleteResourceCategoryAction(
     throw new Error("CATEGORY_HAS_ITEMS");
   }
 
-  await prisma.resourceCategory.deleteMany({ where: { id: categoryId, projectId } });
+  await auditMutation(
+    ctx,
+    async () => {
+      await prisma.resourceCategory.deleteMany({ where: { id: categoryId, projectId } });
+    },
+    null,
+    {
+      projectId,
+      entityType: AuditEntityType.resourceCategory,
+      action: "DELETE",
+      entityId: categoryId,
+      summary: "Удалена категория ресурсов",
+    },
+  );
   revalidateResources(projectId);
 }
 
@@ -155,9 +209,18 @@ export async function createResourceItemAction(
   });
   if (!parsed.success) return { error: "Укажите название элемента" };
 
-  const item = await prisma.resourceItem.create({
-    data: { categoryId, ...parsed.data },
-  });
+  const item = await auditMutation(
+    ctx,
+    async (data) => prisma.resourceItem.create({ data: { categoryId, ...data } }),
+    parsed.data,
+    {
+      projectId,
+      entityType: AuditEntityType.resourceItem,
+      action: "CREATE",
+      entityId: (_, i) => i.id,
+      summary: (_, i) => `Добавлен ресурс «${i.name}»`,
+    },
+  );
 
   revalidateResources(projectId, categoryId, item.id);
   return { success: "Элемент добавлен" };
@@ -183,10 +246,24 @@ export async function updateResourceItemAction(
   });
   if (!parsed.success) return { error: "Проверьте данные" };
 
-  await prisma.resourceItem.updateMany({
-    where: { id: itemId, categoryId, category: { projectId } },
-    data: parsed.data,
-  });
+  await auditMutation(
+    ctx,
+    async (data) => {
+      await prisma.resourceItem.updateMany({
+        where: { id: itemId, categoryId, category: { projectId } },
+        data,
+      });
+      return data;
+    },
+    parsed.data,
+    {
+      projectId,
+      entityType: AuditEntityType.resourceItem,
+      action: "UPDATE",
+      entityId: itemId,
+      summary: (_, d) => `Обновлён ресурс «${d.name}»`,
+    },
+  );
 
   revalidateResources(projectId, categoryId, itemId);
   return { success: "Элемент сохранён" };
@@ -203,9 +280,22 @@ export async function deleteResourceItemAction(
   const usage = await prisma.sceneResourceItem.count({ where: { itemId } });
   if (usage > 0) throw new Error("ITEM_IN_SCENES");
 
-  await prisma.resourceItem.deleteMany({
-    where: { id: itemId, categoryId, category: { projectId } },
-  });
+  await auditMutation(
+    ctx,
+    async () => {
+      await prisma.resourceItem.deleteMany({
+        where: { id: itemId, categoryId, category: { projectId } },
+      });
+    },
+    null,
+    {
+      projectId,
+      entityType: AuditEntityType.resourceItem,
+      action: "DELETE",
+      entityId: itemId,
+      summary: "Удалён элемент ресурса",
+    },
+  );
   revalidateResources(projectId, categoryId);
 }
 
@@ -230,9 +320,18 @@ export async function quickCreateResourceItemAction(
   });
   if (existing) return { id: existing.id, name: existing.name };
 
-  const created = await prisma.resourceItem.create({
-    data: { categoryId, name: trimmed },
-  });
+  const created = await auditMutation(
+    ctx,
+    async (name) => prisma.resourceItem.create({ data: { categoryId, name } }),
+    trimmed,
+    {
+      projectId,
+      entityType: AuditEntityType.resourceItem,
+      action: "CREATE",
+      entityId: (_, i) => i.id,
+      summary: (_, i) => `Быстро добавлен ресурс «${i.name}»`,
+    },
+  );
   revalidateResources(projectId, categoryId, created.id);
   return { id: created.id, name: created.name };
 }

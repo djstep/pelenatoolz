@@ -9,6 +9,7 @@ import {
   type InputHTMLAttributes,
 } from "react";
 import { cn } from "@/shared/lib/cn";
+import { PortaledMenu } from "@/shared/ui/portaled-menu";
 
 const MONTHS = [
   "Январь",
@@ -98,7 +99,7 @@ export function DateInput({
   const generatedId = useId();
   const inputId = id ?? generatedId;
   const panelId = useId();
-  const containerRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const isControlled = value !== undefined;
   const [internal, setInternal] = useState(() =>
     defaultValue != null ? String(defaultValue) : "",
@@ -122,27 +123,6 @@ export function DateInput({
     }
   }, [current]);
 
-  useEffect(() => {
-    if (!open) return;
-    function handlePointerDown(event: MouseEvent) {
-      if (
-        containerRef.current &&
-        !containerRef.current.contains(event.target as Node)
-      ) {
-        setOpen(false);
-      }
-    }
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") setOpen(false);
-    }
-    document.addEventListener("mousedown", handlePointerDown);
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("mousedown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [open]);
-
   function commit(next: string) {
     if (!isControlled) setInternal(next);
     onChange?.({
@@ -156,7 +136,7 @@ export function DateInput({
   const todayIso = toIso(new Date());
 
   return (
-    <div ref={containerRef} className={cn("relative", className)}>
+    <div className={cn("relative", className)}>
       <input
         type="hidden"
         name={name}
@@ -166,6 +146,7 @@ export function DateInput({
       />
 
       <button
+        ref={triggerRef}
         type="button"
         id={inputId}
         disabled={disabled}
@@ -186,13 +167,15 @@ export function DateInput({
         <CalendarIcon />
       </button>
 
-      {open ? (
-        <div
-          id={panelId}
-          role="dialog"
-          aria-label="Выбор даты"
-          className="glass-dropdown absolute z-50 mt-1.5 w-[17.5rem] p-3"
-        >
+      <PortaledMenu
+        open={open}
+        anchorRef={triggerRef}
+        onClose={() => setOpen(false)}
+        id={panelId}
+        role="dialog"
+        minWidth={280}
+        className="p-3"
+      >
           <div className="mb-3 flex items-center justify-between gap-2">
             <button
               type="button"
@@ -267,8 +250,7 @@ export function DateInput({
               Сегодня
             </button>
           </div>
-        </div>
-      ) : null}
+      </PortaledMenu>
     </div>
   );
 }

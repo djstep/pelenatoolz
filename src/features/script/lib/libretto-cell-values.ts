@@ -88,11 +88,12 @@ export function buildLibrettoExportCell(
   scene: LibrettoScene,
   fieldIds: string[],
   projectType: ProjectType,
+  fieldLabels?: Record<string, string>,
 ): string | CellRichTextValue {
   const values = fieldIds
     .map((id) => ({
       id,
-      label: getLibrettoFieldLabel(id),
+      label: getLibrettoFieldLabel(id, fieldLabels),
       value: getLibrettoCellValue(scene, id, projectType),
     }))
     .filter((item) => !isEmptyLibrettoValue(item.value));

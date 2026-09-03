@@ -1,10 +1,11 @@
 import { AuditAction } from "@prisma/client";
 import { prisma } from "@/shared/db/prisma";
+import type { AuditEntityTypeValue } from "@/shared/audit/entity-types";
 
 type AuditInput = {
   projectId?: string | null;
   userId: string;
-  entityType: string;
+  entityType: AuditEntityTypeValue | string;
   entityId: string;
   action: AuditAction;
   summary?: string;

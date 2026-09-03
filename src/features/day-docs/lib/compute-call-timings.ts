@@ -1,5 +1,5 @@
 import { formatMinutesHhMm } from "@/shared/i18n/domain-labels";
-import { addMinutesToTime } from "@/features/day-docs/lib/time-utils";
+import { addMinutesToTime, defaultArrivalTime } from "@/features/day-docs/lib/time-utils";
 
 export type ActorTimingField =
   | "pickupTime"
@@ -17,12 +17,6 @@ export type ActorTimingProposal = {
       { current: string | null; proposed: string | null }
     >
   >;
-};
-
-type SceneSlot = {
-  sceneId: string;
-  startTime: string;
-  endTime: string;
 };
 
 type ActorInput = {
@@ -59,19 +53,49 @@ function subtractMinutes(time: string, minutes: number): string {
   return addMinutesToTime(time, -minutes);
 }
 
-function buildSceneSlotMap(
+/** Ready anchor: REHEARSAL slot immediately before scene shooting, else scene start. */
+export function getSceneReadyTime(
   slots: TimingComputeInput["timeSlots"],
-): Map<string, SceneSlot> {
-  const map = new Map<string, SceneSlot>();
-  for (const slot of slots) {
-    if (slot.slotType !== "SHOOTING" || !slot.sceneId || !slot.endTime) continue;
-    map.set(slot.sceneId, {
-      sceneId: slot.sceneId,
-      startTime: slot.startTime,
-      endTime: slot.endTime,
-    });
+  sceneId: string,
+): string | null {
+  const shootingIdx = slots.findIndex(
+    (s) => s.slotType === "SHOOTING" && s.sceneId === sceneId,
+  );
+  if (shootingIdx === -1) return null;
+
+  for (let i = shootingIdx - 1; i >= 0; i--) {
+    const slot = slots[i]!;
+    if (slot.slotType === "REHEARSAL") return slot.startTime;
+    if (slot.slotType === "SHOOTING") break;
   }
-  return map;
+
+  return slots[shootingIdx]!.startTime;
+}
+
+/** Wrap anchor: fixed end time of the scene's SHOOTING slot (last occurrence in plan). */
+export function getSceneWrapTime(
+  slots: TimingComputeInput["timeSlots"],
+  sceneId: string,
+): string | null {
+  let wrap: string | null = null;
+  for (const slot of slots) {
+    if (slot.slotType === "SHOOTING" && slot.sceneId === sceneId && slot.endTime) {
+      wrap = slot.endTime;
+    }
+  }
+  return wrap;
+}
+
+function getDayFirstReadyTime(slots: TimingComputeInput["timeSlots"]): string | null {
+  const sceneOrder = sceneOrderFromSlots(slots);
+  if (sceneOrder.length === 0) return null;
+  return getSceneReadyTime(slots, sceneOrder[0]!);
+}
+
+function getDayLastWrapTime(slots: TimingComputeInput["timeSlots"]): string | null {
+  const sceneOrder = sceneOrderFromSlots(slots);
+  if (sceneOrder.length === 0) return null;
+  return getSceneWrapTime(slots, sceneOrder[sceneOrder.length - 1]!);
 }
 
 function sceneOrderFromSlots(
@@ -114,7 +138,6 @@ function buildProposedForActor(
 }
 
 function computeActorTimingResults(input: TimingComputeInput) {
-  const slotMap = buildSceneSlotMap(input.timeSlots);
   const sceneOrder = sceneOrderFromSlots(input.timeSlots);
   if (sceneOrder.length === 0) return [];
 
@@ -140,17 +163,19 @@ function computeActorTimingResults(input: TimingComputeInput) {
     );
     if (sceneIds.length === 0) continue;
 
-    const firstSlot = slotMap.get(sceneIds[0]!);
-    const lastSlot = slotMap.get(sceneIds[sceneIds.length - 1]!);
-    if (!firstSlot || !lastSlot) continue;
+    const firstSceneId = sceneIds[0]!;
+    const lastSceneId = sceneIds[sceneIds.length - 1]!;
+    const ready = getSceneReadyTime(input.timeSlots, firstSceneId);
+    const wrap = getSceneWrapTime(input.timeSlots, lastSceneId);
+    if (!ready || !wrap) continue;
 
     results.push({
       actor,
       proposed: buildProposedForActor(
         actor,
         characterMap.get(actor.characterId),
-        firstSlot.startTime,
-        lastSlot.endTime,
+        ready,
+        wrap,
       ),
     });
   }
@@ -256,6 +281,7 @@ type ResourceSceneLink = {
   category: string;
   name: string;
   sceneId: string;
+  arrivalOffsetMin?: number | null;
 };
 
 export function resourceTimingKey(category: string, name: string) {
@@ -270,7 +296,11 @@ function collectResourceSceneLinks(
       elements: Array<{ element: { name: string; type: string } }>;
       resourceItems?: Array<{
         quantity: number;
-        item: { name: string; category: { name: string; perShift: boolean } };
+        item: {
+          name: string;
+          arrivalOffsetMin?: number | null;
+          category: { name: string; perShift: boolean };
+        };
       }>;
     };
   }>,
@@ -299,6 +329,7 @@ function collectResourceSceneLinks(
         category: item.item.category.name,
         name: label,
         sceneId,
+        arrivalOffsetMin: item.item.arrivalOffsetMin,
       });
     }
   }
@@ -310,33 +341,60 @@ function computeResourceTimingResults(input: {
   dayScenes: Parameters<typeof collectResourceSceneLinks>[0];
   shiftStartTime: string | null;
   callTime: string | null;
+  perShiftUsages?: Array<{
+    key: string;
+    arrivalOffsetMin: number | null;
+  }>;
 }): ResourceTimingBaselines {
-  const slotMap = buildSceneSlotMap(input.timeSlots);
   const sceneOrder = sceneOrderFromSlots(input.timeSlots);
-  const arrivalDefault = input.shiftStartTime ?? input.callTime ?? null;
   const links = collectResourceSceneLinks(input.dayScenes);
 
   const scenesByKey = new Map<string, Set<string>>();
+  const offsetByKey = new Map<string, number | null>();
   for (const link of links) {
     const key = resourceTimingKey(link.category, link.name);
     if (!scenesByKey.has(key)) scenesByKey.set(key, new Set());
     scenesByKey.get(key)!.add(link.sceneId);
+    if (link.arrivalOffsetMin != null) {
+      offsetByKey.set(key, link.arrivalOffsetMin);
+    }
   }
 
   const out: ResourceTimingBaselines = {};
   for (const [key, sceneIds] of scenesByKey) {
     const ordered = sceneOrder.filter((id) => sceneIds.has(id));
     if (ordered.length === 0) continue;
-    const first = slotMap.get(ordered[0]!);
-    const last = slotMap.get(ordered[ordered.length - 1]!);
-    if (!first || !last) continue;
+    const ready = getSceneReadyTime(input.timeSlots, ordered[0]!);
+    const wrap = getSceneWrapTime(input.timeSlots, ordered[ordered.length - 1]!);
+    if (!ready || !wrap) continue;
     const fields: Partial<Record<ResourceTimingField, string>> = {
-      readyTime: first.startTime,
-      wrapTime: last.endTime,
+      readyTime: ready,
+      wrapTime: wrap,
     };
-    if (arrivalDefault) fields.arrivalTime = arrivalDefault;
+    const arrival = defaultArrivalTime(
+      input.shiftStartTime,
+      input.callTime,
+      offsetByKey.get(key),
+    );
+    if (arrival) fields.arrivalTime = arrival;
     out[key] = fields;
   }
+
+  const dayReady = getDayFirstReadyTime(input.timeSlots);
+  const dayWrap = getDayLastWrapTime(input.timeSlots);
+  for (const usage of input.perShiftUsages ?? []) {
+    const fields: Partial<Record<ResourceTimingField, string>> = {};
+    const arrival = defaultArrivalTime(
+      input.shiftStartTime,
+      input.callTime,
+      usage.arrivalOffsetMin,
+    );
+    if (arrival) fields.arrivalTime = arrival;
+    if (dayReady) fields.readyTime = dayReady;
+    if (dayWrap) fields.wrapTime = dayWrap;
+    if (Object.keys(fields).length > 0) out[usage.key] = fields;
+  }
+
   return out;
 }
 
@@ -345,6 +403,10 @@ export function computeResourceTimingBaselines(input: {
   dayScenes: Parameters<typeof collectResourceSceneLinks>[0];
   shiftStartTime: string | null;
   callTime: string | null;
+  perShiftUsages?: Array<{
+    key: string;
+    arrivalOffsetMin: number | null;
+  }>;
 }): ResourceTimingBaselines {
   return computeResourceTimingResults(input);
 }
@@ -354,12 +416,22 @@ export function computeResourceTimingProposals(input: {
   dayScenes: Parameters<typeof collectResourceSceneLinks>[0];
   shiftStartTime: string | null;
   callTime: string | null;
+  perShiftUsages?: Array<{
+    key: string;
+    arrivalOffsetMin: number | null;
+  }>;
   currentCalls: Array<{
     category: string;
     name: string;
     arrivalTime: string | null;
     costumeTime: string | null;
     makeupTime: string | null;
+    readyTime: string | null;
+    wrapTime: string | null;
+  }>;
+  currentPerShiftUsages?: Array<{
+    key: string;
+    arrivalTime: string | null;
     readyTime: string | null;
     wrapTime: string | null;
   }>;
@@ -371,12 +443,28 @@ export function computeResourceTimingProposals(input: {
       c,
     ] as const),
   );
+  for (const row of input.currentPerShiftUsages ?? []) {
+    currentByKey.set(row.key, {
+      category: "",
+      name: "",
+      arrivalTime: row.arrivalTime,
+      costumeTime: null,
+      makeupTime: null,
+      readyTime: row.readyTime,
+      wrapTime: row.wrapTime,
+    });
+  }
 
   const proposals: ResourceTimingProposal[] = [];
+  const timingFields: ResourceTimingField[] = [
+    "arrivalTime",
+    "readyTime",
+    "wrapTime",
+  ];
   for (const [key, proposed] of Object.entries(baselines)) {
     const current = currentByKey.get(key);
     const fields: ResourceTimingProposal["fields"] = {};
-    for (const field of Object.keys(proposed) as ResourceTimingField[]) {
+    for (const field of timingFields) {
       const next = proposed[field] ?? null;
       const prev = current?.[field] ?? null;
       if (next !== prev) {

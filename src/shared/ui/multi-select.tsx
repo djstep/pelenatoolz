@@ -3,7 +3,6 @@
 import {
   Children,
   isValidElement,
-  useEffect,
   useId,
   useRef,
   useState,
@@ -11,6 +10,7 @@ import {
   type SelectHTMLAttributes,
 } from "react";
 import { cn } from "@/shared/lib/cn";
+import { PortaledMenu } from "@/shared/ui/portaled-menu";
 
 type OptionData = {
   value: string;
@@ -72,7 +72,7 @@ export function MultiSelect({
 }: SelectHTMLAttributes<HTMLSelectElement> & { hint?: string }) {
   const options = parseOptions(children);
   const listboxId = useId();
-  const containerRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<string[]>(() => {
     if (defaultValue == null) return [];
@@ -85,27 +85,6 @@ export function MultiSelect({
     .filter((o) => selected.includes(o.value))
     .map((o) => o.label);
 
-  useEffect(() => {
-    if (!open) return;
-    function handlePointerDown(event: MouseEvent) {
-      if (
-        containerRef.current &&
-        !containerRef.current.contains(event.target as Node)
-      ) {
-        setOpen(false);
-      }
-    }
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") setOpen(false);
-    }
-    document.addEventListener("mousedown", handlePointerDown);
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("mousedown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [open]);
-
   function toggleValue(optionValue: string) {
     setSelected((prev) =>
       prev.includes(optionValue)
@@ -116,12 +95,13 @@ export function MultiSelect({
 
   return (
     <div className="space-y-1">
-      <div ref={containerRef} className={cn("relative", className)}>
+      <div className={cn("relative", className)}>
         {selected.map((value) => (
           <input key={value} type="hidden" name={name} value={value} />
         ))}
 
         <button
+          ref={triggerRef}
           type="button"
           id={id}
           disabled={disabled}
@@ -149,56 +129,54 @@ export function MultiSelect({
           <ChevronDown open={open} />
         </button>
 
-        {open ? (
-          <ul
-            id={listboxId}
-            role="listbox"
-            aria-multiselectable
-            className="glass-dropdown absolute z-50 mt-1.5 max-h-60 w-full overflow-y-auto"
-          >
-            {options.map((option) => {
-              const isSelected = selected.includes(option.value);
-              return (
-                <li key={option.value} role="presentation">
-                  <button
-                    type="button"
-                    role="option"
-                    aria-selected={isSelected}
-                    disabled={option.disabled}
-                    data-selected={isSelected ? "true" : undefined}
-                    className="glass-dropdown-item"
-                    onClick={() => {
-                      if (!option.disabled) toggleValue(option.value);
-                    }}
-                  >
-                    <span
-                      className={cn(
-                        "flex h-4 w-4 shrink-0 items-center justify-center rounded border",
-                        isSelected
-                          ? "border-[var(--accent)] bg-[var(--accent)] text-white"
-                          : "border-[var(--border-strong)] bg-white/5",
-                      )}
-                      aria-hidden
-                    >
-                      {isSelected ? (
-                        <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                          <path
-                            d="M2 5l2.5 2.5L8 3"
-                            stroke="currentColor"
-                            strokeWidth="1.5"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </svg>
-                      ) : null}
-                    </span>
-                    {option.label}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        ) : null}
+        <PortaledMenu
+          open={open}
+          anchorRef={triggerRef}
+          onClose={() => setOpen(false)}
+          id={listboxId}
+          matchAnchorWidth
+        >
+          {options.map((option) => {
+            const isSelected = selected.includes(option.value);
+            return (
+              <button
+                key={option.value}
+                type="button"
+                role="option"
+                aria-selected={isSelected}
+                disabled={option.disabled}
+                data-selected={isSelected ? "true" : undefined}
+                className="glass-dropdown-item"
+                onClick={() => {
+                  if (!option.disabled) toggleValue(option.value);
+                }}
+              >
+                <span
+                  className={cn(
+                    "flex h-4 w-4 shrink-0 items-center justify-center rounded border",
+                    isSelected
+                      ? "border-[var(--accent)] bg-[var(--accent)] text-white"
+                      : "border-[var(--border-strong)] bg-white/5",
+                  )}
+                  aria-hidden
+                >
+                  {isSelected ? (
+                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                      <path
+                        d="M2 5l2.5 2.5L8 3"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  ) : null}
+                </span>
+                {option.label}
+              </button>
+            );
+          })}
+        </PortaledMenu>
       </div>
 
       {selectedLabels.length > 0 ? (

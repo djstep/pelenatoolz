@@ -23,6 +23,7 @@ import {
 import { LibrettoExportModal } from "@/features/script/components/libretto-export-modal";
 import { LibrettoFiltersModal } from "@/features/script/components/libretto-filters-modal";
 import { LibrettoRenumberModal } from "@/features/script/components/libretto-renumber-modal";
+import { LibrettoExportMenu } from "@/features/script/components/script-export-modals";
 import {
   SceneModal,
   type SceneEditData,
@@ -121,6 +122,7 @@ export function LibrettoWorkspace({
   locations,
   characters,
   resourceCategories = [],
+  exportResourceCategories,
   canWrite,
 }: {
   projectId: string;
@@ -133,12 +135,16 @@ export function LibrettoWorkspace({
   locations: Option[];
   characters: Option[];
   resourceCategories?: SceneCategoryOption[];
+  /** Все категории ресурсов проекта (для пула полей экспорта) */
+  exportResourceCategories?: { id: string; name: string }[];
   canWrite: boolean;
 }) {
   const allColumns = useMemo(
     () => buildLibrettoColumns(resourceCategories),
     [resourceCategories],
   );
+
+  const exportAllResources = exportResourceCategories ?? resourceCategories;
 
   const {
     visibleIds,
@@ -218,11 +224,25 @@ export function LibrettoWorkspace({
     setModalOpen(true);
   }
 
-  function exportXls(exportColumns: LibrettoExportColumn[]) {
-    void exportLibrettoXls(filtered, projectType, exportColumns, projectId);
+  function exportXls(
+    exportColumns: LibrettoExportColumn[],
+    fieldLabels: Record<string, string>,
+  ) {
+    void exportLibrettoXls(
+      filtered,
+      projectType,
+      exportColumns,
+      projectId,
+      fieldLabels,
+    );
   }
 
   const selectedIds = Array.from(selected);
+  const exportScenes =
+    selected.size > 0
+      ? filtered.filter((s) => selected.has(s.id))
+      : filtered;
+  const exportSceneIds = exportScenes.map((s) => s.id);
 
   return (
     <div className="space-y-4">
@@ -252,9 +272,14 @@ export function LibrettoWorkspace({
             Перенумерация
           </Button>
         ) : null}
-        <Button type="button" variant="secondary" onClick={() => setExportOpen(true)}>
-          Экспорт
-        </Button>
+        <LibrettoExportMenu
+          projectId={projectId}
+          sceneIds={exportSceneIds}
+          selectedCount={selected.size}
+          filteredCount={filtered.length}
+          resourceCategories={resourceCategories}
+          onExcelExport={() => setExportOpen(true)}
+        />
         <div className="relative ml-auto">
           <Button type="button" variant="ghost" onClick={() => setColumnsOpen((v) => !v)}>
             Столбцы
@@ -289,13 +314,22 @@ export function LibrettoWorkspace({
         </div>
       </div>
 
-      {canWrite && selected.size > 0 ? (
+      {selected.size > 0 ? (
         <div className="flex items-center gap-2 text-sm">
           <span className="text-[var(--muted-fg)]">Выбрано: {selected.size}</span>
-          <Button type="button" variant="secondary" onClick={() => setBulkOpen((v) => !v)}>
-            Групповые действия
+          {canWrite ? (
+            <Button type="button" variant="secondary" onClick={() => setBulkOpen((v) => !v)}>
+              Групповые действия
+            </Button>
+          ) : null}
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => setSelected(new Set())}
+          >
+            Снять выделение
           </Button>
-          {bulkOpen ? (
+          {canWrite && bulkOpen ? (
             <div className="flex flex-wrap gap-1">
               {(["PLANNING", "SHOT", "NOT_SHOT", "RESHOOT_REQUIRED", "OFF_PLAN"] as const).map(
                 (st) => (
@@ -352,7 +386,7 @@ export function LibrettoWorkspace({
             <table className="glass-table w-full text-left text-sm" style={{ tableLayout: "fixed" }}>
               <thead>
                 <tr className="border-b border-[var(--border)] text-[var(--muted-fg)]">
-                  {canWrite ? <th className="w-8 px-2 py-3" /> : null}
+                  <th className="w-8 px-2 py-3" />
                   <SortableContext
                     items={visibleColumns.map((col) => col.id)}
                     strategy={horizontalListSortingStrategy}
@@ -384,22 +418,20 @@ export function LibrettoWorkspace({
                     openEdit(scene);
                   }}
                 >
-                  {canWrite ? (
-                    <td className="px-2 py-2">
-                      <input
-                        type="checkbox"
-                        checked={selected.has(scene.id)}
-                        onChange={(e) => {
-                          setSelected((prev) => {
-                            const next = new Set(prev);
-                            if (e.target.checked) next.add(scene.id);
-                            else next.delete(scene.id);
-                            return next;
-                          });
-                        }}
-                      />
-                    </td>
-                  ) : null}
+                  <td className="px-2 py-2">
+                    <input
+                      type="checkbox"
+                      checked={selected.has(scene.id)}
+                      onChange={(e) => {
+                        setSelected((prev) => {
+                          const next = new Set(prev);
+                          if (e.target.checked) next.add(scene.id);
+                          else next.delete(scene.id);
+                          return next;
+                        });
+                      }}
+                    />
+                  </td>
                   {visibleColumns.map((col) => (
                     <td
                       key={col.id}
@@ -458,7 +490,14 @@ export function LibrettoWorkspace({
         onApply={(f) => { setFilters(f); setSearch(f.search); }}
         shootingUnits={shootingUnits}
       />
-      <LibrettoExportModal open={exportOpen} onClose={() => setExportOpen(false)} onExport={exportXls} />
+      <LibrettoExportModal
+        open={exportOpen}
+        onClose={() => setExportOpen(false)}
+        onExport={exportXls}
+        projectId={projectId}
+        tableResourceCategories={resourceCategories}
+        allResourceCategories={exportAllResources}
+      />
       <LibrettoRenumberModal
         open={renumberOpen}
         onClose={() => setRenumberOpen(false)}

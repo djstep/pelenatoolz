@@ -8,6 +8,7 @@ import {
   type ActionState,
 } from "@/features/projects/actions";
 import {
+  formatMinutesHhMm,
   projectStatusLabels,
   projectTypeLabels,
   timingModeLabels,
@@ -15,6 +16,7 @@ import {
 import { Button } from "@/shared/ui/button";
 import { Checkbox } from "@/shared/ui/checkbox";
 import { ProjectLocationFields } from "@/features/projects/components/project-location-fields";
+import { HhMmInput } from "@/shared/ui/hh-mm-input";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { SegmentControl } from "@/shared/ui/segment-control";
@@ -30,6 +32,8 @@ export function CreateProjectForm() {
   const [projectType, setProjectType] = useState<ProjectType>(ProjectType.FEATURE);
   const [timingMode, setTimingMode] = useState<TimingMode>(TimingMode.MINUTES);
   const [shootOnFilm, setShootOnFilm] = useState(false);
+  const [episodeRuntime, setEpisodeRuntime] = useState("");
+  const [plannedDailyOutput, setPlannedDailyOutput] = useState("");
 
   return (
     <form action={action} className="glass-card max-w-3xl space-y-6 p-6">
@@ -98,13 +102,14 @@ export function CreateProjectForm() {
             />
           </div>
           <div>
-            <Label htmlFor="episodeRuntimeMin">Хронометраж серии (мин)</Label>
-            <Input
+            <Label htmlFor="episodeRuntimeMin">Хронометраж серии</Label>
+            <input type="hidden" name="episodeRuntimeMin" value={episodeRuntime} />
+            <HhMmInput
               id="episodeRuntimeMin"
-              name="episodeRuntimeMin"
-              type="number"
-              min={1}
-              placeholder="40"
+              mode="duration"
+              value={episodeRuntime}
+              onChange={setEpisodeRuntime}
+              placeholder="00:40"
             />
           </div>
         </div>
@@ -151,13 +156,14 @@ export function CreateProjectForm() {
           />
         </div>
         <div>
-          <Label htmlFor="plannedDailyOutputMin">Плановая выработка (мин)</Label>
-          <Input
+          <Label htmlFor="plannedDailyOutputMin">Плановая выработка</Label>
+          <input type="hidden" name="plannedDailyOutputMin" value={plannedDailyOutput} />
+          <HhMmInput
             id="plannedDailyOutputMin"
-            name="plannedDailyOutputMin"
-            type="number"
-            min={0}
-            step="0.01"
+            mode="duration"
+            value={plannedDailyOutput}
+            onChange={setPlannedDailyOutput}
+            placeholder="08:00"
           />
         </div>
       </div>

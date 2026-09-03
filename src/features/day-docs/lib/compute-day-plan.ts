@@ -39,7 +39,7 @@ export function cascadeDayPlan(
   const result: ComputedPlanSlot[] = [];
 
   for (const item of items) {
-    const durationMin = hhMmToMinutes(item.duration);
+    const durationMin = hhMmToMinutes(item.duration, "duration");
     if (durationMin <= 0) continue;
     const startTime = cursor;
     const endTime = addMinutesToTime(cursor, durationMin);

@@ -1,5 +1,5 @@
-import { DayDocsIndex } from "@/features/day-docs/components/day-docs-index";
-import { listShootDaysBrief } from "@/features/day-docs/queries";
+import { ProductionReportsIndex } from "@/features/reports/components/production-reports-index";
+import { listProductionReports } from "@/features/reports/queries";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 
 type Props = {
@@ -14,14 +14,9 @@ export default async function ReportsPage({ params }: Props) {
     return <p className="text-sm text-[var(--danger)]">Нет доступа к отчётам</p>;
   }
 
-  const days = await listShootDaysBrief(projectId);
+  const days = await listProductionReports(projectId);
 
   return (
-    <DayDocsIndex
-      locale={locale}
-      projectId={projectId}
-      days={days}
-      kind="reports"
-    />
+    <ProductionReportsIndex locale={locale} projectId={projectId} days={days} />
   );
 }

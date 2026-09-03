@@ -9,7 +9,8 @@ import {
   updateShootDaySchema,
 } from "@/features/script/schemas";
 import { prisma } from "@/shared/db/prisma";
-import { writeAuditLog } from "@/shared/audit/log";
+import { AuditEntityType } from "@/shared/audit/entity-types";
+import { recordAudit } from "@/shared/audit/with-audit";
 import { eachCalendarDay, parseDateInput } from "@/features/schedule/lib/date-range";
 import { isWorkingShootDay } from "@/features/schedule/lib/shoot-day-type";
 import { syncShootDayResourceUsages } from "@/features/schedule/lib/sync-shoot-day-resources";
@@ -79,10 +80,9 @@ export async function createShootDayAction(
     return { error: "Конфликт номеров дней — проверьте период и стартовый номер" };
   }
 
-  await writeAuditLog({
+  await recordAudit(ctx, {
     projectId,
-    userId: ctx.user.id!,
-    entityType: "shoot_day",
+    entityType: AuditEntityType.shootDay,
     entityId: projectId,
     action: "CREATE",
     summary:
@@ -218,10 +218,9 @@ export async function assignSceneToDayByDnDAction(
     await syncShootDayResourceUsages(previousDayId);
   }
 
-  await writeAuditLog({
+  await recordAudit(ctx, {
     projectId,
-    userId: ctx.user.id!,
-    entityType: "shoot_day_scene",
+    entityType: AuditEntityType.scene,
     entityId: sceneId,
     action: "UPDATE",
     summary: `Сцена ${scene.number} назначена на день ${shootDay.dayNumber}`,
@@ -262,10 +261,9 @@ export async function updateShootDayAction(
     } as Parameters<typeof prisma.shootDay.updateMany>[0]["data"],
   });
 
-  await writeAuditLog({
+  await recordAudit(ctx, {
     projectId,
-    userId: ctx.user.id!,
-    entityType: "shoot_day",
+    entityType: AuditEntityType.shootDay,
     entityId: shootDayId,
     action: "UPDATE",
     summary: "Обновлён съёмочный день",
@@ -402,10 +400,9 @@ export async function clearShootDayAction(
 
   await syncShootDayResourceUsages(shootDayId);
 
-  await writeAuditLog({
+  await recordAudit(ctx, {
     projectId,
-    userId: ctx.user.id!,
-    entityType: "shoot_day",
+    entityType: AuditEntityType.shootDay,
     entityId: shootDayId,
     action: "UPDATE",
     summary: "День очищен от сцен",
@@ -455,10 +452,9 @@ export async function insertShootDayBeforeAction(
     });
   });
 
-  await writeAuditLog({
+  await recordAudit(ctx, {
     projectId,
-    userId: ctx.user.id!,
-    entityType: "shoot_day",
+    entityType: AuditEntityType.shootDay,
     entityId: beforeDayId,
     action: "CREATE",
     summary: `Вставлен день слева от дня ${before.dayNumber}`,
@@ -507,10 +503,9 @@ export async function insertShootDayAfterAction(
     });
   });
 
-  await writeAuditLog({
+  await recordAudit(ctx, {
     projectId,
-    userId: ctx.user.id!,
-    entityType: "shoot_day",
+    entityType: AuditEntityType.shootDay,
     entityId: afterDayId,
     action: "CREATE",
     summary: `Вставлен день справа от дня ${after.dayNumber}`,
@@ -547,10 +542,9 @@ export async function deleteShootDayWithShiftAction(
     }
   });
 
-  await writeAuditLog({
+  await recordAudit(ctx, {
     projectId,
-    userId: ctx.user.id!,
-    entityType: "shoot_day",
+    entityType: AuditEntityType.shootDay,
     entityId: shootDayId,
     action: "DELETE",
     summary: `Удалён день ${target.dayNumber} со сдвигом`,
@@ -578,10 +572,9 @@ export async function clearScheduleCalendarAction(
 
   await prisma.shootDay.deleteMany({ where: { projectId } });
 
-  await writeAuditLog({
+  await recordAudit(ctx, {
     projectId,
-    userId: ctx.user.id!,
-    entityType: "shoot_day",
+    entityType: AuditEntityType.shootDay,
     entityId: projectId,
     action: "DELETE",
     summary: `Календарь очищен: удалено ${dayCount} съёмочных дней, ${assignedCount} назначений сцен`,
@@ -647,10 +640,9 @@ export async function moveShootDayToDateAction(
       data: { date: parsedDate },
     });
 
-    await writeAuditLog({
+    await recordAudit(ctx, {
       projectId,
-      userId: ctx.user.id!,
-      entityType: "ShootDay",
+      entityType: AuditEntityType.shootDay,
       entityId: source.id,
       action: "UPDATE",
       summary: `День ${source.dayNumber} перенесён на ${targetKey}`,
@@ -682,10 +674,9 @@ export async function moveShootDayToDateAction(
     }),
   ]);
 
-  await writeAuditLog({
+  await recordAudit(ctx, {
     projectId,
-    userId: ctx.user.id!,
-    entityType: "ShootDay",
+    entityType: AuditEntityType.shootDay,
     entityId: source.id,
     action: "UPDATE",
     summary: `Дни ${source.dayNumber} и ${occupant.dayNumber} поменялись датами (${targetKey})`,

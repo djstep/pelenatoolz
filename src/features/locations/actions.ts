@@ -10,7 +10,8 @@ import type { LocationScoutSnapshot } from "@/features/preproduction/lib/snapsho
 import { parseScoutSnapshot } from "@/features/preproduction/lib/snapshots";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { prisma } from "@/shared/db/prisma";
-import { writeAuditLog } from "@/shared/audit/log";
+import { AuditEntityType } from "@/shared/audit/entity-types";
+import { recordAudit } from "@/shared/audit/with-audit";
 import { z } from "zod";
 
 export type LocationActionState = { error?: string; success?: string };
@@ -83,10 +84,9 @@ export async function createLocationAction(
     });
   }
 
-  await writeAuditLog({
+  await recordAudit(gate.ctx, {
     projectId,
-    userId: gate.ctx.user.id!,
-    entityType: "location",
+    entityType: AuditEntityType.location,
     entityId: location.id,
     action: "CREATE",
     summary: `Создана локация ${d.name}${d.sublocation ? `.${d.sublocation}` : ""}`,

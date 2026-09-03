@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState, type InputHTMLAttributes } from "react";
-import { formatMinutesHhMm } from "@/shared/i18n/domain-labels";
+import { formatMinutesHhMm, parseHhMmToMinutes } from "@/shared/i18n/domain-labels";
 import { cn } from "@/shared/lib/cn";
 
 const HH_MM_PATTERN = /^\d{1,3}:\d{2}$/;
+
+export type HhMmInputMode = "clock" | "duration";
 
 /** Up to 4 digits from any input (10 20, 10:20, 1020 → 1020). */
 export function extractTimeDigits(raw: string): string {
@@ -33,22 +35,28 @@ function formatFromDigitStream(digits: string): string {
 function parseFromDigitStream(
   digits: string,
   finalize = false,
+  mode: HhMmInputMode = "clock",
 ): number | undefined {
   if (!digits) return undefined;
 
+  const maxHour = mode === "clock" ? 23 : 999;
+
   if (digits.length <= 2) {
     const h = Number(digits);
-    if (Number.isNaN(h) || h > 23) return undefined;
+    if (Number.isNaN(h) || h > maxHour) return undefined;
     return h * 60;
   }
 
   if (digits.length === 3) {
     const hh = Number(digits.slice(0, 2));
-    if (hh > 23) {
-      const h = Number(digits[0]);
-      const m = Number(digits.slice(1).padEnd(2, "0"));
-      if (Number.isNaN(h) || Number.isNaN(m) || m >= 60) return undefined;
-      return finalize ? h * 60 + m : undefined;
+    if (hh > maxHour) {
+      if (mode === "clock") {
+        const h = Number(digits[0]);
+        const m = Number(digits.slice(1).padEnd(2, "0"));
+        if (Number.isNaN(h) || Number.isNaN(m) || m >= 60) return undefined;
+        return finalize ? h * 60 + m : undefined;
+      }
+      return undefined;
     }
     const h = hh;
     const m = Number(digits[2]!.padEnd(2, "0"));
@@ -58,19 +66,26 @@ function parseFromDigitStream(
 
   const h = Number(digits.slice(0, 2));
   const m = Number(digits.slice(2, 4));
-  if (Number.isNaN(h) || Number.isNaN(m) || h > 23 || m >= 60) return undefined;
+  if (Number.isNaN(h) || Number.isNaN(m) || h > maxHour || m >= 60) return undefined;
   return h * 60 + m;
 }
 
-function parseTimeInputValue(raw: string, finalize = false): number | undefined {
+function parseTimeInputValue(
+  raw: string,
+  finalize = false,
+  mode: HhMmInputMode = "clock",
+): number | undefined {
   const trimmed = raw.trim();
   if (!trimmed || trimmed === ":") return undefined;
-  return parseFromDigitStream(extractTimeDigits(trimmed), finalize);
+  if (mode === "duration" && finalize && trimmed.includes(":")) {
+    return parseHhMmToMinutes(trimmed);
+  }
+  return parseFromDigitStream(extractTimeDigits(trimmed), finalize, mode);
 }
 
-function digitsToFormattedValue(digits: string): string | null {
+function digitsToFormattedValue(digits: string, mode: HhMmInputMode = "clock"): string | null {
   if (!digits) return null;
-  const mins = parseFromDigitStream(digits, true);
+  const mins = parseFromDigitStream(digits, true, mode);
   if (mins == null) return null;
   return formatMinutesHhMm(mins);
 }
@@ -85,17 +100,23 @@ function isEmptyDigits(digits: string): boolean {
   return !digits || /^0+$/.test(digits);
 }
 
-export function isValidHhMm(value: string): boolean {
+export function isValidHhMm(value: string, mode: HhMmInputMode = "clock"): boolean {
   const trimmed = value.trim();
   if (!trimmed) return false;
-  return parseTimeInputValue(trimmed, true) != null;
+  return parseTimeInputValue(trimmed, true, mode) != null;
 }
 
-export function normalizeHhMm(value: string): string {
+export function normalizeHhMm(value: string, mode: HhMmInputMode = "clock"): string {
   const trimmed = value.trim();
   if (!trimmed) return "";
-  const formatted = digitsToFormattedValue(extractTimeDigits(trimmed));
-  if (formatted == null) return trimmed;
+  const formatted = digitsToFormattedValue(extractTimeDigits(trimmed), mode);
+  if (formatted == null) {
+    if (mode === "duration") {
+      const mins = parseHhMmToMinutes(trimmed);
+      if (mins != null) return formatMinutesHhMm(mins);
+    }
+    return trimmed;
+  }
   return formatted;
 }
 
@@ -110,10 +131,13 @@ export function HhMmInput({
   className,
   placeholder = "00:00",
   disabled,
+  mode = "clock",
   ...rest
 }: Omit<InputHTMLAttributes<HTMLInputElement>, "value" | "onChange" | "type"> & {
   value: string;
   onChange: (value: string) => void;
+  /** clock — время суток (до 23:59); duration — длительность/смещение (до 999:59) */
+  mode?: HhMmInputMode;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const digitsRef = useRef("");
@@ -162,8 +186,19 @@ export function HhMmInput({
       return;
     }
 
-    const formatted = digitsToFormattedValue(digits);
+    const formatted = digitsToFormattedValue(digits, mode);
     if (formatted == null) {
+      if (mode === "duration") {
+        const fromDraft = parseHhMmToMinutes(draft.trim());
+        if (fromDraft != null) {
+          const next = formatMinutesHhMm(fromDraft);
+          digitsRef.current = extractTimeDigits(next);
+          setDraft(next);
+          onChange(next);
+          setInvalid(false);
+          return;
+        }
+      }
       setInvalid(true);
       return;
     }
@@ -285,13 +320,19 @@ export function HhMmInput({
         className,
       )}
       aria-invalid={invalid}
-      title={invalid ? "Формат: ЧЧ:ММ (например 10:20 или 1020)" : undefined}
+      title={
+        invalid
+          ? mode === "duration"
+            ? "Формат: ЧЧ:ММ (например 12:00 для 12 часов)"
+            : "Формат: ЧЧ:ММ (например 10:20 или 1020)"
+          : undefined
+      }
     />
   );
 }
 
-export function hhMmToMinutes(value: string): number {
-  return parseTimeInputValue(value.trim(), true) ?? 0;
+export function hhMmToMinutes(value: string, mode: HhMmInputMode = "clock"): number {
+  return parseTimeInputValue(value.trim(), true, mode) ?? 0;
 }
 
 export { HH_MM_PATTERN };

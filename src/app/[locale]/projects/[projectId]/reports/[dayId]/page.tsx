@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
-import { ProductionReportView } from "@/features/day-docs/components/production-report-view";
-import { getShootDayDocument } from "@/features/day-docs/queries";
+import { ProductionReportWorkspace } from "@/features/reports/components/production-report-workspace";
+import { ensureProductionReport } from "@/features/reports/queries";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 
 type Props = {
@@ -15,14 +15,17 @@ export default async function ProductionReportDayPage({ params }: Props) {
     return <p className="text-sm text-[var(--danger)]">Нет доступа к отчётам</p>;
   }
 
-  const bundle = await getShootDayDocument(projectId, dayId);
+  const bundle = await ensureProductionReport(projectId, dayId);
   if (!bundle) notFound();
 
+  const canEdit = ctx.can("report:write") || ctx.can("schedule:write");
+
   return (
-    <ProductionReportView
+    <ProductionReportWorkspace
       locale={locale}
       projectId={projectId}
       bundle={bundle}
+      canEdit={canEdit}
     />
   );
 }

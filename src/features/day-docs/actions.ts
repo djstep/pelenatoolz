@@ -17,8 +17,9 @@ import {
   type ResourceTimingProposal,
 } from "@/features/day-docs/lib/compute-call-timings";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
+import { AuditEntityType } from "@/shared/audit/entity-types";
+import { recordAudit } from "@/shared/audit/with-audit";
 import { prisma } from "@/shared/db/prisma";
-import { writeAuditLog } from "@/shared/audit/log";
 
 export type CallSheetActionState = { error?: string; success?: string };
 
@@ -30,6 +31,21 @@ function revalidateCallSheet(projectId: string, dayId: string) {
 function emptyToNull(v: string | undefined | null) {
   const t = v?.trim();
   return t ? t : null;
+}
+
+async function auditCallSheet(
+  ctx: { user: { id: string } },
+  projectId: string,
+  shootDayId: string,
+  summary: string,
+) {
+  await recordAudit(ctx, {
+    projectId,
+    entityType: AuditEntityType.callSheet,
+    entityId: shootDayId,
+    action: "UPDATE",
+    summary,
+  });
 }
 
 async function assertCallSheetWrite(projectId: string, shootDayId: string) {
@@ -94,14 +110,7 @@ export async function updateCallSheetHeaderAction(
     },
   });
 
-  await writeAuditLog({
-    projectId,
-    userId: gate.ctx.user.id!,
-    entityType: "ShootDay",
-    entityId: shootDayId,
-    action: "UPDATE",
-    summary: "Обновлён вызывной (шапка)",
-  });
+  await auditCallSheet(gate.ctx, projectId, shootDayId, "Обновлён вызывной (шапка)");
 
   revalidateCallSheet(projectId, shootDayId);
   return { success: "Шапка сохранена" };
@@ -145,6 +154,8 @@ export async function saveDepartmentCallsAction(
     ),
   ]);
 
+  await auditCallSheet(gate.ctx, projectId, shootDayId, "Сохранены контакты отделов");
+
   revalidateCallSheet(projectId, shootDayId);
   return { success: "Контакты сохранены" };
 }
@@ -184,6 +195,8 @@ export async function saveTransportsAction(
       }),
     ),
   ]);
+
+  await auditCallSheet(gate.ctx, projectId, shootDayId, "Сохранён спецтранспорт");
 
   revalidateCallSheet(projectId, shootDayId);
   return { success: "Спецтранспорт сохранён" };
@@ -230,6 +243,8 @@ export async function saveTimeSlotsAction(
       data: { callSheetSavedAt: new Date() },
     }),
   ]);
+
+  await auditCallSheet(gate.ctx, projectId, shootDayId, "Сохранено расписание дня");
 
   revalidateCallSheet(projectId, shootDayId);
   return { success: "Расписание сохранено" };
@@ -284,6 +299,8 @@ export async function saveActorCallsAction(
     ),
   ]);
 
+  await auditCallSheet(gate.ctx, projectId, shootDayId, "Сохранены тайминги актёров");
+
   revalidateCallSheet(projectId, shootDayId);
   return { success: "Тайминги актёров сохранены" };
 }
@@ -336,6 +353,8 @@ export async function saveResourceCallsAction(
     ),
   ]);
 
+  await auditCallSheet(gate.ctx, projectId, shootDayId, "Сохранены тайминги ресурсов");
+
   revalidateCallSheet(projectId, shootDayId);
   return { success: "Тайминги ресурсов сохранены" };
 }
@@ -363,24 +382,79 @@ export async function saveResourceUsagesAction(
 
   await prisma.$transaction(
     parsed.data.rows.map((row) =>
-      prisma.shootDayResourceUsage.upsert({
-        where: { shootDayId_itemId: { shootDayId, itemId: row.itemId } },
-        create: {
+      prisma.shootDayResourceUsage.updateMany({
+        where: {
           shootDayId,
           itemId: row.itemId,
-          isUsed: row.isUsed,
-          arrivalTime: emptyToNull(row.arrivalTime),
+          item: { category: { projectId, perShift: true } },
         },
-        update: {
-          isUsed: row.isUsed,
+        data: {
           arrivalTime: emptyToNull(row.arrivalTime),
+          readyTime: emptyToNull(row.readyTime),
+          wrapTime: emptyToNull(row.wrapTime),
         },
       }),
     ),
   );
 
+  await auditCallSheet(gate.ctx, projectId, shootDayId, "Сохранены посменные ресурсы");
+
   revalidateCallSheet(projectId, shootDayId);
   return { success: "Посменные ресурсы сохранены" };
+}
+
+export async function addPerShiftResourceAction(
+  projectId: string,
+  shootDayId: string,
+  itemId: string,
+): Promise<CallSheetActionState> {
+  const gate = await assertCallSheetWrite(projectId, shootDayId);
+  if ("error" in gate) return gate;
+
+  const item = await prisma.resourceItem.findFirst({
+    where: { id: itemId, category: { projectId, perShift: true } },
+    select: { id: true, name: true, category: { select: { name: true } } },
+  });
+  if (!item) return { error: "Ресурс не найден или категория не посменная" };
+
+  const existing = await prisma.shootDayResourceUsage.findUnique({
+    where: { shootDayId_itemId: { shootDayId, itemId } },
+  });
+  if (existing) return { success: "Ресурс уже в списке" };
+
+  await prisma.shootDayResourceUsage.create({
+    data: { shootDayId, itemId, isUsed: true },
+  });
+
+  await auditCallSheet(
+    gate.ctx,
+    projectId,
+    shootDayId,
+    `Добавлен посменный ресурс «${item.name}»`,
+  );
+  revalidateCallSheet(projectId, shootDayId);
+  return { success: "Ресурс добавлен" };
+}
+
+export async function removePerShiftResourceAction(
+  projectId: string,
+  shootDayId: string,
+  itemId: string,
+): Promise<CallSheetActionState> {
+  const gate = await assertCallSheetWrite(projectId, shootDayId);
+  if ("error" in gate) return gate;
+
+  await prisma.shootDayResourceUsage.deleteMany({
+    where: {
+      shootDayId,
+      itemId,
+      item: { category: { projectId, perShift: true } },
+    },
+  });
+
+  await auditCallSheet(gate.ctx, projectId, shootDayId, "Удалён посменный ресурс");
+  revalidateCallSheet(projectId, shootDayId);
+  return { success: "Ресурс убран из дня" };
 }
 
 export async function toggleCallSheetPlanLockAction(
@@ -395,6 +469,13 @@ export async function toggleCallSheetPlanLockAction(
     where: { id: shootDayId },
     data: { callSheetPlanLocked: locked },
   });
+
+  await auditCallSheet(
+    gate.ctx,
+    projectId,
+    shootDayId,
+    locked ? "План вызывного зафиксирован" : "План вызывного разблокирован",
+  );
 
   revalidateCallSheet(projectId, shootDayId);
   return { success: locked ? "План зафиксирован" : "План разблокирован" };
@@ -526,6 +607,13 @@ export async function applyRecalculateActorTimingsAction(
     data: { callSheetSavedAt: new Date() },
   });
 
+  await auditCallSheet(
+    gate.ctx,
+    projectId,
+    shootDayId,
+    `Пересчитаны тайминги актёров (${toApply.length})`,
+  );
+
   revalidateCallSheet(projectId, shootDayId);
   return { success: `Обновлено таймингов: ${toApply.length}` };
 }
@@ -560,6 +648,7 @@ export async function previewRecalculateResourceTimingsAction(
                   item: {
                     select: {
                       name: true,
+                      arrivalOffsetMin: true,
                       category: { select: { name: true, perShift: true } },
                     },
                   },
@@ -570,6 +659,18 @@ export async function previewRecalculateResourceTimingsAction(
         },
       },
       resourceCalls: true,
+      resourceUsages: {
+        where: { item: { category: { perShift: true } } },
+        include: {
+          item: {
+            select: {
+              name: true,
+              arrivalOffsetMin: true,
+              category: { select: { name: true } },
+            },
+          },
+        },
+      },
     },
   });
   if (!day) return { error: "Съёмочный день не найден" };
@@ -577,12 +678,24 @@ export async function previewRecalculateResourceTimingsAction(
     return { error: "Сначала примените план дня к расписанию" };
   }
 
+  const perShiftUsages = day.resourceUsages.map((u) => ({
+    key: `${u.item.category.name}::${u.item.name}`,
+    arrivalOffsetMin: u.item.arrivalOffsetMin,
+  }));
+
   const proposals = computeResourceTimingProposals({
     timeSlots: day.timeSlots,
     dayScenes: day.scenes,
     shiftStartTime: day.shiftStartTime,
     callTime: day.callTime,
+    perShiftUsages,
     currentCalls: day.resourceCalls,
+    currentPerShiftUsages: day.resourceUsages.map((u) => ({
+      key: `${u.item.category.name}::${u.item.name}`,
+      arrivalTime: u.arrivalTime,
+      readyTime: u.readyTime,
+      wrapTime: u.wrapTime,
+    })),
   });
 
   return { proposals };
@@ -613,6 +726,31 @@ export async function applyRecalculateResourceTimingsAction(
     const name = nameParts.join("::");
     if (!category || !name) continue;
 
+    const perShiftUsage = await prisma.shootDayResourceUsage.findFirst({
+      where: {
+        shootDayId,
+        item: { name, category: { name: category, projectId, perShift: true } },
+      },
+    });
+
+    if (perShiftUsage) {
+      const patch = {
+        arrivalTime:
+          proposal.fields.arrivalTime?.proposed ?? perShiftUsage.arrivalTime ?? null,
+        readyTime:
+          proposal.fields.readyTime?.proposed ?? perShiftUsage.readyTime ?? null,
+        wrapTime:
+          proposal.fields.wrapTime?.proposed ?? perShiftUsage.wrapTime ?? null,
+      };
+      if (Object.values(patch).some(Boolean)) {
+        await prisma.shootDayResourceUsage.update({
+          where: { id: perShiftUsage.id },
+          data: patch,
+        });
+      }
+      continue;
+    }
+
     const existing = await prisma.shootDayResourceCall.findUnique({
       where: {
         shootDayId_category_name: {
@@ -626,10 +764,6 @@ export async function applyRecalculateResourceTimingsAction(
     const patch = {
       arrivalTime:
         proposal.fields.arrivalTime?.proposed ?? existing?.arrivalTime ?? null,
-      costumeTime:
-        proposal.fields.costumeTime?.proposed ?? existing?.costumeTime ?? null,
-      makeupTime:
-        proposal.fields.makeupTime?.proposed ?? existing?.makeupTime ?? null,
       readyTime: proposal.fields.readyTime?.proposed ?? existing?.readyTime ?? null,
       wrapTime: proposal.fields.wrapTime?.proposed ?? existing?.wrapTime ?? null,
     };
@@ -651,11 +785,24 @@ export async function applyRecalculateResourceTimingsAction(
     data: { callSheetSavedAt: new Date() },
   });
 
+  await auditCallSheet(
+    gate.ctx,
+    projectId,
+    shootDayId,
+    `Пересчитаны тайминги ресурсов (${toApply.length})`,
+  );
+
   revalidateCallSheet(projectId, shootDayId);
   return { success: `Обновлено ресурсов: ${toApply.length}` };
 }
 
-async function loadCallSheetExportBundle(projectId: string, dayId: string) {
+async function loadCallSheetExportBundle(
+  projectId: string,
+  dayId: string,
+): Promise<
+  | { error: string }
+  | { model: import("@/features/day-docs/lib/export-call-sheet").CallSheetExportModel }
+> {
   const ctx = await requireProjectContext(projectId);
   if (!ctx.can("callsheet:read") && !ctx.can("schedule:read")) {
     return { error: "Недостаточно прав" } as const;

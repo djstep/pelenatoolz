@@ -82,8 +82,9 @@ export const saveResourceCallsSchema = z.object({
 
 export const resourceUsageRowSchema = z.object({
   itemId: z.string().cuid(),
-  isUsed: z.boolean(),
   arrivalTime: timeString,
+  readyTime: timeString,
+  wrapTime: timeString,
 });
 
 export const saveResourceUsagesSchema = z.object({

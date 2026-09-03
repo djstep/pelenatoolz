@@ -38,6 +38,7 @@ export async function listUnscheduledScenes(projectId: string) {
     where: {
       projectId,
       shootDayScenes: { none: {} },
+      status: { not: "OFF_PLAN" },
     },
     select: sceneDetailSelect,
     orderBy: [{ sortOrder: "asc" }, { number: "asc" }],

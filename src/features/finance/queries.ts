@@ -1,7 +1,8 @@
 import { prisma } from "@/shared/db/prisma";
+import { serializeForClient } from "@/shared/db/serialize-decimal";
 
 export async function listFinanceOperations(projectId: string) {
-  return prisma.financeOperation.findMany({
+  const rows = await prisma.financeOperation.findMany({
     where: { projectId },
     include: {
       actor: {
@@ -15,10 +16,11 @@ export async function listFinanceOperations(projectId: string) {
     },
     orderBy: [{ operationDate: "desc" }, { createdAt: "desc" }],
   });
+  return serializeForClient(rows) as typeof rows;
 }
 
 export async function listActorsBrief(projectId: string) {
-  return prisma.actor.findMany({
+  const rows = await prisma.actor.findMany({
     where: { projectId },
     select: {
       id: true,
@@ -29,6 +31,7 @@ export async function listActorsBrief(projectId: string) {
     },
     orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
   });
+  return serializeForClient(rows) as typeof rows;
 }
 
 export async function getFinanceSummary(projectId: string) {

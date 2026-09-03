@@ -14,6 +14,9 @@ type PersonLike = {
   lastName: string;
   firstName?: string | null;
   middleName?: string | null;
+  birthDate?: Date | string | null;
+  education?: string | null;
+  filmography?: string | null;
   phone?: string | null;
   email?: string | null;
   agentName?: string | null;
@@ -86,6 +89,42 @@ export function PersonFormFields({
           <Label htmlFor="email">Email</Label>
           <Input id="email" name="email" type="email" defaultValue={person?.email ?? ""} />
         </div>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-3">
+        <div>
+          <Label htmlFor="birthDate">Дата рождения</Label>
+          <Input
+            id="birthDate"
+            name="birthDate"
+            type="date"
+            defaultValue={
+              person?.birthDate
+                ? String(person.birthDate).slice(0, 10)
+                : ""
+            }
+          />
+        </div>
+        <div className="md:col-span-2">
+          <Label htmlFor="education">Образование</Label>
+          <Input
+            id="education"
+            name="education"
+            defaultValue={person?.education ?? ""}
+          />
+        </div>
+      </div>
+
+      <div>
+        <Label htmlFor="filmography">Фильмография</Label>
+        <textarea
+          id="filmography"
+          name="filmography"
+          rows={3}
+          className="glass-input w-full resize-y px-3 py-2 text-sm"
+          defaultValue={person?.filmography ?? ""}
+          placeholder="Фильмы, сериалы, спектакли…"
+        />
       </div>
 
       <div className="grid gap-3 md:grid-cols-3">

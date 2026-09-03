@@ -393,12 +393,13 @@ export function buildCallSheetPrintHtml(model: CallSheetExportModel) {
   );
 
   const perShiftHtml = htmlTable(
-    ["Категория", "Ресурс", "Исп.", "Прибытие"],
+    ["Категория", "Ресурс", "Прибытие", "Готовность", "Конец смены"],
     model.perShiftResources.map((row) => [
       row.categoryName,
       row.notes ? `${row.itemName} (${row.notes})` : row.itemName,
-      row.isUsed ? "да" : "нет",
       row.arrival ?? "",
+      row.ready ?? "",
+      row.wrap ?? "",
     ]),
   );
 

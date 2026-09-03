@@ -9,6 +9,12 @@ import {
   buildScreenplayDocx,
   buildScreenplayPrintHtml,
 } from "@/features/screenplay/lib/export-screenplay";
+import {
+  buildSceneScriptDocx,
+  buildSceneScriptPrintHtml,
+  type SceneScriptExportOptions,
+} from "@/features/screenplay/lib/export-scene-script";
+import type { ExportColumn } from "@/features/exports/types";
 import { buildLibrettoPreviewFromBlocks } from "@/features/screenplay/lib/libretto-sync";
 import { applyScenesFromPreview } from "@/features/screenplay/lib/libretto-apply";
 import { mergeSceneEdits } from "@/features/import/merge-scene-edits";
@@ -20,6 +26,7 @@ import {
 import {
   createScriptVersion,
   deleteScriptVersion,
+  getCurrentScriptVersion,
   getScriptVersion,
   listVersionBlocks,
   replaceVersionBlocks,
@@ -28,7 +35,8 @@ import {
 import { bootstrapScriptBlocks } from "@/features/screenplay/lib/sync";
 import { listScenes } from "@/features/script/queries";
 import { prisma } from "@/shared/db/prisma";
-import { writeAuditLog } from "@/shared/audit/log";
+import { AuditEntityType } from "@/shared/audit/entity-types";
+import { recordAudit } from "@/shared/audit/with-audit";
 
 export type ScreenplayActionState = {
   error?: string;
@@ -232,10 +240,9 @@ export async function applyLibrettoSyncAction(
   await replaceVersionBlocks(projectId, versionId, linked);
   await setCurrentScriptVersion(projectId, versionId);
 
-  await writeAuditLog({
+  await recordAudit(ctx, {
     projectId,
-    userId: ctx.user.id!,
-    entityType: "script_version",
+    entityType: AuditEntityType.scriptVersion,
     entityId: versionId,
     action: "UPDATE",
     summary: `Либретто: создано ${result.created}, обновлено ${result.updated}`,
@@ -342,6 +349,108 @@ export async function exportScreenplayPrintHtmlAction(
   return {
     html: buildScreenplayPrintHtml(blocks, title),
     fileName: `screenplay-v${version.versionNumber}.html`,
+  };
+}
+
+export type SceneScriptExportPayload = {
+  sceneIds: string[];
+  format: "docx" | "pdf";
+  mode: "regular" | "director";
+  showCharacters: boolean;
+  showExtras: boolean;
+  showGroup: boolean;
+  showEpisodeNumber: boolean;
+  showProjectHeader: boolean;
+  contentMode: "full" | "summary";
+  pdfPreset: "classic" | "crew";
+  directorColumns?: ExportColumn[];
+  fieldLabels?: Record<string, string>;
+};
+
+export async function exportSceneScriptAction(
+  projectId: string,
+  payload: SceneScriptExportPayload,
+): Promise<
+  | { base64: string; fileName: string; mime: string }
+  | { html: string; fileName: string }
+  | { error: string }
+> {
+  const ctx = await requireProjectContext(projectId);
+  if (!ctx.can("script:read")) {
+    return { error: "Недостаточно прав" };
+  }
+
+  if (!payload.sceneIds.length) {
+    return { error: "Нет сцен для экспорта" };
+  }
+
+  const idSet = new Set(payload.sceneIds);
+  const [allScenes, currentVersion, project] = await Promise.all([
+    listScenes(projectId),
+    getCurrentScriptVersion(projectId),
+    prisma.project.findUnique({
+      where: { id: projectId },
+      select: { name: true, type: true, fullName: true },
+    }),
+  ]);
+
+  const scenes = allScenes.filter((s) => idSet.has(s.id));
+  // Preserve order of payload.sceneIds (filtered list order)
+  const order = new Map(payload.sceneIds.map((id, i) => [id, i]));
+  scenes.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
+
+  if (scenes.length === 0) {
+    return { error: "Сцены не найдены" };
+  }
+
+  const blocks = currentVersion
+    ? await prisma.scriptBlock.findMany({
+        where: {
+          projectId,
+          scriptVersionId: currentVersion.id,
+          OR: [
+            { sceneId: { in: scenes.map((s) => s.id) } },
+            { sceneId: null },
+          ],
+        },
+        orderBy: { sortOrder: "asc" },
+        select: { type: true, content: true, sceneId: true },
+      })
+    : [];
+
+  const opts: SceneScriptExportOptions = {
+    showCharacters: payload.showCharacters,
+    showExtras: payload.showExtras,
+    showGroup: payload.showGroup,
+    showEpisodeNumber: payload.showEpisodeNumber,
+    showProjectHeader: payload.showProjectHeader,
+    contentMode:
+      payload.mode === "director" ? payload.contentMode : "full",
+    pdfPreset: payload.pdfPreset,
+    projectName: project?.fullName || project?.name || "Сценарий",
+    projectType: project?.type ?? "FEATURE",
+    directorColumns:
+      payload.mode === "director" ? payload.directorColumns : undefined,
+    fieldLabels: payload.fieldLabels,
+  };
+
+  const suffix = payload.mode === "director" ? "director" : "script";
+  const versionTag = currentVersion
+    ? `v${currentVersion.versionNumber}`
+    : "draft";
+
+  if (payload.format === "docx") {
+    const buffer = await buildSceneScriptDocx(scenes, blocks, opts);
+    return {
+      base64: Buffer.from(buffer).toString("base64"),
+      fileName: `${suffix}-${versionTag}.docx`,
+      mime: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    };
+  }
+
+  return {
+    html: buildSceneScriptPrintHtml(scenes, blocks, opts),
+    fileName: `${suffix}-${versionTag}.html`,
   };
 }
 

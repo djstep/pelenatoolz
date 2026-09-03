@@ -1,13 +1,15 @@
 "use client";
 
-import { useActionState, useEffect } from "react";
+import { useActionState, useEffect, useState } from "react";
 import {
   createResourceItemAction,
   updateResourceItemAction,
   type ResourceActionState,
 } from "@/features/resources/actions";
+import { formatMinutesHhMm } from "@/shared/i18n/domain-labels";
 import { useActionToast } from "@/shared/ui/toast";
 import { Button } from "@/shared/ui/button";
+import { HhMmInput } from "@/shared/ui/hh-mm-input";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Modal } from "@/shared/ui/modal";
@@ -24,6 +26,16 @@ type ItemLike = {
 };
 
 function ItemFormFields({ item }: { item?: ItemLike }) {
+  const [shiftHours, setShiftHours] = useState(
+    () => formatMinutesHhMm(item?.shiftHoursMin) || "",
+  );
+  const [unpaidOvertime, setUnpaidOvertime] = useState(
+    () => formatMinutesHhMm(item?.unpaidOvertimeMin) || "",
+  );
+  const [arrivalOffset, setArrivalOffset] = useState(
+    () => formatMinutesHhMm(item?.arrivalOffsetMin) || "",
+  );
+
   return (
     <div className="space-y-4">
       <div>
@@ -52,34 +64,40 @@ function ItemFormFields({ item }: { item?: ItemLike }) {
           />
         </div>
         <div>
-          <Label htmlFor="shiftHoursMin">Длительность смены (мин)</Label>
-          <Input
+          <Label htmlFor="shiftHoursMin">Длительность смены</Label>
+          <input type="hidden" name="shiftHoursMin" value={shiftHours} />
+          <HhMmInput
             id="shiftHoursMin"
-            name="shiftHoursMin"
-            type="number"
-            min={0}
-            defaultValue={item?.shiftHoursMin ?? undefined}
+            mode="duration"
+            value={shiftHours}
+            onChange={setShiftHours}
+            placeholder="12:00"
           />
         </div>
         <div>
-          <Label htmlFor="unpaidOvertimeMin">Неоплач. переработка (мин)</Label>
-          <Input
+          <Label htmlFor="unpaidOvertimeMin">Неоплач. переработка</Label>
+          <input type="hidden" name="unpaidOvertimeMin" value={unpaidOvertime} />
+          <HhMmInput
             id="unpaidOvertimeMin"
-            name="unpaidOvertimeMin"
-            type="number"
-            min={0}
-            defaultValue={item?.unpaidOvertimeMin ?? undefined}
+            mode="duration"
+            value={unpaidOvertime}
+            onChange={setUnpaidOvertime}
+            placeholder="00:30"
           />
         </div>
         <div>
-          <Label htmlFor="arrivalOffsetMin">Смещение прибытия (мин)</Label>
-          <Input
+          <Label htmlFor="arrivalOffsetMin">Смещение прибытия</Label>
+          <input type="hidden" name="arrivalOffsetMin" value={arrivalOffset} />
+          <HhMmInput
             id="arrivalOffsetMin"
-            name="arrivalOffsetMin"
-            type="number"
-            min={0}
-            defaultValue={item?.arrivalOffsetMin ?? undefined}
+            mode="duration"
+            value={arrivalOffset}
+            onChange={setArrivalOffset}
+            placeholder="01:00"
           />
+          <p className="mt-1 text-[10px] text-[var(--muted-fg)]">
+            Относительно начала смены, формат ЧЧ:ММ
+          </p>
         </div>
       </div>
     </div>

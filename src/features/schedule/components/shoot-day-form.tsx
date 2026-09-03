@@ -9,6 +9,7 @@ import {
 import { countCalendarDays, parseDateInput } from "@/features/schedule/lib/date-range";
 import { shootDayStatusLabels } from "@/shared/i18n/domain-labels";
 import { Button } from "@/shared/ui/button";
+import { HhMmInput } from "@/shared/ui/hh-mm-input";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Select } from "@/shared/ui/select";
@@ -54,6 +55,8 @@ export function ShootDayForm({
   const [state, action, pending] = useActionState(bound, initial);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [callTime, setCallTime] = useState("");
+  const [wrapTime, setWrapTime] = useState("");
 
   const dayCount = useMemo(() => {
     if (!dateFrom) return 1;
@@ -111,19 +114,23 @@ export function ShootDayForm({
           </div>
         </FieldColumn>
 
-        <FieldColumn label="Сбор" labelFor="callTime" className="w-[5rem]">
-          <Input
+        <FieldColumn label="Сбор" labelFor="callTime" className="w-[5.5rem]">
+          <input type="hidden" name="callTime" value={callTime} />
+          <HhMmInput
             id="callTime"
-            name="callTime"
+            value={callTime}
+            onChange={setCallTime}
             placeholder="08:00"
             className={fieldClass}
           />
         </FieldColumn>
 
-        <FieldColumn label="Конец" labelFor="wrapTime" className="w-[5rem]">
-          <Input
+        <FieldColumn label="Конец" labelFor="wrapTime" className="w-[5.5rem]">
+          <input type="hidden" name="wrapTime" value={wrapTime} />
+          <HhMmInput
             id="wrapTime"
-            name="wrapTime"
+            value={wrapTime}
+            onChange={setWrapTime}
             placeholder="20:00"
             className={fieldClass}
           />

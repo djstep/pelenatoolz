@@ -12,7 +12,8 @@ import {
 } from "@/features/script/schemas";
 import { prisma } from "@/shared/db/prisma";
 import { syncShootDaysForScene } from "@/features/schedule/lib/sync-shoot-day-resources";
-import { writeAuditLog } from "@/shared/audit/log";
+import { AuditEntityType } from "@/shared/audit/entity-types";
+import { recordAudit } from "@/shared/audit/with-audit";
 
 export type ActionState = { error?: string; success?: string; keepOpen?: boolean };
 
@@ -245,10 +246,9 @@ export async function createSceneAction(
     await saveSceneResourceItems(projectId, scene.id, resourceItemLinks);
     await syncShootDaysForScene(scene.id);
 
-    await writeAuditLog({
+    await recordAudit(ctx, {
       projectId,
-      userId: ctx.user.id!,
-      entityType: "scene",
+      entityType: AuditEntityType.scene,
       entityId: scene.id,
       action: "CREATE",
       summary: `Создана сцена ${scene.number}${scene.postfix ? scene.postfix : ""}`,
@@ -361,10 +361,9 @@ export async function updateSceneAction(
     return { error: "Сцена с таким номером уже существует" };
   }
 
-  await writeAuditLog({
+  await recordAudit(ctx, {
     projectId,
-    userId: ctx.user.id!,
-    entityType: "scene",
+    entityType: AuditEntityType.scene,
     entityId: sceneId,
     action: "UPDATE",
     summary: `Обновлена сцена ${parsed.data.number}${parsed.data.postfix ?? ""}`,
@@ -392,10 +391,9 @@ export async function bulkUpdateSceneStatusAction(
     data: { status, statusDate: new Date() },
   });
 
-  await writeAuditLog({
+  await recordAudit(ctx, {
     projectId,
-    userId: ctx.user.id!,
-    entityType: "scene",
+    entityType: AuditEntityType.scene,
     entityId: projectId,
     action: "UPDATE",
     summary: `Групповая смена статуса (${sceneIds.length} сц.) → ${status}`,
@@ -418,10 +416,9 @@ export async function bulkDeleteScenesAction(
     where: { projectId, id: { in: sceneIds } },
   });
 
-  await writeAuditLog({
+  await recordAudit(ctx, {
     projectId,
-    userId: ctx.user.id!,
-    entityType: "scene",
+    entityType: AuditEntityType.scene,
     entityId: projectId,
     action: "DELETE",
     summary: `Групповое удаление ${sceneIds.length} сцен`,
@@ -458,10 +455,9 @@ export async function renumberScenesAction(projectId: string) {
     }),
   );
 
-  await writeAuditLog({
+  await recordAudit(ctx, {
     projectId,
-    userId: ctx.user.id!,
-    entityType: "scene",
+    entityType: AuditEntityType.scene,
     entityId: projectId,
     action: "UPDATE",
     summary: `Перенумерация ${scenes.length} сцен`,
@@ -480,12 +476,12 @@ export async function deleteSceneAction(projectId: string, sceneId: string) {
 
   await prisma.scene.deleteMany({ where: { id: sceneId, projectId } });
 
-  await writeAuditLog({
+  await recordAudit(ctx, {
     projectId,
-    userId: ctx.user.id!,
-    entityType: "scene",
+    entityType: AuditEntityType.scene,
     entityId: sceneId,
     action: "DELETE",
+    summary: "Удалена сцена",
   });
 
   revalidateScript(projectId);
@@ -529,10 +525,9 @@ export async function manualRenumberScenesAction(
     return { error: "Конфликт номеров — проверьте уникальность" };
   }
 
-  await writeAuditLog({
+  await recordAudit(ctx, {
     projectId,
-    userId: ctx.user.id!,
-    entityType: "scene",
+    entityType: AuditEntityType.scene,
     entityId: projectId,
     action: "UPDATE",
     summary: `Ручная перенумерация (${parsed.data.rows.length} сцен)`,

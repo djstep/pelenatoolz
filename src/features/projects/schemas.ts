@@ -1,10 +1,16 @@
 import { isValidTimezone } from "@/features/projects/lib/timezones";
+import { parseHhMmToMinutes } from "@/shared/i18n/domain-labels";
 import {
   ProjectStatus,
   ProjectType,
   TimingMode,
 } from "@prisma/client";
 import { z } from "zod";
+
+const durationMinutesField = z.preprocess((val) => {
+  if (val == null || String(val).trim() === "") return undefined;
+  return parseHhMmToMinutes(String(val));
+}, z.number().optional());
 
 export const createProjectSchema = z.object({
   name: z.string().trim().min(2).max(200),
@@ -39,13 +45,15 @@ export const createProjectSchema = z.object({
   startDate: z.string().optional(),
   endDate: z.string().optional(),
   episodeCount: z.coerce.number().int().min(1).max(999).optional(),
-  episodeRuntimeMin: z.coerce.number().int().min(1).max(600).optional(),
+  episodeRuntimeMin: durationMinutesField.pipe(z.number().int().min(1).max(600).optional()),
   shootingDaysCount: z.coerce.number().int().min(1).max(999).optional(),
   cameraUnits: z.coerce.number().int().min(1).max(10).optional(),
   cameraCount: z.coerce.number().int().min(1).max(10).optional(),
   timingMode: z.enum(TimingMode).optional(),
   pageToMinuteRatio: z.coerce.number().min(0.1).max(10).optional(),
-  plannedDailyOutputMin: z.coerce.number().min(0).max(1440).optional(),
+  plannedDailyOutputMin: durationMinutesField.pipe(
+    z.number().min(0).max(1440).optional(),
+  ),
   shootOnFilm: z
     .union([z.literal("on"), z.literal("true"), z.boolean()])
     .optional()

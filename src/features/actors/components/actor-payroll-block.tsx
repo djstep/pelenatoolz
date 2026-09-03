@@ -6,6 +6,7 @@ import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { cn } from "@/shared/lib/cn";
 import { formatMinutesHhMm } from "@/shared/i18n/domain-labels";
+import { HhMmInput } from "@/shared/ui/hh-mm-input";
 
 type OvertimeSeed = {
   hourNumber: number;
@@ -132,6 +133,15 @@ export function ActorPayrollBlock({
   );
   const [fkPct, setFkPct] = useState(forceMajeurePct);
   const [rate, setRate] = useState(shiftRate);
+  const [shiftHours, setShiftHours] = useState(
+    () => formatMinutesHhMm(shiftHoursMin) || "",
+  );
+  const [unpaidOvertime, setUnpaidOvertime] = useState(
+    () => formatMinutesHhMm(unpaidOvertimeMin) || "",
+  );
+  const [pickupOffset, setPickupOffset] = useState(
+    () => formatMinutesHhMm(pickupOffsetMin) || "",
+  );
 
   const amountWithFk = useMemo(
     () => rate + (rate * fkPct) / 100,
@@ -175,35 +185,37 @@ export function ActorPayrollBlock({
         </div>
         <div>
           <Label htmlFor="shiftHoursMin">Продолжительность смены</Label>
-          <Input
+          <input type="hidden" name="shiftHoursMin" value={shiftHours} />
+          <HhMmInput
             id="shiftHoursMin"
-            name="shiftHoursMin"
-            type="time"
-            step={60}
-            defaultValue={formatMinutesHhMm(shiftHoursMin)}
+            mode="duration"
+            value={shiftHours}
+            onChange={setShiftHours}
+            placeholder="12:00"
           />
         </div>
         <div>
           <Label htmlFor="unpaidOvertimeMin">Неоплачиваемая переработка</Label>
-          <Input
+          <input type="hidden" name="unpaidOvertimeMin" value={unpaidOvertime} />
+          <HhMmInput
             id="unpaidOvertimeMin"
-            name="unpaidOvertimeMin"
-            type="time"
-            step={60}
-            defaultValue={formatMinutesHhMm(unpaidOvertimeMin)}
+            mode="duration"
+            value={unpaidOvertime}
+            onChange={setUnpaidOvertime}
+            placeholder="00:30"
           />
         </div>
         <div>
           <Label htmlFor="pickupOffsetMin">Подача до готовности</Label>
-          <Input
+          <input type="hidden" name="pickupOffsetMin" value={pickupOffset} />
+          <HhMmInput
             id="pickupOffsetMin"
-            name="pickupOffsetMin"
-            type="time"
-            step={60}
-            defaultValue={formatMinutesHhMm(pickupOffsetMin)}
+            mode="duration"
+            value={pickupOffset}
+            onChange={setPickupOffset}
             placeholder="01:00"
           />
-          <p className="mt-1 text-[10px] text-[var(--muted-fg)]">ЧЧ:ММ для вызывного</p>
+          <p className="mt-1 text-[10px] text-[var(--muted-fg)]">Формат ЧЧ:ММ</p>
         </div>
       </div>
 

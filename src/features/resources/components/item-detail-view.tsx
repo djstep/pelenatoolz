@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import type { ProjectType } from "@prisma/client";
+import { resourceCategoryPath } from "@/features/resources/lib/paths";
 import type { ResourceItemDetail } from "@/features/resources/queries";
 import { formatSceneNumber } from "@/features/script/lib/libretto-display";
-import { formatSecondsMmSs } from "@/shared/i18n/domain-labels";
+import { formatMinutesHhMm, formatSecondsMmSs } from "@/shared/i18n/domain-labels";
 
 export function ItemDetailView({
   projectId,
@@ -21,7 +22,7 @@ export function ItemDetailView({
     <div className="space-y-6">
       <div>
         <Link
-          href={`/${locale}/projects/${projectId}/resources/${item.categoryId}`}
+          href={resourceCategoryPath(locale, projectId, item.categoryId)}
           className="text-xs text-[var(--muted-fg)] hover:text-[var(--foreground)]"
         >
           ← {item.category.name}
@@ -69,14 +70,26 @@ export function ItemDetailView({
             </div>
             <div>
               <dt className="text-[var(--muted-fg)]">Длительность смены</dt>
-              <dd>{item.shiftHoursMin != null ? `${item.shiftHoursMin} мин` : "—"}</dd>
+              <dd>
+                {item.shiftHoursMin != null
+                  ? formatMinutesHhMm(item.shiftHoursMin)
+                  : "—"}
+              </dd>
             </div>
             <div>
               <dt className="text-[var(--muted-fg)]">Неоплач. переработка</dt>
               <dd>
-                {item.unpaidOvertimeMin != null ? `${item.unpaidOvertimeMin} мин` : "—"}
+                {item.unpaidOvertimeMin != null
+                  ? formatMinutesHhMm(item.unpaidOvertimeMin)
+                  : "—"}
               </dd>
             </div>
+            {item.arrivalOffsetMin != null ? (
+              <div>
+                <dt className="text-[var(--muted-fg)]">Смещение прибытия</dt>
+                <dd>{formatMinutesHhMm(item.arrivalOffsetMin)}</dd>
+              </div>
+            ) : null}
           </dl>
         </section>
       )}

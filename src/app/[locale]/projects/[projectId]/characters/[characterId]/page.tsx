@@ -1,6 +1,10 @@
 import { notFound } from "next/navigation";
 import { CharacterDetailView } from "@/features/characters/components/character-detail-view";
 import { getCharacterDetail } from "@/features/characters/queries";
+import {
+  loadCastListExportBundle,
+  serializeCastListBundle,
+} from "@/features/casting/lib/cast-list-export-data";
 import { getAvailabilityMiniBundle } from "@/features/actor-availability/lib/serialize-bundle";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { Card } from "@/shared/ui/card";
@@ -17,9 +21,10 @@ export default async function CharacterDetailPage({ params }: Props) {
     return <p className="text-sm text-[var(--danger)]">Нет доступа</p>;
   }
 
-  const [character, availability] = await Promise.all([
+  const [character, availability, castBundle] = await Promise.all([
     getCharacterDetail(projectId, characterId),
     getAvailabilityMiniBundle(projectId),
+    loadCastListExportBundle(projectId, characterId, locale),
   ]);
   if (!character) notFound();
 
@@ -31,6 +36,9 @@ export default async function CharacterDetailPage({ params }: Props) {
         projectId={projectId}
         locale={locale}
         character={character}
+        castListBundle={
+          castBundle ? serializeCastListBundle(castBundle) : null
+        }
         canWriteScript={ctx.can("script:write")}
         canWriteCast={ctx.can("cast:write")}
         availabilityMini={

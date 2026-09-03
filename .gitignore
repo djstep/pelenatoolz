@@ -38,6 +38,7 @@ yarn-error.log*
 .vercel
 
 /public/uploads
+/storage
 *.tsbuildinfo
 next-env.d.ts
 

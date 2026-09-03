@@ -2,6 +2,10 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import {
+  resourceCategoryPath,
+  resourcesBasePath,
+} from "@/features/resources/lib/paths";
 import { deleteResourceCategoryAction } from "@/features/resources/actions";
 import { CategoryModal } from "@/features/resources/components/category-modal";
 import type { ResourceCategoryRow } from "@/features/resources/queries";
@@ -85,7 +89,7 @@ export function ResourcesIndex({
                 <tr key={c.id} className="border-b border-[var(--border)]/60">
                   <td className="px-3 py-3 font-medium">
                     <Link
-                      href={`/${locale}/projects/${projectId}/resources/${c.id}`}
+                      href={resourceCategoryPath(locale, projectId, c.id)}
                       className="hover:text-[var(--accent)]"
                     >
                       {c.name}

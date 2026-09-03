@@ -243,6 +243,7 @@ export async function getResourceTimingBaselines(
                   item: {
                     select: {
                       name: true,
+                      arrivalOffsetMin: true,
                       category: { select: { name: true, perShift: true } },
                     },
                   },
@@ -256,10 +257,55 @@ export async function getResourceTimingBaselines(
   });
   if (!day || day.timeSlots.length === 0) return {};
 
+  const perShiftUsages = await prisma.shootDayResourceUsage.findMany({
+    where: { shootDayId, item: { category: { projectId, perShift: true } } },
+    include: {
+      item: {
+        select: {
+          name: true,
+          arrivalOffsetMin: true,
+          category: { select: { name: true } },
+        },
+      },
+    },
+  });
+
   return computeResourceTimingBaselines({
     timeSlots: day.timeSlots,
     dayScenes: day.scenes,
     shiftStartTime: day.shiftStartTime,
     callTime: day.callTime,
+    perShiftUsages: perShiftUsages.map((u) => ({
+      key: `${u.item.category.name}::${u.item.name}`,
+      arrivalOffsetMin: u.item.arrivalOffsetMin,
+    })),
   });
+}
+
+export type PerShiftCatalogOption = {
+  id: string;
+  categoryName: string;
+  name: string;
+  added: boolean;
+};
+
+export async function listPerShiftCatalogForDay(
+  projectId: string,
+  shootDayId: string,
+): Promise<PerShiftCatalogOption[]> {
+  const items = await prisma.resourceItem.findMany({
+    where: { category: { projectId, perShift: true } },
+    include: {
+      category: { select: { name: true } },
+      shiftUsages: { where: { shootDayId }, select: { id: true } },
+    },
+    orderBy: [{ category: { sortOrder: "asc" } }, { name: "asc" }],
+  });
+
+  return items.map((item) => ({
+    id: item.id,
+    categoryName: item.category.name,
+    name: item.name,
+    added: item.shiftUsages.length > 0,
+  }));
 }

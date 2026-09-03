@@ -1,10 +1,17 @@
 import { notFound } from "next/navigation";
+import { PersonAuditionsBlock } from "@/features/auditions/components/person-auditions-block";
+import {
+  listAuditionsForPerson,
+  listCastingPeopleBrief,
+  listScenesBriefForAuditions,
+} from "@/features/auditions/queries";
 import { CastingPersonDetail } from "@/features/casting/components/casting-person-detail";
 import {
   getCastingPerson,
   listCharactersForCasting,
 } from "@/features/casting/queries";
 import { getAvailabilityMiniBundle } from "@/features/actor-availability/lib/serialize-bundle";
+import { fullNameFromParts } from "@/features/preproduction/lib/snapshots";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { Card } from "@/shared/ui/card";
 
@@ -20,13 +27,19 @@ export default async function CastingPersonPage({ params }: Props) {
     return <p className="text-sm text-[var(--danger)]">Нет доступа</p>;
   }
 
-  const [person, characters, availability] = await Promise.all([
-    getCastingPerson(projectId, personId),
-    listCharactersForCasting(projectId),
-    getAvailabilityMiniBundle(projectId),
-  ]);
+  const [person, characters, availability, auditions, people, scenes] =
+    await Promise.all([
+      getCastingPerson(projectId, personId),
+      listCharactersForCasting(projectId),
+      getAvailabilityMiniBundle(projectId),
+      listAuditionsForPerson(projectId, personId),
+      listCastingPeopleBrief(projectId),
+      listScenesBriefForAuditions(projectId),
+    ]);
 
   if (!person) notFound();
+
+  const presetCharacterId = person.candidates[0]?.character.id;
 
   return (
     <div className="space-y-6">
@@ -42,6 +55,19 @@ export default async function CastingPersonPage({ params }: Props) {
             manualDays: availability.manualDays,
             kppBusySerialized: availability.kppBusySerialized,
           }}
+          auditionsSlot={
+            <PersonAuditionsBlock
+              projectId={projectId}
+              personId={person.id}
+              personLabel={fullNameFromParts(person)}
+              auditions={auditions}
+              people={people}
+              characters={characters}
+              scenes={scenes}
+              canWrite={ctx.can("cast:write")}
+              presetCharacterId={presetCharacterId}
+            />
+          }
         />
       </Card>
     </div>

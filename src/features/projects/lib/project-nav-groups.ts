@@ -14,13 +14,9 @@ export const projectNavGroups: NavGroup[] = [
     title: "Препродакшн",
     items: [
       { href: "/preproduction/casting", label: "Кастинг" },
+      { href: "/preproduction/auditions", label: "Кастинг-пробы" },
       { href: "/preproduction/scout", label: "Скаут" },
     ],
-  },
-  {
-    id: "resources",
-    title: "Ресурсы",
-    items: [{ href: "/resources", label: "Категории" }],
   },
   {
     id: "planning",
@@ -36,10 +32,16 @@ export const projectNavGroups: NavGroup[] = [
     ],
   },
   {
+    id: "reports",
+    title: "Отчёты",
+    items: [
+      { href: "/reports", label: "Производственные отчёты" },
+    ],
+  },
+  {
     id: "finance",
     title: "Финансы",
     items: [
-      { href: "/reports", label: "Отчёты" },
       { href: "/budget", label: "Смета" },
       { href: "/finance", label: "Финансы" },
     ],
@@ -57,6 +59,7 @@ export const projectNavGroups: NavGroup[] = [
       { href: "/members", label: "Участники" },
       { href: "/roles", label: "Роли и права" },
       { href: "/settings", label: "Настройки проекта" },
+      { href: "/settings/resources", label: "Ресурсы" },
       { href: "/audit", label: "Журнал изменений" },
     ],
   },

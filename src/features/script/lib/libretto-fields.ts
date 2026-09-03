@@ -1,9 +1,11 @@
 import type { ColumnDef } from "@/shared/hooks/use-table-layout";
+import type { ExportColumn, ExportFieldDef } from "@/features/exports/types";
+import { createExportColumnId } from "@/features/exports/lib/column-utils";
 
-export type LibrettoFieldDef = {
-  id: string;
-  label: string;
-};
+export type LibrettoFieldDef = ExportFieldDef;
+
+/** @deprecated use ExportColumn — kept as alias for libretto call sites */
+export type LibrettoExportColumn = ExportColumn;
 
 /** Все поля, доступные для экспорта */
 export const LIBRETTO_EXPORT_FIELDS: LibrettoFieldDef[] = [
@@ -68,6 +70,7 @@ export function getLibrettoFieldLabel(
   fieldId: string,
   resourceLabels?: Record<string, string>,
 ) {
+  if (resourceLabels?.[fieldId]) return resourceLabels[fieldId];
   const resourceId = fieldId.startsWith("rescat:")
     ? fieldId.slice("rescat:".length)
     : null;
@@ -75,34 +78,61 @@ export function getLibrettoFieldLabel(
     return resourceLabels[resourceId];
   }
   return (
-    LIBRETTO_EXPORT_FIELDS.find((field) => field.id === fieldId)?.label ?? fieldId
+    LIBRETTO_EXPORT_FIELDS.find((field) => field.id === fieldId)?.label ??
+    fieldId
   );
 }
 
-export type LibrettoExportColumn = {
-  id: string;
-  title: string;
-  fieldIds: string[];
-};
-
-export function createDefaultExportColumns(): LibrettoExportColumn[] {
-  return LIBRETTO_COLUMNS.map((col) => ({
+export function createDefaultExportColumns(
+  resourceCategories: { id: string; name: string }[] = [],
+): LibrettoExportColumn[] {
+  return buildLibrettoColumns(resourceCategories).map((col) => ({
     id: col.id,
     title: col.label,
     fieldIds: [col.id],
   }));
 }
 
-export function createExportColumnId() {
-  return `col-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-}
+export { createExportColumnId };
 
-export function suggestedExportColumnTitle(fieldIds: string[]) {
+export function suggestedExportColumnTitle(
+  fieldIds: string[],
+  resourceLabels?: Record<string, string>,
+) {
   if (fieldIds.length === 0) return "Столбец";
   if (fieldIds.length === 1) {
-    return getLibrettoFieldLabel(fieldIds[0]!);
+    return getLibrettoFieldLabel(fieldIds[0]!, resourceLabels);
   }
-  return fieldIds.map((id) => getLibrettoFieldLabel(id)).join(" / ");
+  return fieldIds
+    .map((id) => getLibrettoFieldLabel(id, resourceLabels))
+    .join(" / ");
+}
+
+/**
+ * Поля для конструктора экспорта:
+ * столбцы таблицы либретто + любые категории из раздела «Ресурсы».
+ */
+export function buildLibrettoExportFields(
+  tableResourceCategories: { id: string; name: string }[] = [],
+  allResourceCategories: { id: string; name: string }[] = [],
+): ExportFieldDef[] {
+  const byId = new Map<string, ExportFieldDef>();
+  for (const col of buildLibrettoColumns(tableResourceCategories)) {
+    byId.set(col.id, { id: col.id, label: col.label });
+  }
+  for (const cat of allResourceCategories) {
+    const id = resourceColumnId(cat.id);
+    if (!byId.has(id)) {
+      byId.set(id, { id, label: cat.name });
+    }
+  }
+  return [...byId.values()];
+}
+
+export function librettoFieldLabelsMap(
+  fields: ExportFieldDef[],
+): Record<string, string> {
+  return Object.fromEntries(fields.map((f) => [f.id, f.label]));
 }
 
 export const RESOURCE_COLUMN_PREFIX = "rescat:";

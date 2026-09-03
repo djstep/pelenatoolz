@@ -1,10 +1,12 @@
 import { prisma } from "@/shared/db/prisma";
+import { serializeForClient } from "@/shared/db/serialize-decimal";
 
 export async function listBudgetLines(projectId: string) {
-  return prisma.budgetLine.findMany({
+  const rows = await prisma.budgetLine.findMany({
     where: { projectId },
     orderBy: [{ category: "asc" }, { sortOrder: "asc" }, { createdAt: "asc" }],
   });
+  return serializeForClient(rows) as typeof rows;
 }
 
 export async function getBudgetTotals(projectId: string) {

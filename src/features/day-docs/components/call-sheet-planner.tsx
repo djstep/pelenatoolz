@@ -163,6 +163,7 @@ function PlanRowBody({
         <label className="flex max-w-[8rem] flex-col gap-1 text-xs">
           <span className="text-[var(--muted-fg)]">Длительность</span>
           <HhMmInput
+            mode="duration"
             value={item.duration}
             disabled={disabled}
             onChange={(duration) => onChange(item.id, { duration })}
@@ -332,6 +333,7 @@ function BreakPresetsEditor({
             ))}
           </select>
           <HhMmInput
+            mode="duration"
             value={preset.defaultDuration}
             onChange={(defaultDuration) =>
               updatePreset(preset.id, { defaultDuration })

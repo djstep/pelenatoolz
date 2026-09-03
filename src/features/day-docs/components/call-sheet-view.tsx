@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { CallSheetEditor } from "@/features/day-docs/components/call-sheet-edit";
 import { CallSheetExportButtons } from "@/features/day-docs/components/call-sheet-export-buttons";
+import { CallSheetCharacterScriptsMenu } from "@/features/day-docs/components/call-sheet-character-scripts";
 import { CallSheetMoveDateButton } from "@/features/day-docs/components/call-sheet-move-date-button";
 import { CallSheetPlanner } from "@/features/day-docs/components/call-sheet-planner";
 import { PrintButton } from "@/features/day-docs/components/print-button";
@@ -107,13 +108,9 @@ function ManualTimingCell({
 
 function ResourceTable({
   rows,
-  showMakeup = true,
-  showCostume = true,
   timingBaselines = {},
 }: {
   rows: ResourceTableRow[];
-  showMakeup?: boolean;
-  showCostume?: boolean;
   timingBaselines?: ResourceTimingBaselines;
 }) {
   if (rows.length === 0) {
@@ -128,10 +125,8 @@ function ResourceTable({
             <th className="py-2 pr-3">Наименование</th>
             <th className="py-2 pr-3">Сцены</th>
             <th className="py-2 pr-3">Прибытие</th>
-            {showCostume ? <th className="py-2 pr-3">Костюм</th> : null}
-            {showMakeup ? <th className="py-2 pr-3">Грим</th> : null}
             <th className="py-2 pr-3">Готовность</th>
-            <th className="py-2">Конец</th>
+            <th className="py-2">Конец смены</th>
           </tr>
         </thead>
         <tbody>
@@ -147,18 +142,6 @@ function ResourceTable({
                 value={row.arrival}
                 computed={baseline?.arrivalTime}
               />
-              {showCostume ? (
-                <ManualTimingCell
-                  value={row.costume}
-                  computed={baseline?.costumeTime}
-                />
-              ) : null}
-              {showMakeup ? (
-                <ManualTimingCell
-                  value={row.makeup}
-                  computed={baseline?.makeupTime}
-                />
-              ) : null}
               <ManualTimingCell
                 value={row.ready}
                 computed={baseline?.readyTime}
@@ -195,6 +178,7 @@ export function CallSheetView({
   canEdit,
   timingBaselines = {},
   resourceTimingBaselines = {},
+  perShiftCatalog = [],
 }: {
   locale: string;
   projectId: string;
@@ -205,6 +189,7 @@ export function CallSheetView({
   canEdit: boolean;
   timingBaselines?: ActorTimingBaselines;
   resourceTimingBaselines?: ResourceTimingBaselines;
+  perShiftCatalog?: import("@/features/day-docs/queries").PerShiftCatalogOption[];
 }) {
   const { project, day } = bundle;
   const stats = buildDayStats(day);
@@ -256,7 +241,9 @@ export function CallSheetView({
               cast={cast}
               resources={resources}
               perShiftResources={perShiftResources}
+              perShiftCatalog={perShiftCatalog}
               timingBaselines={timingBaselines}
+              resourceTimingBaselines={resourceTimingBaselines}
             />
           ) : null}
           <CallSheetMoveDateButton
@@ -267,6 +254,7 @@ export function CallSheetView({
             locale={locale}
             canEdit={canEdit}
           />
+          <CallSheetCharacterScriptsMenu projectId={projectId} cast={cast} />
           <CallSheetExportButtons projectId={projectId} dayId={day.id} />
           <PrintButton />
         </div>
@@ -593,23 +581,24 @@ export function CallSheetView({
       {perShiftResources.length > 0 ? (
         <DocSection title="Посменные ресурсы">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[480px] text-left text-sm">
+            <table className="w-full min-w-[560px] text-left text-sm">
               <thead>
                 <tr className="border-b border-[var(--border)] text-[var(--muted-fg)]">
                   <th className="py-2 pr-3">Категория</th>
                   <th className="py-2 pr-3">Ресурс</th>
-                  <th className="py-2 pr-3">Исп.</th>
-                  <th className="py-2">Прибытие</th>
+                  <th className="py-2 pr-3">Прибытие</th>
+                  <th className="py-2 pr-3">Готовность</th>
+                  <th className="py-2">Конец смены</th>
                 </tr>
               </thead>
               <tbody>
-                {perShiftResources.map((row) => (
+                {perShiftResources.map((row) => {
+                  const key = `${row.categoryName}::${row.itemName}`;
+                  const baseline = resourceTimingBaselines[key];
+                  return (
                   <tr
                     key={row.usageId}
-                    className={cn(
-                      "border-b border-[var(--border)]/60",
-                      !row.isUsed && "opacity-50",
-                    )}
+                    className="border-b border-[var(--border)]/60"
                   >
                     <td className="py-2 pr-3 text-[var(--muted-fg)]">{row.categoryName}</td>
                     <td className="py-2 pr-3 font-medium">
@@ -620,10 +609,21 @@ export function CallSheetView({
                         </span>
                       ) : null}
                     </td>
-                    <td className="py-2 pr-3">{row.isUsed ? "да" : "нет"}</td>
-                    <td className="py-2">{row.arrival || "—"}</td>
+                    <ManualTimingCell
+                      value={row.arrival}
+                      computed={baseline?.arrivalTime}
+                    />
+                    <ManualTimingCell
+                      value={row.ready}
+                      computed={baseline?.readyTime}
+                    />
+                    <ManualTimingCell
+                      value={row.wrap}
+                      computed={baseline?.wrapTime}
+                    />
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -640,8 +640,6 @@ export function CallSheetView({
         <DocSection title="Трюк / каскадёры">
           <ResourceTable
             rows={resources.stunts}
-            showCostume={false}
-            showMakeup={false}
             timingBaselines={resourceTimingBaselines}
           />
         </DocSection>
@@ -651,7 +649,6 @@ export function CallSheetView({
         <DocSection title="Художественный цех">
           <ResourceTable
             rows={resources.art}
-            showMakeup={false}
             timingBaselines={resourceTimingBaselines}
           />
         </DocSection>
@@ -661,8 +658,6 @@ export function CallSheetView({
         <DocSection title="Операторская техника">
           <ResourceTable
             rows={resources.camera}
-            showCostume={false}
-            showMakeup={false}
             timingBaselines={resourceTimingBaselines}
           />
         </DocSection>
@@ -672,7 +667,6 @@ export function CallSheetView({
         <DocSection title="Реквизит">
           <ResourceTable
             rows={resources.props}
-            showMakeup={false}
             timingBaselines={resourceTimingBaselines}
           />
         </DocSection>
@@ -682,8 +676,6 @@ export function CallSheetView({
         <DocSection title="Игровой транспорт / спецтехника на сцену">
           <ResourceTable
             rows={resources.vehicles}
-            showCostume={false}
-            showMakeup={false}
             timingBaselines={resourceTimingBaselines}
           />
         </DocSection>

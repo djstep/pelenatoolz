@@ -12,6 +12,7 @@ import {
   type ActionState,
 } from "@/features/projects/actions";
 import {
+  formatMinutesHhMm,
   projectStatusLabels,
   projectTypeLabels,
   timingModeLabels,
@@ -19,6 +20,7 @@ import {
 import { Button } from "@/shared/ui/button";
 import { Checkbox } from "@/shared/ui/checkbox";
 import { ProjectLocationFields } from "@/features/projects/components/project-location-fields";
+import { HhMmInput } from "@/shared/ui/hh-mm-input";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { SegmentControl } from "@/shared/ui/segment-control";
@@ -40,6 +42,13 @@ export function ProjectSettingsForm({ project }: { project: Project }) {
   const [projectType, setProjectType] = useState(project.type);
   const [timingMode, setTimingMode] = useState(project.timingMode);
   const [shootOnFilm, setShootOnFilm] = useState(project.shootOnFilm);
+  const [episodeRuntime, setEpisodeRuntime] = useState(
+    () => formatMinutesHhMm(project.episodeRuntimeMin) || "",
+  );
+  const [plannedDailyOutput, setPlannedDailyOutput] = useState(() => {
+    if (project.plannedDailyOutputMin == null) return "";
+    return formatMinutesHhMm(Math.round(Number(project.plannedDailyOutputMin)));
+  });
 
   const isArchived = project.status === ProjectStatus.ARCHIVED;
 
@@ -140,13 +149,14 @@ export function ProjectSettingsForm({ project }: { project: Project }) {
             />
           </div>
           <div>
-            <Label htmlFor="episodeRuntimeMin">Хронометраж серии (мин)</Label>
-            <Input
+            <Label htmlFor="episodeRuntimeMin">Хронометраж серии</Label>
+            <input type="hidden" name="episodeRuntimeMin" value={episodeRuntime} />
+            <HhMmInput
               id="episodeRuntimeMin"
-              name="episodeRuntimeMin"
-              type="number"
-              min={1}
-              defaultValue={project.episodeRuntimeMin ?? undefined}
+              mode="duration"
+              value={episodeRuntime}
+              onChange={setEpisodeRuntime}
+              placeholder="00:40"
               disabled={isArchived}
             />
           </div>
@@ -210,18 +220,14 @@ export function ProjectSettingsForm({ project }: { project: Project }) {
           />
         </div>
         <div>
-          <Label htmlFor="plannedDailyOutputMin">Плановая выработка (мин)</Label>
-          <Input
+          <Label htmlFor="plannedDailyOutputMin">Плановая выработка</Label>
+          <input type="hidden" name="plannedDailyOutputMin" value={plannedDailyOutput} />
+          <HhMmInput
             id="plannedDailyOutputMin"
-            name="plannedDailyOutputMin"
-            type="number"
-            min={0}
-            step="0.01"
-            defaultValue={
-              project.plannedDailyOutputMin != null
-                ? Number(project.plannedDailyOutputMin)
-                : undefined
-            }
+            mode="duration"
+            value={plannedDailyOutput}
+            onChange={setPlannedDailyOutput}
+            placeholder="08:00"
             disabled={isArchived}
           />
         </div>

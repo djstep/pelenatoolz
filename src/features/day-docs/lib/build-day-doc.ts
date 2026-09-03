@@ -16,6 +16,7 @@ export type SceneRow = DayDocBundle["day"]["scenes"][number]["scene"];
 
 export type CastRow = {
   characterName: string;
+  characterId: string | null;
   actorName: string | null;
   actorId: string | null;
   phone: string | null;
@@ -47,8 +48,9 @@ export type PerShiftResourceRow = {
   itemId: string;
   categoryName: string;
   itemName: string;
-  isUsed: boolean;
   arrival: string | null;
+  ready: string | null;
+  wrap: string | null;
   defaultArrival: string | null;
   notes: string | null;
 };
@@ -176,6 +178,7 @@ export function buildCastForDay(bundle: DayDocBundle): CastRow[] {
       : null;
     rows.push({
       characterName: entry.characterName,
+      characterId: entry.characterId,
       actorName,
       actorId: actor?.id ?? null,
       phone: actor?.phone1 ?? actor?.phone2 ?? null,
@@ -357,8 +360,9 @@ export function buildPerShiftResources(bundle: DayDocBundle): PerShiftResourceRo
         itemId: usage.itemId,
         categoryName: usage.item.category.name,
         itemName: usage.item.name,
-        isUsed: usage.isUsed,
         arrival: usage.arrivalTime ?? defaultArr,
+        ready: usage.readyTime ?? null,
+        wrap: usage.wrapTime ?? null,
         defaultArrival: defaultArr,
         notes: usage.item.notes,
       };

@@ -5,7 +5,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { prisma } from "@/shared/db/prisma";
-import { writeAuditLog } from "@/shared/audit/log";
+import { AuditEntityType } from "@/shared/audit/entity-types";
+import { recordAudit } from "@/shared/audit/with-audit";
 
 export type BudgetActionState = { error?: string; success?: string };
 
@@ -75,10 +76,9 @@ export async function createBudgetLineAction(
     },
   });
 
-  await writeAuditLog({
+  await recordAudit(ctx, {
     projectId,
-    userId: ctx.user.id!,
-    entityType: "budget_line",
+    entityType: AuditEntityType.budgetLine,
     entityId: line.id,
     action: "CREATE",
     summary: `Статья сметы: ${line.title}`,

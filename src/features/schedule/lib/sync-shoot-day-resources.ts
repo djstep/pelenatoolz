@@ -52,40 +52,14 @@ async function syncSceneResourceUsages(shootDayId: string) {
   }
 }
 
-/** Синхронизирует посменные ресурсы из каталога (категории с perShift). */
-async function syncPerShiftResourceUsages(shootDayId: string, projectId: string) {
-  const perShiftItems = await prisma.resourceItem.findMany({
-    where: { category: { projectId, perShift: true } },
-    select: { id: true },
-  });
-
-  const desired = new Set(perShiftItems.map((item) => item.id));
-
-  if (desired.size === 0) {
-    await prisma.shootDayResourceUsage.deleteMany({
-      where: {
-        shootDayId,
-        item: { category: { perShift: true } },
-      },
-    });
-    return;
-  }
-
+/** Синхронизирует посменные ресурсы: только удаляет устаревшие записи (без автодобавления). */
+async function prunePerShiftResourceUsages(shootDayId: string) {
   await prisma.shootDayResourceUsage.deleteMany({
     where: {
       shootDayId,
-      itemId: { notIn: [...desired] },
-      item: { category: { perShift: true } },
+      item: { category: { perShift: false } },
     },
   });
-
-  for (const itemId of desired) {
-    await prisma.shootDayResourceUsage.upsert({
-      where: { shootDayId_itemId: { shootDayId, itemId } },
-      create: { shootDayId, itemId, isUsed: true },
-      update: {},
-    });
-  }
 }
 
 /** Синхронизирует все ресурсы смены: посценные + посменные. */
@@ -97,7 +71,7 @@ export async function syncShootDayResourceUsages(shootDayId: string) {
   if (!day) return;
 
   await syncSceneResourceUsages(shootDayId);
-  await syncPerShiftResourceUsages(shootDayId, day.projectId);
+  await prunePerShiftResourceUsages(shootDayId);
 }
 
 export async function syncShootDaysForScene(sceneId: string) {

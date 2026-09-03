@@ -4,7 +4,8 @@ import { ActorRoleType, ContractorType, Gender } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { prisma } from "@/shared/db/prisma";
-import { writeAuditLog } from "@/shared/audit/log";
+import { AuditEntityType } from "@/shared/audit/entity-types";
+import { recordAudit } from "@/shared/audit/with-audit";
 import { z } from "zod";
 import { parseHhMmToMinutes } from "@/shared/i18n/domain-labels";
 
@@ -190,10 +191,9 @@ export async function createActorAction(
     },
   });
 
-  await writeAuditLog({
+  await recordAudit(ctx, {
     projectId,
-    userId: ctx.user.id!,
-    entityType: "actor",
+    entityType: AuditEntityType.actor,
     entityId: actor.id,
     action: "CREATE",
     summary: `Добавлен актёр ${parsed.data.lastName}`,
@@ -242,10 +242,9 @@ export async function updateActorAction(
     }),
   ]);
 
-  await writeAuditLog({
+  await recordAudit(ctx, {
     projectId,
-    userId: ctx.user.id!,
-    entityType: "actor",
+    entityType: AuditEntityType.actor,
     entityId: actorId,
     action: "UPDATE",
     summary: `Обновлён актёр ${parsed.data.lastName}`,
@@ -262,12 +261,12 @@ export async function deleteActorAction(projectId: string, actorId: string) {
   }
 
   await prisma.actor.deleteMany({ where: { id: actorId, projectId } });
-  await writeAuditLog({
+  await recordAudit(ctx, {
     projectId,
-    userId: ctx.user.id!,
-    entityType: "actor",
+    entityType: AuditEntityType.actor,
     entityId: actorId,
     action: "DELETE",
+    summary: "Удалён актёр",
   });
   revalidateActors(projectId);
 }

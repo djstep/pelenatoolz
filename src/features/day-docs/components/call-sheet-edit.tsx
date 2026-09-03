@@ -1,8 +1,11 @@
 "use client";
 
 import { TimeSlotType } from "@prisma/client";
-import { useActionState, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useActionState, useState, useTransition } from "react";
 import {
+  addPerShiftResourceAction,
+  removePerShiftResourceAction,
   saveActorCallsAction,
   saveDepartmentCallsAction,
   saveResourceCallsAction,
@@ -15,9 +18,13 @@ import {
 import type { CastRow, DayDocBundle, PerShiftResourceRow, ResourceTableRow } from "@/features/day-docs/lib/build-day-doc";
 import {
   isManualActorTiming,
+  isManualResourceTiming,
   type ActorTimingBaselines,
   type ActorTimingField,
+  type ResourceTimingBaselines,
+  type ResourceTimingField,
 } from "@/features/day-docs/lib/compute-call-timings";
+import type { PerShiftCatalogOption } from "@/features/day-docs/queries";
 import { timeSlotTypeLabels } from "@/features/day-docs/lib/slot-labels";
 import { Button } from "@/shared/ui/button";
 import { HhMmInput } from "@/shared/ui/hh-mm-input";
@@ -75,7 +82,9 @@ export function CallSheetEditor({
   cast,
   resources,
   perShiftResources,
+  perShiftCatalog = [],
   timingBaselines = {},
+  resourceTimingBaselines = {},
 }: {
   projectId: string;
   dayId: string;
@@ -90,8 +99,13 @@ export function CallSheetEditor({
     vehicles: ResourceTableRow[];
   };
   perShiftResources: PerShiftResourceRow[];
+  perShiftCatalog?: PerShiftCatalogOption[];
   timingBaselines?: ActorTimingBaselines;
+  resourceTimingBaselines?: ResourceTimingBaselines;
 }) {
+  const router = useRouter();
+  const [addPending, startAddTransition] = useTransition();
+  const [selectedToAdd, setSelectedToAdd] = useState("");
   const { day } = bundle;
   const [open, setOpen] = useState(false);
   const [headerTimes, setHeaderTimes] = useState({
@@ -161,8 +175,6 @@ export function CallSheetEditor({
       name: r.name,
       label: r.name,
       arrivalTime: r.arrival ?? "",
-      costumeTime: r.costume ?? "",
-      makeupTime: r.makeup ?? "",
       readyTime: r.ready ?? "",
       wrapTime: r.wrap ?? "",
     })),
@@ -171,12 +183,17 @@ export function CallSheetEditor({
   const [perShiftRows, setPerShiftRows] = useState(
     perShiftResources.map((r) => ({
       itemId: r.itemId,
+      categoryName: r.categoryName,
+      itemName: r.itemName,
       label: `${r.categoryName} · ${r.itemName}`,
-      isUsed: r.isUsed,
       arrivalTime: r.arrival ?? "",
+      readyTime: r.ready ?? "",
+      wrapTime: r.wrap ?? "",
       defaultArrival: r.defaultArrival ?? "",
     })),
   );
+
+  const availableToAdd = perShiftCatalog.filter((item) => !item.added);
 
   const headerAction = updateCallSheetHeaderAction.bind(null, projectId, dayId);
   const deptAction = saveDepartmentCallsAction.bind(null, projectId, dayId);
@@ -612,21 +629,32 @@ export function CallSheetEditor({
             <h4 className="text-sm font-semibold text-[var(--muted-fg)]">
               Тайминги ресурсов (массовка, трюки, реквизит…)
             </h4>
-            {resourceTimings.map((row, i) => (
+            {resourceTimings.map((row, i) => {
+              const baselineKey = `${row.category}::${row.name}`;
+              const baseline = resourceTimingBaselines[baselineKey];
+              return (
               <div key={`${row.category}-${row.name}`} className="rounded-xl border border-[var(--border)] p-3">
                 <p className="mb-2 text-sm font-medium">{row.label}</p>
-                <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-5">
+                <div className="grid gap-2 sm:grid-cols-3">
                   {(
                     [
                       ["arrivalTime", "Прибытие"],
-                      ["costumeTime", "Костюм"],
-                      ["makeupTime", "Грим"],
                       ["readyTime", "Готовность"],
-                      ["wrapTime", "Конец"],
+                      ["wrapTime", "Конец смены"],
                     ] as const
-                  ).map(([field, label]) => (
+                  ).map(([field, label]) => {
+                    const computed = baseline?.[field as ResourceTimingField];
+                    const manual = isManualResourceTiming(row[field], computed);
+                    return (
                     <label key={field} className="space-y-1 text-xs">
-                      <span className="text-[var(--muted-fg)]">{label}</span>
+                      <span className="text-[var(--muted-fg)]">
+                        {label}
+                        {manual && computed ? (
+                          <span className="ml-1 text-amber-300/90" title={`Расчётное: ${computed}`}>
+                            · ручн.
+                          </span>
+                        ) : null}
+                      </span>
                       <HhMmInput
                         value={row[field]}
                         onChange={(v) =>
@@ -637,22 +665,26 @@ export function CallSheetEditor({
                           )
                         }
                         placeholder="00:00"
+                        className={cn(
+                          manual && "border-amber-400/50 bg-amber-500/10",
+                        )}
+                        title={manual && computed ? `Расчётное: ${computed}` : undefined}
                       />
                     </label>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
-            ))}
+              );
+            })}
             <JsonRowsForm
               action={resourceAction}
               rowsJson={JSON.stringify(
                 resourceTimings.map(
-                  ({ category, name, arrivalTime, costumeTime, makeupTime, readyTime, wrapTime }) => ({
+                  ({ category, name, arrivalTime, readyTime, wrapTime }) => ({
                     category,
                     name,
                     arrivalTime,
-                    costumeTime,
-                    makeupTime,
                     readyTime,
                     wrapTime,
                   }),
@@ -663,62 +695,125 @@ export function CallSheetEditor({
           </div>
         ) : null}
 
-        {perShiftRows.length > 0 ? (
-          <div className="space-y-3">
-            <h4 className="text-sm font-semibold text-[var(--muted-fg)]">
-              Посменные ресурсы
-            </h4>
-            {perShiftRows.map((row, i) => (
+        <div className="space-y-3">
+          <h4 className="text-sm font-semibold text-[var(--muted-fg)]">
+            Посменные ресурсы
+          </h4>
+          {availableToAdd.length > 0 ? (
+            <div className="flex flex-wrap items-end gap-2">
+              <label className="space-y-1 text-xs">
+                <span className="text-[var(--muted-fg)]">Добавить ресурс</span>
+                <select
+                  className="glass-input min-w-[14rem] rounded-lg px-3 py-2 text-sm"
+                  value={selectedToAdd}
+                  onChange={(e) => setSelectedToAdd(e.target.value)}
+                >
+                  <option value="">Выберите…</option>
+                  {availableToAdd.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.categoryName} · {item.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={!selectedToAdd || addPending}
+                onClick={() => {
+                  if (!selectedToAdd) return;
+                  startAddTransition(async () => {
+                    await addPerShiftResourceAction(projectId, dayId, selectedToAdd);
+                    setSelectedToAdd("");
+                    router.refresh();
+                  });
+                }}
+              >
+                {addPending ? "…" : "Добавить"}
+              </Button>
+            </div>
+          ) : null}
+          {perShiftRows.length === 0 ? (
+            <p className="text-sm text-[var(--muted-fg)]">
+              Нет посменных ресурсов на этот день. Добавьте нужные из каталога.
+            </p>
+          ) : (
+            <>
+            {perShiftRows.map((row, i) => {
+              const baselineKey = `${row.categoryName}::${row.itemName}`;
+              const baseline = resourceTimingBaselines[baselineKey];
+              return (
               <div
                 key={row.itemId}
-                className="grid gap-2 rounded-xl border border-[var(--border)] p-3 sm:grid-cols-[1fr_auto_8rem]"
+                className="rounded-xl border border-[var(--border)] p-3"
               >
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={row.isUsed}
-                    onChange={(e) =>
-                      setPerShiftRows((p) =>
-                        p.map((r, j) =>
-                          j === i ? { ...r, isUsed: e.target.checked } : r,
-                        ),
-                      )
-                    }
-                  />
-                  <span>{row.label}</span>
-                </label>
-                <span className="self-center text-xs text-[var(--muted-fg)]">
-                  {row.defaultArrival ? `по умолч. ${row.defaultArrival}` : ""}
-                </span>
-                <label className="space-y-1 text-xs">
-                  <span className="text-[var(--muted-fg)]">Прибытие</span>
-                  <HhMmInput
-                    value={row.arrivalTime}
-                    placeholder={row.defaultArrival || "08:00"}
-                    onChange={(arrivalTime) =>
-                      setPerShiftRows((p) =>
-                        p.map((r, j) =>
-                          j === i ? { ...r, arrivalTime } : r,
-                        ),
-                      )
-                    }
-                  />
-                </label>
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <p className="text-sm font-medium">{row.label}</p>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="text-[var(--danger)]"
+                    disabled={addPending}
+                    onClick={() => {
+                      startAddTransition(async () => {
+                        await removePerShiftResourceAction(projectId, dayId, row.itemId);
+                        router.refresh();
+                      });
+                    }}
+                  >
+                    Убрать
+                  </Button>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-3">
+                  {(
+                    [
+                      ["arrivalTime", "Прибытие", row.defaultArrival],
+                      ["readyTime", "Готовность", ""],
+                      ["wrapTime", "Конец смены", ""],
+                    ] as const
+                  ).map(([field, label, placeholder]) => {
+                    const computed = baseline?.[field as ResourceTimingField];
+                    const manual = isManualResourceTiming(row[field], computed);
+                    return (
+                    <label key={field} className="space-y-1 text-xs">
+                      <span className="text-[var(--muted-fg)]">{label}</span>
+                      <HhMmInput
+                        value={row[field]}
+                        placeholder={placeholder || "00:00"}
+                        onChange={(v) =>
+                          setPerShiftRows((p) =>
+                            p.map((r, j) =>
+                              j === i ? { ...r, [field]: v } : r,
+                            ),
+                          )
+                        }
+                        className={cn(
+                          manual && "border-amber-400/50 bg-amber-500/10",
+                        )}
+                        title={manual && computed ? `Расчётное: ${computed}` : undefined}
+                      />
+                    </label>
+                    );
+                  })}
+                </div>
               </div>
-            ))}
+              );
+            })}
             <JsonRowsForm
               action={perShiftAction}
               rowsJson={JSON.stringify(
-                perShiftRows.map(({ itemId, isUsed, arrivalTime }) => ({
+                perShiftRows.map(({ itemId, arrivalTime, readyTime, wrapTime }) => ({
                   itemId,
-                  isUsed,
                   arrivalTime,
+                  readyTime,
+                  wrapTime,
                 })),
               )}
               label="Сохранить посменные ресурсы"
             />
-          </div>
-        ) : null}
+            </>
+          )}
+        </div>
       </div>
     </section>
   );

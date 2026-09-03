@@ -6,7 +6,8 @@ import { z } from "zod";
 import { approveCastingCandidate } from "@/features/preproduction/lib/approve-casting";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { prisma } from "@/shared/db/prisma";
-import { writeAuditLog } from "@/shared/audit/log";
+import { AuditEntityType } from "@/shared/audit/entity-types";
+import { recordAudit } from "@/shared/audit/with-audit";
 
 export type CastingActionState = { error?: string; success?: string };
 
@@ -33,6 +34,9 @@ const personSchema = z.object({
   notes: z.string().trim().max(5000).optional(),
   photoUrl: z.string().trim().max(2000).optional(),
   skills: z.string().trim().optional(),
+  birthDate: z.string().optional(),
+  education: z.string().trim().max(2000).optional(),
+  filmography: z.string().trim().max(10000).optional(),
 });
 
 function parseSkills(raw: string | undefined) {
@@ -41,6 +45,12 @@ function parseSkills(raw: string | undefined) {
     .split(/[,;]/)
     .map((s) => s.trim())
     .filter(Boolean);
+}
+
+function parseBirthDate(raw: string | undefined): Date | null {
+  if (!raw?.trim()) return null;
+  const d = new Date(`${raw.trim()}T00:00:00.000Z`);
+  return Number.isNaN(d.getTime()) ? null : d;
 }
 
 function parsePhysicalParams(formData: FormData) {
@@ -73,11 +83,16 @@ function personFromForm(formData: FormData) {
     notes: formData.get("notes") || undefined,
     photoUrl: formData.get("photoUrl") || undefined,
     skills: formData.get("skills") || undefined,
+    birthDate: formData.get("birthDate") || undefined,
+    education: formData.get("education") || undefined,
+    filmography: formData.get("filmography") || undefined,
   });
   if (!parsed.success) return { error: "Проверьте данные кандидата" as const };
+  const { birthDate: birthRaw, ...rest } = parsed.data;
   return {
     data: {
-      ...parsed.data,
+      ...rest,
+      birthDate: parseBirthDate(birthRaw),
       skills: parseSkills(parsed.data.skills),
       physicalParams: parsePhysicalParams(formData),
     },
@@ -128,10 +143,9 @@ export async function createCastingPersonAction(
     });
   }
 
-  await writeAuditLog({
+  await recordAudit(ctx, {
     projectId,
-    userId: ctx.user.id!,
-    entityType: "casting_person",
+    entityType: AuditEntityType.castingPerson,
     entityId: person.id,
     action: "CREATE",
     summary: `Добавлен кандидат ${person.lastName}`,

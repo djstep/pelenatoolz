@@ -7,12 +7,13 @@ import {
   type CharacterActionState,
 } from "@/features/characters/actions";
 import type { CharacterEditSource } from "@/features/characters/queries";
-import { formatMinutesHhMm } from "@/shared/i18n/domain-labels";
+import { formatMinutesHhMm, actorRoleTypeLabels } from "@/shared/i18n/domain-labels";
 import { HhMmInput } from "@/shared/ui/hh-mm-input";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Modal } from "@/shared/ui/modal";
+import { Select } from "@/shared/ui/select";
 import { useActionToast } from "@/shared/ui/toast";
 
 const initial: CharacterActionState = {};
@@ -84,6 +85,23 @@ export function CharacterModal({
           />
         </div>
         <div>
+          <Label htmlFor="roleType">Тип роли</Label>
+          <Select
+            id="roleType"
+            name="roleType"
+            defaultValue={character?.roleType ?? ""}
+          >
+            <option value="">Не указан</option>
+            {(Object.keys(actorRoleTypeLabels) as Array<keyof typeof actorRoleTypeLabels>).map(
+              (k) => (
+                <option key={k} value={k}>
+                  {actorRoleTypeLabels[k]}
+                </option>
+              ),
+            )}
+          </Select>
+        </div>
+        <div>
           <Label htmlFor="roleRequirements">Требования к роли</Label>
           <textarea
             id="roleRequirements"
@@ -100,6 +118,7 @@ export function CharacterModal({
             <input type="hidden" name="makeupOffsetMin" value={makeupOffset} />
             <HhMmInput
               id="makeupOffsetMin"
+              mode="duration"
               value={makeupOffset}
               onChange={setMakeupOffset}
               placeholder="01:00"
@@ -111,6 +130,7 @@ export function CharacterModal({
             <input type="hidden" name="costumeOffsetMin" value={costumeOffset} />
             <HhMmInput
               id="costumeOffsetMin"
+              mode="duration"
               value={costumeOffset}
               onChange={setCostumeOffset}
               placeholder="00:30"

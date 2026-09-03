@@ -16,7 +16,8 @@ import { requireProjectAccess, listProjectRoles } from "@/features/memberships/q
 import { prisma } from "@/shared/db/prisma";
 import { getDefaultProjectRoles } from "@/features/roles/default-roles";
 import { parsePermissionMatrix } from "@/features/roles/permissions-matrix";
-import { writeAuditLog } from "@/shared/audit/log";
+import { AuditEntityType } from "@/shared/audit/entity-types";
+import { recordAudit } from "@/shared/audit/with-audit";
 import { nanoid } from "nanoid";
 
 export type ActionState = {
@@ -226,10 +227,9 @@ export async function updateProjectAction(
     },
   });
 
-  await writeAuditLog({
+  await recordAudit({ user: { id: user.id! } }, {
     projectId,
-    userId: user.id!,
-    entityType: "project",
+    entityType: AuditEntityType.project,
     entityId: projectId,
     action: "UPDATE",
     summary: "Настройки проекта обновлены",
@@ -254,10 +254,9 @@ export async function archiveProjectAction(projectId: string): Promise<ActionSta
     data: { status: ProjectStatus.ARCHIVED },
   });
 
-  await writeAuditLog({
+  await recordAudit({ user: { id: user.id! } }, {
     projectId,
-    userId: user.id!,
-    entityType: "project",
+    entityType: AuditEntityType.project,
     entityId: projectId,
     action: "UPDATE",
     summary: `Проект «${project.name}» архивирован`,
@@ -282,10 +281,9 @@ export async function restoreProjectAction(projectId: string): Promise<ActionSta
     data: { status: ProjectStatus.DRAFT },
   });
 
-  await writeAuditLog({
+  await recordAudit({ user: { id: user.id! } }, {
     projectId,
-    userId: user.id!,
-    entityType: "project",
+    entityType: AuditEntityType.project,
     entityId: projectId,
     action: "UPDATE",
     summary: `Проект «${project.name}» восстановлен из архива`,
@@ -317,10 +315,9 @@ export async function deleteProjectAction(
     return { error: "Название не совпадает" };
   }
 
-  await writeAuditLog({
+  await recordAudit({ user: { id: user.id! } }, {
     projectId: null,
-    userId: user.id!,
-    entityType: "project",
+    entityType: AuditEntityType.project,
     entityId: projectId,
     action: "DELETE",
     summary: `Удалён проект «${project.name}»`,

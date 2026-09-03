@@ -12,6 +12,7 @@ import {
   type SelectHTMLAttributes,
 } from "react";
 import { cn } from "@/shared/lib/cn";
+import { PortaledMenu } from "@/shared/ui/portaled-menu";
 
 type OptionData = {
   value: string;
@@ -87,7 +88,7 @@ export function Select({
 }: SelectHTMLAttributes<HTMLSelectElement>) {
   const options = parseOptions(children);
   const listboxId = useId();
-  const containerRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const nativeRef = useRef<HTMLSelectElement>(null);
   const isControlled = value !== undefined;
   const [open, setOpen] = useState(false);
@@ -109,27 +110,6 @@ export function Select({
     }
   }, [isControlled, value]);
 
-  useEffect(() => {
-    if (!open) return;
-    function handlePointerDown(event: MouseEvent) {
-      if (
-        containerRef.current &&
-        !containerRef.current.contains(event.target as Node)
-      ) {
-        setOpen(false);
-      }
-    }
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") setOpen(false);
-    }
-    document.addEventListener("mousedown", handlePointerDown);
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("mousedown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [open]);
-
   function handleNativeChange(event: ChangeEvent<HTMLSelectElement>) {
     if (!isControlled) {
       setInternalValue(event.target.value);
@@ -148,7 +128,7 @@ export function Select({
   }
 
   return (
-    <div ref={containerRef} className={cn("relative", className)}>
+    <div className={cn("relative", className)}>
       <select
         ref={nativeRef}
         id={id}
@@ -165,6 +145,7 @@ export function Select({
       </select>
 
       <button
+        ref={triggerRef}
         type="button"
         id={id ? `${id}-trigger` : undefined}
         disabled={disabled}
@@ -187,34 +168,32 @@ export function Select({
         <ChevronDown open={open} />
       </button>
 
-      {open ? (
-        <ul
-          id={listboxId}
-          role="listbox"
-          aria-labelledby={id ? `${id}-trigger` : undefined}
-          className="glass-dropdown absolute z-50 mt-1.5 max-h-60 w-full overflow-y-auto"
-        >
-          {options.map((option) => (
-            <li key={option.value || "__empty"} role="presentation">
-              <button
-                type="button"
-                role="option"
-                aria-selected={option.value === currentValue}
-                disabled={option.disabled}
-                data-selected={
-                  option.value === currentValue ? "true" : undefined
-                }
-                className="glass-dropdown-item"
-                onClick={() => {
-                  if (!option.disabled) commitValue(option.value);
-                }}
-              >
-                {option.label}
-              </button>
-            </li>
-          ))}
-        </ul>
-      ) : null}
+      <PortaledMenu
+        open={open}
+        anchorRef={triggerRef}
+        onClose={() => setOpen(false)}
+        id={listboxId}
+        matchAnchorWidth
+      >
+        {options.map((option) => (
+          <button
+            key={option.value || "__empty"}
+            type="button"
+            role="option"
+            aria-selected={option.value === currentValue}
+            disabled={option.disabled}
+            data-selected={
+              option.value === currentValue ? "true" : undefined
+            }
+            className="glass-dropdown-item"
+            onClick={() => {
+              if (!option.disabled) commitValue(option.value);
+            }}
+          >
+            {option.label}
+          </button>
+        ))}
+      </PortaledMenu>
     </div>
   );
 }

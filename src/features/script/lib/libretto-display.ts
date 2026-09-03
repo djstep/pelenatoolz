@@ -48,6 +48,14 @@ function resourceNames(scene: LibrettoScene, categories: string[]) {
     .join(", ");
 }
 
+/** «Люди на причале (6)» — имя и количество, если quantity > 1. */
+function resourceNamesWithQty(scene: LibrettoScene, categories: string[]) {
+  return scene.resources
+    .filter((r) => categories.includes(r.category))
+    .map((r) => (r.quantity > 1 ? `${r.name} (${r.quantity})` : r.name))
+    .join(", ");
+}
+
 function elementNames(scene: LibrettoScene, types: string[]) {
   return scene.elements
     .filter((e) => types.includes(e.element.type))
@@ -56,11 +64,11 @@ function elementNames(scene: LibrettoScene, types: string[]) {
 }
 
 export function getExtras(scene: LibrettoScene) {
-  return resourceNames(scene, ["EXTRAS"]) || "—";
+  return resourceNamesWithQty(scene, ["EXTRAS"]) || "—";
 }
 
 export function getGroup(scene: LibrettoScene) {
-  return resourceNames(scene, ["GROUP"]) || "—";
+  return resourceNamesWithQty(scene, ["GROUP"]) || "—";
 }
 
 export function getStunt(scene: LibrettoScene) {

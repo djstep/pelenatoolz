@@ -97,6 +97,7 @@ export type CharacterEditSource = Pick<
   | "name"
   | "description"
   | "roleRequirements"
+  | "roleType"
   | "makeupOffsetMin"
   | "costumeOffsetMin"
 >;
@@ -115,7 +116,13 @@ export async function getCharacterDetail(projectId: string, characterId: string)
         },
       },
       castingCandidates: {
-        include: { person: true },
+        include: {
+          person: true,
+          comments: {
+            orderBy: { createdAt: "asc" },
+            include: { author: { select: { id: true, name: true } } },
+          },
+        },
         orderBy: { statusChangedAt: "desc" },
       },
       actors: {
@@ -143,6 +150,13 @@ export async function getCharacterDetail(projectId: string, characterId: string)
         ...c.person,
         proposedRate: dec(c.person.proposedRate),
       },
+      comments: c.comments.map((cm) => ({
+        id: cm.id,
+        body: cm.body,
+        createdAt: cm.createdAt.toISOString(),
+        authorName: cm.author.name,
+        authorId: cm.author.id,
+      })),
     })),
     actors: character.actors.map((a) => ({
       ...a,

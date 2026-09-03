@@ -19,7 +19,8 @@ import { detectScriptFormat, formatLabel } from "@/features/import/script-format
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { listScenes } from "@/features/script/queries";
 import { prisma } from "@/shared/db/prisma";
-import { writeAuditLog } from "@/shared/audit/log";
+import { AuditEntityType } from "@/shared/audit/entity-types";
+import { recordAudit } from "@/shared/audit/with-audit";
 
 import { mergeSceneEdits } from "@/features/import/merge-scene-edits";
 import type {
@@ -286,10 +287,9 @@ export async function applyScriptImportAction(
     data: { status: "applied", scriptVersionId: version.id },
   });
 
-  await writeAuditLog({
+  await recordAudit(ctx, {
     projectId,
-    userId: ctx.user.id!,
-    entityType: "script_import",
+    entityType: AuditEntityType.scriptImport,
     entityId: jobId,
     action: "CREATE",
     summary: `Импортирована версия сценария (${applied} сцен в тексте)`,

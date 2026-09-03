@@ -8,6 +8,7 @@ import {
   type KeyboardEvent,
 } from "react";
 import { cn } from "@/shared/lib/cn";
+import { PortaledMenu } from "@/shared/ui/portaled-menu";
 
 export type AutocompleteOption = {
   value: string;
@@ -53,7 +54,7 @@ export function AutocompleteInput({
   displayValue,
 }: Props) {
   const listboxId = useId();
-  const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const isControlled = value !== undefined;
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState(defaultValue);
@@ -70,21 +71,6 @@ export function AutocompleteInput({
       setSubmittedValue(value ?? "");
     }
   }, [isControlled, value]);
-
-  useEffect(() => {
-    if (!open) return;
-    function handlePointerDown(event: MouseEvent) {
-      if (
-        containerRef.current &&
-        !containerRef.current.contains(event.target as Node)
-      ) {
-        setOpen(false);
-        setActiveIndex(-1);
-      }
-    }
-    document.addEventListener("mousedown", handlePointerDown);
-    return () => document.removeEventListener("mousedown", handlePointerDown);
-  }, [open]);
 
   function updateValue(next: string) {
     setSubmittedValue(next);
@@ -150,9 +136,10 @@ export function AutocompleteInput({
     open && currentQuery.trim().length >= minChars && !disabled;
 
   return (
-    <div ref={containerRef} className="relative">
+    <div className="relative">
       <input type="hidden" name={name} value={submittedValue} />
       <input
+        ref={inputRef}
         id={id}
         type="text"
         value={visibleValue}
@@ -176,46 +163,49 @@ export function AutocompleteInput({
         onKeyDown={handleKeyDown}
       />
 
-      {showDropdown ? (
-        <ul
-          id={listboxId}
-          role="listbox"
-          className="glass-dropdown absolute z-50 mt-1 max-h-56 w-full overflow-auto p-1"
-        >
-          {loading ? (
-            <li className="px-3 py-2 text-sm text-[var(--muted-fg)]">
-              Поиск…
-            </li>
-          ) : options.length === 0 ? (
-            <li className="px-3 py-2 text-sm text-[var(--muted-fg)]">
-              {emptyText}
-            </li>
-          ) : (
-            options.map((option, index) => (
-              <li key={`${option.value}-${index}`} role="presentation">
-                <button
-                  type="button"
-                  role="option"
-                  aria-selected={index === activeIndex}
-                  className={cn(
-                    "glass-dropdown-item w-full text-left",
-                    index === activeIndex && "bg-[var(--accent)]/10",
-                  )}
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => commitOption(option)}
-                >
-                  <span className="block truncate">{option.label}</span>
-                  {option.hint ? (
-                    <span className="mt-0.5 block truncate text-xs text-[var(--muted-fg)]">
-                      {option.hint}
-                    </span>
-                  ) : null}
-                </button>
-              </li>
-            ))
-          )}
-        </ul>
-      ) : null}
+      <PortaledMenu
+        open={showDropdown}
+        anchorRef={inputRef}
+        onClose={() => {
+          setOpen(false);
+          setActiveIndex(-1);
+        }}
+        id={listboxId}
+        matchAnchorWidth
+        className="p-1"
+      >
+        {loading ? (
+          <div className="px-3 py-2 text-sm text-[var(--muted-fg)]">
+            Поиск…
+          </div>
+        ) : options.length === 0 ? (
+          <div className="px-3 py-2 text-sm text-[var(--muted-fg)]">
+            {emptyText}
+          </div>
+        ) : (
+          options.map((option, index) => (
+            <button
+              key={`${option.value}-${index}`}
+              type="button"
+              role="option"
+              aria-selected={index === activeIndex}
+              className={cn(
+                "glass-dropdown-item w-full text-left",
+                index === activeIndex && "bg-[var(--accent)]/10",
+              )}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => commitOption(option)}
+            >
+              <span className="block truncate">{option.label}</span>
+              {option.hint ? (
+                <span className="mt-0.5 block truncate text-xs text-[var(--muted-fg)]">
+                  {option.hint}
+                </span>
+              ) : null}
+            </button>
+          ))
+        )}
+      </PortaledMenu>
     </div>
   );
 }

@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { cn } from "@/shared/lib/cn";
+import { PortaledMenu } from "@/shared/ui/portaled-menu";
 
 type Option = { value: string; label: string };
 
@@ -24,37 +25,17 @@ export function StatusSelect({
 }) {
   const label = options.find((o) => o.value === value)?.label ?? value;
   const listboxId = useId();
-  const containerRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
-
-  useEffect(() => {
-    if (!open) return;
-    function handlePointerDown(event: MouseEvent) {
-      if (
-        containerRef.current &&
-        !containerRef.current.contains(event.target as Node)
-      ) {
-        setOpen(false);
-      }
-    }
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") setOpen(false);
-    }
-    document.addEventListener("mousedown", handlePointerDown);
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("mousedown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [open]);
 
   if (disabled || !onChange) {
     return <span className={cn(triggerClass, className)}>{label}</span>;
   }
 
   return (
-    <div ref={containerRef} className={cn("relative inline-flex", className)}>
+    <div className={cn("inline-flex", className)}>
       <button
+        ref={triggerRef}
         type="button"
         aria-haspopup="listbox"
         aria-expanded={open}
@@ -84,31 +65,32 @@ export function StatusSelect({
         </svg>
       </button>
 
-      {open ? (
-        <ul
-          id={listboxId}
-          role="listbox"
-          className="glass-dropdown absolute right-0 z-50 mt-1 min-w-[11rem] max-h-60 overflow-y-auto py-1"
-        >
-          {options.map((option) => (
-            <li key={option.value} role="presentation">
-              <button
-                type="button"
-                role="option"
-                aria-selected={option.value === value}
-                data-selected={option.value === value ? "true" : undefined}
-                className="glass-dropdown-item text-xs"
-                onClick={() => {
-                  setOpen(false);
-                  if (option.value !== value) onChange(option.value);
-                }}
-              >
-                {option.label}
-              </button>
-            </li>
-          ))}
-        </ul>
-      ) : null}
+      <PortaledMenu
+        open={open}
+        anchorRef={triggerRef}
+        onClose={() => setOpen(false)}
+        id={listboxId}
+        align="end"
+        minWidth={176}
+        className="py-1"
+      >
+        {options.map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            role="option"
+            aria-selected={option.value === value}
+            data-selected={option.value === value ? "true" : undefined}
+            className="glass-dropdown-item text-xs"
+            onClick={() => {
+              setOpen(false);
+              if (option.value !== value) onChange(option.value);
+            }}
+          >
+            {option.label}
+          </button>
+        ))}
+      </PortaledMenu>
     </div>
   );
 }

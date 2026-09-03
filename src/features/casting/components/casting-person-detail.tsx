@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState, useTransition } from "react";
+import { useActionState, useEffect, useState, useTransition, type ReactNode } from "react";
 import type { CastingCandidateStatus } from "@prisma/client";
 import Link from "next/link";
 import {
@@ -39,6 +39,7 @@ export function CastingPersonDetail({
   characters,
   canWrite,
   availabilityMini,
+  auditionsSlot,
 }: {
   projectId: string;
   locale: string;
@@ -50,6 +51,7 @@ export function CastingPersonDetail({
     manualDays: Record<string, Record<string, { status: string; comment: string | null }>>;
     kppBusySerialized: Record<string, string[]>;
   };
+  auditionsSlot?: ReactNode;
 }) {
   const [editOpen, setEditOpen] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -144,6 +146,22 @@ export function CastingPersonDetail({
       ) : null}
 
       <section className="glass-card grid gap-4 p-5 md:grid-cols-2 text-sm">
+        <div>
+          <p className="text-[var(--muted-fg)]">Дата рождения</p>
+          <p>
+            {person.birthDate
+              ? String(person.birthDate).slice(0, 10)
+              : "—"}
+          </p>
+        </div>
+        <div>
+          <p className="text-[var(--muted-fg)]">Образование</p>
+          <p>{person.education ?? "—"}</p>
+        </div>
+        <div className="md:col-span-2">
+          <p className="text-[var(--muted-fg)]">Фильмография</p>
+          <p className="whitespace-pre-wrap">{person.filmography ?? "—"}</p>
+        </div>
         <div>
           <p className="text-[var(--muted-fg)]">Email</p>
           <p>{person.email ?? "—"}</p>
@@ -242,6 +260,8 @@ export function CastingPersonDetail({
           </div>
         ) : null}
       </section>
+
+      {auditionsSlot}
 
       {editOpen ? (
         <div className="glass-card space-y-4 p-5">

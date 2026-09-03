@@ -3,6 +3,11 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import type { ProjectType } from "@prisma/client";
+import {
+  resourceCategoryPath,
+  resourceItemPath,
+  resourcesBasePath,
+} from "@/features/resources/lib/paths";
 import { deleteResourceItemAction } from "@/features/resources/actions";
 import { ItemModal } from "@/features/resources/components/item-modal";
 import type { ResourceCategoryDetail } from "@/features/resources/queries";
@@ -95,7 +100,7 @@ export function CategoryWorkspace({
     <div className="space-y-4">
       <div>
         <Link
-          href={`/${locale}/projects/${projectId}/resources`}
+          href={resourcesBasePath(locale, projectId)}
           className="text-xs text-[var(--muted-fg)] hover:text-[var(--foreground)]"
         >
           ← Все категории
@@ -160,7 +165,7 @@ export function CategoryWorkspace({
                   <tr key={item.id} className="border-b border-[var(--border)]/60 align-top">
                     <td className="px-3 py-3 font-medium">
                       <Link
-                        href={`/${locale}/projects/${projectId}/resources/${category.id}/items/${item.id}`}
+                        href={resourceItemPath(locale, projectId, category.id, item.id)}
                         className="hover:text-[var(--accent)]"
                       >
                         {item.name}

@@ -5,6 +5,8 @@ import { z } from "zod";
 import { parseHhMmToMinutes } from "@/shared/i18n/domain-labels";
 import type { CharacterCastSnapshot } from "@/features/preproduction/lib/snapshots";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
+import { AuditEntityType } from "@/shared/audit/entity-types";
+import { auditMutation } from "@/shared/audit/with-audit";
 import { prisma } from "@/shared/db/prisma";
 
 export type CharacterActionState = { error?: string; success?: string };
@@ -31,6 +33,10 @@ const characterRecordSchema = z.object({
   name: z.string().trim().min(1).max(200),
   description: z.string().trim().max(5000).optional(),
   roleRequirements: z.string().trim().max(5000).optional(),
+  roleType: z
+    .enum(["LEAD", "SUPPORTING", "EPISODIC", ""])
+    .optional()
+    .transform((v) => (v ? v : null)),
   makeupOffsetMin: durationMinutes.pipe(z.number().max(600).optional()),
   costumeOffsetMin: durationMinutes.pipe(z.number().max(600).optional()),
 });
@@ -65,10 +71,24 @@ export async function updateCharacterRequirementsAction(
   });
   if (!parsed.success) return { error: "Проверьте данные" };
 
-  await prisma.character.updateMany({
-    where: { id: characterId, projectId },
-    data: parsed.data,
-  });
+  await auditMutation(
+    ctx,
+    async (data) => {
+      await prisma.character.updateMany({
+        where: { id: characterId, projectId },
+        data,
+      });
+    },
+    parsed.data,
+    {
+      projectId,
+      entityType: AuditEntityType.character,
+      action: "UPDATE",
+      entityId: characterId,
+      summary: "Обновлены требования персонажа",
+      changes: { fields: { description: parsed.data.description, roleRequirements: parsed.data.roleRequirements } },
+    },
+  );
 
   revalidateCharacter(projectId, characterId);
   return { success: "Сохранено" };
@@ -112,23 +132,35 @@ export async function updateCharacterCastSnapshotAction(
     skills,
   };
 
-  await prisma.character.update({
-    where: { id: characterId },
-    data: { castSnapshot: next },
-  });
-
-  const actor = await prisma.actor.findFirst({
-    where: { projectId, characterId },
-  });
-  if (actor && parsed.data.shiftRate != null) {
-    await prisma.actor.update({
-      where: { id: actor.id },
-      data: {
-        shiftRate: parsed.data.shiftRate,
-        specialConditions: next.proposedTerms ?? actor.specialConditions,
-      },
-    });
-  }
+  await auditMutation(
+    ctx,
+    async (next) => {
+      await prisma.character.update({
+        where: { id: characterId },
+        data: { castSnapshot: next },
+      });
+      const actor = await prisma.actor.findFirst({
+        where: { projectId, characterId },
+      });
+      if (actor && parsed.data.shiftRate != null) {
+        await prisma.actor.update({
+          where: { id: actor.id },
+          data: {
+            shiftRate: parsed.data.shiftRate,
+            specialConditions: next.proposedTerms ?? actor.specialConditions,
+          },
+        });
+      }
+    },
+    next,
+    {
+      projectId,
+      entityType: AuditEntityType.character,
+      action: "UPDATE",
+      entityId: characterId,
+      summary: "Обновлён снимок утверждённого актёра",
+    },
+  );
 
   revalidateCharacter(projectId, characterId);
   return { success: "Данные утверждённого актёра обновлены" };
@@ -146,14 +178,24 @@ export async function createCharacterRecordAction(
     name: formData.get("name"),
     description: formData.get("description") || undefined,
     roleRequirements: formData.get("roleRequirements") || undefined,
+    roleType: formData.get("roleType") || "",
     makeupOffsetMin: formData.get("makeupOffsetMin") || undefined,
     costumeOffsetMin: formData.get("costumeOffsetMin") || undefined,
   });
   if (!parsed.success) return { error: "Укажите имя персонажа" };
 
-  await prisma.character.create({
-    data: { projectId, ...parsed.data },
-  });
+  await auditMutation(
+    ctx,
+    async (data) => prisma.character.create({ data: { projectId, ...data } }),
+    parsed.data,
+    {
+      projectId,
+      entityType: AuditEntityType.character,
+      action: "CREATE",
+      entityId: (_, c) => c.id,
+      summary: (_, c) => `Создан персонаж «${c.name}»`,
+    },
+  );
 
   revalidateCharacters(projectId);
   return { success: "Персонаж добавлен" };
@@ -172,16 +214,33 @@ export async function updateCharacterRecordAction(
     name: formData.get("name"),
     description: formData.get("description") || undefined,
     roleRequirements: formData.get("roleRequirements") || undefined,
+    roleType: formData.get("roleType") || "",
     makeupOffsetMin: formData.get("makeupOffsetMin") || undefined,
     costumeOffsetMin: formData.get("costumeOffsetMin") || undefined,
   });
   if (!parsed.success) return { error: "Проверьте данные" };
 
-  const updated = await prisma.character.updateMany({
-    where: { id: characterId, projectId },
-    data: parsed.data,
-  });
-  if (updated.count === 0) return { error: "Персонаж не найден" };
+  const updated = await auditMutation(
+    ctx,
+    async (data) => {
+      const count = await prisma.character.updateMany({
+        where: { id: characterId, projectId },
+        data,
+      });
+      if (count.count === 0) throw new Error("NOT_FOUND");
+      return { name: data.name };
+    },
+    parsed.data,
+    {
+      projectId,
+      entityType: AuditEntityType.character,
+      action: "UPDATE",
+      entityId: characterId,
+      summary: (_, r) => `Обновлён персонаж «${r.name}»`,
+    },
+  ).catch(() => null);
+
+  if (!updated) return { error: "Персонаж не найден" };
 
   revalidateCharacters(projectId, characterId);
   return { success: "Персонаж сохранён" };
@@ -196,13 +255,26 @@ export async function deleteCharacterAction(projectId: string, characterId: stri
   });
   if (!character) throw new Error("NOT_FOUND");
 
-  await prisma.$transaction([
-    prisma.actor.updateMany({
-      where: { projectId, characterId },
-      data: { characterId: null },
-    }),
-    prisma.character.deleteMany({ where: { id: characterId, projectId } }),
-  ]);
+  await auditMutation(
+    ctx,
+    async () => {
+      await prisma.$transaction([
+        prisma.actor.updateMany({
+          where: { projectId, characterId },
+          data: { characterId: null },
+        }),
+        prisma.character.deleteMany({ where: { id: characterId, projectId } }),
+      ]);
+    },
+    null,
+    {
+      projectId,
+      entityType: AuditEntityType.character,
+      action: "DELETE",
+      entityId: characterId,
+      summary: `Удалён персонаж «${character.name}»`,
+    },
+  );
 
   revalidateCharacters(projectId);
 }
