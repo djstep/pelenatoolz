@@ -20,9 +20,9 @@ export default async function BudgetPage({ params }: Props) {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="font-display text-2xl font-semibold">Смета и бюджет</h2>
+        <h2 className="font-display text-2xl font-semibold">Статьи бюджета</h2>
         <p className="mt-1 text-sm text-[var(--muted-fg)]">
-          Статьи расходов по категориям · план / факт · валюта проекта:{" "}
+          План / факт по категориям · табличная смета — в разделе «Смета» · валюта:{" "}
           {ctx.project.currency}
         </p>
       </div>

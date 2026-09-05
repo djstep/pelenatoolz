@@ -107,7 +107,7 @@ export default async function ProjectOverviewPage({ params }: Props) {
             <Link href={`/${locale}/projects/${projectId}/reports`}>
               <Button variant="secondary">Отчёты</Button>
             </Link>
-            <Link href={`/${locale}/projects/${projectId}/budget`}>
+            <Link href={`/${locale}/projects/${projectId}/smeta`}>
               <Button variant="secondary">Смета</Button>
             </Link>
           </div>

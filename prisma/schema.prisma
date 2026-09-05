@@ -231,6 +231,7 @@ model User {
   scriptVersions  ScriptVersion[]
   scriptComments  ScriptComment[]
   castingCandidateComments CastingCandidateComment[]
+  createdBudgets Budget[] @relation("BudgetCreator")
   createdAuditions Audition[]         @relation("AuditionCreator")
   uploadedFiles   ProjectFile[]       @relation("FileUploader")
 }
@@ -287,6 +288,7 @@ model Project {
   scoutCandidates ScoutCandidate[]
   auditLogs   AuditLog[]
   budgetLines BudgetLine[]
+  budgets     Budget[]
   financeOps  FinanceOperation[]
   postTasks   PostTask[]
   cloudFiles  CloudFileLink[]
@@ -1340,6 +1342,46 @@ model BudgetLine {
 
   @@index([projectId, category])
   @@index([projectId, sortOrder])
+}
+
+/// Табличная смета проекта (Excel-like). Не путать со статьями BudgetLine.
+model Budget {
+  id          String   @id @default(cuid())
+  projectId   String
+  name        String   @default("Смета")
+  /// Общая карта стилей Univer (workbook-level), на листы ссылаются по id
+  styles      Json     @default("{}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdById String?
+
+  project   Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy User?        @relation("BudgetCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  sheets    BudgetSheet[]
+
+  @@index([projectId])
+}
+
+model BudgetSheet {
+  id        String  @id @default(cuid())
+  budgetId  String
+  name      String
+  sortOrder Int     @default(0)
+  /// Избранный / закреплённый в начале бокового навигатора
+  pinned    Boolean @default(false)
+
+  budget Budget           @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  data   BudgetSheetData?
+
+  @@index([budgetId, sortOrder])
+}
+
+/// Один JSON на лист — строки/столбцы/значения/формулы/стили ячеек (формат Univer worksheet).
+model BudgetSheetData {
+  sheetId String @id
+  data    Json
+
+  sheet BudgetSheet @relation(fields: [sheetId], references: [id], onDelete: Cascade)
 }
 
 enum FinanceOpType {

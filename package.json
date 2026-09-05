@@ -20,6 +20,8 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@prisma/client": "^6.19.3",
     "@types/pdfkit": "^0.17.6",
+    "@univerjs/preset-sheets-core": "^0.25.1",
+    "@univerjs/presets": "^0.25.1",
     "bcryptjs": "^3.0.3",
     "clsx": "^2.1.1",
     "dejavu-fonts-ttf": "^2.37.3",
@@ -36,6 +38,7 @@
     "sql.js": "^1.14.2",
     "suncalc": "^2.0.1",
     "tailwind-merge": "^3.6.0",
+    "xlsx": "^0.18.5",
     "zod": "^4.4.3"
   },
   "devDependencies": {

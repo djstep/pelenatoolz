@@ -120,7 +120,7 @@ export function hasSectionPermission(
 export function can(
   matrix: PermissionMatrix,
   section: PermissionSectionId,
-  action: "read" | "write" | "manage" | "finance",
+  action: "read" | "write" | "manage" | "finance" | "financeWrite",
 ): boolean {
   const s = matrix[section];
   if (!s?.access) return false;
@@ -133,6 +133,8 @@ export function can(
       return s.update && s.delete;
     case "finance":
       return s.financeRead || s.financeWrite;
+    case "financeWrite":
+      return s.financeWrite;
     default:
       return false;
   }

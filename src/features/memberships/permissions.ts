@@ -32,7 +32,10 @@ export type Permission = (typeof PERMISSIONS)[number];
 
 const PERMISSION_TO_SECTION: Record<
   Permission,
-  { section: PermissionSectionId; action: "read" | "write" | "manage" | "finance" }
+  {
+    section: PermissionSectionId;
+    action: "read" | "write" | "manage" | "finance" | "financeWrite";
+  }
 > = {
   "project:read": { section: "project_settings", action: "read" },
   "project:write": { section: "project_settings", action: "write" },
@@ -47,8 +50,9 @@ const PERMISSION_TO_SECTION: Record<
   "callsheet:write": { section: "schedule", action: "write" },
   "cast:read": { section: "actors", action: "read" },
   "cast:write": { section: "actors", action: "write" },
-  "budget:read": { section: "budget", action: "read" },
-  "budget:write": { section: "budget", action: "write" },
+  /** Смета: фин. просмотр / фин. редактирование в матрице раздела «Смета» */
+  "budget:read": { section: "budget", action: "finance" },
+  "budget:write": { section: "budget", action: "financeWrite" },
   "report:read": { section: "reports", action: "read" },
   "report:write": { section: "reports", action: "write" },
   "finance:read": { section: "finance", action: "finance" },

@@ -31,7 +31,7 @@ export async function requireSectionAccess(
   projectId: string,
   userId: string,
   section: PermissionSectionId,
-  action: "read" | "write" | "manage" | "finance" = "read",
+  action: "read" | "write" | "manage" | "finance" | "financeWrite" = "read",
 ) {
   const membership = await getMembershipWithPermissions(projectId, userId);
   const matrix = getMatrixFromMembership(membership);
