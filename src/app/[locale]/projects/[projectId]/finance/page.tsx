@@ -1,16 +1,21 @@
+import { FinanceSectionTabs } from "@/features/finance/components/finance-section-tabs";
 import { FinanceWorkspace } from "@/features/finance/components/finance-workspace";
 import {
   listActorsBrief,
   listFinanceOperations,
 } from "@/features/finance/queries";
+import {
+  listCompanyOptions,
+  listCounterpartyOptions,
+} from "@/features/counterparties/queries";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 
 type Props = {
-  params: Promise<{ projectId: string }>;
+  params: Promise<{ locale: string; projectId: string }>;
 };
 
 export default async function FinancePage({ params }: Props) {
-  const { projectId } = await params;
+  const { locale, projectId } = await params;
   const ctx = await requireProjectContext(projectId);
 
   if (!ctx.can("finance:read")) {
@@ -19,9 +24,11 @@ export default async function FinancePage({ params }: Props) {
     );
   }
 
-  const [operations, actors] = await Promise.all([
+  const [operations, actors, companies, counterparties] = await Promise.all([
     listFinanceOperations(projectId),
     listActorsBrief(projectId),
+    listCompanyOptions(projectId),
+    listCounterpartyOptions(projectId),
   ]);
 
   return (
@@ -36,11 +43,15 @@ export default async function FinancePage({ params }: Props) {
         </p>
       </div>
 
+      <FinanceSectionTabs locale={locale} projectId={projectId} />
+
       <FinanceWorkspace
         projectId={projectId}
         currency={ctx.project.currency}
         operations={operations}
         actors={actors}
+        companies={companies}
+        counterparties={counterparties}
         canWrite={ctx.can("finance:write")}
       />
     </div>

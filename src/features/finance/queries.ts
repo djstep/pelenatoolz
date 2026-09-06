@@ -13,6 +13,10 @@ export async function listFinanceOperations(projectId: string) {
           middleName: true,
         },
       },
+      company: { select: { id: true, name: true } },
+      counterpartyEntity: {
+        select: { id: true, name: true, type: true },
+      },
     },
     orderBy: [{ operationDate: "desc" }, { createdAt: "desc" }],
   });

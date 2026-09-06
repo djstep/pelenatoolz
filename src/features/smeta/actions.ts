@@ -7,16 +7,144 @@ import {
   excelBufferToUniverWorkbook,
 } from "@/features/smeta/lib/import-workbook";
 import {
+  createBlankBudget,
   createBudgetFromSnapshot,
+  createBudgetFromTemplate,
+  deleteBudgetTemplate,
   persistBudgetSnapshot,
   renameBudget,
+  renameBudgetTemplate,
+  saveBudgetAsTemplate,
   setBudgetSheetPinned,
 } from "@/features/smeta/queries";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 
 function revalidateSmeta(projectId: string) {
   revalidatePath(`/ru/projects/${projectId}/smeta`);
+  revalidatePath(`/ru/projects/${projectId}/smeta/templates`);
   revalidatePath(`/ru/projects/${projectId}/budget`);
+  revalidatePath(`/ru/projects/${projectId}/finance`);
+}
+
+export async function createBlankBudgetAction(
+  projectId: string,
+  payload?: unknown,
+) {
+  const ctx = await requireProjectContext(projectId);
+  if (!ctx.can("budget:write")) return { error: "Недостаточно прав" };
+
+  const schema = z.object({
+    name: z.string().trim().min(1).max(200).optional(),
+  });
+  const parsed = schema.safeParse(payload ?? {});
+  if (!parsed.success) return { error: "Некорректные данные" };
+
+  const created = await createBlankBudget(
+    projectId,
+    ctx.user.id,
+    parsed.data.name ?? "Смета",
+  );
+  revalidateSmeta(projectId);
+  return {
+    success: "Смета создана",
+    budgetId: created.id,
+    name: created.name,
+  };
+}
+
+export async function createBudgetFromTemplateAction(
+  projectId: string,
+  payload: unknown,
+) {
+  const ctx = await requireProjectContext(projectId);
+  if (!ctx.can("budget:write")) return { error: "Недостаточно прав" };
+
+  const schema = z.object({
+    templateId: z.string().min(1),
+    name: z.string().trim().min(1).max(200).optional(),
+  });
+  const parsed = schema.safeParse(payload);
+  if (!parsed.success) return { error: "Выберите шаблон" };
+
+  const created = await createBudgetFromTemplate(
+    projectId,
+    parsed.data.templateId,
+    ctx.user.id,
+    parsed.data.name,
+  );
+  if (!created) return { error: "Шаблон не найден" };
+
+  revalidateSmeta(projectId);
+  return {
+    success: "Смета создана из шаблона",
+    budgetId: created.id,
+    name: created.name,
+  };
+}
+
+export async function saveBudgetAsTemplateAction(
+  projectId: string,
+  budgetId: string,
+  payload: unknown,
+) {
+  const ctx = await requireProjectContext(projectId);
+  if (!ctx.can("budget:write")) return { error: "Недостаточно прав" };
+
+  const schema = z.object({
+    name: z.string().trim().min(1).max(200),
+  });
+  const parsed = schema.safeParse(payload);
+  if (!parsed.success) return { error: "Укажите название шаблона" };
+
+  const saved = await saveBudgetAsTemplate(
+    projectId,
+    budgetId,
+    parsed.data.name,
+    ctx.user.id,
+  );
+  if (!saved) return { error: "Смета не найдена" };
+
+  revalidateSmeta(projectId);
+  return { success: "Шаблон сохранён", templateId: saved.id };
+}
+
+export async function renameBudgetTemplateAction(
+  projectId: string,
+  templateId: string,
+  payload: unknown,
+) {
+  const ctx = await requireProjectContext(projectId);
+  if (!ctx.can("budget:write")) return { error: "Недостаточно прав" };
+
+  const schema = z.object({
+    name: z.string().trim().min(1).max(200),
+  });
+  const parsed = schema.safeParse(payload);
+  if (!parsed.success) return { error: "Укажите название" };
+
+  const saved = await renameBudgetTemplate(
+    projectId,
+    templateId,
+    parsed.data.name,
+  );
+  if (!saved) return { error: "Шаблон не найден или его нельзя переименовать" };
+
+  revalidateSmeta(projectId);
+  return { success: "Название сохранено", name: saved.name };
+}
+
+export async function deleteBudgetTemplateAction(
+  projectId: string,
+  templateId: string,
+) {
+  const ctx = await requireProjectContext(projectId);
+  if (!ctx.can("budget:write")) return { error: "Недостаточно прав" };
+
+  const ok = await deleteBudgetTemplate(projectId, templateId);
+  if (!ok) return { error: "Шаблон не найден или его нельзя удалить" };
+
+  revalidateSmeta(projectId);
+  return { success: "Шаблон удалён" };
 }
 
 export async function saveBudgetWorkbookAction(
@@ -123,7 +251,6 @@ export async function importBudgetWorkbookFileAction(
   const schema = z.object({
     fileName: z.string().min(1).max(260),
     base64: z.string().min(1),
-    /** Optional override; default = filename without extension */
     name: z.string().trim().min(1).max(200).optional(),
   });
   const parsed = schema.safeParse(payload);

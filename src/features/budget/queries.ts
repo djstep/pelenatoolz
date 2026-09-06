@@ -4,6 +4,9 @@ import { serializeForClient } from "@/shared/db/serialize-decimal";
 export async function listBudgetLines(projectId: string) {
   const rows = await prisma.budgetLine.findMany({
     where: { projectId },
+    include: {
+      plannedCounterparty: { select: { id: true, name: true } },
+    },
     orderBy: [{ category: "asc" }, { sortOrder: "asc" }, { createdAt: "asc" }],
   });
   return serializeForClient(rows) as typeof rows;

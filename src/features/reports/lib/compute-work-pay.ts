@@ -4,7 +4,7 @@ export type OvertimeRateInput = {
   hourNumber: number;
   percentRate: number | null;
   amount: number | null;
-  forceMajeurePct: number | null;
+  taxPercent: number | null;
 };
 
 export type WorkPayInput = {
@@ -14,7 +14,7 @@ export type WorkPayInput = {
   shiftHoursMin: number | null | undefined;
   unpaidOvertimeMin: number | null | undefined;
   shiftRate: number | null | undefined;
-  forceMajeurePct: number | null | undefined;
+  taxPercent: number | null | undefined;
   overtimeRates?: OvertimeRateInput[];
   extrasTotal?: number;
 };
@@ -42,8 +42,8 @@ function minutesBetween(start: string, end: string): number {
   return diff >= 0 ? diff : diff + 1440;
 }
 
-function withFk(amount: number, fkPct: number): number {
-  return amount + (amount * fkPct) / 100;
+function withTax(amount: number, taxPct: number): number {
+  return amount + (amount * taxPct) / 100;
 }
 
 function roundUpToHourMinutes(mins: number): number {
@@ -58,13 +58,13 @@ function roundUpToHourMinutes(mins: number): number {
  */
 export function computeWorkPay(input: WorkPayInput): WorkPayResult {
   const shiftRate = input.shiftRate != null ? Number(input.shiftRate) : null;
-  const fkPct = input.forceMajeurePct != null ? Number(input.forceMajeurePct) : 0;
+  const taxPct = input.taxPercent != null ? Number(input.taxPercent) : 0;
   const extrasPay = input.extrasTotal ?? 0;
   const shiftHoursMin = input.shiftHoursMin ?? null;
   const unpaid = input.unpaidOvertimeMin ?? 0;
 
   const shiftPay =
-    shiftRate != null && shiftRate > 0 ? withFk(shiftRate, fkPct) : null;
+    shiftRate != null && shiftRate > 0 ? withTax(shiftRate, taxPct) : null;
 
   const start = input.factStart?.trim() || "";
   const end = input.factEnd?.trim() || "";
@@ -115,16 +115,16 @@ export function computeWorkPay(input: WorkPayInput): WorkPayResult {
             : rate.percentRate != null
               ? (shiftRate * Number(rate.percentRate)) / 100
               : 0;
-        const rowFk =
-          rate.forceMajeurePct != null ? Number(rate.forceMajeurePct) : fkPct;
-        sum += withFk(amount, rowFk);
+        const rowTax =
+          rate.taxPercent != null ? Number(rate.taxPercent) : taxPct;
+        sum += withTax(amount, rowTax);
       }
       overtimePay = sum;
     } else if (shiftHoursMin && shiftHoursMin > 0) {
       const hourly = shiftRate / (shiftHoursMin / 60);
-      overtimePay = withFk(hourly * hours, fkPct);
+      overtimePay = withTax(hourly * hours, taxPct);
     } else {
-      overtimePay = withFk((shiftRate / 12) * hours, fkPct);
+      overtimePay = withTax((shiftRate / 12) * hours, taxPct);
     }
   } else if (payableOvertimeMin === 0) {
     overtimePay = 0;

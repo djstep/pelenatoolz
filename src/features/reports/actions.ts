@@ -278,7 +278,7 @@ async function recomputeWorkRowPay(workRowId: string) {
       hourNumber: r.hourNumber,
       percentRate: dec(r.percentRate),
       amount: dec(r.amount),
-      forceMajeurePct: dec(r.forceMajeurePct),
+      taxPercent: dec(r.taxPercent),
     })) ?? [];
 
   const pay = computeWorkPay({
@@ -288,7 +288,7 @@ async function recomputeWorkRowPay(workRowId: string) {
     shiftHoursMin: row.shiftHoursMin,
     unpaidOvertimeMin: row.unpaidOvertimeMin,
     shiftRate: dec(row.shiftRate),
-    forceMajeurePct: dec(row.forceMajeurePct),
+    taxPercent: dec(row.taxPercent),
     overtimeRates: rates,
     extrasTotal,
   });

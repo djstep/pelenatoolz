@@ -14,7 +14,7 @@ const SmetaSpreadsheetEditor = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="flex min-h-[65vh] items-center justify-center rounded-xl border border-[var(--border)] text-sm text-[var(--muted-fg)]">
+      <div className="smeta-editor--embedded flex min-h-[65vh] items-center justify-center text-sm text-[var(--foreground)]/80">
         Загрузка табличного редактора…
       </div>
     ),

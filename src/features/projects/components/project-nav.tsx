@@ -9,6 +9,8 @@ export type NavItem = {
   href: string;
   label: string;
   soon?: boolean;
+  /** Extra path prefixes that count as active for this item (e.g. finance sub-tabs). */
+  matchPrefixes?: string[];
 };
 
 export type NavGroup = {
@@ -164,7 +166,11 @@ export function ProjectNav({
       .filter((item) => {
         const full = `${base}${item.href}`;
         if (item.href === "") return pathname === full;
-        return pathname === full || pathname.startsWith(`${full}/`);
+        if (pathname === full || pathname.startsWith(`${full}/`)) return true;
+        return (item.matchPrefixes ?? []).some((prefix) => {
+          const p = `${base}${prefix}`;
+          return pathname === p || pathname.startsWith(`${p}/`);
+        });
       })
       .sort((a, b) => b.href.length - a.href.length);
     return matches[0]?.href ?? null;

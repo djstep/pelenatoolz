@@ -48,10 +48,34 @@ function createPrismaClient() {
 
 type ExtendedPrismaClient = ReturnType<typeof createPrismaClient>;
 
-export const prisma: ExtendedPrismaClient =
-  (globalForPrisma.prisma as ExtendedPrismaClient | undefined) ??
-  createPrismaClient();
+function getPrismaClient(): ExtendedPrismaClient {
+  const cached = globalForPrisma.prisma as ExtendedPrismaClient | undefined;
+  // After `prisma generate`, a long-lived global singleton can miss new models
+  // (e.g. company) until the process restarts. Drop the stale instance in dev.
+  if (
+    cached &&
+    process.env.NODE_ENV !== "production" &&
+    (typeof (cached as { company?: unknown }).company === "undefined" ||
+      typeof (cached as { projectFinanceVariable?: unknown })
+        .projectFinanceVariable === "undefined" ||
+      typeof (cached as { budgetTemplate?: unknown }).budgetTemplate ===
+        "undefined" ||
+      typeof (cached as { accrual?: unknown }).accrual === "undefined" ||
+      typeof (cached as { cashPayment?: unknown }).cashPayment === "undefined")
+  ) {
+    void cached.$disconnect().catch(() => undefined);
+    globalForPrisma.prisma = undefined;
+  }
 
-if (process.env.NODE_ENV !== "production") {
-  globalForPrisma.prisma = prisma as unknown as PrismaClient;
+  const client =
+    (globalForPrisma.prisma as ExtendedPrismaClient | undefined) ??
+    createPrismaClient();
+
+  if (process.env.NODE_ENV !== "production") {
+    globalForPrisma.prisma = client as unknown as PrismaClient;
+  }
+
+  return client;
 }
+
+export const prisma: ExtendedPrismaClient = getPrismaClient();

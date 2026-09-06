@@ -25,6 +25,8 @@ export type SectionPermissions = {
   delete: boolean;
   financeRead: boolean;
   financeWrite: boolean;
+  /** Снятие фиксации кассовых платежей */
+  financeUnlock: boolean;
 };
 
 export type PermissionMatrix = Record<PermissionSectionId, SectionPermissions>;
@@ -37,6 +39,7 @@ export const PERMISSION_FLAGS = [
   "delete",
   "financeRead",
   "financeWrite",
+  "financeUnlock",
 ] as const;
 
 export function emptySectionPermissions(): SectionPermissions {
@@ -48,6 +51,7 @@ export function emptySectionPermissions(): SectionPermissions {
     delete: false,
     financeRead: false,
     financeWrite: false,
+    financeUnlock: false,
   };
 }
 
@@ -60,6 +64,7 @@ export function fullSectionPermissions(): SectionPermissions {
     delete: true,
     financeRead: true,
     financeWrite: true,
+    financeUnlock: true,
   };
 }
 
@@ -103,6 +108,7 @@ export function parsePermissionMatrix(raw: unknown): PermissionMatrix {
       delete: Boolean(v.delete),
       financeRead: Boolean(v.financeRead),
       financeWrite: Boolean(v.financeWrite),
+      financeUnlock: Boolean(v.financeUnlock),
     };
   }
   return base;
@@ -120,7 +126,13 @@ export function hasSectionPermission(
 export function can(
   matrix: PermissionMatrix,
   section: PermissionSectionId,
-  action: "read" | "write" | "manage" | "finance" | "financeWrite",
+  action:
+    | "read"
+    | "write"
+    | "manage"
+    | "finance"
+    | "financeWrite"
+    | "financeUnlock",
 ): boolean {
   const s = matrix[section];
   if (!s?.access) return false;
@@ -135,6 +147,8 @@ export function can(
       return s.financeRead || s.financeWrite;
     case "financeWrite":
       return s.financeWrite;
+    case "financeUnlock":
+      return s.financeUnlock;
     default:
       return false;
   }

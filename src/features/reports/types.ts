@@ -98,7 +98,7 @@ export type ProductionReportWorkRow = {
   shiftHoursMin: number | null;
   unpaidOvertimeMin: number | null;
   shiftRate: number | null;
-  forceMajeurePct: number | null;
+  taxPercent: number | null;
   shiftPay: number | null;
   overtimePay: number | null;
   extrasPay: number | null;

@@ -24,6 +24,7 @@ export const PERMISSIONS = [
   "report:write",
   "finance:read",
   "finance:write",
+  "finance:unlock",
   "post:read",
   "post:write",
 ] as const;
@@ -34,7 +35,13 @@ const PERMISSION_TO_SECTION: Record<
   Permission,
   {
     section: PermissionSectionId;
-    action: "read" | "write" | "manage" | "finance" | "financeWrite";
+    action:
+      | "read"
+      | "write"
+      | "manage"
+      | "finance"
+      | "financeWrite"
+      | "financeUnlock";
   }
 > = {
   "project:read": { section: "project_settings", action: "read" },
@@ -57,6 +64,7 @@ const PERMISSION_TO_SECTION: Record<
   "report:write": { section: "reports", action: "write" },
   "finance:read": { section: "finance", action: "finance" },
   "finance:write": { section: "finance", action: "write" },
+  "finance:unlock": { section: "finance", action: "financeUnlock" },
   "post:read": { section: "post", action: "read" },
   "post:write": { section: "post", action: "write" },
 };

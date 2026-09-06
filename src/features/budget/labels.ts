@@ -1,4 +1,4 @@
-import { BudgetCategory } from "@prisma/client";
+import { BudgetCategory, BudgetLineType } from "@prisma/client";
 
 export const budgetCategoryLabels: Record<BudgetCategory, string> = {
   CAST: "Актёры",
@@ -9,4 +9,11 @@ export const budgetCategoryLabels: Record<BudgetCategory, string> = {
   CATERING: "Питание",
   POST: "Постпродакшн",
   OTHER: "Прочее",
+};
+
+export const budgetLineTypeLabels: Record<BudgetLineType, string> = {
+  PER_SHIFT: "Посменная",
+  ONE_TIME: "Разовая",
+  MONTHLY: "Расходы за месяц",
+  DAILY: "Расходы за день",
 };

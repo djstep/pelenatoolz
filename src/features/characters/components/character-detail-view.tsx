@@ -375,7 +375,7 @@ function CharacterPayrollSection({
       <h3 className="mb-3 font-semibold">Гонорар и переработки</h3>
       <ActorPayrollBlock
         shiftRate={actor.shiftRate ? Number(actor.shiftRate) : 0}
-        forceMajeurePct={actor.forceMajeurePct ? Number(actor.forceMajeurePct) : 0}
+        taxPercent={actor.taxPercent ? Number(actor.taxPercent) : 0}
         shiftHoursMin={actor.shiftHoursMin}
         unpaidOvertimeMin={actor.unpaidOvertimeMin}
         overtime={seedOvertime(actor.overtimeRates)}

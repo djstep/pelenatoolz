@@ -52,19 +52,19 @@ type ActorRow = {
   shiftHoursMin: number | null;
   unpaidOvertimeMin: number | null;
   pickupOffsetMin: number | null;
-  forceMajeurePct: { toString(): string } | null;
+  taxPercent: { toString(): string } | null;
   characterId: string | null;
   character: { name: string } | null;
   overtimeRates: {
     hourNumber: number;
     percentRate: { toString(): string } | null;
     amount: { toString(): string } | null;
-    forceMajeurePct: { toString(): string } | null;
+    taxPercent: { toString(): string } | null;
   }[];
   extraPayments: {
     paymentDate: Date | null;
     amount: { toString(): string };
-    forceMajeurePct: { toString(): string } | null;
+    taxPercent: { toString(): string } | null;
     description: string | null;
   }[];
 };
@@ -249,8 +249,8 @@ function ActorFormFields({
 
       <ActorPayrollBlock
         shiftRate={actor?.shiftRate ? Number(actor.shiftRate) : 0}
-        forceMajeurePct={
-          actor?.forceMajeurePct ? Number(actor.forceMajeurePct) : 0
+        taxPercent={
+          actor?.taxPercent ? Number(actor.taxPercent) : 0
         }
         shiftHoursMin={actor?.shiftHoursMin}
         unpaidOvertimeMin={actor?.unpaidOvertimeMin}

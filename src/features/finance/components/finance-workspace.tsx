@@ -1,13 +1,24 @@
 "use client";
 
 import { useActionState, useEffect, useMemo, useState } from "react";
-import { FinanceOpCategory, FinanceOpType } from "@prisma/client";
+import { CounterpartyType, FinanceOpCategory, FinanceOpType } from "@prisma/client";
+import {
+  quickCreateCompanyAction,
+  quickCreateCounterpartyAction,
+} from "@/features/counterparties/actions";
+import {
+  CounterpartyQuickCreateFields,
+  EntityPicker,
+  type PickerOption,
+} from "@/features/counterparties/components/entity-picker";
+import { counterpartyTypeLabels } from "@/features/counterparties/labels";
 import {
   createFinanceOpAction,
   deleteFinanceOpAction,
   updateFinanceOpAction,
   type FinanceActionState,
 } from "@/features/finance/actions";
+import { financeCounterpartyLabel } from "@/features/finance/lib/labels";
 import {
   financeOpCategoryLabels,
   financeOpTypeLabels,
@@ -38,9 +49,17 @@ type Op = {
   amount: { toString(): string };
   operationDate: Date;
   counterparty: string | null;
+  companyId: string | null;
+  counterpartyId: string | null;
   notes: string | null;
   actorId: string | null;
   actor: ActorOpt | null;
+  company: { id: string; name: string } | null;
+  counterpartyEntity: {
+    id: string;
+    name: string;
+    type: CounterpartyType;
+  } | null;
 };
 
 function money(n: number, currency: string) {
@@ -55,12 +74,32 @@ function actorName(a: ActorOpt) {
 }
 
 function OpForm({
+  projectId,
   op,
   actors,
+  companies,
+  counterparties,
 }: {
+  projectId: string;
   op?: Op;
   actors: ActorOpt[];
+  companies: PickerOption[];
+  counterparties: Array<PickerOption & { type?: CounterpartyType }>;
 }) {
+  const [companyId, setCompanyId] = useState(op?.companyId ?? "");
+  const [counterpartyId, setCounterpartyId] = useState(
+    op?.counterpartyId ?? "",
+  );
+  const [companyOpts, setCompanyOpts] = useState(companies);
+  const [cpOpts, setCpOpts] = useState(counterparties);
+
+  useEffect(() => {
+    setCompanyOpts(companies);
+  }, [companies]);
+  useEffect(() => {
+    setCpOpts(counterparties);
+  }, [counterparties]);
+
   return (
     <div className="grid gap-3 sm:grid-cols-2">
       <div>
@@ -126,11 +165,65 @@ function OpForm({
         />
       </div>
       <div>
-        <Label htmlFor="counterparty">Контрагент</Label>
-        <Input
-          id="counterparty"
-          name="counterparty"
-          defaultValue={op?.counterparty ?? ""}
+        <EntityPicker
+          name="companyId"
+          label="Компания (наше юрлицо)"
+          options={companyOpts}
+          value={companyId}
+          onChange={setCompanyId}
+          placeholder="Поиск компании…"
+          createTitle="Новая компания"
+          onQuickCreate={async (fd) => {
+            const name = String(fd.get("name") ?? "");
+            const result = await quickCreateCompanyAction(projectId, name);
+            if ("id" in result) {
+              setCompanyOpts((prev) => {
+                if (prev.some((o) => o.id === result.id)) return prev;
+                return [{ id: result.id, name: result.name, usageCount: 0 }, ...prev];
+              });
+            }
+            return result;
+          }}
+        />
+      </div>
+      <div>
+        <EntityPicker
+          name="counterpartyId"
+          label="Контрагент"
+          options={cpOpts.map((o) => ({
+            ...o,
+            subtitle: o.type ? counterpartyTypeLabels[o.type] : undefined,
+          }))}
+          value={counterpartyId}
+          onChange={setCounterpartyId}
+          placeholder="Поиск контрагента…"
+          createTitle="Новый контрагент"
+          createFields={<CounterpartyQuickCreateFields />}
+          onQuickCreate={async (fd) => {
+            const name = String(fd.get("name") ?? "");
+            const type = (String(fd.get("type") ?? "LEGAL_ENTITY") ||
+              "LEGAL_ENTITY") as CounterpartyType;
+            const result = await quickCreateCounterpartyAction(
+              projectId,
+              name,
+              type,
+            );
+            if ("id" in result) {
+              setCpOpts((prev) => {
+                if (prev.some((o) => o.id === result.id)) return prev;
+                return [
+                  {
+                    id: result.id,
+                    name: result.name,
+                    usageCount: 0,
+                    type,
+                  },
+                  ...prev,
+                ];
+              });
+            }
+            return result;
+          }}
         />
       </div>
       <div>
@@ -156,12 +249,16 @@ function OpModal({
   projectId,
   op,
   actors,
+  companies,
+  counterparties,
   open,
   onClose,
 }: {
   projectId: string;
   op?: Op;
   actors: ActorOpt[];
+  companies: PickerOption[];
+  counterparties: Array<PickerOption & { type?: CounterpartyType }>;
   open: boolean;
   onClose: () => void;
 }) {
@@ -192,7 +289,13 @@ function OpModal({
       }
     >
       <form id="finance-op-form" action={action} key={op?.id ?? "new"}>
-        <OpForm op={op} actors={actors} />
+        <OpForm
+          projectId={projectId}
+          op={op}
+          actors={actors}
+          companies={companies}
+          counterparties={counterparties}
+        />
       </form>
     </Modal>
   );
@@ -203,12 +306,16 @@ export function FinanceWorkspace({
   currency,
   operations,
   actors,
+  companies,
+  counterparties,
   canWrite,
 }: {
   projectId: string;
   currency: string;
   operations: Op[];
   actors: ActorOpt[];
+  companies: PickerOption[];
+  counterparties: Array<PickerOption & { type?: CounterpartyType }>;
   canWrite: boolean;
 }) {
   const [creating, setCreating] = useState(false);
@@ -309,6 +416,7 @@ export function FinanceWorkspace({
               "Название",
               "Сумма",
               "Контрагент",
+              "Компания",
               "Актёр",
               "Комментарий",
             ];
@@ -320,7 +428,8 @@ export function FinanceWorkspace({
               financeOpCategoryLabels[op.category],
               op.title,
               op.amount.toString(),
-              op.counterparty ?? "",
+              financeCounterpartyLabel(op) ?? "",
+              op.company?.name ?? "",
               op.actor ? actorName(op.actor) : "",
               op.notes ?? "",
             ]);
@@ -399,7 +508,12 @@ export function FinanceWorkspace({
                     {money(Number(op.amount), currency)}
                   </td>
                   <td className="px-4 py-3 text-[var(--muted-fg)]">
-                    {op.counterparty || "—"}
+                    {financeCounterpartyLabel(op) || "—"}
+                    {op.company ? (
+                      <div className="text-[10px] opacity-70">
+                        от {op.company.name}
+                      </div>
+                    ) : null}
                   </td>
                   {canWrite ? (
                     <td className="px-4 py-3 text-right whitespace-nowrap">
@@ -433,6 +547,8 @@ export function FinanceWorkspace({
       <OpModal
         projectId={projectId}
         actors={actors}
+        companies={companies}
+        counterparties={counterparties}
         open={creating}
         onClose={() => setCreating(false)}
       />
@@ -440,6 +556,8 @@ export function FinanceWorkspace({
         projectId={projectId}
         op={editing ?? undefined}
         actors={actors}
+        companies={companies}
+        counterparties={counterparties}
         open={editing != null}
         onClose={() => setEditing(null)}
       />

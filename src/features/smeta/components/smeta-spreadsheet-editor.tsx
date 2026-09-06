@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import {
   importBudgetWorkbookFileAction,
   renameBudgetAction,
+  saveBudgetAsTemplateAction,
   saveBudgetWorkbookAction,
   toggleBudgetSheetPinnedAction,
 } from "@/features/smeta/actions";
@@ -18,6 +19,7 @@ import {
   type NavSheetItem,
 } from "@/features/smeta/components/smeta-sheet-nav";
 import { formatDateShort } from "@/shared/i18n/format-date";
+import { cn } from "@/shared/lib/cn";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Select } from "@/shared/ui/select";
@@ -319,13 +321,20 @@ export function SmetaSpreadsheetEditor({
           /* ignore */
         }
       }
-      try {
-        univerRef.current?.dispose();
-      } catch {
-        /* ignore */
-      }
+      // Univer unmounts its own React root; must not run inside React's render/cleanup.
+      const instance = univerRef.current;
       univerRef.current = null;
       apiRef.current = null;
+      if (instance) {
+        // Defer past React commit — Univer dispose() unmounts a nested React root.
+        setTimeout(() => {
+          try {
+            instance.dispose();
+          } catch {
+            /* ignore */
+          }
+        }, 0);
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- remount via key={budget.id}
   }, [budget.id]);
@@ -488,24 +497,48 @@ export function SmetaSpreadsheetEditor({
             ? `Сохранено ${formatDateShort(savedAt)}`
             : `Обновлено ${formatDateShort(savedAt)}`;
 
+  const projectHref = `/${locale}/projects/${projectId}`;
+  const [isFullscreen, setIsFullscreen] = useState(true);
+
+  function setFullscreen(next: boolean) {
+    setIsFullscreen(next);
+    requestAnimationFrame(() => {
+      window.dispatchEvent(new Event("resize"));
+    });
+  }
+
+  useEffect(() => {
+    if (!isFullscreen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [isFullscreen]);
+
+  useEffect(() => {
+    if (!isFullscreen) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setFullscreen(false);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [isFullscreen]);
+
   return (
-    <div className="flex min-h-[70vh] flex-col gap-3">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="min-w-[16rem] flex-1 space-y-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <label className="text-xs text-[var(--muted-fg)]">Смета</label>
-            <Select
-              value={budget.id}
-              onChange={(e) => onSelectBudget(e.target.value)}
-              className="max-w-xs"
-            >
-              {budgets.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name}
-                </option>
-              ))}
-            </Select>
-          </div>
+    <div
+      className={cn(
+        "flex flex-col text-[var(--foreground)]",
+        isFullscreen
+          ? "smeta-editor--fullscreen"
+          : "smeta-editor--embedded min-h-0",
+      )}
+    >
+      <header className="flex shrink-0 flex-wrap items-center gap-2 border-b border-[var(--border)] bg-[var(--panel-solid)] px-3 py-2 sm:gap-3 sm:px-4">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
           <Input
             value={title}
             disabled={!canWrite || pending}
@@ -516,16 +549,36 @@ export function SmetaSpreadsheetEditor({
                 e.currentTarget.blur();
               }
             }}
-            className="font-display max-w-lg text-xl font-semibold"
+            className="font-display h-9 max-w-md min-w-[10rem] flex-1 text-base font-semibold"
             aria-label="Название сметы"
           />
-          <p className="text-sm text-[var(--muted-fg)]">
-            Боковой список листов · избранное · закрепление шапки · импорт →
-            новая смета
-          </p>
+          {budgets.length > 0 ? (
+            <Select
+              value={budget.id}
+              onChange={(e) => onSelectBudget(e.target.value)}
+              className="h-9 max-w-[14rem]"
+              id="smeta-budget-switcher"
+            >
+              {budgets.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </Select>
+          ) : null}
         </div>
+
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs text-[var(--muted-fg)]">{statusLabel}</span>
+          <span
+            className={cn(
+              "text-xs",
+              status === "error"
+                ? "text-[var(--danger)]"
+                : "text-[var(--foreground)]/70",
+            )}
+          >
+            {statusLabel}
+          </span>
           {canWrite ? (
             <>
               <input
@@ -542,6 +595,53 @@ export function SmetaSpreadsheetEditor({
               <Button
                 type="button"
                 variant="secondary"
+                className="h-9"
+                disabled={pending}
+                onClick={() =>
+                  router.push(`${smetaBase}?create=1`)
+                }
+              >
+                Новая смета
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                className="h-9"
+                onClick={() => router.push(`${smetaBase}/templates`)}
+              >
+                Шаблоны
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                className="h-9"
+                disabled={pending}
+                onClick={() => {
+                  const name = window.prompt(
+                    "Название шаблона",
+                    `${budget.name} (шаблон)`,
+                  );
+                  if (!name?.trim()) return;
+                  start(async () => {
+                    const result = await saveBudgetAsTemplateAction(
+                      projectId,
+                      budget.id,
+                      { name: name.trim() },
+                    );
+                    if (result.error) {
+                      toast.error(result.error);
+                      return;
+                    }
+                    toast.success(result.success ?? "Шаблон сохранён");
+                  });
+                }}
+              >
+                В шаблон
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                className="h-9"
                 disabled={pending}
                 onClick={() => fileInputRef.current?.click()}
               >
@@ -550,34 +650,47 @@ export function SmetaSpreadsheetEditor({
               <Button
                 type="button"
                 variant="secondary"
+                className="h-9"
                 disabled={pending || status === "saving"}
                 onClick={() => void flushSave()}
               >
-                Сохранить сейчас
+                Сохранить
               </Button>
             </>
           ) : (
-            <span className="text-xs text-[var(--muted-fg)]">Только просмотр</span>
+            <span className="text-xs text-[var(--foreground)]/70">
+              Только просмотр
+            </span>
           )}
+          {!isFullscreen ? (
+            <Button
+              type="button"
+              variant="secondary"
+              className="h-9"
+              onClick={() => setFullscreen(true)}
+            >
+              На весь экран
+            </Button>
+          ) : null}
         </div>
-      </div>
+      </header>
 
       {importWarnings.length > 0 ? (
         <div
-          className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm"
+          className="shrink-0 border-b border-amber-500/40 bg-amber-500/10 px-4 py-2.5 text-sm"
           role="status"
         >
-          <p className="font-medium text-amber-900 dark:text-amber-100">
+          <p className="font-medium text-amber-100">
             Импорт выполнен с ограничениями — что не перенесено полностью:
           </p>
-          <ul className="mt-2 list-disc space-y-1 pl-5 text-[var(--foreground)]">
+          <ul className="mt-1 list-disc space-y-0.5 pl-5 text-[var(--foreground)]">
             {importWarnings.map((w) => (
               <li key={w.code + w.message}>{w.message}</li>
             ))}
           </ul>
           <button
             type="button"
-            className="mt-2 text-xs underline text-[var(--muted-fg)]"
+            className="mt-1 text-xs text-[var(--foreground)]/70 underline hover:text-[var(--foreground)]"
             onClick={() => setImportWarnings([])}
           >
             Скрыть
@@ -586,8 +699,10 @@ export function SmetaSpreadsheetEditor({
       ) : null}
 
       <div
-        className="flex min-h-[65vh] flex-1 overflow-hidden rounded-xl border border-[var(--border)] bg-white"
-        style={{ height: "calc(100vh - 14rem)" }}
+        className="flex min-h-0 flex-1 overflow-hidden"
+        style={
+          isFullscreen ? undefined : { minHeight: "calc(100vh - 12rem)" }
+        }
       >
         <SmetaSheetNavigator
           sheets={sheets}
@@ -604,8 +719,14 @@ export function SmetaSpreadsheetEditor({
           onApplyFreeze={applyFreeze}
           onFreezeToSelection={freezeToSelection}
           onClearFreeze={clearFreeze}
+          isFullscreen={isFullscreen}
+          onExitFullscreen={() => setFullscreen(false)}
+          projectHref={projectHref}
         />
-        <div ref={containerRef} className="univer-smeta-host min-w-0 flex-1" />
+        <div
+          ref={containerRef}
+          className="univer-smeta-host min-h-0 min-w-0 flex-1 bg-white"
+        />
       </div>
     </div>
   );

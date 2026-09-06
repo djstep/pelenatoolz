@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { cn } from "@/shared/lib/cn";
 import { Button } from "@/shared/ui/button";
@@ -26,6 +27,9 @@ export function SmetaSheetNavigator({
   onApplyFreeze,
   onFreezeToSelection,
   onClearFreeze,
+  isFullscreen = false,
+  onExitFullscreen,
+  projectHref,
 }: {
   sheets: NavSheetItem[];
   activeSheetId: string | null;
@@ -41,6 +45,9 @@ export function SmetaSheetNavigator({
   onApplyFreeze: (rows?: number, cols?: number) => void;
   onFreezeToSelection: () => void;
   onClearFreeze: () => void;
+  isFullscreen?: boolean;
+  onExitFullscreen?: () => void;
+  projectHref?: string;
 }) {
   const [query, setQuery] = useState("");
 
@@ -59,10 +66,21 @@ export function SmetaSheetNavigator({
 
   if (collapsed) {
     return (
-      <div className="flex w-10 shrink-0 flex-col items-center gap-2 border-r border-[var(--border)] bg-[var(--muted)]/30 py-2">
+      <div className="flex w-10 shrink-0 flex-col items-center gap-2 border-r border-[var(--border)] bg-[var(--panel-solid)] py-2">
+        {isFullscreen && onExitFullscreen ? (
+          <button
+            type="button"
+            className="rounded-lg p-2 text-[var(--foreground)] hover:bg-[var(--nav-hover-bg)]"
+            title="Меню проекта (Esc)"
+            aria-label="Меню проекта"
+            onClick={onExitFullscreen}
+          >
+            ←
+          </button>
+        ) : null}
         <button
           type="button"
-          className="rounded-lg p-2 text-[var(--muted-fg)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
+          className="rounded-lg p-2 text-[var(--foreground)] hover:bg-[var(--nav-hover-bg)]"
           title="Показать список листов"
           aria-label="Показать список листов"
           onClick={onToggleCollapsed}
@@ -70,7 +88,7 @@ export function SmetaSheetNavigator({
           <ChevronRightIcon />
         </button>
         <span
-          className="writing-mode-vertical text-[10px] tracking-wide text-[var(--muted-fg)]"
+          className="text-[10px] tracking-wide text-[var(--foreground)]/80"
           style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
         >
           Листы · {sheets.length}
@@ -80,21 +98,43 @@ export function SmetaSheetNavigator({
   }
 
   return (
-    <aside className="flex w-64 shrink-0 flex-col border-r border-[var(--border)] bg-[var(--muted)]/20">
+    <aside className="flex w-64 shrink-0 flex-col border-r border-[var(--border)] bg-[var(--panel-solid)] text-[var(--foreground)]">
+      {isFullscreen && onExitFullscreen ? (
+        <div className="border-b border-[var(--border)] px-3 py-2">
+          <Button
+            type="button"
+            variant="secondary"
+            className="h-8 w-full justify-start px-2 text-xs"
+            onClick={onExitFullscreen}
+            title="Esc"
+          >
+            ← Меню проекта
+          </Button>
+          {projectHref ? (
+            <Link
+              href={projectHref}
+              className="mt-1 block px-1 text-[11px] text-[var(--foreground)]/60 hover:text-[var(--foreground)]"
+            >
+              Обзор проекта
+            </Link>
+          ) : null}
+        </div>
+      ) : null}
+
       <div className="flex items-center justify-between gap-2 border-b border-[var(--border)] px-3 py-2">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-[var(--muted-fg)]">
+          <p className="text-xs font-semibold uppercase tracking-wide text-[var(--foreground)]">
             Листы
           </p>
-          <p className="text-[11px] text-[var(--muted-fg)]">
+          <p className="text-[11px] text-[var(--foreground)]/70">
             {sheets.length}
             {pinnedCount ? ` · ★ ${pinnedCount}` : ""}
           </p>
         </div>
         <button
           type="button"
-          className="rounded-lg p-1.5 text-[var(--muted-fg)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
-          title="Свернуть"
+          className="rounded-lg p-1.5 text-[var(--foreground)]/80 hover:bg-[var(--nav-hover-bg)] hover:text-[var(--foreground)]"
+          title="Свернуть список листов"
           aria-label="Свернуть список листов"
           onClick={onToggleCollapsed}
         >
@@ -114,7 +154,7 @@ export function SmetaSheetNavigator({
 
       <div className="min-h-0 flex-1 overflow-y-auto px-1.5 py-1">
         {filtered.length === 0 ? (
-          <p className="px-2 py-4 text-center text-xs text-[var(--muted-fg)]">
+          <p className="px-2 py-4 text-center text-xs text-[var(--foreground)]/70">
             Ничего не найдено
           </p>
         ) : (
@@ -129,14 +169,14 @@ export function SmetaSheetNavigator({
                     className={cn(
                       "min-w-0 flex-1 rounded-lg px-2 py-1.5 text-left text-sm transition-colors",
                       active
-                        ? "bg-[var(--foreground)] text-[var(--background)]"
-                        : "text-[var(--foreground)] hover:bg-[var(--muted)]",
+                        ? "glass-nav-active"
+                        : "text-[var(--foreground)] hover:bg-[var(--nav-hover-bg)]",
                     )}
                     title={sheet.name}
                   >
                     <span className="block truncate">
                       {sheet.pinned ? (
-                        <span className="mr-1 opacity-80" aria-hidden>
+                        <span className="mr-1 text-amber-400" aria-hidden>
                           ★
                         </span>
                       ) : null}
@@ -150,8 +190,8 @@ export function SmetaSheetNavigator({
                     className={cn(
                       "shrink-0 rounded-lg px-1.5 text-sm transition-colors",
                       sheet.pinned
-                        ? "text-amber-600 hover:bg-amber-500/10"
-                        : "text-[var(--muted-fg)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]",
+                        ? "text-amber-400 hover:bg-amber-500/10"
+                        : "text-[var(--foreground)]/55 hover:bg-[var(--nav-hover-bg)] hover:text-[var(--foreground)]",
                       !canWrite && "opacity-40",
                     )}
                     title={
@@ -176,14 +216,14 @@ export function SmetaSheetNavigator({
       </div>
 
       <div className="space-y-2 border-t border-[var(--border)] px-3 py-3">
-        <p className="text-xs font-medium uppercase tracking-wide text-[var(--muted-fg)]">
+        <p className="text-xs font-semibold uppercase tracking-wide text-[var(--foreground)]">
           Закрепление
         </p>
-        <p className="text-[11px] leading-snug text-[var(--muted-fg)]">
+        <p className="text-[11px] leading-snug text-[var(--foreground)]/70">
           Шапка не уезжает при прокрутке длинной сметы
         </p>
         <div className="flex items-center gap-2">
-          <label className="flex flex-1 flex-col gap-0.5 text-[11px] text-[var(--muted-fg)]">
+          <label className="flex flex-1 flex-col gap-0.5 text-[11px] font-medium text-[var(--foreground)]">
             Строк
             <input
               type="number"
@@ -194,10 +234,10 @@ export function SmetaSheetNavigator({
               onChange={(e) =>
                 onFreezeRowsChange(Math.max(0, Number(e.target.value) || 0))
               }
-              className="glass-input h-8 rounded-lg px-2 text-sm"
+              className="glass-input h-8 rounded-lg px-2 text-sm text-[var(--foreground)]"
             />
           </label>
-          <label className="flex flex-1 flex-col gap-0.5 text-[11px] text-[var(--muted-fg)]">
+          <label className="flex flex-1 flex-col gap-0.5 text-[11px] font-medium text-[var(--foreground)]">
             Столбцов
             <input
               type="number"
@@ -208,7 +248,7 @@ export function SmetaSheetNavigator({
               onChange={(e) =>
                 onFreezeColsChange(Math.max(0, Number(e.target.value) || 0))
               }
-              className="glass-input h-8 rounded-lg px-2 text-sm"
+              className="glass-input h-8 rounded-lg px-2 text-sm text-[var(--foreground)]"
             />
           </label>
         </div>
@@ -252,7 +292,7 @@ export function SmetaSheetNavigator({
               key={preset.label}
               type="button"
               disabled={!canWrite}
-              className="rounded-md border border-[var(--border)] px-1.5 py-0.5 text-[11px] text-[var(--muted-fg)] hover:bg-[var(--muted)] disabled:opacity-40"
+              className="rounded-md border border-[var(--border)] px-1.5 py-0.5 text-[11px] text-[var(--foreground)]/80 hover:bg-[var(--nav-hover-bg)] hover:text-[var(--foreground)] disabled:opacity-40"
               onClick={() => {
                 onFreezeRowsChange(preset.rows);
                 onFreezeColsChange(preset.cols);

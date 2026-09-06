@@ -6,6 +6,11 @@ import {
   splitWorkbookToSheets,
   type UniverWorkbookData,
 } from "@/features/smeta/lib/workbook-model";
+import {
+  BUILTIN_INDUSTRY_TEMPLATE_ID,
+  createBlankWorkbookSnapshot,
+  createIndustryTemplateSnapshot,
+} from "@/features/smeta/lib/templates";
 
 const budgetInclude = {
   sheets: {
@@ -21,6 +26,15 @@ export type BudgetListItem = {
   updatedAt: string;
 };
 
+export type BudgetTemplateListItem = {
+  id: string;
+  name: string;
+  isBuiltin: boolean;
+  description?: string;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
 export async function listBudgets(projectId: string): Promise<BudgetListItem[]> {
   const rows = await prisma.budget.findMany({
     where: { projectId },
@@ -33,6 +47,32 @@ export async function listBudgets(projectId: string): Promise<BudgetListItem[]> 
     createdAt: r.createdAt.toISOString(),
     updatedAt: r.updatedAt.toISOString(),
   }));
+}
+
+export async function listBudgetTemplates(
+  projectId: string,
+): Promise<BudgetTemplateListItem[]> {
+  const rows = await prisma.budgetTemplate.findMany({
+    where: { projectId },
+    orderBy: [{ updatedAt: "desc" }],
+    select: { id: true, name: true, createdAt: true, updatedAt: true },
+  });
+  return [
+    {
+      id: BUILTIN_INDUSTRY_TEMPLATE_ID,
+      name: "Отраслевой шаблон",
+      isBuiltin: true,
+      description:
+        "Базовый набор статей кинопроизводства «из коробки»",
+    },
+    ...rows.map((r) => ({
+      id: r.id,
+      name: r.name,
+      isBuiltin: false,
+      createdAt: r.createdAt.toISOString(),
+      updatedAt: r.updatedAt.toISOString(),
+    })),
+  ];
 }
 
 export async function getBudgetForProject(projectId: string, budgetId: string) {
@@ -59,6 +99,101 @@ export async function getOrCreateBudget(projectId: string, createdById?: string)
     createEmptyWorkbookSnapshot("Смета"),
     createdById,
   );
+}
+
+export async function createBlankBudget(
+  projectId: string,
+  createdById?: string,
+  name = "Смета",
+) {
+  return createBudgetFromSnapshot(
+    projectId,
+    createBlankWorkbookSnapshot(name),
+    createdById,
+    name,
+  );
+}
+
+export async function createBudgetFromTemplate(
+  projectId: string,
+  templateId: string,
+  createdById?: string,
+  nameOverride?: string,
+) {
+  if (templateId === BUILTIN_INDUSTRY_TEMPLATE_ID) {
+    const name = nameOverride?.trim() || "Смета (отраслевой шаблон)";
+    return createBudgetFromSnapshot(
+      projectId,
+      createIndustryTemplateSnapshot(name),
+      createdById,
+      name,
+    );
+  }
+
+  const tpl = await prisma.budgetTemplate.findFirst({
+    where: { id: templateId, projectId },
+  });
+  if (!tpl) return null;
+
+  const snapshot =
+    tpl.snapshot && typeof tpl.snapshot === "object"
+      ? (tpl.snapshot as Record<string, unknown>)
+      : null;
+  if (!snapshot) return null;
+
+  const name = nameOverride?.trim() || tpl.name;
+  return createBudgetFromSnapshot(projectId, snapshot, createdById, name);
+}
+
+export async function saveBudgetAsTemplate(
+  projectId: string,
+  budgetId: string,
+  name: string,
+  createdById?: string,
+) {
+  const budget = await getBudgetForProject(projectId, budgetId);
+  if (!budget) return null;
+
+  const trimmed = name.trim().slice(0, 200);
+  if (!trimmed) return null;
+
+  return prisma.budgetTemplate.create({
+    data: {
+      projectId,
+      name: trimmed,
+      snapshot: budget.workbook as unknown as Prisma.InputJsonValue,
+      createdById: createdById ?? null,
+    },
+    select: { id: true, name: true, createdAt: true },
+  });
+}
+
+export async function renameBudgetTemplate(
+  projectId: string,
+  templateId: string,
+  name: string,
+) {
+  if (templateId === BUILTIN_INDUSTRY_TEMPLATE_ID) return null;
+  const trimmed = name.trim().slice(0, 200);
+  if (!trimmed) return null;
+
+  const updated = await prisma.budgetTemplate.updateMany({
+    where: { id: templateId, projectId },
+    data: { name: trimmed },
+  });
+  if (updated.count === 0) return null;
+  return { id: templateId, name: trimmed };
+}
+
+export async function deleteBudgetTemplate(
+  projectId: string,
+  templateId: string,
+) {
+  if (templateId === BUILTIN_INDUSTRY_TEMPLATE_ID) return false;
+  const result = await prisma.budgetTemplate.deleteMany({
+    where: { id: templateId, projectId },
+  });
+  return result.count > 0;
 }
 
 /** Create a new Budget (+ sheets) from a Univer snapshot — used by Excel import. */
@@ -235,7 +370,6 @@ export async function persistBudgetSnapshot(
           name: sheet.name,
           sortOrder: sheet.sortOrder,
           budgetId,
-          // pinned preserved — toggled separately
           data: {
             upsert: {
               create: { data: sheet.data as Prisma.InputJsonValue },

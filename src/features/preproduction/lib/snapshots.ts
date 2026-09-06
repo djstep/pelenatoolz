@@ -18,7 +18,7 @@ export type CharacterCastSnapshot = {
   shiftRate?: number | null;
   shiftHoursMin?: number | null;
   unpaidOvertimeMin?: number | null;
-  forceMajeurePct?: number | null;
+  taxPercent?: number | null;
   riderNotes?: string | null;
   roleType?: ActorRoleType;
   contractorType?: ContractorType;
@@ -74,8 +74,12 @@ export function fullNameFromParts(parts: {
 
 export function parseCastSnapshot(raw: unknown): CharacterCastSnapshot | null {
   if (!raw || typeof raw !== "object") return null;
-  const o = raw as CharacterCastSnapshot;
+  const o = raw as CharacterCastSnapshot & { forceMajeurePct?: number | null };
   if (!o.lastName) return null;
+  // Legacy snapshots used forceMajeurePct for the same tax percent field.
+  if (o.taxPercent == null && o.forceMajeurePct != null) {
+    o.taxPercent = o.forceMajeurePct;
+  }
   return o;
 }
 

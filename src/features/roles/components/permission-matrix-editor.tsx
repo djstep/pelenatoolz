@@ -15,6 +15,7 @@ const FLAG_LABELS: Record<keyof SectionPermissions, string> = {
   delete: "Удаление",
   financeRead: "Фин. условия: просмотр",
   financeWrite: "Фин. условия: редактирование",
+  financeUnlock: "Снятие фиксации платежей",
 };
 
 export function PermissionMatrixEditor({

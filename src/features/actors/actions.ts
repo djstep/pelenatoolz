@@ -47,7 +47,7 @@ const actorSchema = z.object({
   shiftRate: z.coerce.number().min(0).optional(),
   shiftHoursMin: durationMinutes.pipe(z.number().max(1440).optional()),
   unpaidOvertimeMin: durationMinutes.pipe(z.number().max(600).optional()),
-  forceMajeurePct: z.coerce.number().min(0).max(1000).optional(),
+  taxPercent: z.coerce.number().min(0).max(1000).optional(),
   pickupOffsetMin: durationMinutes.pipe(z.number().max(600).optional()),
 });
 
@@ -63,14 +63,14 @@ function isFormValueBlank(value: FormDataEntryValue | null) {
   return value == null || String(value).trim() === "";
 }
 
-function parseOvertimeRows(formData: FormData, shiftRate: number, fkPct: number) {
+function parseOvertimeRows(formData: FormData, shiftRate: number, taxPct: number) {
   const rows: Array<{
     hourNumber: number;
     percentRate: number | null;
     amount: number | null;
-    forceMajeurePct: number | null;
-    forceMajeureAmt: number | null;
-    totalWithFk: number | null;
+    taxPercent: number | null;
+    taxAmount: number | null;
+    totalWithTax: number | null;
   }> = [];
 
   for (let i = 1; i <= 24; i++) {
@@ -85,31 +85,31 @@ function parseOvertimeRows(formData: FormData, shiftRate: number, fkPct: number)
     if (percentRate == null && amount == null) continue;
     if (Number.isNaN(percentRate ?? 0) || Number.isNaN(amount ?? 0)) continue;
 
-    const rowFkPctRaw = formData.get(`ot_fk_${i}`);
-    const rowFkPct = isFormValueBlank(rowFkPctRaw) ? fkPct : Number(rowFkPctRaw);
-    const forceMajeureAmt =
-      amount != null ? (amount * (rowFkPct || 0)) / 100 : null;
-    const totalWithFk =
-      amount != null ? amount + (forceMajeureAmt ?? 0) : null;
+    const rowFkPctRaw = formData.get(`ot_tax_${i}`);
+    const rowTaxPct = isFormValueBlank(rowFkPctRaw) ? taxPct : Number(rowFkPctRaw);
+    const taxAmount =
+      amount != null ? (amount * (rowTaxPct || 0)) / 100 : null;
+    const totalWithTax =
+      amount != null ? amount + (taxAmount ?? 0) : null;
     rows.push({
       hourNumber: i,
       percentRate,
       amount,
-      forceMajeurePct: rowFkPct,
-      forceMajeureAmt,
-      totalWithFk,
+      taxPercent: rowTaxPct,
+      taxAmount,
+      totalWithTax,
     });
   }
   return rows;
 }
 
-function parseExtraPayments(formData: FormData, fkPct: number) {
+function parseExtraPayments(formData: FormData, taxPct: number) {
   const rows: Array<{
     paymentDate: Date | null;
     amount: number;
-    forceMajeurePct: number | null;
-    forceMajeureAmt: number | null;
-    totalWithFk: number | null;
+    taxPercent: number | null;
+    taxAmount: number | null;
+    totalWithTax: number | null;
     description: string | null;
   }> = [];
 
@@ -122,15 +122,15 @@ function parseExtraPayments(formData: FormData, fkPct: number) {
     if (Number.isNaN(amount)) continue;
     if (amount === 0 && !dateRaw && !descRaw) continue;
 
-    const rowFkRaw = formData.get(`ep_fk_${i}`);
-    const rowFk = isFormValueBlank(rowFkRaw) ? fkPct : Number(rowFkRaw);
-    const forceMajeureAmt = (amount * (rowFk || 0)) / 100;
+    const rowFkRaw = formData.get(`ep_tax_${i}`);
+    const rowTax = isFormValueBlank(rowFkRaw) ? taxPct : Number(rowFkRaw);
+    const taxAmount = (amount * (rowTax || 0)) / 100;
     rows.push({
       paymentDate: dateRaw ? new Date(dateRaw) : null,
       amount,
-      forceMajeurePct: rowFk,
-      forceMajeureAmt,
-      totalWithFk: amount + forceMajeureAmt,
+      taxPercent: rowTax,
+      taxAmount,
+      totalWithTax: amount + taxAmount,
       description: descRaw || null,
     });
   }
@@ -157,7 +157,7 @@ function actorFormData(formData: FormData) {
     shiftRate: formData.get("shiftRate") || undefined,
     shiftHoursMin: formData.get("shiftHoursMin") || undefined,
     unpaidOvertimeMin: formData.get("unpaidOvertimeMin") || undefined,
-    forceMajeurePct: formData.get("forceMajeurePct") || undefined,
+    taxPercent: formData.get("taxPercent") || undefined,
     pickupOffsetMin: formData.get("pickupOffsetMin") || undefined,
   };
 }
@@ -178,9 +178,9 @@ export async function createActorAction(
   }
 
   const shiftRate = parsed.data.shiftRate ?? 0;
-  const fkPct = parsed.data.forceMajeurePct ?? 0;
-  const overtime = parseOvertimeRows(formData, shiftRate, fkPct);
-  const extras = parseExtraPayments(formData, fkPct);
+  const taxPct = parsed.data.taxPercent ?? 0;
+  const overtime = parseOvertimeRows(formData, shiftRate, taxPct);
+  const extras = parseExtraPayments(formData, taxPct);
 
   const actor = await prisma.actor.create({
     data: {
@@ -225,9 +225,9 @@ export async function updateActorAction(
   }
 
   const shiftRate = parsed.data.shiftRate ?? 0;
-  const fkPct = parsed.data.forceMajeurePct ?? 0;
-  const overtime = parseOvertimeRows(formData, shiftRate, fkPct);
-  const extras = parseExtraPayments(formData, fkPct);
+  const taxPct = parsed.data.taxPercent ?? 0;
+  const overtime = parseOvertimeRows(formData, shiftRate, taxPct);
+  const extras = parseExtraPayments(formData, taxPct);
 
   await prisma.$transaction([
     prisma.actorOvertimeRate.deleteMany({ where: { actorId } }),

@@ -16,7 +16,7 @@ type SeedCandidate = {
   shiftHoursMin?: number | null;
   unpaidOvertimeMin?: number | null;
   shiftRate?: number | null;
-  forceMajeurePct?: number | null;
+  taxPercent?: number | null;
   sortOrder: number;
 };
 
@@ -115,7 +115,7 @@ export async function syncProductionWorkRows(
       shiftHoursMin: actor.shiftHoursMin,
       unpaidOvertimeMin: actor.unpaidOvertimeMin,
       shiftRate: dec(actor.shiftRate),
-      forceMajeurePct: dec(actor.forceMajeurePct),
+      taxPercent: dec(actor.taxPercent),
       sortOrder: order++,
     });
   }
@@ -136,7 +136,7 @@ export async function syncProductionWorkRows(
       shiftHoursMin: usage.item.shiftHoursMin,
       unpaidOvertimeMin: usage.item.unpaidOvertimeMin,
       shiftRate: dec(usage.item.shiftRate),
-      forceMajeurePct: null,
+      taxPercent: null,
       sortOrder: order++,
     });
   }
@@ -163,7 +163,7 @@ export async function syncProductionWorkRows(
         shiftHoursMin: link.item.shiftHoursMin,
         unpaidOvertimeMin: link.item.unpaidOvertimeMin,
         shiftRate: dec(link.item.shiftRate),
-        forceMajeurePct: null,
+        taxPercent: null,
         sortOrder: order++,
       });
     }
@@ -180,7 +180,7 @@ export async function syncProductionWorkRows(
       shiftHoursMin: null,
       unpaidOvertimeMin: null,
       shiftRate: null,
-      forceMajeurePct: null,
+      taxPercent: null,
       sortOrder: order++,
     });
   }
@@ -240,7 +240,7 @@ export async function syncProductionWorkRows(
       hourNumber: number;
       percentRate: number | null;
       amount: number | null;
-      forceMajeurePct: number | null;
+      taxPercent: number | null;
     }[] = [];
     if (c.actorId) {
       const actor = actors.find((a) => a.id === c.actorId);
@@ -249,7 +249,7 @@ export async function syncProductionWorkRows(
           hourNumber: r.hourNumber,
           percentRate: dec(r.percentRate),
           amount: dec(r.amount),
-          forceMajeurePct: dec(r.forceMajeurePct),
+          taxPercent: dec(r.taxPercent),
         })) ?? [];
     }
 
@@ -260,7 +260,7 @@ export async function syncProductionWorkRows(
       shiftHoursMin: c.shiftHoursMin,
       unpaidOvertimeMin: c.unpaidOvertimeMin,
       shiftRate: c.shiftRate,
-      forceMajeurePct: c.forceMajeurePct,
+      taxPercent: c.taxPercent,
       overtimeRates,
       extrasTotal: 0,
     });
@@ -283,7 +283,7 @@ export async function syncProductionWorkRows(
       shiftHoursMin: c.shiftHoursMin ?? null,
       unpaidOvertimeMin: c.unpaidOvertimeMin ?? null,
       shiftRate: c.shiftRate ?? null,
-      forceMajeurePct: c.forceMajeurePct ?? null,
+      taxPercent: c.taxPercent ?? null,
       shiftPay: pay.shiftPay,
       overtimePay: pay.overtimePay,
       extrasPay: pay.extrasPay,
@@ -308,7 +308,7 @@ export async function syncProductionWorkRows(
           shiftHoursMin: c.shiftHoursMin ?? null,
           unpaidOvertimeMin: c.unpaidOvertimeMin ?? null,
           shiftRate: c.shiftRate ?? null,
-          forceMajeurePct: c.forceMajeurePct ?? null,
+          taxPercent: c.taxPercent ?? null,
           sortOrder: c.sortOrder,
         },
       });
@@ -336,7 +336,7 @@ export async function syncProductionWorkRows(
         hourNumber: r.hourNumber,
         percentRate: dec(r.percentRate),
         amount: dec(r.amount),
-        forceMajeurePct: dec(r.forceMajeurePct),
+        taxPercent: dec(r.taxPercent),
       })) ?? [];
     const pay = computeWorkPay({
       factStart: row.factStart,
@@ -345,7 +345,7 @@ export async function syncProductionWorkRows(
       shiftHoursMin: row.shiftHoursMin,
       unpaidOvertimeMin: row.unpaidOvertimeMin,
       shiftRate: dec(row.shiftRate),
-      forceMajeurePct: dec(row.forceMajeurePct),
+      taxPercent: dec(row.taxPercent),
       overtimeRates: rates,
       extrasTotal,
     });
