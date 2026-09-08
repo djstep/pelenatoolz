@@ -8,7 +8,6 @@ import {
   listCompanyOptions,
   listCounterpartyOptions,
 } from "@/features/counterparties/queries";
-import { FinanceSectionTabs } from "@/features/finance/components/finance-section-tabs";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 
 type Props = {
@@ -25,7 +24,7 @@ type Props = {
 };
 
 export default async function PaymentsPage({ params, searchParams }: Props) {
-  const { locale, projectId } = await params;
+  const { projectId } = await params;
   const sp = await searchParams;
   const ctx = await requireProjectContext(projectId);
 
@@ -76,8 +75,6 @@ export default async function PaymentsPage({ params, searchParams }: Props) {
           валюта: {ctx.project.currency}
         </p>
       </div>
-
-      <FinanceSectionTabs locale={locale} projectId={projectId} />
 
       <PaymentsWorkspace
         projectId={projectId}

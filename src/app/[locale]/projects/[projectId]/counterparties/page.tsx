@@ -3,7 +3,6 @@ import {
   listCompanies,
   listCounterparties,
 } from "@/features/counterparties/queries";
-import { FinanceSectionTabs } from "@/features/finance/components/finance-section-tabs";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 
 type Props = {
@@ -11,7 +10,7 @@ type Props = {
 };
 
 export default async function CounterpartiesPage({ params }: Props) {
-  const { locale, projectId } = await params;
+  const { projectId } = await params;
   const ctx = await requireProjectContext(projectId);
 
   if (!ctx.can("finance:read")) {
@@ -34,8 +33,6 @@ export default async function CounterpartiesPage({ params }: Props) {
           используемые выше в списках выбора.
         </p>
       </div>
-
-      <FinanceSectionTabs locale={locale} projectId={projectId} />
 
       <CounterpartiesWorkspace
         projectId={projectId}

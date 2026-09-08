@@ -237,76 +237,141 @@ export function SmetaSpreadsheetEditor({
     async function boot() {
       if (!containerRef.current) return;
 
-      const { createUniver, LocaleType, mergeLocales } = await import(
-        "@univerjs/presets"
-      );
-      const { UniverSheetsCorePreset } = await import(
-        "@univerjs/preset-sheets-core"
-      );
-      const UniverPresetSheetsCoreRuRU = (
-        await import("@univerjs/preset-sheets-core/locales/ru-RU")
-      ).default;
+      try {
+        const { createUniver, LocaleType, mergeLocales } = await import(
+          "@univerjs/presets"
+        );
+        const { UniverSheetsCorePreset } = await import(
+          "@univerjs/preset-sheets-core"
+        );
+        const UniverPresetSheetsCoreRuRU = (
+          await import("@univerjs/preset-sheets-core/locales/ru-RU")
+        ).default;
 
-      await import("@univerjs/preset-sheets-core/lib/index.css");
+        await import("@univerjs/preset-sheets-core/lib/index.css");
 
-      if (disposed || !containerRef.current) return;
+        if (disposed || !containerRef.current) return;
 
-      const { univer, univerAPI } = createUniver({
-        locale: LocaleType.RU_RU,
-        locales: {
-          [LocaleType.RU_RU]: mergeLocales(UniverPresetSheetsCoreRuRU),
-        },
-        presets: [
-          UniverSheetsCorePreset({
-            container: containerRef.current,
-            header: true,
-            toolbar: true,
-            formulaBar: true,
-            footer: {
-              sheetBar: true,
-              statisticBar: true,
-              menus: true,
-              zoomSlider: true,
-            },
-            contextMenu: true,
-          }),
-        ],
-      });
+        // Дождаться реальных пикселей контейнера (absolute inset)
+        const host = containerRef.current;
+        for (let i = 0; i < 20; i++) {
+          if (disposed) return;
+          if (host.clientWidth > 40 && host.clientHeight > 40) break;
+          await new Promise((r) => requestAnimationFrame(() => r(null)));
+        }
+        if (disposed || !containerRef.current) return;
 
-      univerRef.current = univer;
-      const api = univerAPI as unknown as UniverAPI;
-      apiRef.current = api;
+        const { defaultTheme } = await import("@univerjs/themes");
 
-      univerAPI.createWorkbook(budget.workbook as never);
+        const { univer, univerAPI } = createUniver({
+          theme: defaultTheme,
+          locale: LocaleType.RU_RU,
+          darkMode: false,
+          locales: {
+            [LocaleType.RU_RU]: mergeLocales(UniverPresetSheetsCoreRuRU),
+          },
+          presets: [
+            UniverSheetsCorePreset({
+              container: containerRef.current,
+              header: true,
+              toolbar: true,
+              formulaBar: true,
+              footer: {
+                sheetBar: true,
+                statisticBar: true,
+                menus: true,
+                zoomSlider: true,
+              },
+              contextMenu: true,
+            }),
+          ],
+        });
 
-      queueMicrotask(() => {
-        if (!disposed) syncSheetsFromApi();
-      });
+        if (disposed) {
+          try {
+            univer.dispose();
+          } catch {
+            /* ignore */
+          }
+          return;
+        }
 
-      const listen = (key: unknown, cb: (...args: unknown[]) => void) => {
-        if (key == null) return;
         try {
-          disposables.push(api.addEvent(key, cb));
+          (
+            univerAPI as unknown as { setDarkMode?: (v: boolean) => void }
+          ).setDarkMode?.(false);
         } catch {
           /* optional */
         }
-      };
 
-      listen(api.Event?.CommandExecuted, () => {
-        scheduleSave();
-        syncSheetsFromApi();
-      });
-      listen(api.Event?.ActiveSheetChanged, (params) => {
-        const p = params as { activeSheet?: FWorksheet };
-        if (p.activeSheet) {
-          setActiveSheetId(p.activeSheet.getSheetId());
-          syncFreezeFromSheet(p.activeSheet);
-        } else {
-          syncSheetsFromApi();
+        univerRef.current = univer;
+        const api = univerAPI as unknown as UniverAPI;
+        apiRef.current = api;
+
+        univerAPI.createWorkbook(budget.workbook as never);
+
+        if (disposed) {
+          try {
+            univer.dispose();
+          } catch {
+            /* ignore */
+          }
+          univerRef.current = null;
+          apiRef.current = null;
+          return;
         }
-      });
-      listen(api.Event?.SheetCreated, () => syncSheetsFromApi());
-      listen(api.Event?.SheetDeleted, () => syncSheetsFromApi());
+
+        const kickResize = () => {
+          window.dispatchEvent(new Event("resize"));
+        };
+        requestAnimationFrame(() => {
+          kickResize();
+          setTimeout(kickResize, 80);
+          setTimeout(kickResize, 300);
+        });
+
+        const hostEl = containerRef.current;
+        let resizeObserver: ResizeObserver | null = null;
+        if (hostEl && typeof ResizeObserver !== "undefined") {
+          resizeObserver = new ResizeObserver(() => kickResize());
+          resizeObserver.observe(hostEl);
+          disposables.push({
+            dispose: () => resizeObserver?.disconnect(),
+          });
+        }
+
+        queueMicrotask(() => {
+          if (!disposed) syncSheetsFromApi();
+        });
+
+        const listen = (key: unknown, cb: (...args: unknown[]) => void) => {
+          if (key == null) return;
+          try {
+            disposables.push(api.addEvent(key, cb));
+          } catch {
+            /* optional */
+          }
+        };
+
+        listen(api.Event?.CommandExecuted, () => {
+          scheduleSave();
+          syncSheetsFromApi();
+        });
+        listen(api.Event?.ActiveSheetChanged, (params) => {
+          const p = params as { activeSheet?: FWorksheet };
+          if (p.activeSheet) {
+            setActiveSheetId(p.activeSheet.getSheetId());
+            syncFreezeFromSheet(p.activeSheet);
+          } else {
+            syncSheetsFromApi();
+          }
+        });
+        listen(api.Event?.SheetCreated, () => syncSheetsFromApi());
+        listen(api.Event?.SheetDeleted, () => syncSheetsFromApi());
+      } catch (err) {
+        console.error("[smeta univer boot]", err);
+        toast.error("Не удалось загрузить табличный редактор");
+      }
     }
 
     void boot();
@@ -498,7 +563,7 @@ export function SmetaSpreadsheetEditor({
             : `Обновлено ${formatDateShort(savedAt)}`;
 
   const projectHref = `/${locale}/projects/${projectId}`;
-  const [isFullscreen, setIsFullscreen] = useState(true);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   function setFullscreen(next: boolean) {
     setIsFullscreen(next);
@@ -531,10 +596,10 @@ export function SmetaSpreadsheetEditor({
   return (
     <div
       className={cn(
-        "flex flex-col text-[var(--foreground)]",
+        "flex min-h-0 flex-1 flex-col text-[var(--foreground)]",
         isFullscreen
           ? "smeta-editor--fullscreen"
-          : "smeta-editor--embedded min-h-0",
+          : "smeta-editor--embedded",
       )}
     >
       <header className="flex shrink-0 flex-wrap items-center gap-2 border-b border-[var(--border)] bg-[var(--panel-solid)] px-3 py-2 sm:gap-3 sm:px-4">
@@ -698,35 +763,35 @@ export function SmetaSpreadsheetEditor({
         </div>
       ) : null}
 
-      <div
-        className="flex min-h-0 flex-1 overflow-hidden"
-        style={
-          isFullscreen ? undefined : { minHeight: "calc(100vh - 12rem)" }
-        }
-      >
-        <SmetaSheetNavigator
-          sheets={sheets}
-          activeSheetId={activeSheetId}
-          collapsed={navCollapsed}
-          canWrite={canWrite}
-          onToggleCollapsed={toggleNavCollapsed}
-          onSelectSheet={onSelectSheet}
-          onTogglePinned={onTogglePinned}
-          freezeRows={freezeRows}
-          freezeCols={freezeCols}
-          onFreezeRowsChange={setFreezeRows}
-          onFreezeColsChange={setFreezeCols}
-          onApplyFreeze={applyFreeze}
-          onFreezeToSelection={freezeToSelection}
-          onClearFreeze={clearFreeze}
-          isFullscreen={isFullscreen}
-          onExitFullscreen={() => setFullscreen(false)}
-          projectHref={projectHref}
-        />
-        <div
-          ref={containerRef}
-          className="univer-smeta-host min-h-0 min-w-0 flex-1 bg-white"
-        />
+      <div className="relative min-h-0 flex-1 overflow-hidden">
+        <div className="absolute inset-0 flex min-h-0 overflow-hidden">
+          <SmetaSheetNavigator
+            sheets={sheets}
+            activeSheetId={activeSheetId}
+            collapsed={navCollapsed}
+            canWrite={canWrite}
+            onToggleCollapsed={toggleNavCollapsed}
+            onSelectSheet={onSelectSheet}
+            onTogglePinned={onTogglePinned}
+            freezeRows={freezeRows}
+            freezeCols={freezeCols}
+            onFreezeRowsChange={setFreezeRows}
+            onFreezeColsChange={setFreezeCols}
+            onApplyFreeze={applyFreeze}
+            onFreezeToSelection={freezeToSelection}
+            onClearFreeze={clearFreeze}
+            isFullscreen={isFullscreen}
+            onExitFullscreen={() => setFullscreen(false)}
+            projectHref={projectHref}
+          />
+          <div className="relative min-h-0 min-w-0 flex-1">
+            <div
+              ref={containerRef}
+              className="univer-smeta-host"
+              style={{ background: "#ffffff" }}
+            />
+          </div>
+        </div>
       </div>
     </div>
   );

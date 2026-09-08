@@ -1,4 +1,3 @@
-import { FinanceSectionTabs } from "@/features/finance/components/finance-section-tabs";
 import { FinanceVariablesWorkspace } from "@/features/finance/components/finance-variables-workspace";
 import { listFinanceVariables } from "@/features/finance/queries-variables";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
@@ -8,7 +7,7 @@ type Props = {
 };
 
 export default async function FinanceSettingsPage({ params }: Props) {
-  const { locale, projectId } = await params;
+  const { projectId } = await params;
   const ctx = await requireProjectContext(projectId);
 
   if (!ctx.can("finance:read")) {
@@ -29,8 +28,6 @@ export default async function FinanceSettingsPage({ params }: Props) {
           Переменные для расчёта количества в статьях сметы
         </p>
       </div>
-
-      <FinanceSectionTabs locale={locale} projectId={projectId} />
 
       <FinanceVariablesWorkspace
         projectId={projectId}

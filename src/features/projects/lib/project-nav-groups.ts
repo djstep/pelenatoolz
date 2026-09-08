@@ -41,19 +41,16 @@ export const projectNavGroups: NavGroup[] = [
   {
     id: "finance",
     title: "Финансы",
+    defaultOpen: true,
     items: [
-      {
-        href: "/smeta",
-        label: "Финансы",
-        matchPrefixes: [
-          "/smeta",
-          "/budget",
-          "/accruals",
-          "/payments",
-          "/finance",
-          "/counterparties",
-        ],
-      },
+      { href: "/smeta", label: "Смета" },
+      { href: "/budget", label: "Статьи" },
+      { href: "/accruals", label: "Начисления" },
+      { href: "/payments", label: "Платежи" },
+      { href: "/finance/reports", label: "Отчёты" },
+      { href: "/finance", label: "Операции", exact: true },
+      { href: "/finance/settings", label: "Настройки" },
+      { href: "/counterparties", label: "Контрагенты" },
     ],
   },
   {

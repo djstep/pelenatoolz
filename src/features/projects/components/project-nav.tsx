@@ -11,6 +11,8 @@ export type NavItem = {
   soon?: boolean;
   /** Extra path prefixes that count as active for this item (e.g. finance sub-tabs). */
   matchPrefixes?: string[];
+  /** If true, only exact path match (not nested routes). */
+  exact?: boolean;
 };
 
 export type NavGroup = {
@@ -166,6 +168,9 @@ export function ProjectNav({
       .filter((item) => {
         const full = `${base}${item.href}`;
         if (item.href === "") return pathname === full;
+        if (item.exact) {
+          return pathname === full;
+        }
         if (pathname === full || pathname.startsWith(`${full}/`)) return true;
         return (item.matchPrefixes ?? []).some((prefix) => {
           const p = `${base}${prefix}`;

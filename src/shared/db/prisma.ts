@@ -6,9 +6,16 @@ const globalForPrisma = globalThis as unknown as {
 
 function isTransientDbError(error: unknown): boolean {
   if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    // Never retry interactive transaction failures — the tx is already dead.
+    if (error.code === "P2028") return false;
     return ["P1001", "P1008", "P1017", "P2024"].includes(error.code);
   }
   if (error instanceof Error) {
+    if (/Transaction not found|old closed transaction|Transaction API error/i.test(
+      error.message,
+    )) {
+      return false;
+    }
     return /closed the connection|connection terminated|ECONNRESET|ETIMEDOUT|Can't reach database/i.test(
       error.message,
     );

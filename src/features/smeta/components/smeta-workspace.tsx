@@ -14,7 +14,7 @@ const SmetaSpreadsheetEditor = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="smeta-editor--embedded flex min-h-[65vh] items-center justify-center text-sm text-[var(--foreground)]/80">
+      <div className="smeta-editor--embedded flex flex-1 items-center justify-center text-sm text-[var(--foreground)]/80">
         Загрузка табличного редактора…
       </div>
     ),
@@ -33,12 +33,14 @@ export function SmetaWorkspace({
   canWrite: boolean;
 }) {
   return (
-    <SmetaSpreadsheetEditor
-      key={budget.id}
-      projectId={projectId}
-      budget={budget}
-      budgets={budgets}
-      canWrite={canWrite}
-    />
+    <div className="flex min-h-0 flex-1 flex-col">
+      <SmetaSpreadsheetEditor
+        key={budget.id}
+        projectId={projectId}
+        budget={budget}
+        budgets={budgets}
+        canWrite={canWrite}
+      />
+    </div>
   );
 }

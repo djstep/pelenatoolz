@@ -1,4 +1,3 @@
-import { FinanceSectionTabs } from "@/features/finance/components/finance-section-tabs";
 import { FinanceWorkspace } from "@/features/finance/components/finance-workspace";
 import {
   listActorsBrief,
@@ -15,7 +14,7 @@ type Props = {
 };
 
 export default async function FinancePage({ params }: Props) {
-  const { locale, projectId } = await params;
+  const { projectId } = await params;
   const ctx = await requireProjectContext(projectId);
 
   if (!ctx.can("finance:read")) {
@@ -42,8 +41,6 @@ export default async function FinancePage({ params }: Props) {
           {ctx.project.currency}
         </p>
       </div>
-
-      <FinanceSectionTabs locale={locale} projectId={projectId} />
 
       <FinanceWorkspace
         projectId={projectId}

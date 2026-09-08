@@ -5,7 +5,6 @@ import {
   listBudgets,
   listBudgetTemplates,
 } from "@/features/smeta/queries";
-import { FinanceSectionTabs } from "@/features/finance/components/finance-section-tabs";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 
 type Props = {
@@ -50,7 +49,6 @@ export default async function SmetaPage({ params, searchParams }: Props) {
             Табличный редактор · шаблоны · импорт Excel
           </p>
         </div>
-        <FinanceSectionTabs locale={locale} projectId={projectId} />
         <CreateSmetaWizard
           projectId={projectId}
           templates={templates}
@@ -81,8 +79,7 @@ export default async function SmetaPage({ params, searchParams }: Props) {
         ];
 
   return (
-    <div className="space-y-4">
-      <FinanceSectionTabs locale={locale} projectId={projectId} />
+    <div className="flex min-h-0 flex-1 flex-col">
       <SmetaWorkspace
         projectId={projectId}
         budget={active}

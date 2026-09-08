@@ -2,7 +2,6 @@ import {
   CashFlowReportView,
   PlanFactReportView,
 } from "@/features/finance/components/finance-reports-workspace";
-import { FinanceSectionTabs } from "@/features/finance/components/finance-section-tabs";
 import {
   getCashFlowReport,
   getPlanFactReport,
@@ -56,7 +55,6 @@ export default async function FinanceReportsPage({
             {ctx.project.currency}
           </p>
         </div>
-        <FinanceSectionTabs locale={locale} projectId={projectId} />
         <PlanFactReportView
           locale={locale}
           projectId={projectId}
@@ -88,7 +86,6 @@ export default async function FinanceReportsPage({
           {ctx.project.currency}
         </p>
       </div>
-      <FinanceSectionTabs locale={locale} projectId={projectId} />
       <CashFlowReportView
         locale={locale}
         projectId={projectId}

@@ -4,7 +4,6 @@ import {
   listShootDaysBrief,
 } from "@/features/accruals/queries";
 import { listCounterpartyOptions } from "@/features/counterparties/queries";
-import { FinanceSectionTabs } from "@/features/finance/components/finance-section-tabs";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import Link from "next/link";
 
@@ -46,8 +45,6 @@ export default async function ShiftEntryPage({ params }: Props) {
           Выберите день смены, отметьте строки и сохраните пакетом
         </p>
       </div>
-
-      <FinanceSectionTabs locale={locale} projectId={projectId} />
 
       <ShiftEntryWorkspace
         projectId={projectId}

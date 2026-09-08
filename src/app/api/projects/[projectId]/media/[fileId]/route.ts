@@ -13,7 +13,7 @@ export async function GET(
 
   try {
     const ctx = await requireProjectContext(projectId);
-    if (!ctx.can("cast:read") && !ctx.can("project:read")) {
+    if (!ctx.can("cast:read") && !ctx.can("project:read") && !ctx.can("script:read")) {
       return NextResponse.json({ error: "Недостаточно прав" }, { status: 403 });
     }
 

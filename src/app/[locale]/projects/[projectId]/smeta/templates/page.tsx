@@ -1,6 +1,5 @@
 import { SmetaTemplatesWorkspace } from "@/features/smeta/components/smeta-templates-workspace";
 import { listBudgets, listBudgetTemplates } from "@/features/smeta/queries";
-import { FinanceSectionTabs } from "@/features/finance/components/finance-section-tabs";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import Link from "next/link";
 
@@ -39,8 +38,6 @@ export default async function SmetaTemplatesPage({ params }: Props) {
           Встроенный отраслевой и ваши сохранённые шаблоны
         </p>
       </div>
-
-      <FinanceSectionTabs locale={locale} projectId={projectId} />
 
       <SmetaTemplatesWorkspace
         projectId={projectId}

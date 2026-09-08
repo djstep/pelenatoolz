@@ -105,48 +105,39 @@ export async function replaceVersionBlocks(
   versionId: string,
   blocks: ScreenplayBlock[],
 ) {
-  const existingIds = new Set(
-    (
-      await prisma.scriptBlock.findMany({
-        where: { scriptVersionId: versionId },
-        select: { id: true },
-      })
-    ).map((row) => row.id),
-  );
+  const { nanoid } = await import("nanoid");
 
-  const incomingIds = new Set(blocks.map((block) => block.id));
-
-  await prisma.$transaction(async (tx) => {
-    const toDelete = [...existingIds].filter((id) => !incomingIds.has(id));
-    if (toDelete.length > 0) {
+  // Bulk replace: per-row update inside interactive tx times out on Neon
+  // and Prisma retry wrapper then hits a closed transaction (P2028).
+  await prisma.$transaction(
+    async (tx) => {
       await tx.scriptBlock.deleteMany({
-        where: { id: { in: toDelete }, scriptVersionId: versionId },
+        where: { scriptVersionId: versionId },
       });
-    }
 
-    for (const block of blocks) {
-      const data = {
+      if (blocks.length === 0) return;
+
+      const rows = blocks.map((block, index) => ({
+        id: block.id.startsWith("new-") ? nanoid() : block.id,
         projectId,
         scriptVersionId: versionId,
         sceneId: block.sceneId,
         type: block.type,
         content: block.content,
         contentHtml: block.contentHtml ?? null,
-        sortOrder: block.sortOrder,
-      };
+        sortOrder: block.sortOrder ?? index,
+      }));
 
-      if (existingIds.has(block.id) && !block.id.startsWith("new-")) {
-        await tx.scriptBlock.update({
-          where: { id: block.id },
-          data,
+      // Chunk createMany — large screenplays can exceed param limits
+      const CHUNK = 200;
+      for (let i = 0; i < rows.length; i += CHUNK) {
+        await tx.scriptBlock.createMany({
+          data: rows.slice(i, i + CHUNK),
         });
-      } else {
-        const { nanoid } = await import("nanoid");
-        const id = block.id.startsWith("new-") ? nanoid() : block.id;
-        await tx.scriptBlock.create({ data: { id, ...data } });
       }
-    }
-  });
+    },
+    { timeout: 60_000, maxWait: 15_000 },
+  );
 }
 
 export async function copyBlocksBetweenVersions(

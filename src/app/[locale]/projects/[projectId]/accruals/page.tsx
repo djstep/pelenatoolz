@@ -7,7 +7,6 @@ import {
   listShootDaysBrief,
 } from "@/features/accruals/queries";
 import { listCounterpartyOptions } from "@/features/counterparties/queries";
-import { FinanceSectionTabs } from "@/features/finance/components/finance-section-tabs";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import Link from "next/link";
 import { Button } from "@/shared/ui/button";
@@ -95,8 +94,6 @@ export default async function AccrualsPage({ params, searchParams }: Props) {
           </Link>
         ) : null}
       </div>
-
-      <FinanceSectionTabs locale={locale} projectId={projectId} />
 
       <AccrualsWorkspace
         projectId={projectId}

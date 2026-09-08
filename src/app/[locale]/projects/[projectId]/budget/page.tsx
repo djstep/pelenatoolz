@@ -5,7 +5,6 @@ import {
   listResourceItemsBriefForLink,
 } from "@/features/accruals/queries";
 import { listCounterpartyOptions } from "@/features/counterparties/queries";
-import { FinanceSectionTabs } from "@/features/finance/components/finance-section-tabs";
 import { listFinanceVariables } from "@/features/finance/queries-variables";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 
@@ -14,7 +13,7 @@ type Props = {
 };
 
 export default async function BudgetPage({ params }: Props) {
-  const { locale, projectId } = await params;
+  const { projectId } = await params;
   const ctx = await requireProjectContext(projectId);
 
   if (!ctx.can("budget:read")) {
@@ -40,8 +39,6 @@ export default async function BudgetPage({ params }: Props) {
           {ctx.project.currency}
         </p>
       </div>
-
-      <FinanceSectionTabs locale={locale} projectId={projectId} />
 
       <BudgetWorkspace
         projectId={projectId}

@@ -53,6 +53,15 @@ export async function getProjectObject(
   }
 }
 
+export async function deleteProjectObject(storageKey: string): Promise<void> {
+  try {
+    const { unlink } = await import("node:fs/promises");
+    await unlink(localPath(storageKey));
+  } catch {
+    /* missing file is fine */
+  }
+}
+
 /** Public-facing URL served by our media API (works for local + later R2 proxy). */
 export function mediaApiUrl(projectId: string, fileId: string) {
   return `/api/projects/${projectId}/media/${fileId}`;

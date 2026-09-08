@@ -4,6 +4,7 @@ import {
   listProjectCloudFiles,
   listUserCloudConnections,
 } from "@/features/cloud/lib/cloud-service";
+import { listProjectUploadedFiles } from "@/features/files/queries";
 
 type Props = {
   params: Promise<{ locale: string; projectId: string }>;
@@ -17,9 +18,10 @@ export default async function ProjectFilesPage({ params }: Props) {
     return <p className="text-sm text-[var(--danger)]">Нет доступа к файлам</p>;
   }
 
-  const [connections, files] = await Promise.all([
+  const [connections, cloudFiles, uploadedFiles] = await Promise.all([
     listUserCloudConnections(ctx.user.id!),
     listProjectCloudFiles(projectId),
+    listProjectUploadedFiles(projectId),
   ]);
 
   const canWrite = ctx.can("script:write") || ctx.can("project:write");
@@ -29,9 +31,13 @@ export default async function ProjectFilesPage({ params }: Props) {
       locale={locale}
       projectId={projectId}
       connections={connections}
-      files={files.map((file) => ({
+      files={cloudFiles.map((file) => ({
         ...file,
         sizeBytes: file.sizeBytes != null ? Number(file.sizeBytes) : null,
+        createdAt: file.createdAt.toISOString(),
+      }))}
+      uploadedFiles={uploadedFiles.map((file) => ({
+        ...file,
         createdAt: file.createdAt.toISOString(),
       }))}
       canWrite={canWrite}
