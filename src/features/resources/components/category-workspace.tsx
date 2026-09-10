@@ -20,7 +20,7 @@ import { Input } from "@/shared/ui/input";
 
 type ItemRow = ResourceCategoryDetail["items"][number];
 
-function itemForModal(item: ItemRow) {
+function itemForModal(item: ItemRow, tracksMileage: boolean) {
   return {
     name: item.name,
     notes: item.notes,
@@ -28,6 +28,13 @@ function itemForModal(item: ItemRow) {
     shiftHoursMin: item.shiftHoursMin,
     unpaidOvertimeMin: item.unpaidOvertimeMin,
     arrivalOffsetMin: item.arrivalOffsetMin,
+    taxPercent: item.taxPercent != null ? Number(item.taxPercent) : null,
+    kmRate: item.kmRate != null ? Number(item.kmRate) : null,
+    tracksMileage,
+    overtimeMode: item.overtimeMode,
+    unpaidOvertimeMode: item.unpaidOvertimeMode,
+    overtimeRates: item.overtimeRates,
+    extraPayments: item.extraPayments,
   };
 }
 
@@ -78,12 +85,16 @@ export function CategoryWorkspace({
   projectType,
   category,
   canWrite,
+  canFinanceRead = false,
+  canFinanceWrite = false,
 }: {
   projectId: string;
   locale: string;
   projectType: ProjectType;
   category: ResourceCategoryDetail;
   canWrite: boolean;
+  canFinanceRead?: boolean;
+  canFinanceWrite?: boolean;
 }) {
   const [search, setSearch] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
@@ -110,6 +121,7 @@ export function CategoryWorkspace({
           {category.fillInScenes ? "Посценный" : ""}
           {category.perShift ? " · Посменный" : ""}
           {category.countable ? " · Счётный" : ""}
+          {category.tracksMileage ? " · Километраж" : ""}
         </p>
       </div>
 
@@ -232,7 +244,10 @@ export function CategoryWorkspace({
         open={modalOpen}
         onClose={() => { setModalOpen(false); setEditing(null); }}
         itemId={editing?.id}
-        item={editing ? itemForModal(editing) : undefined}
+        item={editing ? itemForModal(editing, category.tracksMileage) : undefined}
+        tracksMileage={category.tracksMileage}
+        canFinanceRead={canFinanceRead}
+        canFinanceWrite={canFinanceWrite}
       />
     </div>
   );

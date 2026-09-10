@@ -24,7 +24,7 @@ type Props = {
 };
 
 export default async function PaymentsPage({ params, searchParams }: Props) {
-  const { projectId } = await params;
+  const { locale, projectId } = await params;
   const sp = await searchParams;
   const ctx = await requireProjectContext(projectId);
 
@@ -78,6 +78,7 @@ export default async function PaymentsPage({ params, searchParams }: Props) {
 
       <PaymentsWorkspace
         projectId={projectId}
+        locale={locale}
         currency={ctx.project.currency}
         payments={payments}
         lines={lines}

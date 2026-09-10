@@ -5,10 +5,12 @@ import { revalidatePath } from "next/cache";
 import { requireUser } from "@/features/auth/session";
 import {
   isExportLayoutKey,
+  normalizeAttendanceSheetSettings,
   normalizeExportLayout,
   parseExportSettings,
 } from "@/features/exports/lib/column-utils";
 import type {
+  AttendanceSheetSettings,
   ExportColumn,
   ExportLayout,
   ExportLayoutKey,
@@ -20,6 +22,7 @@ export type ExportActionState = {
   error?: string;
   success?: string;
   layout?: ExportLayout | null;
+  attendanceSheet?: AttendanceSheetSettings | null;
 };
 
 export async function getExportLayoutAction(
@@ -94,4 +97,73 @@ export async function saveExportLayoutAction(
 
   revalidatePath(`/ru/projects/${projectId}`);
   return { success: "Раскладка сохранена", layout };
+}
+
+export async function getAttendanceSheetSettingsAction(
+  projectId: string,
+): Promise<ExportActionState> {
+  const { requireProjectContext } = await import(
+    "@/features/projects/lib/project-context"
+  );
+  const ctx = await requireProjectContext(projectId);
+  if (
+    !ctx.can("callsheet:read") &&
+    !ctx.can("schedule:read") &&
+    !ctx.can("report:read") &&
+    !ctx.can("project:read")
+  ) {
+    return { error: "Недостаточно прав" };
+  }
+
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { exportSettings: true },
+  });
+  if (!project) return { error: "Проект не найден" };
+
+  const settings = parseExportSettings(project.exportSettings);
+  return {
+    attendanceSheet: settings.attendanceSheet ?? { resourceIds: [] },
+  };
+}
+
+export async function saveAttendanceSheetSettingsAction(
+  projectId: string,
+  resourceIds: string[],
+): Promise<ExportActionState> {
+  const { requireProjectContext } = await import(
+    "@/features/projects/lib/project-context"
+  );
+  const ctx = await requireProjectContext(projectId);
+  if (
+    !ctx.can("callsheet:write") &&
+    !ctx.can("schedule:write") &&
+    !ctx.can("report:write") &&
+    !ctx.can("project:write")
+  ) {
+    return { error: "Недостаточно прав" };
+  }
+
+  const attendanceSheet = normalizeAttendanceSheetSettings({ resourceIds }) ?? {
+    resourceIds: [],
+  };
+
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { exportSettings: true },
+  });
+  if (!project) return { error: "Проект не найден" };
+
+  const settings = parseExportSettings(project.exportSettings);
+  const next = { ...settings, attendanceSheet };
+
+  await prisma.project.update({
+    where: { id: projectId },
+    data: {
+      exportSettings: next as Prisma.InputJsonValue,
+    },
+  });
+
+  revalidatePath(`/ru/projects/${projectId}`);
+  return { success: "Настройки явочного листа сохранены", attendanceSheet };
 }

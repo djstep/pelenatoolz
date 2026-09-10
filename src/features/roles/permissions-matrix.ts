@@ -6,7 +6,7 @@ export const PERMISSION_SECTIONS = [
   { id: "actors", label: "Актёры" },
   { id: "characters", label: "Персонажи" },
   { id: "locations", label: "Объекты и места" },
-  { id: "elements", label: "Прочие ресурсы" },
+  { id: "elements", label: "Прочие ресурсы (новые категории)" },
   { id: "budget", label: "Смета" },
   { id: "reports", label: "Производственные отчёты" },
   { id: "finance", label: "Финансы" },
@@ -31,6 +31,17 @@ export type SectionPermissions = {
 
 export type PermissionMatrix = Record<PermissionSectionId, SectionPermissions>;
 
+/** Фин. условия по динамической категории ресурсов (раздел «Ресурсы»). */
+export type CategoryFinancePermissions = {
+  financeRead: boolean;
+  financeWrite: boolean;
+};
+
+export type EntityFinanceTarget =
+  | "actors"
+  | "locations"
+  | { categoryId: string };
+
 export const PERMISSION_FLAGS = [
   "access",
   "read",
@@ -41,6 +52,13 @@ export const PERMISSION_FLAGS = [
   "financeWrite",
   "financeUnlock",
 ] as const;
+
+/** Разделы, где колонки фин. условий относятся к сущности (не к модулю «Финансы»). */
+export const ENTITY_FINANCE_SECTIONS: PermissionSectionId[] = [
+  "actors",
+  "locations",
+  "elements",
+];
 
 export function emptySectionPermissions(): SectionPermissions {
   return {
@@ -114,6 +132,34 @@ export function parsePermissionMatrix(raw: unknown): PermissionMatrix {
   return base;
 }
 
+export function parseResourceCategoryFinance(
+  raw: unknown,
+): Record<string, CategoryFinancePermissions> {
+  if (!raw || typeof raw !== "object") return {};
+  const block = (raw as Record<string, unknown>).resourceCategoryFinance;
+  if (!block || typeof block !== "object") return {};
+  const out: Record<string, CategoryFinancePermissions> = {};
+  for (const [id, value] of Object.entries(block)) {
+    if (!value || typeof value !== "object") continue;
+    const v = value as Record<string, unknown>;
+    out[id] = {
+      financeRead: Boolean(v.financeRead),
+      financeWrite: Boolean(v.financeWrite),
+    };
+  }
+  return out;
+}
+
+export function buildPermissionsDocument(
+  matrix: PermissionMatrix,
+  resourceCategoryFinance: Record<string, CategoryFinancePermissions>,
+): Record<string, unknown> {
+  return {
+    ...matrix,
+    resourceCategoryFinance,
+  };
+}
+
 export function hasSectionPermission(
   matrix: PermissionMatrix,
   section: PermissionSectionId,
@@ -152,4 +198,49 @@ export function can(
     default:
       return false;
   }
+}
+
+/**
+ * Финансовые условия сущности:
+ * - актёры / локации — флаги раздела;
+ * - категория ресурсов — запись в resourceCategoryFinance, иначе fallback на «elements».
+ */
+export function canEntityFinance(
+  matrix: PermissionMatrix,
+  categoryFinance: Record<string, CategoryFinancePermissions>,
+  target: EntityFinanceTarget,
+  mode: "read" | "write",
+): boolean {
+  if (target === "actors") {
+    return can(matrix, "actors", mode === "write" ? "financeWrite" : "finance");
+  }
+  if (target === "locations") {
+    return can(
+      matrix,
+      "locations",
+      mode === "write" ? "financeWrite" : "finance",
+    );
+  }
+
+  const explicit = categoryFinance[target.categoryId];
+  if (explicit) {
+    return mode === "write"
+      ? explicit.financeWrite
+      : explicit.financeRead || explicit.financeWrite;
+  }
+  return can(matrix, "elements", mode === "write" ? "financeWrite" : "finance");
+}
+
+export function resolveCategoryFinance(
+  matrix: PermissionMatrix,
+  categoryFinance: Record<string, CategoryFinancePermissions>,
+  categoryId: string,
+): CategoryFinancePermissions {
+  const explicit = categoryFinance[categoryId];
+  if (explicit) return explicit;
+  const fallback = matrix.elements;
+  return {
+    financeRead: Boolean(fallback?.financeRead || fallback?.financeWrite),
+    financeWrite: Boolean(fallback?.financeWrite),
+  };
 }

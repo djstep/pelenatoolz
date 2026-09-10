@@ -2,6 +2,12 @@
 
 import Link from "next/link";
 import type { ProjectType } from "@prisma/client";
+import {
+  OVERTIME_MODE_LABELS,
+  UNPAID_OT_MODE_LABELS,
+  type OvertimeCalcMode,
+  type UnpaidOvertimeMode,
+} from "@/features/reports/lib/compute-work-pay";
 import { resourceCategoryPath } from "@/features/resources/lib/paths";
 import type { ResourceItemDetail } from "@/features/resources/queries";
 import { formatSceneNumber } from "@/features/script/lib/libretto-display";
@@ -12,11 +18,16 @@ export function ItemDetailView({
   locale,
   projectType,
   item,
+  canFinanceRead = false,
 }: {
   projectId: string;
   locale: string;
   projectType: ProjectType;
   item: ResourceItemDetail;
+  canFinanceRead?: boolean;
+  /** @deprecated detail moved to /resource-usage */
+  overtimeHistory?: unknown;
+  canEdit?: boolean;
 }) {
   return (
     <div className="space-y-6">
@@ -58,22 +69,30 @@ export function ItemDetailView({
         </div>
       </div>
 
-      {(item.shiftRate != null ||
-        item.shiftHoursMin != null ||
-        item.unpaidOvertimeMin != null) && (
+      {canFinanceRead ? (
         <section className="glass-card p-5">
-          <h2 className="mb-3 font-semibold">Финансовые параметры</h2>
+          <h2 className="mb-3 font-semibold">Финансовые условия</h2>
           <dl className="grid gap-2 text-sm md:grid-cols-2">
             <div>
               <dt className="text-[var(--muted-fg)]">Стоимость смены</dt>
               <dd>{item.shiftRate ?? "—"}</dd>
+            </div>
+            {item.category.tracksMileage ? (
+              <div>
+                <dt className="text-[var(--muted-fg)]">Ставка за км</dt>
+                <dd>{item.kmRate ?? "—"}</dd>
+              </div>
+            ) : null}
+            <div>
+              <dt className="text-[var(--muted-fg)]">Налог %</dt>
+              <dd>{item.taxPercent ?? "—"}</dd>
             </div>
             <div>
               <dt className="text-[var(--muted-fg)]">Длительность смены</dt>
               <dd>
                 {item.shiftHoursMin != null
                   ? formatMinutesHhMm(item.shiftHoursMin)
-                  : "—"}
+                  : "12:00"}
               </dd>
             </div>
             <div>
@@ -84,6 +103,25 @@ export function ItemDetailView({
                   : "—"}
               </dd>
             </div>
+            <div>
+              <dt className="text-[var(--muted-fg)]">Режим переработки</dt>
+              <dd>
+                {OVERTIME_MODE_LABELS[
+                  (item.overtimeMode ?? "HOURLY_CUMULATIVE") as OvertimeCalcMode
+                ]}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-[var(--muted-fg)]">Учёт неоплач. буфера</dt>
+              <dd>
+                {
+                  UNPAID_OT_MODE_LABELS[
+                    (item.unpaidOvertimeMode ??
+                      "FIRST_HOUR") as UnpaidOvertimeMode
+                  ]
+                }
+              </dd>
+            </div>
             {item.arrivalOffsetMin != null ? (
               <div>
                 <dt className="text-[var(--muted-fg)]">Смещение прибытия</dt>
@@ -92,28 +130,33 @@ export function ItemDetailView({
             ) : null}
           </dl>
         </section>
-      )}
+      ) : null}
+
+      <section className="glass-card p-5">
+        <h2 className="mb-3 font-semibold">Ведомость по использованию</h2>
+        <p className="mb-3 text-sm text-[var(--muted-fg)]">
+          Детализация смен, переработок и доп. выплат по проекту.
+        </p>
+        <Link
+          href={`/${locale}/projects/${projectId}/resource-usage/resources/${item.id}`}
+          className="text-sm text-[var(--accent)] hover:underline"
+        >
+          Открыть ведомость →
+        </Link>
+      </section>
 
       {item.sceneLinks.length > 0 ? (
         <section className="glass-card p-5">
           <h2 className="mb-3 font-semibold">Сцены</h2>
           <ul className="space-y-2 text-sm">
             {item.sceneLinks.map((link) => (
-              <li key={link.id} className="border-b border-[var(--border)]/50 pb-2">
-                <span className="font-medium">
-                  {formatSceneNumber(
-                    {
-                      episodeNumber: link.scene.episodeNumber,
-                      number: link.scene.number,
-                      postfix: link.scene.postfix,
-                    },
-                    projectType,
-                  )}
-                </span>
-                {link.quantity > 1 ? ` ×${link.quantity}` : ""}
-                {link.scene.planSeconds
-                  ? ` · ${formatSecondsMmSs(link.scene.planSeconds)}`
-                  : ""}
+              <li key={link.id}>
+                <Link
+                  href={`/${locale}/projects/${projectId}/libretto/${link.scene.id}`}
+                  className="hover:underline"
+                >
+                  {formatSceneNumber(link.scene, projectType)}
+                </Link>
               </li>
             ))}
           </ul>

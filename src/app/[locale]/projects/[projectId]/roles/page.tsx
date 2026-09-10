@@ -1,5 +1,6 @@
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { listProjectRoles } from "@/features/memberships/queries";
+import { listResourceCategories } from "@/features/resources/queries";
 import { RolesManager } from "@/features/roles/components/roles-manager";
 import { canManageMembers } from "@/features/memberships/permissions";
 import { Card } from "@/shared/ui/card";
@@ -16,7 +17,10 @@ export default async function ProjectRolesPage({ params }: Props) {
     return <p className="text-sm text-[var(--danger)]">Нет доступа</p>;
   }
 
-  const roles = await listProjectRoles(projectId);
+  const [roles, categories] = await Promise.all([
+    listProjectRoles(projectId),
+    listResourceCategories(projectId),
+  ]);
   const canManage = canManageMembers(ctx.matrix);
 
   return (
@@ -24,7 +28,8 @@ export default async function ProjectRolesPage({ params }: Props) {
       <div>
         <h2 className="font-display text-2xl font-semibold">Роли и права доступа</h2>
         <p className="mt-1 text-sm text-[var(--muted-fg)]">
-          Настройка матрицы прав по каждому разделу проекта.
+          Матрица по разделам и отдельно — финансовые условия по типам ресурсов
+          (актёры, локации, каждая категория).
         </p>
       </div>
       <Card>
@@ -32,6 +37,10 @@ export default async function ProjectRolesPage({ params }: Props) {
           projectId={projectId}
           roles={roles}
           canManage={canManage}
+          resourceCategories={categories.map((c) => ({
+            id: c.id,
+            name: c.name,
+          }))}
         />
       </Card>
     </div>

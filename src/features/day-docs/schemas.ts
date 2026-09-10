@@ -30,6 +30,10 @@ export const transportRowSchema = z.object({
   name: z.string().trim().min(1).max(200),
   callTime: timeString,
   notes: z.string().trim().max(500).optional(),
+  kmRate: z.preprocess((val) => {
+    if (val == null || val === "") return null;
+    return val;
+  }, z.coerce.number().min(0).nullable().optional()),
 });
 
 export const timeSlotRowSchema = z.object({

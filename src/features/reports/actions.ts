@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import type { SceneStatus } from "@prisma/client";
+import { sumExtrasPay } from "@/features/payroll/lib/parse-extra-payments";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { syncShootDayResourceUsages } from "@/features/schedule/lib/sync-shoot-day-resources";
 import { AuditEntityType } from "@/shared/audit/entity-types";
@@ -19,11 +20,14 @@ function emptyToNull(v: string | undefined | null) {
   return t ? t : null;
 }
 
-function revalidateReports(projectId: string, dayId: string) {
+function revalidateReports(projectId: string, dayId: string, sceneId?: string) {
   revalidatePath(`/ru/projects/${projectId}/reports`);
   revalidatePath(`/ru/projects/${projectId}/reports/${dayId}`);
   revalidatePath(`/ru/projects/${projectId}/schedule`);
   revalidatePath(`/ru/projects/${projectId}/libretto`);
+  if (sceneId) {
+    revalidatePath(`/ru/projects/${projectId}/libretto/${sceneId}`);
+  }
   revalidatePath(`/ru/projects/${projectId}/call-sheets/${dayId}`);
 }
 
@@ -34,10 +38,10 @@ async function assertReportWrite(projectId: string, shootDayId: string) {
   }
   const day = await prisma.shootDay.findFirst({
     where: { id: shootDayId, projectId },
-    select: { id: true },
+    select: { id: true, date: true },
   });
   if (!day) return { error: "Съёмочный день не найден" } as const;
-  return { ctx, dayId: day.id } as const;
+  return { ctx, dayId: day.id, shootDate: day.date } as const;
 }
 
 function mapFactStatusToSceneStatus(
@@ -216,6 +220,26 @@ export async function saveProductionSceneFactAction(
       });
     }
 
+    // История попыток — отдельно от текущего плана ShootDayScene
+    await tx.sceneShootAttempt.upsert({
+      where: {
+        sceneId_shootDayId: {
+          sceneId: data.sceneId,
+          shootDayId,
+        },
+      },
+      create: {
+        sceneId: data.sceneId,
+        shootDayId,
+        shootDate: gate.shootDate,
+        status: data.status,
+      },
+      update: {
+        shootDate: gate.shootDate,
+        status: data.status,
+      },
+    });
+
     await tx.scene.update({
       where: { id: data.sceneId },
       data: {
@@ -256,7 +280,7 @@ export async function saveProductionSceneFactAction(
     }`,
   });
 
-  revalidateReports(projectId, shootDayId);
+  revalidateReports(projectId, shootDayId, data.sceneId);
   return { success: "Факт по сцене сохранён" };
 }
 
@@ -266,20 +290,26 @@ async function recomputeWorkRowPay(workRowId: string) {
     include: {
       extras: true,
       actor: { include: { overtimeRates: true } },
+      item: { include: { overtimeRates: true } },
+      location: { include: { overtimeRates: true } },
     },
   });
   if (!row) return null;
 
   const { computeWorkPay } = await import("@/features/reports/lib/compute-work-pay");
   const { dec } = await import("@/shared/db/serialize-decimal");
-  const extrasTotal = row.extras.reduce((s, e) => s + Number(e.amount), 0);
-  const rates =
-    row.actor?.overtimeRates.map((r) => ({
-      hourNumber: r.hourNumber,
-      percentRate: dec(r.percentRate),
-      amount: dec(r.amount),
-      taxPercent: dec(r.taxPercent),
-    })) ?? [];
+  const extrasTotal = sumExtrasPay(row.extras);
+  const sourceRates =
+    row.actor?.overtimeRates ??
+    row.item?.overtimeRates ??
+    row.location?.overtimeRates ??
+    [];
+  const rates = sourceRates.map((r) => ({
+    hourNumber: r.hourNumber,
+    percentRate: dec(r.percentRate),
+    amount: dec(r.amount),
+    taxPercent: dec(r.taxPercent),
+  }));
 
   const pay = computeWorkPay({
     factStart: row.factStart,
@@ -289,8 +319,12 @@ async function recomputeWorkRowPay(workRowId: string) {
     unpaidOvertimeMin: row.unpaidOvertimeMin,
     shiftRate: dec(row.shiftRate),
     taxPercent: dec(row.taxPercent),
+    overtimeMode: row.overtimeMode,
+    unpaidOvertimeMode: row.unpaidOvertimeMode,
     overtimeRates: rates,
     extrasTotal,
+    factKm: row.factKm != null ? Number(row.factKm) : null,
+    kmRate: row.kmRate != null ? Number(row.kmRate) : null,
   });
 
   return prisma.productionReportWorkRow.update({
@@ -302,6 +336,7 @@ async function recomputeWorkRowPay(workRowId: string) {
       shiftPay: pay.shiftPay,
       overtimePay: pay.overtimePay,
       extrasPay: pay.extrasPay,
+      mileagePay: pay.mileagePay,
       totalPay: pay.totalPay,
     },
   });
@@ -338,6 +373,9 @@ export async function updateProductionWorkRowAction(
       factStart: emptyToNull(parsed.data.factStart),
       factEnd: emptyToNull(parsed.data.factEnd),
       lunchSkipped: parsed.data.lunchSkipped,
+      ...(parsed.data.factKm !== undefined
+        ? { factKm: parsed.data.factKm }
+        : {}),
     },
   });
 
@@ -397,11 +435,29 @@ export async function saveProductionWorkExtrasAction(
     );
     if (filled.length > 0) {
       await tx.productionReportWorkExtra.createMany({
-        data: filled.map((e) => ({
-          workRowId: row.id,
-          amount: e.amount,
-          description: emptyToNull(e.description),
-        })),
+        data: filled.map((e) => {
+          const taxPercent = e.taxPercent ?? null;
+          const taxAmount =
+            e.taxAmount != null
+              ? e.taxAmount
+              : taxPercent != null
+                ? (e.amount * taxPercent) / 100
+                : null;
+          const totalWithTax =
+            e.totalWithTax != null
+              ? e.totalWithTax
+              : taxAmount != null
+                ? e.amount + taxAmount
+                : e.amount;
+          return {
+            workRowId: row.id,
+            amount: e.amount,
+            taxPercent,
+            taxAmount,
+            totalWithTax,
+            description: emptyToNull(e.description),
+          };
+        }),
       });
     }
   });
@@ -422,6 +478,9 @@ export async function saveProductionWorkExtrasAction(
 
   revalidateReports(projectId, shootDayId);
   revalidatePath(`/ru/projects/${projectId}/finance`);
+  revalidatePath(`/ru/projects/${projectId}/characters`);
+  revalidatePath(`/ru/projects/${projectId}/resources`);
+  revalidatePath(`/ru/projects/${projectId}/settings/resources`);
   return { success: "Дополнительные выплаты сохранены" };
 }
 

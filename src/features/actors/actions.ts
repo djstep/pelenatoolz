@@ -8,6 +8,8 @@ import { AuditEntityType } from "@/shared/audit/entity-types";
 import { recordAudit } from "@/shared/audit/with-audit";
 import { z } from "zod";
 import { parseHhMmToMinutes } from "@/shared/i18n/domain-labels";
+import { parseExtraPaymentFormRows } from "@/features/payroll/lib/parse-extra-payments";
+import { parseOvertimeFormRows } from "@/features/payroll/lib/parse-overtime-form";
 
 export type ActorActionState = { error?: string; success?: string };
 
@@ -49,6 +51,10 @@ const actorSchema = z.object({
   unpaidOvertimeMin: durationMinutes.pipe(z.number().max(600).optional()),
   taxPercent: z.coerce.number().min(0).max(1000).optional(),
   pickupOffsetMin: durationMinutes.pipe(z.number().max(600).optional()),
+  overtimeMode: z
+    .enum(["HALF_HOUR", "HOURLY_CUMULATIVE", "HOURLY_FLAT"])
+    .optional(),
+  unpaidOvertimeMode: z.enum(["FIRST_HOUR", "EACH_HOUR"]).optional(),
 });
 
 function revalidateActors(projectId: string, characterId?: string) {
@@ -64,77 +70,11 @@ function isFormValueBlank(value: FormDataEntryValue | null) {
 }
 
 function parseOvertimeRows(formData: FormData, shiftRate: number, taxPct: number) {
-  const rows: Array<{
-    hourNumber: number;
-    percentRate: number | null;
-    amount: number | null;
-    taxPercent: number | null;
-    taxAmount: number | null;
-    totalWithTax: number | null;
-  }> = [];
-
-  for (let i = 1; i <= 24; i++) {
-    const pctRaw = formData.get(`ot_pct_${i}`);
-    const amountRaw = formData.get(`ot_amount_${i}`);
-    if (isFormValueBlank(pctRaw) && isFormValueBlank(amountRaw)) continue;
-    const percentRate = isFormValueBlank(pctRaw) ? null : Number(pctRaw);
-    let amount = isFormValueBlank(amountRaw) ? null : Number(amountRaw);
-    if (amount == null && percentRate != null && shiftRate > 0) {
-      amount = (shiftRate * percentRate) / 100;
-    }
-    if (percentRate == null && amount == null) continue;
-    if (Number.isNaN(percentRate ?? 0) || Number.isNaN(amount ?? 0)) continue;
-
-    const rowFkPctRaw = formData.get(`ot_tax_${i}`);
-    const rowTaxPct = isFormValueBlank(rowFkPctRaw) ? taxPct : Number(rowFkPctRaw);
-    const taxAmount =
-      amount != null ? (amount * (rowTaxPct || 0)) / 100 : null;
-    const totalWithTax =
-      amount != null ? amount + (taxAmount ?? 0) : null;
-    rows.push({
-      hourNumber: i,
-      percentRate,
-      amount,
-      taxPercent: rowTaxPct,
-      taxAmount,
-      totalWithTax,
-    });
-  }
-  return rows;
+  return parseOvertimeFormRows(formData, shiftRate, taxPct);
 }
 
 function parseExtraPayments(formData: FormData, taxPct: number) {
-  const rows: Array<{
-    paymentDate: Date | null;
-    amount: number;
-    taxPercent: number | null;
-    taxAmount: number | null;
-    totalWithTax: number | null;
-    description: string | null;
-  }> = [];
-
-  for (let i = 0; i < 50; i++) {
-    const amountRaw = formData.get(`ep_amount_${i}`);
-    const dateRaw = String(formData.get(`ep_date_${i}`) ?? "").trim();
-    const descRaw = String(formData.get(`ep_desc_${i}`) ?? "").trim();
-    if (isFormValueBlank(amountRaw) && !dateRaw && !descRaw) continue;
-    const amount = isFormValueBlank(amountRaw) ? 0 : Number(amountRaw);
-    if (Number.isNaN(amount)) continue;
-    if (amount === 0 && !dateRaw && !descRaw) continue;
-
-    const rowFkRaw = formData.get(`ep_tax_${i}`);
-    const rowTax = isFormValueBlank(rowFkRaw) ? taxPct : Number(rowFkRaw);
-    const taxAmount = (amount * (rowTax || 0)) / 100;
-    rows.push({
-      paymentDate: dateRaw ? new Date(dateRaw) : null,
-      amount,
-      taxPercent: rowTax,
-      taxAmount,
-      totalWithTax: amount + taxAmount,
-      description: descRaw || null,
-    });
-  }
-  return rows;
+  return parseExtraPaymentFormRows(formData, taxPct);
 }
 
 function actorFormData(formData: FormData) {
@@ -159,6 +99,8 @@ function actorFormData(formData: FormData) {
     unpaidOvertimeMin: formData.get("unpaidOvertimeMin") || undefined,
     taxPercent: formData.get("taxPercent") || undefined,
     pickupOffsetMin: formData.get("pickupOffsetMin") || undefined,
+    overtimeMode: formData.get("overtimeMode") || undefined,
+    unpaidOvertimeMode: formData.get("unpaidOvertimeMode") || undefined,
   };
 }
 
@@ -177,17 +119,42 @@ export async function createActorAction(
     return { error: "Проверьте данные актёра" };
   }
 
-  const shiftRate = parsed.data.shiftRate ?? 0;
-  const taxPct = parsed.data.taxPercent ?? 0;
-  const overtime = parseOvertimeRows(formData, shiftRate, taxPct);
-  const extras = parseExtraPayments(formData, taxPct);
+  const canFin = ctx.canFinanceWrite("actors");
+  const {
+    shiftRate,
+    shiftHoursMin,
+    unpaidOvertimeMin,
+    taxPercent,
+    pickupOffsetMin,
+    overtimeMode,
+    unpaidOvertimeMode,
+    ...profile
+  } = parsed.data;
+
+  const overtime = canFin
+    ? parseOvertimeRows(formData, shiftRate ?? 0, taxPercent ?? 0)
+    : [];
+  const extras = canFin
+    ? parseExtraPayments(formData, taxPercent ?? 0)
+    : [];
 
   const actor = await prisma.actor.create({
     data: {
       projectId,
-      ...parsed.data,
-      overtimeRates: overtime.length ? { create: overtime } : undefined,
-      extraPayments: extras.length ? { create: extras } : undefined,
+      ...profile,
+      ...(canFin
+        ? {
+            shiftRate,
+            shiftHoursMin,
+            unpaidOvertimeMin,
+            taxPercent,
+            pickupOffsetMin,
+            overtimeMode,
+            unpaidOvertimeMode,
+            overtimeRates: overtime.length ? { create: overtime } : undefined,
+            extraPayments: extras.length ? { create: extras } : undefined,
+          }
+        : {}),
     },
   });
 
@@ -224,23 +191,50 @@ export async function updateActorAction(
     return { error: "Проверьте данные актёра" };
   }
 
-  const shiftRate = parsed.data.shiftRate ?? 0;
-  const taxPct = parsed.data.taxPercent ?? 0;
-  const overtime = parseOvertimeRows(formData, shiftRate, taxPct);
-  const extras = parseExtraPayments(formData, taxPct);
+  const canFin = ctx.canFinanceWrite("actors");
+  const {
+    shiftRate,
+    shiftHoursMin,
+    unpaidOvertimeMin,
+    taxPercent,
+    pickupOffsetMin,
+    overtimeMode,
+    unpaidOvertimeMode,
+    ...profile
+  } = parsed.data;
 
-  await prisma.$transaction([
-    prisma.actorOvertimeRate.deleteMany({ where: { actorId } }),
-    prisma.actorExtraPayment.deleteMany({ where: { actorId } }),
-    prisma.actor.update({
+  if (canFin) {
+    const overtime = parseOvertimeRows(
+      formData,
+      shiftRate ?? 0,
+      taxPercent ?? 0,
+    );
+    const extras = parseExtraPayments(formData, taxPercent ?? 0);
+    await prisma.$transaction([
+      prisma.actorOvertimeRate.deleteMany({ where: { actorId } }),
+      prisma.actorExtraPayment.deleteMany({ where: { actorId } }),
+      prisma.actor.update({
+        where: { id: actorId },
+        data: {
+          ...profile,
+          shiftRate,
+          shiftHoursMin,
+          unpaidOvertimeMin,
+          taxPercent,
+          pickupOffsetMin,
+          overtimeMode,
+          unpaidOvertimeMode,
+          overtimeRates: overtime.length ? { create: overtime } : undefined,
+          extraPayments: extras.length ? { create: extras } : undefined,
+        },
+      }),
+    ]);
+  } else {
+    await prisma.actor.update({
       where: { id: actorId },
-      data: {
-        ...parsed.data,
-        overtimeRates: overtime.length ? { create: overtime } : undefined,
-        extraPayments: extras.length ? { create: extras } : undefined,
-      },
-    }),
-  ]);
+      data: profile,
+    });
+  }
 
   await recordAudit(ctx, {
     projectId,

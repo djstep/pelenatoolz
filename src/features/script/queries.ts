@@ -40,6 +40,14 @@ export async function listScenes(projectId: string) {
           },
         },
       },
+      shootAttempts: {
+        include: {
+          shootDay: {
+            select: { id: true, dayNumber: true, unit: true },
+          },
+        },
+        orderBy: [{ shootDate: "asc" }, { createdAt: "asc" }],
+      },
     },
     orderBy: [{ sortOrder: "asc" }, { number: "asc" }],
   });
@@ -58,8 +66,35 @@ export async function getSceneForEdit(projectId: string, sceneId: string) {
           item: { include: { category: { select: { id: true, name: true } } } },
         },
       },
+      shootAttempts: {
+        include: {
+          shootDay: {
+            select: { id: true, dayNumber: true, unit: true },
+          },
+        },
+        orderBy: [{ shootDate: "asc" }, { createdAt: "asc" }],
+      },
     },
   });
+}
+
+export async function getSceneNeighbors(projectId: string, sceneId: string) {
+  const scenes = await prisma.scene.findMany({
+    where: { projectId },
+    select: {
+      id: true,
+      episodeNumber: true,
+      number: true,
+      postfix: true,
+    },
+    orderBy: [{ sortOrder: "asc" }, { number: "asc" }],
+  });
+  const idx = scenes.findIndex((s) => s.id === sceneId);
+  if (idx < 0) return { prev: null, next: null };
+  return {
+    prev: idx > 0 ? scenes[idx - 1]! : null,
+    next: idx < scenes.length - 1 ? scenes[idx + 1]! : null,
+  };
 }
 
 export async function listLocations(projectId: string) {

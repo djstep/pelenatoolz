@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import {
@@ -25,6 +25,17 @@ export function LoginForm({
   const t = useTranslations("auth");
   const tNav = useTranslations("nav");
   const [state, action, pending] = useActionState(loginAction, initial);
+  const [email, setEmail] = useState("");
+  const [passwordKey, setPasswordKey] = useState(0);
+
+  useEffect(() => {
+    if (state.email != null) {
+      setEmail(state.email);
+    }
+    if (state.error) {
+      setPasswordKey((k) => k + 1);
+    }
+  }, [state]);
 
   return (
     <form action={action} className="space-y-4">
@@ -39,6 +50,8 @@ export function LoginForm({
           type="email"
           autoComplete="email"
           required
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
         />
       </div>
       <div>
@@ -52,6 +65,7 @@ export function LoginForm({
           </Link>
         </div>
         <Input
+          key={passwordKey}
           id="password"
           name="password"
           type="password"

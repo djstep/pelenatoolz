@@ -6,6 +6,7 @@ import {
   Gender,
   IntExt,
   LocationKind,
+  ProductionSceneFactStatus,
   ProjectStatus,
   ProjectType,
   SceneKind,
@@ -66,6 +67,17 @@ export const sceneStatusRowColors: Record<SceneStatus, string> = {
   PLANNING: "bg-zinc-900/40 hover:bg-zinc-900/50",
   OFF_PLAN: "bg-black/50 hover:bg-black/60",
   NOT_SHOT: "bg-red-950/35 hover:bg-red-950/45",
+};
+
+/** Цвета статусов факта отчёта — те же, что у SceneStatus в либретто. */
+export const productionSceneFactStatusColors: Record<
+  ProductionSceneFactStatus,
+  string
+> = {
+  SHOT: sceneStatusColors.SHOT,
+  NOT_SHOT: sceneStatusColors.NOT_SHOT,
+  RESHOOT_REQUIRED: sceneStatusColors.RESHOOT_REQUIRED,
+  DELETED: sceneStatusColors.OFF_PLAN,
 };
 
 export const locationKindLabels: Record<LocationKind, string> = {

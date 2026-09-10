@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { useActionState, useState } from "react";
 import { updateProductionDayMetricsAction } from "@/features/reports/actions";
 import { SceneFactModal } from "@/features/reports/components/scene-fact-modal";
@@ -29,11 +30,13 @@ export function ProductionReportWorkspace({
   projectId,
   bundle,
   canEdit,
+  exportMenu,
 }: {
   locale: string;
   projectId: string;
   bundle: ProductionReportBundle;
   canEdit: boolean;
+  exportMenu?: ReactNode;
 }) {
   const { day, project, report, cameraCount, factDuration } = bundle;
   const [selectedFactId, setSelectedFactId] = useState<string | null>(null);
@@ -87,6 +90,7 @@ export function ProductionReportWorkspace({
             Производственный отчёт · День {day.dayNumber}
           </h2>
         </div>
+        {exportMenu}
       </div>
 
       <section className="rounded-2xl border border-[var(--border)] bg-[var(--panel-solid)] p-5">

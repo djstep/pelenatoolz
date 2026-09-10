@@ -494,9 +494,10 @@ export function inferDayNightLabel(day: DayDocBundle["day"]) {
 export function formatSceneLine(scene: SceneRow) {
   const num = formatSceneNumber(scene);
   const loc = scene.locations[0]?.location.name;
+  // Как slugline / плашка КПП: № · Инт/Нат · Локация · День/Ночь
   const parts = [num];
-  if (loc) parts.push(loc);
   if (scene.intExt) parts.push(intExtLabels[scene.intExt]);
+  if (loc) parts.push(loc);
   if (scene.dayNight) parts.push(dayNightLabels[scene.dayNight]);
   return parts.join(" · ");
 }

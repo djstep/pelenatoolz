@@ -76,6 +76,9 @@ export type ProductionReportWorkExtra = {
   id: string;
   workRowId: string;
   amount: number;
+  taxPercent: number | null;
+  taxAmount: number | null;
+  totalWithTax: number | null;
   description: string | null;
 };
 
@@ -102,6 +105,10 @@ export type ProductionReportWorkRow = {
   shiftPay: number | null;
   overtimePay: number | null;
   extrasPay: number | null;
+  tracksMileage: boolean;
+  factKm: number | null;
+  kmRate: number | null;
+  mileagePay: number | null;
   totalPay: number | null;
   sortOrder: number;
   extras: ProductionReportWorkExtra[];

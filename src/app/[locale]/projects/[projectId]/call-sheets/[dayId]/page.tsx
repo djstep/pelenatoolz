@@ -11,6 +11,7 @@ import {
   listPerShiftCatalogForDay,
 } from "@/features/day-docs/queries";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
+import { listResourceCategories } from "@/features/resources/queries";
 
 type Props = {
   params: Promise<{ locale: string; projectId: string; dayId: string }>;
@@ -60,8 +61,14 @@ export default async function CallSheetDayPage({ params }: Props) {
     );
   }
 
-  const [astro, nextDay, timingBaselines, resourceTimingBaselines, perShiftCatalog] =
-    await Promise.all([
+  const [
+    astro,
+    nextDay,
+    timingBaselines,
+    resourceTimingBaselines,
+    perShiftCatalog,
+    resourceCategories,
+  ] = await Promise.all([
     fetchCityAstro(
       bundleFresh.project.city,
       bundleFresh.day.date,
@@ -71,6 +78,7 @@ export default async function CallSheetDayPage({ params }: Props) {
     getActorTimingBaselines(projectId, dayId),
     getResourceTimingBaselines(projectId, dayId),
     listPerShiftCatalogForDay(projectId, dayId),
+    listResourceCategories(projectId),
   ]);
 
   const nextDayAstro = nextDay
@@ -96,6 +104,11 @@ export default async function CallSheetDayPage({ params }: Props) {
       timingBaselines={timingBaselines}
       resourceTimingBaselines={resourceTimingBaselines}
       perShiftCatalog={perShiftCatalog}
+      resourceCategories={resourceCategories.map((c) => ({
+        id: c.id,
+        name: c.name,
+        perShift: c.perShift,
+      }))}
     />
   );
 }

@@ -7,6 +7,8 @@ import { parseHhMmToMinutes } from "@/shared/i18n/domain-labels";
 import { AuditEntityType } from "@/shared/audit/entity-types";
 import { auditMutation } from "@/shared/audit/with-audit";
 import { resourcesRevalidatePaths } from "@/features/resources/lib/paths";
+import { parseExtraPaymentFormRows } from "@/features/payroll/lib/parse-extra-payments";
+import { parseOvertimeFormRows } from "@/features/payroll/lib/parse-overtime-form";
 import { prisma } from "@/shared/db/prisma";
 
 export type ResourceActionState = { error?: string; success?: string };
@@ -22,6 +24,7 @@ const categorySchema = z.object({
   perShift: z.boolean().optional(),
   countable: z.boolean().optional(),
   showInKpp: z.boolean().optional(),
+  tracksMileage: z.boolean().optional(),
 });
 
 const itemSchema = z.object({
@@ -31,6 +34,16 @@ const itemSchema = z.object({
   shiftHoursMin: durationMinutes.pipe(z.number().max(1440).optional()),
   unpaidOvertimeMin: durationMinutes.pipe(z.number().max(600).optional()),
   arrivalOffsetMin: durationMinutes.pipe(z.number().max(1440).optional()),
+  taxPercent: z.coerce.number().min(0).max(1000).optional(),
+  kmRate: z.preprocess((val) => {
+    if (val == null || val === "") return null;
+    const n = Number(val);
+    return Number.isFinite(n) ? n : null;
+  }, z.number().min(0).nullable().optional()),
+  overtimeMode: z
+    .enum(["HALF_HOUR", "HOURLY_CUMULATIVE", "HOURLY_FLAT"])
+    .optional(),
+  unpaidOvertimeMode: z.enum(["FIRST_HOUR", "EACH_HOUR"]).optional(),
 });
 
 function checkbox(formData: FormData, key: string) {
@@ -71,6 +84,7 @@ export async function createResourceCategoryAction(
     perShift: checkbox(formData, "perShift"),
     countable: checkbox(formData, "countable"),
     showInKpp: checkbox(formData, "showInKpp"),
+    tracksMileage: checkbox(formData, "tracksMileage"),
   });
   if (!parsed.success) return { error: "Укажите название категории" };
 
@@ -90,6 +104,7 @@ export async function createResourceCategoryAction(
           perShift: data.perShift ?? false,
           countable: data.countable ?? false,
           showInKpp: data.showInKpp ?? true,
+          tracksMileage: data.tracksMileage ?? false,
         },
       });
     },
@@ -122,6 +137,7 @@ export async function updateResourceCategoryAction(
     perShift: checkbox(formData, "perShift"),
     countable: checkbox(formData, "countable"),
     showInKpp: checkbox(formData, "showInKpp"),
+    tracksMileage: checkbox(formData, "tracksMileage"),
   });
   if (!parsed.success) return { error: "Проверьте данные" };
 
@@ -136,6 +152,7 @@ export async function updateResourceCategoryAction(
           perShift: data.perShift ?? false,
           countable: data.countable ?? false,
           showInKpp: data.showInKpp ?? true,
+          tracksMileage: data.tracksMileage ?? false,
         },
       });
       return data;
@@ -185,6 +202,23 @@ export async function deleteResourceCategoryAction(
   revalidateResources(projectId);
 }
 
+function parseItemForm(formData: FormData) {
+  const kmRaw = formData.get("kmRate");
+  return {
+    name: formData.get("name"),
+    notes: formData.get("notes") || undefined,
+    shiftRate: formData.get("shiftRate") || undefined,
+    shiftHoursMin: formData.get("shiftHoursMin") || undefined,
+    unpaidOvertimeMin: formData.get("unpaidOvertimeMin") || undefined,
+    arrivalOffsetMin: formData.get("arrivalOffsetMin") || undefined,
+    taxPercent: formData.get("taxPercent") || undefined,
+    kmRate:
+      kmRaw == null || String(kmRaw).trim() === "" ? null : kmRaw,
+    overtimeMode: formData.get("overtimeMode") || undefined,
+    unpaidOvertimeMode: formData.get("unpaidOvertimeMode") || undefined,
+  };
+}
+
 export async function createResourceItemAction(
   projectId: string,
   categoryId: string,
@@ -199,19 +233,50 @@ export async function createResourceItemAction(
   });
   if (!category) return { error: "Категория не найдена" };
 
-  const parsed = itemSchema.safeParse({
-    name: formData.get("name"),
-    notes: formData.get("notes") || undefined,
-    shiftRate: formData.get("shiftRate") || undefined,
-    shiftHoursMin: formData.get("shiftHoursMin") || undefined,
-    unpaidOvertimeMin: formData.get("unpaidOvertimeMin") || undefined,
-    arrivalOffsetMin: formData.get("arrivalOffsetMin") || undefined,
-  });
+  const parsed = itemSchema.safeParse(parseItemForm(formData));
   if (!parsed.success) return { error: "Укажите название элемента" };
+
+  const canFin = ctx.canFinanceWrite({ categoryId });
+  const {
+    shiftRate,
+    shiftHoursMin,
+    unpaidOvertimeMin,
+    taxPercent,
+    overtimeMode,
+    unpaidOvertimeMode,
+    kmRate,
+    ...base
+  } = parsed.data;
+
+  const overtime = canFin
+    ? parseOvertimeFormRows(formData, shiftRate ?? 0, taxPercent ?? 0)
+    : [];
+  const extras = canFin
+    ? parseExtraPaymentFormRows(formData, taxPercent ?? 0)
+    : [];
 
   const item = await auditMutation(
     ctx,
-    async (data) => prisma.resourceItem.create({ data: { categoryId, ...data } }),
+    async () =>
+      prisma.resourceItem.create({
+        data: {
+          categoryId,
+          ...base,
+          ...(canFin
+            ? {
+                shiftRate,
+                shiftHoursMin,
+                unpaidOvertimeMin,
+                taxPercent,
+                overtimeMode,
+                unpaidOvertimeMode,
+                kmRate,
+                overtimeRates: overtime.length ? { create: overtime } : undefined,
+                extraPayments: extras.length ? { create: extras } : undefined,
+              }
+            : {}),
+        },
+      }),
     parsed.data,
     {
       projectId,
@@ -236,24 +301,69 @@ export async function updateResourceItemAction(
   const ctx = await requireProjectContext(projectId);
   if (!ctx.can("script:write")) return { error: "Недостаточно прав" };
 
-  const parsed = itemSchema.safeParse({
-    name: formData.get("name"),
-    notes: formData.get("notes") || undefined,
-    shiftRate: formData.get("shiftRate") || undefined,
-    shiftHoursMin: formData.get("shiftHoursMin") || undefined,
-    unpaidOvertimeMin: formData.get("unpaidOvertimeMin") || undefined,
-    arrivalOffsetMin: formData.get("arrivalOffsetMin") || undefined,
-  });
+  const parsed = itemSchema.safeParse(parseItemForm(formData));
   if (!parsed.success) return { error: "Проверьте данные" };
+
+  const canFin = ctx.canFinanceWrite({ categoryId });
+  const {
+    shiftRate,
+    shiftHoursMin,
+    unpaidOvertimeMin,
+    taxPercent,
+    overtimeMode,
+    unpaidOvertimeMode,
+    kmRate,
+    ...base
+  } = parsed.data;
 
   await auditMutation(
     ctx,
-    async (data) => {
-      await prisma.resourceItem.updateMany({
-        where: { id: itemId, categoryId, category: { projectId } },
-        data,
-      });
-      return data;
+    async () => {
+      if (canFin) {
+        const overtime = parseOvertimeFormRows(
+          formData,
+          shiftRate ?? 0,
+          taxPercent ?? 0,
+        );
+        const extras = parseExtraPaymentFormRows(formData, taxPercent ?? 0);
+        await prisma.$transaction([
+          prisma.resourceOvertimeRate.deleteMany({ where: { itemId } }),
+          prisma.resourceExtraPayment.deleteMany({ where: { itemId } }),
+          prisma.resourceItem.updateMany({
+            where: { id: itemId, categoryId, category: { projectId } },
+            data: {
+              ...base,
+              shiftRate,
+              shiftHoursMin,
+              unpaidOvertimeMin,
+              taxPercent,
+              overtimeMode,
+              unpaidOvertimeMode,
+              kmRate,
+            },
+          }),
+          ...(overtime.length
+            ? [
+                prisma.resourceOvertimeRate.createMany({
+                  data: overtime.map((r) => ({ ...r, itemId })),
+                }),
+              ]
+            : []),
+          ...(extras.length
+            ? [
+                prisma.resourceExtraPayment.createMany({
+                  data: extras.map((r) => ({ ...r, itemId })),
+                }),
+              ]
+            : []),
+        ]);
+      } else {
+        await prisma.resourceItem.updateMany({
+          where: { id: itemId, categoryId, category: { projectId } },
+          data: base,
+        });
+      }
+      return parsed.data;
     },
     parsed.data,
     {

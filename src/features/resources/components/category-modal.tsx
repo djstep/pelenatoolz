@@ -56,6 +56,14 @@ function CategoryFormFields({ category }: { category?: ResourceCategoryRow }) {
           />
           Выводить в КПП
         </label>
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            name="tracksMileage"
+            defaultChecked={category?.tracksMileage ?? false}
+          />
+          Учитывать километраж (игровой / спецтранспорт)
+        </label>
       </div>
     </div>
   );

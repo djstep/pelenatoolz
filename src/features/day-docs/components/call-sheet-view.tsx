@@ -36,6 +36,7 @@ import { formatDateLong, formatDateShort } from "@/shared/i18n/format-date";
 import { Badge } from "@/shared/ui/badge";
 import { cn } from "@/shared/lib/cn";
 import type { getNextShootDayBrief } from "@/features/day-docs/queries";
+import type { DayDocsExportResourceCategory } from "@/features/day-docs/components/day-docs-export-menu";
 
 function DocSection({
   title,
@@ -179,6 +180,7 @@ export function CallSheetView({
   timingBaselines = {},
   resourceTimingBaselines = {},
   perShiftCatalog = [],
+  resourceCategories = [],
 }: {
   locale: string;
   projectId: string;
@@ -190,6 +192,7 @@ export function CallSheetView({
   timingBaselines?: ActorTimingBaselines;
   resourceTimingBaselines?: ResourceTimingBaselines;
   perShiftCatalog?: import("@/features/day-docs/queries").PerShiftCatalogOption[];
+  resourceCategories?: DayDocsExportResourceCategory[];
 }) {
   const { project, day } = bundle;
   const stats = buildDayStats(day);
@@ -255,7 +258,11 @@ export function CallSheetView({
             canEdit={canEdit}
           />
           <CallSheetCharacterScriptsMenu projectId={projectId} cast={cast} />
-          <CallSheetExportButtons projectId={projectId} dayId={day.id} />
+          <CallSheetExportButtons
+            projectId={projectId}
+            dayId={day.id}
+            resourceCategories={resourceCategories}
+          />
           <PrintButton />
         </div>
       </div>

@@ -14,6 +14,8 @@ import {
 import { canManageMembers } from "@/features/memberships/permissions";
 import { requireProjectAccess, listProjectRoles } from "@/features/memberships/queries";
 import { prisma } from "@/shared/db/prisma";
+import { DEFAULT_APPROVAL_STATUSES } from "@/features/finance/lib/approval-statuses";
+import { DEFAULT_LEDGER_TYPES } from "@/features/contracts/lib/vat";
 import { getDefaultProjectRoles } from "@/features/roles/default-roles";
 import { parsePermissionMatrix } from "@/features/roles/permissions-matrix";
 import { AuditEntityType } from "@/shared/audit/entity-types";
@@ -161,6 +163,26 @@ export async function createProjectAction(
         }),
       ),
     );
+
+    await tx.projectApprovalStatus.createMany({
+      data: DEFAULT_APPROVAL_STATUSES.map((s) => ({
+        projectId: created.id,
+        key: s.key,
+        name: s.name,
+        color: s.color,
+        isSystem: true,
+        sortOrder: s.sortOrder,
+      })),
+    });
+
+    await tx.projectLedgerType.createMany({
+      data: DEFAULT_LEDGER_TYPES.map((t) => ({
+        projectId: created.id,
+        name: t.name,
+        isSystem: true,
+        sortOrder: t.sortOrder,
+      })),
+    });
 
     const producer = roles.find((r) => r.name === producerRole.name)!;
 

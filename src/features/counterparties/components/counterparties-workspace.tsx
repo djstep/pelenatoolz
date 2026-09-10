@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import {
   createCompanyAction,
   createCounterpartyAction,
@@ -216,11 +217,13 @@ function CounterpartyModal({
 
 export function CounterpartiesWorkspace({
   projectId,
+  locale,
   companies,
   counterparties,
   canWrite,
 }: {
   projectId: string;
+  locale: string;
   companies: CompanyListItem[];
   counterparties: CounterpartyListItem[];
   canWrite: boolean;
@@ -384,7 +387,12 @@ export function CounterpartiesWorkspace({
               {filteredCounterparties.map((c) => (
                 <tr key={c.id} className="border-b border-[var(--border)]/60">
                   <td className="px-4 py-3 font-medium">
-                    {c.name}
+                    <Link
+                      href={`/${locale}/projects/${projectId}/counterparties/${c.id}`}
+                      className="hover:text-[var(--accent)] hover:underline"
+                    >
+                      {c.name}
+                    </Link>
                     {c.inn ? (
                       <div className="text-xs text-[var(--muted-fg)]">
                         ИНН {c.inn}

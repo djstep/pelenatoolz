@@ -1,6 +1,7 @@
 import {
   EXTRAS_BUCKET_HEADER,
   EXPORT_LAYOUT_KEYS,
+  type AttendanceSheetSettings,
   type ExportColumn,
   type ExportFieldDef,
   type ExportLayout,
@@ -69,6 +70,19 @@ export function normalizeExportLayout(raw: unknown): ExportLayout | null {
   };
 }
 
+export function normalizeAttendanceSheetSettings(
+  raw: unknown,
+): AttendanceSheetSettings | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const o = raw as Record<string, unknown>;
+  if (!Array.isArray(o.resourceIds)) return { resourceIds: [] };
+  return {
+    resourceIds: o.resourceIds.filter(
+      (id): id is string => typeof id === "string" && id.trim().length > 0,
+    ),
+  };
+}
+
 export function parseExportSettings(raw: unknown): ExportSettings {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
   const src = raw as Record<string, unknown>;
@@ -77,6 +91,8 @@ export function parseExportSettings(raw: unknown): ExportSettings {
     const layout = normalizeExportLayout(src[key]);
     if (layout) out[key] = layout;
   }
+  const attendance = normalizeAttendanceSheetSettings(src.attendanceSheet);
+  if (attendance) out.attendanceSheet = attendance;
   return out;
 }
 

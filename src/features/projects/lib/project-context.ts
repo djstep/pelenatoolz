@@ -5,7 +5,12 @@ import {
   type Permission,
 } from "@/features/memberships/permissions";
 import { getProjectForUser } from "@/features/projects/queries";
-import { parsePermissionMatrix } from "@/features/roles/permissions-matrix";
+import {
+  canEntityFinance,
+  parsePermissionMatrix,
+  parseResourceCategoryFinance,
+  type EntityFinanceTarget,
+} from "@/features/roles/permissions-matrix";
 
 export async function requireProjectContext(projectId: string) {
   const user = await requireUser();
@@ -20,7 +25,9 @@ export async function requireProjectContext(projectId: string) {
     notFound();
   }
 
-  const matrix = parsePermissionMatrix(membership.role.permissions);
+  const rawPermissions = membership.role.permissions;
+  const matrix = parsePermissionMatrix(rawPermissions);
+  const categoryFinance = parseResourceCategoryFinance(rawPermissions);
 
   return {
     user,
@@ -28,6 +35,11 @@ export async function requireProjectContext(projectId: string) {
     membership,
     role: membership.role,
     matrix,
+    categoryFinance,
     can: (permission: Permission) => hasPermission(matrix, permission),
+    canFinanceRead: (target: EntityFinanceTarget) =>
+      canEntityFinance(matrix, categoryFinance, target, "read"),
+    canFinanceWrite: (target: EntityFinanceTarget) =>
+      canEntityFinance(matrix, categoryFinance, target, "write"),
   };
 }

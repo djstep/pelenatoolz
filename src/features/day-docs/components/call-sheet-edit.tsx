@@ -39,7 +39,12 @@ type DeptRow = {
   callTime: string;
 };
 
-type TransportRow = { name: string; callTime: string; notes: string };
+type TransportRow = {
+  name: string;
+  callTime: string;
+  notes: string;
+  kmRate: string;
+};
 
 type SlotRow = {
   startTime: string;
@@ -132,6 +137,7 @@ export function CallSheetEditor({
       name: t.name,
       callTime: t.callTime ?? "",
       notes: t.notes ?? "",
+      kmRate: t.kmRate != null ? String(t.kmRate) : "",
     })),
   );
 
@@ -402,7 +408,7 @@ export function CallSheetEditor({
         <div className="space-y-3">
           <h4 className="text-sm font-semibold text-[var(--muted-fg)]">Спецтранспорт</h4>
           {transports.map((row, i) => (
-            <div key={i} className="grid gap-2 sm:grid-cols-4">
+            <div key={i} className="grid gap-2 sm:grid-cols-5">
               <Input
                 value={row.name}
                 onChange={(e) =>
@@ -420,6 +426,21 @@ export function CallSheetEditor({
                   )
                 }
                 placeholder="07:00"
+              />
+              <Input
+                type="number"
+                min={0}
+                step="0.01"
+                value={row.kmRate}
+                onChange={(e) =>
+                  setTransports((p) =>
+                    p.map((r, j) =>
+                      j === i ? { ...r, kmRate: e.target.value } : r,
+                    ),
+                  )
+                }
+                placeholder="₽/км"
+                title="Ставка за километр"
               />
               <Input
                 value={row.notes}
@@ -442,13 +463,27 @@ export function CallSheetEditor({
           <Button
             type="button"
             variant="ghost"
-            onClick={() => setTransports((p) => [...p, { name: "", callTime: "", notes: "" }])}
+            onClick={() =>
+              setTransports((p) => [
+                ...p,
+                { name: "", callTime: "", notes: "", kmRate: "" },
+              ])
+            }
           >
             + Техника
           </Button>
           <JsonRowsForm
             action={transportAction}
-            rowsJson={JSON.stringify(transports.filter((r) => r.name.trim()))}
+            rowsJson={JSON.stringify(
+              transports
+                .filter((r) => r.name.trim())
+                .map((r) => ({
+                  name: r.name,
+                  callTime: r.callTime,
+                  notes: r.notes,
+                  kmRate: r.kmRate.trim() === "" ? null : Number(r.kmRate),
+                })),
+            )}
             label="Сохранить спецтранспорт"
           />
         </div>

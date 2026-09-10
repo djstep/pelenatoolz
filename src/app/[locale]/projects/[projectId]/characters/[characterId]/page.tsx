@@ -41,6 +41,8 @@ export default async function CharacterDetailPage({ params }: Props) {
         }
         canWriteScript={ctx.can("script:write")}
         canWriteCast={ctx.can("cast:write")}
+        canFinanceRead={ctx.canFinanceRead("actors")}
+        canFinanceWrite={ctx.canFinanceWrite("actors")}
         availabilityMini={
           actorId
             ? {

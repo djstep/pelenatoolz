@@ -16,6 +16,7 @@ import { prisma } from "@/shared/db/prisma";
 export type ActionState = {
   error?: string;
   success?: string;
+  email?: string;
   devResetUrl?: string;
   fieldErrors?: Record<string, string[]>;
 };
@@ -79,24 +80,30 @@ export async function loginAction(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  const emailRaw = String(formData.get("email") ?? "").trim();
   const parsed = loginSchema.safeParse({
-    email: formData.get("email"),
+    email: emailRaw,
     password: formData.get("password"),
   });
 
   if (!parsed.success) {
-    return { error: "Введите корректный email и пароль" };
+    return {
+      error: "Введите корректный email и пароль",
+      email: emailRaw,
+    };
   }
+
+  const email = parsed.data.email.toLowerCase();
 
   try {
     await signIn("credentials", {
-      email: parsed.data.email.toLowerCase(),
+      email,
       password: parsed.data.password,
       redirect: false,
     });
   } catch (error) {
     if (error instanceof AuthError) {
-      return { error: "Неверный email или пароль" };
+      return { error: "Неверный email или пароль", email };
     }
     throw error;
   }

@@ -27,6 +27,8 @@ export default async function SettingsResourceCategoryPage({ params }: Props) {
         projectType={ctx.project.type}
         category={category}
         canWrite={ctx.can("script:write")}
+        canFinanceRead={ctx.canFinanceRead({ categoryId })}
+        canFinanceWrite={ctx.canFinanceWrite({ categoryId })}
       />
     </Card>
   );

@@ -49,10 +49,14 @@ export const updateWorkRowSchema = z.object({
   factStart: timeString,
   factEnd: timeString,
   lunchSkipped: z.boolean(),
+  factKm: z.coerce.number().min(0).max(1_000_000).optional().nullable(),
 });
 
 export const workExtraRowSchema = z.object({
   amount: z.coerce.number(),
+  taxPercent: z.coerce.number().min(0).max(1000).optional().nullable(),
+  taxAmount: z.coerce.number().optional().nullable(),
+  totalWithTax: z.coerce.number().optional().nullable(),
   description: z.string().trim().max(500).optional().or(z.literal("")),
 });
 

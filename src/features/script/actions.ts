@@ -17,8 +17,11 @@ import { recordAudit } from "@/shared/audit/with-audit";
 
 export type ActionState = { error?: string; success?: string; keepOpen?: boolean };
 
-function revalidateScript(projectId: string) {
+function revalidateScript(projectId: string, sceneId?: string) {
   revalidatePath(`/ru/projects/${projectId}/libretto`);
+  if (sceneId) {
+    revalidatePath(`/ru/projects/${projectId}/libretto/${sceneId}`);
+  }
   revalidatePath(`/ru/projects/${projectId}/script`);
   revalidatePath(`/ru/projects/${projectId}/screenplay`);
   revalidatePath(`/ru/projects/${projectId}`);
@@ -371,8 +374,162 @@ export async function updateSceneAction(
 
   await syncSluglineFromScene(sceneId).catch(() => {});
 
-  revalidateScript(projectId);
+  revalidateScript(projectId, sceneId);
   return { success: "Сцена сохранена" };
+}
+
+async function allocateDuplicateNumber(
+  projectId: string,
+  episodeNumber: number,
+  baseNumber: string,
+  basePostfix: string,
+) {
+  const siblings = await prisma.scene.findMany({
+    where: { projectId, episodeNumber },
+    select: { number: true, postfix: true },
+  });
+  const taken = new Set(siblings.map((s) => `${s.number}\0${s.postfix}`));
+  const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  const startIdx = basePostfix
+    ? letters.indexOf(basePostfix.toUpperCase()) + 1
+    : 0;
+  for (let i = Math.max(0, startIdx); i < letters.length; i++) {
+    const postfix = letters[i]!;
+    if (!taken.has(`${baseNumber}\0${postfix}`)) {
+      return { number: baseNumber, postfix };
+    }
+  }
+  const n = Number.parseInt(baseNumber, 10);
+  if (!Number.isNaN(n)) {
+    for (let next = n + 1; next < n + 1000; next++) {
+      if (!taken.has(`${String(next)}\0`)) {
+        return { number: String(next), postfix: "" };
+      }
+    }
+  }
+  let suffix = 2;
+  while (taken.has(`${baseNumber}\0${suffix}`)) suffix += 1;
+  return { number: baseNumber, postfix: String(suffix) };
+}
+
+export async function duplicateSceneAction(
+  projectId: string,
+  sceneId: string,
+): Promise<{ error?: string; newSceneId?: string }> {
+  const ctx = await requireProjectContext(projectId);
+  if (!ctx.can("script:write")) {
+    return { error: "Недостаточно прав" };
+  }
+
+  const source = await prisma.scene.findFirst({
+    where: { id: sceneId, projectId },
+    include: {
+      locations: true,
+      characters: true,
+      elements: true,
+      resources: true,
+      resourceItems: true,
+    },
+  });
+  if (!source) return { error: "Сцена не найдена" };
+
+  const nextNumber = await allocateDuplicateNumber(
+    projectId,
+    source.episodeNumber,
+    source.number,
+    source.postfix,
+  );
+
+  const maxOrder = await prisma.scene.aggregate({
+    where: { projectId },
+    _max: { sortOrder: true },
+  });
+
+  try {
+    const created = await prisma.scene.create({
+      data: {
+        projectId,
+        episodeNumber: source.episodeNumber,
+        number: nextNumber.number,
+        postfix: nextNumber.postfix,
+        title: source.title,
+        summary: source.summary,
+        description: source.description,
+        scriptContent: source.scriptContent,
+        scriptDay: source.scriptDay,
+        objectType: source.objectType,
+        sceneKind: source.sceneKind,
+        shootingUnit: source.shootingUnit,
+        montageMap: source.montageMap,
+        pageCount: source.pageCount,
+        planSeconds: source.planSeconds,
+        factSeconds: source.factSeconds,
+        preEditSeconds: source.preEditSeconds,
+        editSeconds: source.editSeconds,
+        filmFootagePlan: source.filmFootagePlan,
+        filmFootageFact: source.filmFootageFact,
+        intExt: source.intExt,
+        dayNight: source.dayNight,
+        status: source.status,
+        statusDate: source.statusDate,
+        sortOrder: (maxOrder._max.sortOrder ?? 0) + 1,
+        locations: source.locations.length
+          ? {
+              create: source.locations.map((l) => ({
+                locationId: l.locationId,
+              })),
+            }
+          : undefined,
+        characters: source.characters.length
+          ? {
+              create: source.characters.map((c) => ({
+                characterId: c.characterId,
+              })),
+            }
+          : undefined,
+        elements: source.elements.length
+          ? {
+              create: source.elements.map((e) => ({
+                elementId: e.elementId,
+              })),
+            }
+          : undefined,
+        resources: source.resources.length
+          ? {
+              create: source.resources.map((r) => ({
+                category: r.category,
+                name: r.name,
+                quantity: r.quantity,
+                unitPrice: r.unitPrice,
+              })),
+            }
+          : undefined,
+        resourceItems: source.resourceItems.length
+          ? {
+              create: source.resourceItems.map((r) => ({
+                itemId: r.itemId,
+                quantity: r.quantity,
+              })),
+            }
+          : undefined,
+      },
+    });
+
+    await syncShootDaysForScene(created.id);
+
+    await recordAudit(ctx, {
+      projectId,
+      entityType: AuditEntityType.scene,
+      entityId: created.id,
+      action: "CREATE",
+      summary: `Дубликат сцены ${source.number}${source.postfix || ""} → ${created.number}${created.postfix || ""}`,
+    });
+
+    revalidateScript(projectId, created.id);
+    return { newSceneId: created.id };
+  } catch {
+    return { error: "Не удалось создать копию сцены" };
+  }
 }
 
 export async function bulkUpdateSceneStatusAction(

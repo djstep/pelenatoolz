@@ -98,3 +98,10 @@ export async function listCounterpartyOptions(projectId: string) {
     type: r.type,
   }));
 }
+
+export async function getCounterparty(projectId: string, counterpartyId: string) {
+  const row = await prisma.counterparty.findFirst({
+    where: { id: counterpartyId, projectId },
+  });
+  return row ? serializeForClient(row) : null;
+}

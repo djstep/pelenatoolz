@@ -190,6 +190,7 @@ export async function saveTransportsAction(
           name: row.name,
           callTime: emptyToNull(row.callTime),
           notes: emptyToNull(row.notes),
+          kmRate: row.kmRate ?? null,
           sortOrder: index,
         },
       }),
@@ -887,5 +888,62 @@ export async function exportCallSheetPrintHtmlAction(
   return {
     html: buildCallSheetPrintHtml(loaded.model),
     fileName: `${loaded.model.fileBaseName}.html`,
+  };
+}
+
+export async function exportAttendanceSheetXlsxAction(
+  projectId: string,
+  dayId: string,
+): Promise<{ base64: string; fileName: string } | { error: string }> {
+  const ctx = await requireProjectContext(projectId);
+  if (
+    !ctx.can("callsheet:read") &&
+    !ctx.can("schedule:read") &&
+    !ctx.can("report:read")
+  ) {
+    return { error: "Недостаточно прав" };
+  }
+
+  const { getShootDayDocument } = await import("@/features/day-docs/queries");
+  const { listResourceCategories } = await import(
+    "@/features/resources/queries"
+  );
+  const { parseExportSettings } = await import(
+    "@/features/exports/lib/column-utils"
+  );
+  const { buildAttendanceSheetModel } = await import(
+    "@/features/day-docs/lib/export-attendance-sheet"
+  );
+  const { buildAttendanceSheetXlsx } = await import(
+    "@/features/day-docs/lib/export-attendance-sheet-xlsx"
+  );
+  const { prisma } = await import("@/shared/db/prisma");
+
+  const [bundle, categories, project] = await Promise.all([
+    getShootDayDocument(projectId, dayId),
+    listResourceCategories(projectId),
+    prisma.project.findUnique({
+      where: { id: projectId },
+      select: { exportSettings: true },
+    }),
+  ]);
+  if (!bundle) return { error: "Съёмочный день не найден" };
+  if (!project) return { error: "Проект не найден" };
+
+  const settings = parseExportSettings(project.exportSettings);
+  const model = buildAttendanceSheetModel(
+    bundle,
+    settings.attendanceSheet ?? { resourceIds: [] },
+    categories.map((c) => ({
+      id: c.id,
+      name: c.name,
+      perShift: c.perShift,
+    })),
+  );
+
+  const buffer = await buildAttendanceSheetXlsx(model);
+  return {
+    base64: Buffer.from(buffer).toString("base64"),
+    fileName: `${model.fileBaseName}.xlsx`,
   };
 }

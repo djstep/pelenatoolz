@@ -8,9 +8,11 @@ import {
   type RoleActionState,
 } from "@/features/roles/actions";
 import { PermissionMatrixEditor } from "@/features/roles/components/permission-matrix-editor";
+import type { ResourceCategoryOption } from "@/features/roles/components/permission-matrix-editor";
 import {
   buildEmptyMatrix,
   parsePermissionMatrix,
+  parseResourceCategoryFinance,
   type PermissionMatrix,
 } from "@/features/roles/permissions-matrix";
 import { Button } from "@/shared/ui/button";
@@ -34,11 +36,13 @@ function RoleEditorModal({
   role,
   open,
   onClose,
+  resourceCategories,
 }: {
   projectId: string;
   role?: RoleRow;
   open: boolean;
   onClose: () => void;
+  resourceCategories: ResourceCategoryOption[];
 }) {
   const isEdit = Boolean(role);
   const bound = isEdit
@@ -49,6 +53,9 @@ function RoleEditorModal({
   const matrix: PermissionMatrix = role
     ? parsePermissionMatrix(role.permissions)
     : buildEmptyMatrix();
+  const categoryFinance = role
+    ? parseResourceCategoryFinance(role.permissions)
+    : {};
 
   return (
     <Modal
@@ -68,6 +75,11 @@ function RoleEditorModal({
       }
     >
       <form id="role-form" action={action} className="space-y-4">
+        <input
+          type="hidden"
+          name="resourceCategoryIds"
+          value={JSON.stringify(resourceCategories.map((c) => c.id))}
+        />
         <div className="grid gap-4 md:grid-cols-2">
           <div>
             <Label htmlFor="name">Название *</Label>
@@ -84,7 +96,11 @@ function RoleEditorModal({
             <Input id="note" name="note" defaultValue={role?.note ?? ""} />
           </div>
         </div>
-        <PermissionMatrixEditor matrix={matrix} />
+        <PermissionMatrixEditor
+          matrix={matrix}
+          categoryFinance={categoryFinance}
+          resourceCategories={resourceCategories}
+        />
       </form>
     </Modal>
   );
@@ -94,10 +110,12 @@ export function RolesManager({
   projectId,
   roles,
   canManage,
+  resourceCategories = [],
 }: {
   projectId: string;
   roles: RoleRow[];
   canManage: boolean;
+  resourceCategories?: ResourceCategoryOption[];
 }) {
   const [editing, setEditing] = useState<RoleRow | null>(null);
   const [creating, setCreating] = useState(false);
@@ -168,6 +186,7 @@ export function RolesManager({
           setCreating(false);
           setEditing(null);
         }}
+        resourceCategories={resourceCategories}
       />
     </div>
   );

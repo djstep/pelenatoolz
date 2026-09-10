@@ -54,6 +54,7 @@ export async function getLocationDetail(projectId: string, locationId: string) {
     where: { id: locationId, projectId },
     include: {
       photos: { orderBy: { sortOrder: "asc" } },
+      overtimeRates: { orderBy: { hourNumber: "asc" } },
       scoutCandidateLinks: {
         include: {
           scoutCandidate: {

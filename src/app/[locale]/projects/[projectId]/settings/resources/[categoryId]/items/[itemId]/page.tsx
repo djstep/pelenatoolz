@@ -31,6 +31,7 @@ export default async function SettingsResourceItemPage({ params }: Props) {
         locale={locale}
         projectType={ctx.project.type}
         item={item}
+        canFinanceRead={ctx.canFinanceRead({ categoryId })}
       />
     </Card>
   );

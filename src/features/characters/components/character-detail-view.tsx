@@ -45,6 +45,8 @@ export function CharacterDetailView({
   castListBundle,
   canWriteScript,
   canWriteCast,
+  canFinanceRead = false,
+  canFinanceWrite = false,
   availabilityMini,
 }: {
   projectId: string;
@@ -53,12 +55,16 @@ export function CharacterDetailView({
   castListBundle: CastListExportBundleClient | null;
   canWriteScript: boolean;
   canWriteCast: boolean;
+  canFinanceRead?: boolean;
+  canFinanceWrite?: boolean;
   availabilityMini?: {
     rowId?: string;
     actorId?: string;
     manualDays: Record<string, Record<string, { status: string; comment: string | null }>>;
     kppBusySerialized: Record<string, string[]>;
   };
+  /** @deprecated detail moved to /resource-usage */
+  overtimeHistory?: unknown;
 }) {
   const [pending, startTransition] = useTransition();
   const toast = useToast();
@@ -312,11 +318,14 @@ export function CharacterDetailView({
             ) : null}
           </form>
 
-          {actor && canWriteCast ? (
+          {actor && (canWriteCast || canFinanceRead) ? (
             <CharacterPayrollSection
               projectId={projectId}
+              locale={locale}
               characterId={character.id}
               actor={actor}
+              canFinanceRead={canFinanceRead}
+              canFinanceWrite={canFinanceWrite && canWriteCast}
             />
           ) : null}
         </section>
@@ -350,40 +359,78 @@ type ActorPayroll = CharacterDetail["actors"][number];
 
 function CharacterPayrollSection({
   projectId,
+  locale,
   characterId,
   actor,
+  canFinanceRead,
+  canFinanceWrite,
 }: {
   projectId: string;
+  locale: string;
   characterId: string;
   actor: ActorPayroll;
+  canFinanceRead: boolean;
+  canFinanceWrite: boolean;
 }) {
   const bound = updateActorAction.bind(null, projectId, actor.id);
   const [state, action, pending] = useActionState(bound, actorInitial);
   useActionToast(state);
 
   return (
-    <form action={action} className="border-t border-[var(--border)] pt-4">
-      <input type="hidden" name="lastName" value={actor.lastName} />
-      <input type="hidden" name="firstName" value={actor.firstName ?? ""} />
-      <input type="hidden" name="middleName" value={actor.middleName ?? ""} />
-      <input type="hidden" name="characterId" value={characterId} />
-      <input type="hidden" name="phone1" value={actor.phone1 ?? ""} />
-      <input type="hidden" name="email" value={actor.email ?? ""} />
-      <input type="hidden" name="agentName" value={actor.agentName ?? ""} />
-      <input type="hidden" name="agentPhone" value={actor.agentPhone ?? ""} />
-      <input type="hidden" name="agentEmail" value={actor.agentEmail ?? ""} />
-      <h3 className="mb-3 font-semibold">Гонорар и переработки</h3>
-      <ActorPayrollBlock
-        shiftRate={actor.shiftRate ? Number(actor.shiftRate) : 0}
-        taxPercent={actor.taxPercent ? Number(actor.taxPercent) : 0}
-        shiftHoursMin={actor.shiftHoursMin}
-        unpaidOvertimeMin={actor.unpaidOvertimeMin}
-        overtime={seedOvertime(actor.overtimeRates)}
-        extras={seedExtras(actor.extraPayments)}
-      />
-      <Button type="submit" className="mt-4" disabled={pending}>
-        {pending ? "…" : "Сохранить гонорар"}
-      </Button>
-    </form>
+    <div className="space-y-4 border-t border-[var(--border)] pt-4">
+      {canFinanceRead ? (
+        canFinanceWrite ? (
+          <form action={action}>
+            <input type="hidden" name="lastName" value={actor.lastName} />
+            <input type="hidden" name="firstName" value={actor.firstName ?? ""} />
+            <input type="hidden" name="middleName" value={actor.middleName ?? ""} />
+            <input type="hidden" name="characterId" value={characterId} />
+            <input type="hidden" name="phone1" value={actor.phone1 ?? ""} />
+            <input type="hidden" name="email" value={actor.email ?? ""} />
+            <input type="hidden" name="agentName" value={actor.agentName ?? ""} />
+            <input type="hidden" name="agentPhone" value={actor.agentPhone ?? ""} />
+            <input type="hidden" name="agentEmail" value={actor.agentEmail ?? ""} />
+            <ActorPayrollBlock
+              title="Гонорар и переработки"
+              shiftRate={actor.shiftRate ? Number(actor.shiftRate) : 0}
+              taxPercent={actor.taxPercent ? Number(actor.taxPercent) : 0}
+              shiftHoursMin={actor.shiftHoursMin}
+              unpaidOvertimeMin={actor.unpaidOvertimeMin}
+              overtimeMode={actor.overtimeMode}
+              unpaidOvertimeMode={actor.unpaidOvertimeMode}
+              overtime={seedOvertime(actor.overtimeRates)}
+              extras={seedExtras(actor.extraPayments)}
+            />
+            <Button type="submit" className="mt-4" disabled={pending}>
+              {pending ? "…" : "Сохранить гонорар"}
+            </Button>
+          </form>
+        ) : (
+          <div className="text-sm">
+            <h4 className="mb-2 font-semibold">Гонорар</h4>
+            <p className="text-[var(--muted-fg)]">
+              Стоимость смены:{" "}
+              {actor.shiftRate != null ? String(actor.shiftRate) : "—"}
+              {actor.taxPercent != null
+                ? ` · налог ${String(actor.taxPercent)}%`
+                : ""}
+            </p>
+          </div>
+        )
+      ) : null}
+
+      <div>
+        <h4 className="mb-2 font-semibold">Ведомость по использованию</h4>
+        <p className="mb-2 text-sm text-[var(--muted-fg)]">
+          Детализация смен, переработок и доп. выплат по проекту.
+        </p>
+        <Link
+          href={`/${locale}/projects/${projectId}/resource-usage/actors/${actor.id}`}
+          className="text-sm text-[var(--accent)] hover:underline"
+        >
+          Открыть ведомость →
+        </Link>
+      </div>
+    </div>
   );
 }

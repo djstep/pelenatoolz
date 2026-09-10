@@ -46,7 +46,7 @@ export async function POST(
 
   try {
     const ctx = await requireProjectContext(projectId);
-    if (!ctx.can("script:write") && !ctx.can("project:write")) {
+    if (!ctx.can("script:write") && !ctx.can("project:write") && !ctx.can("finance:write")) {
       return NextResponse.json({ error: "Недостаточно прав" }, { status: 403 });
     }
 

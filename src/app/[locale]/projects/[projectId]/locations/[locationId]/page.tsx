@@ -32,6 +32,8 @@ export default async function LocationDetailPage({ params }: Props) {
       location={location}
       addresses={addresses}
       canWrite={ctx.can("script:write")}
+      canFinanceRead={ctx.canFinanceRead("locations")}
+      canFinanceWrite={ctx.canFinanceWrite("locations")}
     />
   );
 }

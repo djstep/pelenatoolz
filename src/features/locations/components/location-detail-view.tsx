@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   addLocationPhotoAction,
   deleteLocationPhotoAction,
+  updateLocationFinancialAction,
   updateLocationRequirementsAction,
   updateLocationScoutSnapshotAction,
   type LocationActionState,
@@ -17,6 +18,10 @@ import {
   parseTags,
 } from "@/features/locations/lib/format-location";
 import type { LocationDetail } from "@/features/locations/queries";
+import {
+  FinancialTermsBlock,
+  seedOvertime,
+} from "@/features/payroll/components/financial-terms-block";
 import { scoutStatusLabels } from "@/features/preproduction/lib/status-labels";
 import { formatSecondsMmSs } from "@/shared/i18n/domain-labels";
 import { useActionToast } from "@/shared/ui/toast";
@@ -33,12 +38,16 @@ export function LocationDetailView({
   location,
   addresses,
   canWrite,
+  canFinanceRead = false,
+  canFinanceWrite = false,
 }: {
   locale: string;
   projectId: string;
   location: LocationDetail;
   addresses: string[];
   canWrite: boolean;
+  canFinanceRead?: boolean;
+  canFinanceWrite?: boolean;
 }) {
   const [editOpen, setEditOpen] = useState(false);
   const boundPhoto = addLocationPhotoAction.bind(null, projectId, location.id);
@@ -51,6 +60,10 @@ export function LocationDetailView({
   const snapBound = updateLocationScoutSnapshotAction.bind(null, projectId, location.id);
   const [snapState, snapAction, snapPending] = useActionState(snapBound, initial);
   useActionToast(snapState);
+
+  const finBound = updateLocationFinancialAction.bind(null, projectId, location.id);
+  const [finState, finAction, finPending] = useActionState(finBound, initial);
+  useActionToast(finState);
 
   const scoutSnapshot = location.scoutSnapshot;
 
@@ -263,6 +276,46 @@ export function LocationDetailView({
       ) : (
         <p className="text-sm text-[var(--muted-fg)]">Укажите адрес — появится карта Яндекса.</p>
       )}
+
+      {canFinanceRead ? (
+        <Card className="space-y-4 p-5">
+          <h3 className="font-semibold">Финансовые условия</h3>
+          {canFinanceWrite ? (
+            <form action={finAction} className="space-y-4">
+              <FinancialTermsBlock
+                shiftRate={location.shiftRate ? Number(location.shiftRate) : 0}
+                taxPercent={location.taxPercent ? Number(location.taxPercent) : 0}
+                shiftHoursMin={location.shiftHoursMin}
+                unpaidOvertimeMin={location.unpaidOvertimeMin}
+                overtimeMode={location.overtimeMode}
+                unpaidOvertimeMode={location.unpaidOvertimeMode}
+                overtime={seedOvertime(location.overtimeRates)}
+                showExtras={false}
+              />
+              <Button type="submit" disabled={finPending}>
+                {finPending ? "…" : "Сохранить финансы"}
+              </Button>
+            </form>
+          ) : (
+            <dl className="grid gap-2 text-sm md:grid-cols-2">
+              <div>
+                <dt className="text-[var(--muted-fg)]">Стоимость смены</dt>
+                <dd>
+                  {location.shiftRate != null ? String(location.shiftRate) : "—"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-[var(--muted-fg)]">Налог %</dt>
+                <dd>
+                  {location.taxPercent != null
+                    ? String(location.taxPercent)
+                    : "—"}
+                </dd>
+              </div>
+            </dl>
+          )}
+        </Card>
+      ) : null}
 
       <Card className="p-4">
         <h3 className="mb-3 font-semibold">Галерея</h3>

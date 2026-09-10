@@ -28,10 +28,11 @@ type DaySceneRow = {
 export function formatSceneBrief(scene: SceneLike): string {
   const ep = scene.episodeNumber && scene.episodeNumber > 0 ? `${scene.episodeNumber}-` : "";
   const num = `${ep}${scene.number}${scene.postfix ?? ""}`;
+  // Как slugline в сценарии: № · Инт/Нат · Локация · День/Ночь
   const parts = [num];
+  if (scene.intExt) parts.push(intExtLabels[scene.intExt]);
   const location = scene.locations?.[0]?.location.name;
   if (location) parts.push(location);
-  if (scene.intExt) parts.push(intExtLabels[scene.intExt]);
   if (scene.dayNight) parts.push(dayNightLabels[scene.dayNight]);
   return parts.join(" · ");
 }

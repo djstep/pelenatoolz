@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useEffect, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import type { ProjectType, TimingMode } from "@prisma/client";
 import {
   DndContext,
@@ -24,10 +25,7 @@ import { LibrettoExportModal } from "@/features/script/components/libretto-expor
 import { LibrettoFiltersModal } from "@/features/script/components/libretto-filters-modal";
 import { LibrettoRenumberModal } from "@/features/script/components/libretto-renumber-modal";
 import { LibrettoExportMenu } from "@/features/script/components/script-export-modals";
-import {
-  SceneModal,
-  type SceneEditData,
-} from "@/features/script/components/scene-modal";
+import { SceneModal } from "@/features/script/components/scene-modal";
 import type { SceneCategoryOption } from "@/features/script/components/scene-category-resource-block";
 import {
   formatSceneNumber,
@@ -139,6 +137,7 @@ export function LibrettoWorkspace({
   exportResourceCategories?: { id: string; name: string }[];
   canWrite: boolean;
 }) {
+  const router = useRouter();
   const allColumns = useMemo(
     () => buildLibrettoColumns(resourceCategories),
     [resourceCategories],
@@ -185,7 +184,6 @@ export function LibrettoWorkspace({
   const [renumberOpen, setRenumberOpen] = useState(false);
   const [columnsOpen, setColumnsOpen] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
-  const [editingScene, setEditingScene] = useState<SceneEditData | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkOpen, setBulkOpen] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -215,13 +213,11 @@ export function LibrettoWorkspace({
   }, [scenes]);
 
   function openCreate() {
-    setEditingScene(null);
     setModalOpen(true);
   }
 
-  function openEdit(scene: LibrettoScene) {
-    setEditingScene(scene as SceneEditData);
-    setModalOpen(true);
+  function openScene(scene: LibrettoScene) {
+    router.push(`/${locale}/projects/${projectId}/libretto/${scene.id}`);
   }
 
   function exportXls(
@@ -409,13 +405,12 @@ export function LibrettoWorkspace({
                   key={scene.id}
                   className={cn(
                     "border-b border-[var(--border)]/60 align-top",
-                    canWrite && "cursor-pointer",
+                    "cursor-pointer",
                     colorMode && sceneStatusRowColors[scene.status],
                   )}
                   onClick={(e) => {
-                    if (!canWrite) return;
                     if ((e.target as HTMLElement).closest("input, button, form")) return;
-                    openEdit(scene);
+                    openScene(scene);
                   }}
                 >
                   <td className="px-2 py-2">
@@ -454,7 +449,7 @@ export function LibrettoWorkspace({
                   ))}
                   {canWrite ? (
                     <td className="px-2 py-2 text-right">
-                      <Button type="button" variant="ghost" onClick={() => openEdit(scene)}>
+                      <Button type="button" variant="ghost" onClick={() => openScene(scene)}>
                         Изм.
                       </Button>
                     </td>
@@ -468,7 +463,6 @@ export function LibrettoWorkspace({
       )}
 
       <SceneModal
-        key={editingScene?.id ?? "create"}
         projectId={projectId}
         locale={locale}
         projectType={projectType}
@@ -476,11 +470,10 @@ export function LibrettoWorkspace({
         timingMode={timingMode}
         pageToMinuteRatio={pageToMinuteRatio}
         open={modalOpen}
-        onClose={() => { setModalOpen(false); setEditingScene(null); }}
+        onClose={() => setModalOpen(false)}
         locations={locations}
         characters={characters}
         resourceCategories={resourceCategories}
-        scene={editingScene}
       />
 
       <LibrettoFiltersModal

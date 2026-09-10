@@ -30,6 +30,8 @@ export async function getResourceCategory(projectId: string, categoryId: string)
     include: {
       items: {
         include: {
+          overtimeRates: { orderBy: { hourNumber: "asc" } },
+          extraPayments: { orderBy: { paymentDate: "asc" } },
           _count: { select: { sceneLinks: true } },
           sceneLinks: {
             include: {
@@ -61,6 +63,8 @@ export async function getResourceItem(
     where: { id: itemId, categoryId, category: { projectId } },
     include: {
       category: true,
+      overtimeRates: { orderBy: { hourNumber: "asc" } },
+      extraPayments: { orderBy: { paymentDate: "asc" } },
       sceneLinks: {
         include: {
           scene: {
@@ -96,6 +100,8 @@ export async function getResourceItem(
   return {
     ...item,
     shiftRate: dec(item.shiftRate),
+    taxPercent: dec(item.taxPercent),
+    kmRate: dec(item.kmRate),
     sceneCount: item.sceneLinks.length,
     unshotSceneCount: unshotLinks.length,
     planSeconds,

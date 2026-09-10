@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState, useEffect, useMemo, useState, useTransition } from "react";
 import {
   createCashPaymentAction,
@@ -386,6 +387,7 @@ function PaymentModal({
 
 export function PaymentsWorkspace({
   projectId,
+  locale,
   currency,
   payments,
   lines,
@@ -397,6 +399,7 @@ export function PaymentsWorkspace({
   canUnlock,
 }: {
   projectId: string;
+  locale: string;
   currency: string;
   payments: CashPaymentListRow[];
   lines: LineOpt[];
@@ -571,10 +574,20 @@ export function PaymentsWorkspace({
               {payments.map((p) => (
                 <tr key={p.id} className="border-b border-[var(--border)]/60">
                   <td className="px-4 py-3 whitespace-nowrap">
-                    {formatDateShort(p.date)}
+                    <Link
+                      href={`/${locale}/projects/${projectId}/payments/${p.id}`}
+                      className="text-[var(--accent)] hover:underline"
+                    >
+                      {formatDateShort(p.date)}
+                    </Link>
                   </td>
                   <td className="px-4 py-3">
-                    <div className="font-medium">{p.counterparty.name}</div>
+                    <Link
+                      href={`/${locale}/projects/${projectId}/payments/${p.id}`}
+                      className="font-medium hover:underline"
+                    >
+                      {p.counterparty.name}
+                    </Link>
                     {p.comment ? (
                       <div className="text-xs text-[var(--muted-fg)]">
                         {p.comment}

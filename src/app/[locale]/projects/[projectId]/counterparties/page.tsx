@@ -10,7 +10,7 @@ type Props = {
 };
 
 export default async function CounterpartiesPage({ params }: Props) {
-  const { projectId } = await params;
+  const { locale, projectId } = await params;
   const ctx = await requireProjectContext(projectId);
 
   if (!ctx.can("finance:read")) {
@@ -25,21 +25,12 @@ export default async function CounterpartiesPage({ params }: Props) {
   ]);
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="font-display text-2xl font-semibold">Контрагенты</h2>
-        <p className="mt-1 text-sm text-[var(--muted-fg)]">
-          Наши юрлица (источники платежей) и сторонние получатели. Часто
-          используемые выше в списках выбора.
-        </p>
-      </div>
-
-      <CounterpartiesWorkspace
-        projectId={projectId}
-        companies={companies}
-        counterparties={counterparties}
-        canWrite={ctx.can("finance:write")}
-      />
-    </div>
+    <CounterpartiesWorkspace
+      projectId={projectId}
+      locale={locale}
+      companies={companies}
+      counterparties={counterparties}
+      canWrite={ctx.can("finance:write")}
+    />
   );
 }

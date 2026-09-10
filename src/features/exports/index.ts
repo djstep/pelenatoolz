@@ -1,4 +1,5 @@
 export type {
+  AttendanceSheetSettings,
   ExportColumn,
   ExportFieldDef,
   ExportLayout,
@@ -6,13 +7,17 @@ export type {
   ExportSettings,
 } from "@/features/exports/types";
 export {
+  ATTENDANCE_BUILTIN_SECTIONS,
   EXTRAS_BUCKET_HEADER,
   EXPORT_LAYOUT_KEYS,
+  attendanceCategorySectionId,
+  parseAttendanceCategorySectionId,
 } from "@/features/exports/types";
 export {
   columnsReadyForExport,
   createExportColumnId,
   findFieldUsage,
+  normalizeAttendanceSheetSettings,
   normalizeExportLayout,
   parseExportSettings,
   resolveColumnHeader,

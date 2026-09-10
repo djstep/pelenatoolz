@@ -30,6 +30,33 @@ export type ExportLayout = {
   showWeekday?: boolean;
 };
 
-export type ExportSettings = Partial<Record<ExportLayoutKey, ExportLayout>>;
+/** Явочный лист: актёры и цеха всегда включены; здесь — доп. ресурсы. */
+export type AttendanceSheetSettings = {
+  resourceIds: string[];
+};
+
+export type ExportSettings = Partial<Record<ExportLayoutKey, ExportLayout>> & {
+  attendanceSheet?: AttendanceSheetSettings;
+};
 
 export const EXTRAS_BUCKET_HEADER = "Дополнительные ресурсы";
+
+/** Встроенные блоки ресурсов для настроек явочного листа. */
+export const ATTENDANCE_BUILTIN_SECTIONS = [
+  { id: "scene:extras", label: "Массовка / групповка" },
+  { id: "scene:stunts", label: "Трюк / каскадёры" },
+  { id: "scene:props", label: "Реквизит" },
+  { id: "scene:art", label: "Художественный цех" },
+  { id: "scene:camera", label: "Операторская техника" },
+  { id: "scene:vehicles", label: "Игровой транспорт" },
+  { id: "special:transport", label: "Спецтранспорт" },
+] as const;
+
+export function attendanceCategorySectionId(categoryId: string) {
+  return `resourceCategory:${categoryId}`;
+}
+
+export function parseAttendanceCategorySectionId(id: string): string | null {
+  if (!id.startsWith("resourceCategory:")) return null;
+  return id.slice("resourceCategory:".length) || null;
+}

@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import {
   buildEmptyMatrix,
+  buildPermissionsDocument,
+  type CategoryFinancePermissions,
   type PermissionMatrix,
   PERMISSION_FLAGS,
   PERMISSION_SECTIONS,
@@ -21,6 +23,10 @@ const roleSchema = z.object({
 function revalidateRoles(projectId: string) {
   revalidatePath(`/ru/projects/${projectId}/roles`);
   revalidatePath(`/ru/projects/${projectId}/members`);
+  revalidatePath(`/ru/projects/${projectId}/resource-usage`);
+  revalidatePath(`/ru/projects/${projectId}/settings/resources`);
+  revalidatePath(`/ru/projects/${projectId}/characters`);
+  revalidatePath(`/ru/projects/${projectId}/locations`);
 }
 
 function matrixFromFormData(formData: FormData): PermissionMatrix {
@@ -32,6 +38,32 @@ function matrixFromFormData(formData: FormData): PermissionMatrix {
     }
   }
   return matrix;
+}
+
+function categoryFinanceFromFormData(
+  formData: FormData,
+  categoryIds: string[],
+): Record<string, CategoryFinancePermissions> {
+  const out: Record<string, CategoryFinancePermissions> = {};
+  for (const id of categoryIds) {
+    out[id] = {
+      financeRead: formData.get(`catfin_${id}_financeRead`) === "on",
+      financeWrite: formData.get(`catfin_${id}_financeWrite`) === "on",
+    };
+  }
+  return out;
+}
+
+function categoryIdsFromForm(formData: FormData): string[] {
+  const raw = String(formData.get("resourceCategoryIds") ?? "");
+  if (!raw.trim()) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((id): id is string => typeof id === "string");
+  } catch {
+    return [];
+  }
 }
 
 export async function createRoleAction(
@@ -52,7 +84,12 @@ export async function createRoleAction(
     return { error: "Укажите название роли" };
   }
 
-  const permissions = matrixFromFormData(formData);
+  const matrix = matrixFromFormData(formData);
+  const categoryFinance = categoryFinanceFromFormData(
+    formData,
+    categoryIdsFromForm(formData),
+  );
+  const permissions = buildPermissionsDocument(matrix, categoryFinance);
 
   try {
     await prisma.projectRoleDefinition.create({
@@ -95,7 +132,12 @@ export async function updateRoleAction(
     return { error: "Укажите название роли" };
   }
 
-  const permissions = matrixFromFormData(formData);
+  const matrix = matrixFromFormData(formData);
+  const categoryFinance = categoryFinanceFromFormData(
+    formData,
+    categoryIdsFromForm(formData),
+  );
+  const permissions = buildPermissionsDocument(matrix, categoryFinance);
 
   try {
     await prisma.projectRoleDefinition.update({

@@ -46,6 +46,7 @@ export const projectNavGroups: NavGroup[] = [
       { href: "/smeta", label: "Смета" },
       { href: "/budget", label: "Статьи" },
       { href: "/accruals", label: "Начисления" },
+      { href: "/resource-usage", label: "Ведомость по использованию" },
       { href: "/payments", label: "Платежи" },
       { href: "/finance/reports", label: "Отчёты" },
       { href: "/finance", label: "Операции", exact: true },

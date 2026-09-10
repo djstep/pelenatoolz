@@ -1,4 +1,5 @@
 import type { Prisma } from "@prisma/client";
+import { sumExtrasPay } from "@/features/payroll/lib/parse-extra-payments";
 import { prisma } from "@/shared/db/prisma";
 import { computeWorkPay } from "@/features/reports/lib/compute-work-pay";
 import { dec } from "@/shared/db/serialize-decimal";
@@ -17,6 +18,10 @@ type SeedCandidate = {
   unpaidOvertimeMin?: number | null;
   shiftRate?: number | null;
   taxPercent?: number | null;
+  overtimeMode?: "HALF_HOUR" | "HOURLY_CUMULATIVE" | "HOURLY_FLAT" | null;
+  unpaidOvertimeMode?: "FIRST_HOUR" | "EACH_HOUR" | null;
+  tracksMileage?: boolean;
+  kmRate?: number | null;
   sortOrder: number;
 };
 
@@ -26,6 +31,29 @@ function actorName(a: {
   middleName: string | null;
 }) {
   return [a.lastName, a.firstName, a.middleName].filter(Boolean).join(" ");
+}
+
+type RateRow = {
+  hourNumber: number;
+  percentRate: number | null;
+  amount: number | null;
+  taxPercent: number | null;
+};
+
+function mapRates(
+  rates: Array<{
+    hourNumber: number;
+    percentRate: unknown;
+    amount: unknown;
+    taxPercent: unknown;
+  }>,
+): RateRow[] {
+  return rates.map((r) => ({
+    hourNumber: r.hourNumber,
+    percentRate: dec(r.percentRate as { toString(): string } | null),
+    amount: dec(r.amount as { toString(): string } | null),
+    taxPercent: dec(r.taxPercent as { toString(): string } | null),
+  }));
 }
 
 /** Сидирует строки факта работы из актёров/ресурсов/транспорта/локаций дня. */
@@ -47,7 +75,19 @@ export async function syncProductionWorkRows(
               locations: {
                 select: {
                   locationId: true,
-                  location: { select: { id: true, name: true, sublocation: true } },
+                  location: {
+                    select: {
+                      id: true,
+                      name: true,
+                      sublocation: true,
+                      shiftRate: true,
+                      shiftHoursMin: true,
+                      unpaidOvertimeMin: true,
+                      taxPercent: true,
+                      overtimeMode: true,
+                      unpaidOvertimeMode: true,
+                    },
+                  },
                 },
               },
               resourceItems: {
@@ -60,7 +100,12 @@ export async function syncProductionWorkRows(
                       shiftRate: true,
                       shiftHoursMin: true,
                       unpaidOvertimeMin: true,
-                      category: { select: { name: true, perShift: true } },
+                      taxPercent: true,
+                      overtimeMode: true,
+                      unpaidOvertimeMode: true,
+                      kmRate: true,
+                      category: { select: { name: true, perShift: true, tracksMileage: true } },
+                      overtimeRates: true,
                     },
                   },
                 },
@@ -74,7 +119,10 @@ export async function syncProductionWorkRows(
         where: { isUsed: true },
         include: {
           item: {
-            include: { category: { select: { name: true, perShift: true } } },
+            include: {
+              category: { select: { name: true, perShift: true, tracksMileage: true } },
+              overtimeRates: true,
+            },
           },
         },
       },
@@ -97,6 +145,28 @@ export async function syncProductionWorkRows(
     },
   });
 
+  const locationRates = await prisma.locationOvertimeRate.findMany({
+    where: {
+      locationId: {
+        in: [
+          ...new Set(
+            day.scenes.flatMap((s) =>
+              s.scene.locations.map((l) => l.locationId),
+            ),
+          ),
+        ],
+      },
+    },
+  });
+  const locationRatesById = new Map<string, typeof locationRates>();
+  for (const r of locationRates) {
+    const list = locationRatesById.get(r.locationId) ?? [];
+    list.push(r);
+    locationRatesById.set(r.locationId, list);
+  }
+
+  const resourceRatesByItemId = new Map<string, RateRow[]>();
+
   const candidates: SeedCandidate[] = [];
   let order = 0;
 
@@ -116,6 +186,8 @@ export async function syncProductionWorkRows(
       unpaidOvertimeMin: actor.unpaidOvertimeMin,
       shiftRate: dec(actor.shiftRate),
       taxPercent: dec(actor.taxPercent),
+      overtimeMode: actor.overtimeMode,
+      unpaidOvertimeMode: actor.unpaidOvertimeMode,
       sortOrder: order++,
     });
   }
@@ -125,6 +197,10 @@ export async function syncProductionWorkRows(
     const key = `resource:${usage.itemId}`;
     if (seenResources.has(key)) continue;
     seenResources.add(key);
+    resourceRatesByItemId.set(
+      usage.itemId,
+      mapRates(usage.item.overtimeRates),
+    );
     candidates.push({
       sourceKey: key,
       kind: "RESOURCE",
@@ -136,7 +212,11 @@ export async function syncProductionWorkRows(
       shiftHoursMin: usage.item.shiftHoursMin,
       unpaidOvertimeMin: usage.item.unpaidOvertimeMin,
       shiftRate: dec(usage.item.shiftRate),
-      taxPercent: null,
+      taxPercent: dec(usage.item.taxPercent),
+      overtimeMode: usage.item.overtimeMode,
+      unpaidOvertimeMode: usage.item.unpaidOvertimeMode,
+      tracksMileage: usage.item.category.tracksMileage,
+      kmRate: dec(usage.item.kmRate),
       sortOrder: order++,
     });
   }
@@ -147,6 +227,7 @@ export async function syncProductionWorkRows(
       const key = `resource:${link.itemId}`;
       if (seenResources.has(key)) continue;
       seenResources.add(key);
+      resourceRatesByItemId.set(link.itemId, mapRates(link.item.overtimeRates));
       const call = day.resourceCalls.find(
         (c) =>
           c.category === link.item.category.name &&
@@ -163,7 +244,11 @@ export async function syncProductionWorkRows(
         shiftHoursMin: link.item.shiftHoursMin,
         unpaidOvertimeMin: link.item.unpaidOvertimeMin,
         shiftRate: dec(link.item.shiftRate),
-        taxPercent: null,
+        taxPercent: dec(link.item.taxPercent),
+        overtimeMode: link.item.overtimeMode,
+        unpaidOvertimeMode: link.item.unpaidOvertimeMode,
+        tracksMileage: link.item.category.tracksMileage,
+        kmRate: dec(link.item.kmRate),
         sortOrder: order++,
       });
     }
@@ -181,6 +266,8 @@ export async function syncProductionWorkRows(
       unpaidOvertimeMin: null,
       shiftRate: null,
       taxPercent: null,
+      tracksMileage: true,
+      kmRate: dec(t.kmRate),
       sortOrder: order++,
     });
   }
@@ -190,9 +277,10 @@ export async function syncProductionWorkRows(
     for (const link of row.scene.locations) {
       if (seenLocations.has(link.locationId)) continue;
       seenLocations.add(link.locationId);
-      const label = link.location.sublocation
-        ? `${link.location.name}.${link.location.sublocation}`
-        : link.location.name;
+      const loc = link.location;
+      const label = loc.sublocation
+        ? `${loc.name}.${loc.sublocation}`
+        : loc.name;
       candidates.push({
         sourceKey: `location:${link.locationId}`,
         kind: "LOCATION",
@@ -201,6 +289,12 @@ export async function syncProductionWorkRows(
         locationId: link.locationId,
         factStart: null,
         factEnd: null,
+        shiftHoursMin: loc.shiftHoursMin,
+        unpaidOvertimeMin: loc.unpaidOvertimeMin,
+        shiftRate: dec(loc.shiftRate),
+        taxPercent: dec(loc.taxPercent),
+        overtimeMode: loc.overtimeMode,
+        unpaidOvertimeMode: loc.unpaidOvertimeMode,
         sortOrder: order++,
       });
     }
@@ -208,26 +302,14 @@ export async function syncProductionWorkRows(
 
   const existing = await prisma.productionReportWorkRow.findMany({
     where: { reportId },
-    select: { id: true, sourceKey: true, lunchSkipped: true, factStart: true, factEnd: true },
   });
   const existingByKey = new Map(existing.map((r) => [r.sourceKey, r]));
-  const desiredKeys = new Set(candidates.map((c) => c.sourceKey));
+  const keepKeys = new Set(candidates.map((c) => c.sourceKey));
 
-  // Remove rows that are no longer on the day and were never manually timed? Keep all seeded; only delete missing sources without extras
-  const stale = existing.filter((r) => !desiredKeys.has(r.sourceKey));
-  if (stale.length > 0) {
-    await prisma.productionReportWorkRow.deleteMany({
-      where: {
-        id: { in: stale.map((r) => r.id) },
-        extras: { none: {} },
-        // keep if user filled times or T/O
-        AND: [
-          { lunchSkipped: false },
-          { OR: [{ factStart: null }, { factStart: "" }] },
-          { OR: [{ factEnd: null }, { factEnd: "" }] },
-        ],
-      },
-    });
+  for (const row of existing) {
+    if (!keepKeys.has(row.sourceKey)) {
+      await prisma.productionReportWorkRow.delete({ where: { id: row.id } });
+    }
   }
 
   for (const c of candidates) {
@@ -236,22 +318,19 @@ export async function syncProductionWorkRows(
     const factEnd = prev?.factEnd || c.factEnd || null;
     const lunchSkipped = prev?.lunchSkipped ?? false;
 
-    let overtimeRates: {
-      hourNumber: number;
-      percentRate: number | null;
-      amount: number | null;
-      taxPercent: number | null;
-    }[] = [];
+    let overtimeRates: RateRow[] = [];
     if (c.actorId) {
       const actor = actors.find((a) => a.id === c.actorId);
-      overtimeRates =
-        actor?.overtimeRates.map((r) => ({
-          hourNumber: r.hourNumber,
-          percentRate: dec(r.percentRate),
-          amount: dec(r.amount),
-          taxPercent: dec(r.taxPercent),
-        })) ?? [];
+      overtimeRates = mapRates(actor?.overtimeRates ?? []);
+    } else if (c.resourceItemId) {
+      overtimeRates = resourceRatesByItemId.get(c.resourceItemId) ?? [];
+    } else if (c.locationId) {
+      overtimeRates = mapRates(locationRatesById.get(c.locationId) ?? []);
     }
+
+    const factKm = prev?.factKm != null ? Number(prev.factKm) : null;
+    const kmRate = c.kmRate ?? (prev?.kmRate != null ? Number(prev.kmRate) : null);
+    const tracksMileage = Boolean(c.tracksMileage) || c.kind === "TRANSPORT";
 
     const pay = computeWorkPay({
       factStart,
@@ -261,8 +340,12 @@ export async function syncProductionWorkRows(
       unpaidOvertimeMin: c.unpaidOvertimeMin,
       shiftRate: c.shiftRate,
       taxPercent: c.taxPercent,
+      overtimeMode: c.overtimeMode,
+      unpaidOvertimeMode: c.unpaidOvertimeMode,
       overtimeRates,
       extrasTotal: 0,
+      factKm,
+      kmRate,
     });
 
     const data: Prisma.ProductionReportWorkRowUncheckedCreateInput = {
@@ -284,6 +367,12 @@ export async function syncProductionWorkRows(
       unpaidOvertimeMin: c.unpaidOvertimeMin ?? null,
       shiftRate: c.shiftRate ?? null,
       taxPercent: c.taxPercent ?? null,
+      overtimeMode: c.overtimeMode ?? null,
+      unpaidOvertimeMode: c.unpaidOvertimeMode ?? null,
+      tracksMileage,
+      factKm,
+      kmRate,
+      mileagePay: pay.mileagePay,
       shiftPay: pay.shiftPay,
       overtimePay: pay.overtimePay,
       extrasPay: pay.extrasPay,
@@ -292,7 +381,6 @@ export async function syncProductionWorkRows(
     };
 
     if (prev) {
-      // Backfill empty times from call sheet; never overwrite user-entered values
       const nextStart = prev.factStart?.trim() ? prev.factStart : c.factStart || null;
       const nextEnd = prev.factEnd?.trim() ? prev.factEnd : c.factEnd || null;
       await prisma.productionReportWorkRow.update({
@@ -309,6 +397,10 @@ export async function syncProductionWorkRows(
           unpaidOvertimeMin: c.unpaidOvertimeMin ?? null,
           shiftRate: c.shiftRate ?? null,
           taxPercent: c.taxPercent ?? null,
+          overtimeMode: c.overtimeMode ?? null,
+          unpaidOvertimeMode: c.unpaidOvertimeMode ?? null,
+          tracksMileage,
+          kmRate,
           sortOrder: c.sortOrder,
         },
       });
@@ -317,7 +409,6 @@ export async function syncProductionWorkRows(
     }
   }
 
-  // Recalc extras + payments for all rows
   const { syncPaymentFromWorkRow } = await import(
     "@/features/reports/lib/sync-payment"
   );
@@ -326,18 +417,19 @@ export async function syncProductionWorkRows(
     include: {
       extras: true,
       actor: { include: { overtimeRates: true } },
+      item: { include: { overtimeRates: true } },
+      location: { include: { overtimeRates: true } },
     },
   });
 
   for (const row of rows) {
-    const extrasTotal = row.extras.reduce((s, e) => s + Number(e.amount), 0);
-    const rates =
-      row.actor?.overtimeRates.map((r) => ({
-        hourNumber: r.hourNumber,
-        percentRate: dec(r.percentRate),
-        amount: dec(r.amount),
-        taxPercent: dec(r.taxPercent),
-      })) ?? [];
+    const extrasTotal = sumExtrasPay(row.extras);
+    const rates = mapRates(
+      row.actor?.overtimeRates ??
+        row.item?.overtimeRates ??
+        row.location?.overtimeRates ??
+        [],
+    );
     const pay = computeWorkPay({
       factStart: row.factStart,
       factEnd: row.factEnd,
@@ -346,8 +438,12 @@ export async function syncProductionWorkRows(
       unpaidOvertimeMin: row.unpaidOvertimeMin,
       shiftRate: dec(row.shiftRate),
       taxPercent: dec(row.taxPercent),
+      overtimeMode: row.overtimeMode,
+      unpaidOvertimeMode: row.unpaidOvertimeMode,
       overtimeRates: rates,
       extrasTotal,
+      factKm: row.factKm != null ? Number(row.factKm) : null,
+      kmRate: row.kmRate != null ? Number(row.kmRate) : null,
     });
     await prisma.productionReportWorkRow.update({
       where: { id: row.id },
@@ -358,6 +454,7 @@ export async function syncProductionWorkRows(
         shiftPay: pay.shiftPay,
         overtimePay: pay.overtimePay,
         extrasPay: pay.extrasPay,
+        mileagePay: pay.mileagePay,
         totalPay: pay.totalPay,
       },
     });

@@ -297,3 +297,74 @@ export async function updateLocationScoutSnapshotAction(
   revalidateLocations(projectId, locationId);
   return { success: "Данные утверждённой площадки обновлены" };
 }
+
+export async function updateLocationFinancialAction(
+  projectId: string,
+  locationId: string,
+  _prev: LocationActionState,
+  formData: FormData,
+): Promise<LocationActionState> {
+  const ctx = await requireProjectContext(projectId);
+  if (!ctx.canFinanceWrite("locations")) {
+    return { error: "Нет прав на редактирование финансовых условий локаций" };
+  }
+
+  const { parseHhMmToMinutes } = await import("@/shared/i18n/domain-labels");
+  const { parseOvertimeFormRows } = await import(
+    "@/features/payroll/lib/parse-overtime-form"
+  );
+
+  const durationMinutes = z.preprocess((val) => {
+    if (val === "" || val == null) return undefined;
+    return parseHhMmToMinutes(String(val));
+  }, z.number().int().min(0).optional());
+
+  const schema = z.object({
+    shiftRate: z.coerce.number().min(0).optional(),
+    shiftHoursMin: durationMinutes.pipe(z.number().max(1440).optional()),
+    unpaidOvertimeMin: durationMinutes.pipe(z.number().max(600).optional()),
+    taxPercent: z.coerce.number().min(0).max(1000).optional(),
+    overtimeMode: z
+      .enum(["HALF_HOUR", "HOURLY_CUMULATIVE", "HOURLY_FLAT"])
+      .optional(),
+    unpaidOvertimeMode: z.enum(["FIRST_HOUR", "EACH_HOUR"]).optional(),
+  });
+
+  const parsed = schema.safeParse({
+    shiftRate: formData.get("shiftRate") || undefined,
+    shiftHoursMin: formData.get("shiftHoursMin") || undefined,
+    unpaidOvertimeMin: formData.get("unpaidOvertimeMin") || undefined,
+    taxPercent: formData.get("taxPercent") || undefined,
+    overtimeMode: formData.get("overtimeMode") || undefined,
+    unpaidOvertimeMode: formData.get("unpaidOvertimeMode") || undefined,
+  });
+  if (!parsed.success) return { error: "Проверьте финансовые условия" };
+
+  const existing = await prisma.location.findFirst({
+    where: { id: locationId, projectId },
+    select: { id: true },
+  });
+  if (!existing) return { error: "Локация не найдена" };
+
+  const shiftRate = parsed.data.shiftRate ?? 0;
+  const taxPct = parsed.data.taxPercent ?? 0;
+  const overtime = parseOvertimeFormRows(formData, shiftRate, taxPct);
+
+  await prisma.$transaction([
+    prisma.locationOvertimeRate.deleteMany({ where: { locationId } }),
+    prisma.location.update({
+      where: { id: locationId },
+      data: parsed.data,
+    }),
+    ...(overtime.length
+      ? [
+          prisma.locationOvertimeRate.createMany({
+            data: overtime.map((r) => ({ ...r, locationId })),
+          }),
+        ]
+      : []),
+  ]);
+
+  revalidateLocations(projectId, locationId);
+  return { success: "Финансовые условия сохранены" };
+}

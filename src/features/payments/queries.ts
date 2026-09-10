@@ -15,6 +15,7 @@ export type CashPaymentFilters = {
 const paymentInclude = {
   counterparty: { select: { id: true, name: true } },
   company: { select: { id: true, name: true } },
+  contract: { select: { id: true, number: true } },
   createdBy: { select: { id: true, name: true } },
   lockedBy: { select: { id: true, name: true } },
   breakdown: {

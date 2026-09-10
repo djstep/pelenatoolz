@@ -53,6 +53,8 @@ type ActorRow = {
   unpaidOvertimeMin: number | null;
   pickupOffsetMin: number | null;
   taxPercent: { toString(): string } | null;
+  overtimeMode?: "HALF_HOUR" | "HOURLY_CUMULATIVE" | "HOURLY_FLAT" | null;
+  unpaidOvertimeMode?: "FIRST_HOUR" | "EACH_HOUR" | null;
   characterId: string | null;
   character: { name: string } | null;
   overtimeRates: {
@@ -248,6 +250,7 @@ function ActorFormFields({
       </div>
 
       <ActorPayrollBlock
+        title="Гонорар (зарплатная ведомость)"
         shiftRate={actor?.shiftRate ? Number(actor.shiftRate) : 0}
         taxPercent={
           actor?.taxPercent ? Number(actor.taxPercent) : 0
@@ -255,8 +258,11 @@ function ActorFormFields({
         shiftHoursMin={actor?.shiftHoursMin}
         unpaidOvertimeMin={actor?.unpaidOvertimeMin}
         pickupOffsetMin={actor?.pickupOffsetMin}
+        overtimeMode={actor?.overtimeMode}
+        unpaidOvertimeMode={actor?.unpaidOvertimeMode}
         overtime={actor ? seedOvertime(actor.overtimeRates) : []}
         extras={actor ? seedExtras(actor.extraPayments) : []}
+        showPickupOffset
       />
     </div>
   );

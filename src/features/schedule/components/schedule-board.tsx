@@ -113,19 +113,16 @@ function SceneRowInDay({
 }) {
   const scene = row.scene;
   const location = scene.locations[0]?.location.name ?? "—";
-  const intExtDay = [
-    scene.intExt ? intExtLabels[scene.intExt] : null,
-    scene.dayNight ? dayNightLabels[scene.dayNight] : null,
-  ]
-    .filter(Boolean)
-    .join(", ");
+  const intExt = scene.intExt ? intExtLabels[scene.intExt] : "—";
+  const dayNight = scene.dayNight ? dayNightLabels[scene.dayNight] : "—";
 
   return (
     <tr className="border-b border-[var(--border)]/50 last:border-0">
       <td className="py-2 px-3 text-[var(--muted-fg)] w-8">{index + 1}</td>
       <td className="py-2 px-3 font-semibold whitespace-nowrap">{scene.number}</td>
+      <td className="py-2 px-3 text-[var(--muted-fg)]">{intExt}</td>
       <td className="py-2 px-3">{location}</td>
-      <td className="py-2 px-3 text-[var(--muted-fg)]">{intExtDay || "—"}</td>
+      <td className="py-2 px-3 text-[var(--muted-fg)]">{dayNight}</td>
       <td className="py-2 px-3 whitespace-nowrap">
         {formatPagesMinutes(
           row.estimatedPages ?? scene.pageCount,
@@ -227,7 +224,7 @@ function ShootDayAccordionRow({
 
       {expanded ? (
         <tr className="border-b border-[var(--border)] bg-white/4">
-          <td colSpan={canWrite ? 6 : 5} className="px-4 pb-4 pt-2">
+          <td colSpan={canWrite ? 7 : 6} className="px-4 pb-4 pt-2">
             {day.notes ? (
               <p className="mb-3 text-sm text-[var(--muted-fg)]">{day.notes}</p>
             ) : null}
@@ -241,8 +238,9 @@ function ShootDayAccordionRow({
                     <tr className="border-b border-[var(--border)] text-[var(--muted-fg)]">
                       <th className="py-2 px-3 w-8">#</th>
                       <th className="py-2 px-3">Сцена</th>
+                      <th className="py-2 px-3">Инт/Нат</th>
                       <th className="py-2 px-3">Локация</th>
-                      <th className="py-2 px-3">INT/EXT · Д/Н</th>
+                      <th className="py-2 px-3">День/Ночь</th>
                       <th className="py-2 px-3">Стр. / мин</th>
                       {canWrite ? <th className="py-2 px-3" /> : null}
                     </tr>
