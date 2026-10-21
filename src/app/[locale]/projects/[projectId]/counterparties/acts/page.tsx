@@ -1,4 +1,4 @@
-import { resolveDefaultStatusIdAction } from "@/features/contracts/actions";
+import { resolveDefaultStatusId } from "@/features/contracts/lib/default-status";
 import { CertificatesWorkspace } from "@/features/contracts/components/certificates-workspace";
 import {
   listCertificates,
@@ -47,7 +47,7 @@ export default async function ActsPage({ params, searchParams }: Props) {
     listContracts(projectId),
     listPaymentsForCertificateForm(projectId),
     listApprovalStatuses(projectId),
-    resolveDefaultStatusIdAction(projectId),
+    resolveDefaultStatusId(projectId),
   ]);
 
   const defaultStatusId =

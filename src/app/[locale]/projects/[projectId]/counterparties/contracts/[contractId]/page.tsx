@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { resolveDefaultStatusIdAction } from "@/features/contracts/actions";
+import { resolveDefaultStatusId } from "@/features/contracts/lib/default-status";
 import { ContractDetailView } from "@/features/contracts/components/contract-detail-view";
 import {
   getContract,
@@ -35,7 +35,7 @@ export default async function ContractPage({ params }: Props) {
       listLedgerTypes(projectId),
       listApprovalStatuses(projectId),
       listContractTags(projectId),
-      resolveDefaultStatusIdAction(projectId),
+      resolveDefaultStatusId(projectId),
     ]);
 
   if (!contract) notFound();

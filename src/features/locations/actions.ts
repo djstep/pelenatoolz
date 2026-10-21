@@ -8,6 +8,7 @@ import {
 } from "@/features/locations/schemas";
 import type { LocationScoutSnapshot } from "@/features/preproduction/lib/snapshots";
 import { parseScoutSnapshot } from "@/features/preproduction/lib/snapshots";
+import { assertInProject } from "@/features/memberships/assert-in-project";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { prisma } from "@/shared/db/prisma";
 import { AuditEntityType } from "@/shared/audit/entity-types";
@@ -163,6 +164,15 @@ export async function addLocationPhotoAction(
     return { error: "Укажите корректный URL изображения" };
   }
 
+  try {
+    await assertInProject("Location", locationId, projectId);
+  } catch (error) {
+    if (error instanceof Error && error.message === "Объект не найден") {
+      return { error: "Объект не найден" };
+    }
+    throw error;
+  }
+
   const count = await prisma.locationPhoto.count({ where: { locationId } });
   await prisma.locationPhoto.create({
     data: {
@@ -185,8 +195,18 @@ export async function deleteLocationPhotoAction(
   const gate = await assertScriptWrite(projectId);
   if ("error" in gate) throw new Error(gate.error);
 
+  const photo = await prisma.locationPhoto.findFirst({
+    where: {
+      id: photoId,
+      locationId,
+      location: { projectId },
+    },
+    select: { id: true },
+  });
+  if (!photo) throw new Error("Объект не найден");
+
   await prisma.locationPhoto.deleteMany({
-    where: { id: photoId, locationId },
+    where: { id: photo.id, locationId, location: { projectId } },
   });
   revalidateLocations(projectId, locationId);
 }

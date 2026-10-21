@@ -1,5 +1,6 @@
 import type { DayNight, IntExt } from "@prisma/client";
 import type { ImportPreviewScene } from "@/features/import/types";
+import { assertInProject } from "@/features/memberships/assert-in-project";
 import { prisma } from "@/shared/db/prisma";
 import { parseMmSs } from "@/shared/i18n/domain-labels";
 
@@ -39,6 +40,12 @@ export async function applyScenesFromPreview(
   let created = 0;
   let updated = 0;
   let skipped = 0;
+
+  await assertInProject(
+    "Scene",
+    scenes.flatMap((scene) => (scene.existingId ? [scene.existingId] : [])),
+    projectId,
+  );
 
   for (const scene of scenes) {
     const selected = formData.get(`sel_${scene.key}`) === "on";
@@ -135,7 +142,7 @@ export async function applyScenesFromPreview(
 
     if (Object.keys(data).length > 0) {
       await prisma.scene.update({
-        where: { id: scene.existingId },
+        where: { id: scene.existingId, projectId },
         data,
       });
     }

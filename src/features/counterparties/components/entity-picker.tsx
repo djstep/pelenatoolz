@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { CounterpartyType } from "@prisma/client";
 import {
   COUNTERPARTY_TYPES,
@@ -50,6 +50,7 @@ export function EntityPicker({
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [createName, setCreateName] = useState("");
+  const createRootRef = useRef<HTMLDivElement>(null);
 
   const selected = options.find((o) => o.id === value);
 
@@ -68,12 +69,19 @@ export function EntityPicker({
     setOpen(true);
   }
 
-  async function handleCreate(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    e.stopPropagation();
+  async function submitCreate() {
+    const root = createRootRef.current;
+    if (!root) return;
     setCreating(true);
     setCreateError(null);
-    const fd = new FormData(e.currentTarget);
+    const fd = new FormData();
+    root
+      .querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>(
+        "input[name], select[name], textarea[name]",
+      )
+      .forEach((el) => {
+        fd.append(el.name, el.value);
+      });
     const result = await onQuickCreate(fd);
     setCreating(false);
     if ("error" in result) {
@@ -197,7 +205,16 @@ export function EntityPicker({
               </button>
             </>
           ) : (
-            <form className="space-y-2" onSubmit={handleCreate}>
+            <div
+              ref={createRootRef}
+              className="space-y-2"
+              onKeyDown={(e) => {
+                if (e.key !== "Enter" || creating) return;
+                e.preventDefault();
+                e.stopPropagation();
+                void submitCreate();
+              }}
+            >
               <p className="px-1 text-xs font-medium text-[var(--foreground)]">
                 {createTitle}
               </p>
@@ -217,7 +234,12 @@ export function EntityPicker({
                 <p className="text-xs text-[var(--danger)]">{createError}</p>
               ) : null}
               <div className="flex gap-2 pt-1">
-                <Button type="submit" className="h-8 px-3 text-xs" disabled={creating}>
+                <Button
+                  type="button"
+                  className="h-8 px-3 text-xs"
+                  disabled={creating}
+                  onClick={() => void submitCreate()}
+                >
                   {creating ? "…" : "Добавить"}
                 </Button>
                 <Button
@@ -229,7 +251,7 @@ export function EntityPicker({
                   Назад
                 </Button>
               </div>
-            </form>
+            </div>
           )}
         </div>
       ) : null}

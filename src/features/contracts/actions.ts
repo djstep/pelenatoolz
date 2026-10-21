@@ -628,9 +628,3 @@ export async function detachCertificateFileAction(
   });
   return { success: "Файл откреплён" };
 }
-
-/** Для формы: дефолтный статус «Не подписан». */
-export async function resolveDefaultStatusIdAction(projectId: string) {
-  const id = await defaultUnsignedStatusId(projectId);
-  return id ? { id } : { error: "Нет статусов" as const };
-}

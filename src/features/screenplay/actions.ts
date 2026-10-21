@@ -3,6 +3,7 @@
 import { ScriptBlockType, TimingMode } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { assertInProject } from "@/features/memberships/assert-in-project";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import type { ScreenplayBlock } from "@/features/screenplay/lib/block-types";
 import {
@@ -233,7 +234,15 @@ export async function applyLibrettoSyncAction(
     return { error: "Некорректные данные предпросмотра" };
   }
 
-  const result = await applyScenesFromPreview(projectId, scenes, formData);
+  let result: Awaited<ReturnType<typeof applyScenesFromPreview>>;
+  try {
+    result = await applyScenesFromPreview(projectId, scenes, formData);
+  } catch (error) {
+    if (error instanceof Error && error.message === "Объект не найден") {
+      return { error: "Объект не найден" };
+    }
+    throw error;
+  }
 
   const blocks = await listVersionBlocks(versionId);
   const linked = await linkBlocksToExistingScenes(projectId, blocks);
@@ -660,10 +669,19 @@ export async function replyScriptCommentAction(
   const trimmed = content.trim();
   if (!trimmed) return { error: "Введите текст ответа" };
 
+  try {
+    await assertInProject("ScriptVersion", versionId, projectId);
+  } catch (error) {
+    if (error instanceof Error && error.message === "Объект не найден") {
+      return { error: "Объект не найден" };
+    }
+    throw error;
+  }
+
   const parent = await prisma.scriptComment.findFirst({
     where: { id: parentCommentId, scriptVersionId: versionId },
   });
-  if (!parent) return { error: "Комментарий не найден" };
+  if (!parent) return { error: "Объект не найден" };
 
   await prisma.scriptComment.create({
     data: {

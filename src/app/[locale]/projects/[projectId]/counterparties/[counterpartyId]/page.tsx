@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { resolveDefaultStatusIdAction } from "@/features/contracts/actions";
+import { resolveDefaultStatusId } from "@/features/contracts/lib/default-status";
 import {
   listCertificates,
   listContractTags,
@@ -55,7 +55,7 @@ export default async function CounterpartyDetailPage({ params }: Props) {
     listLedgerTypes(projectId),
     listApprovalStatuses(projectId),
     listContractTags(projectId),
-    resolveDefaultStatusIdAction(projectId),
+    resolveDefaultStatusId(projectId),
   ]);
 
   if (!counterparty) notFound();

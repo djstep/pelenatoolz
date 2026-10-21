@@ -1,4 +1,4 @@
-import { resolveDefaultStatusIdAction } from "@/features/contracts/actions";
+import { resolveDefaultStatusId } from "@/features/contracts/lib/default-status";
 import { ContractsWorkspace } from "@/features/contracts/components/contracts-workspace";
 import {
   listContractTags,
@@ -36,7 +36,7 @@ export default async function ContractsPage({ params, searchParams }: Props) {
       listLedgerTypes(projectId),
       listApprovalStatuses(projectId),
       listContractTags(projectId),
-      resolveDefaultStatusIdAction(projectId),
+      resolveDefaultStatusId(projectId),
     ]);
 
   const defaultStatusId =
