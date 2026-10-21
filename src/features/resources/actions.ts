@@ -2,7 +2,6 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { assertInProject } from "@/features/memberships/assert-in-project";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { parseHhMmToMinutes } from "@/shared/i18n/domain-labels";
 import { AuditEntityType } from "@/shared/audit/entity-types";
@@ -305,14 +304,11 @@ export async function updateResourceItemAction(
   const parsed = itemSchema.safeParse(parseItemForm(formData));
   if (!parsed.success) return { error: "Проверьте данные" };
 
-  try {
-    await assertInProject("ResourceItem", itemId, projectId);
-  } catch (error) {
-    if (error instanceof Error && error.message === "Объект не найден") {
-      return { error: "Объект не найден" };
-    }
-    throw error;
-  }
+  const existingItem = await prisma.resourceItem.findFirst({
+    where: { id: itemId, categoryId, category: { projectId } },
+    select: { id: true },
+  });
+  if (!existingItem) return { error: "Объект не найден" };
 
   const canFin = ctx.canFinanceWrite({ categoryId });
   const {
