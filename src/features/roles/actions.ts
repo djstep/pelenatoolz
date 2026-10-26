@@ -10,6 +10,12 @@ import {
   PERMISSION_FLAGS,
   PERMISSION_SECTIONS,
 } from "@/features/roles/permissions-matrix";
+import {
+  canGrantPermissions,
+  isReservedRoleName,
+} from "@/features/roles/role-rules";
+import { AuditEntityType } from "@/shared/audit/entity-types";
+import { recordAudit } from "@/shared/audit/with-audit";
 import { prisma } from "@/shared/db/prisma";
 import { z } from "zod";
 
@@ -66,6 +72,23 @@ function categoryIdsFromForm(formData: FormData): string[] {
   }
 }
 
+/** Только категории ресурсов этого проекта: чужие id в права роли не попадают. */
+async function projectCategoryIdsFromForm(
+  projectId: string,
+  formData: FormData,
+): Promise<string[]> {
+  const ids = [...new Set(categoryIdsFromForm(formData))];
+  if (ids.length === 0) return [];
+  const rows = await prisma.resourceCategory.findMany({
+    where: { projectId, id: { in: ids } },
+    select: { id: true },
+  });
+  return rows.map((row) => row.id);
+}
+
+const RESERVED_NAME_ERROR = "Это название зарезервировано для системной роли";
+const GRANT_ERROR = "Нельзя выдать права шире ваших собственных";
+
 export async function createRoleAction(
   projectId: string,
   _prev: RoleActionState,
@@ -83,26 +106,42 @@ export async function createRoleAction(
   if (!parsed.success) {
     return { error: "Укажите название роли" };
   }
+  if (isReservedRoleName(parsed.data.name)) {
+    return { error: RESERVED_NAME_ERROR };
+  }
 
   const matrix = matrixFromFormData(formData);
   const categoryFinance = categoryFinanceFromFormData(
     formData,
-    categoryIdsFromForm(formData),
+    await projectCategoryIdsFromForm(projectId, formData),
   );
   const permissions = buildPermissionsDocument(matrix, categoryFinance);
+  if (!canGrantPermissions(ctx.role, permissions)) {
+    return { error: GRANT_ERROR };
+  }
 
+  let created: { id: string };
   try {
-    await prisma.projectRoleDefinition.create({
+    created = await prisma.projectRoleDefinition.create({
       data: {
         projectId,
         name: parsed.data.name,
         note: parsed.data.note,
         permissions,
       },
+      select: { id: true },
     });
   } catch {
     return { error: "Роль с таким названием уже существует" };
   }
+
+  await recordAudit(ctx, {
+    projectId,
+    entityType: AuditEntityType.role,
+    entityId: created.id,
+    action: "CREATE",
+    summary: `Создана роль «${parsed.data.name}»`,
+  });
 
   revalidateRoles(projectId);
   return { success: "Роль создана" };
@@ -123,6 +162,10 @@ export async function updateRoleAction(
     where: { id: roleId, projectId },
   });
   if (!role) return { error: "Роль не найдена" };
+  if (role.isSystem) return { error: "Системную роль изменить нельзя" };
+  if (role.id === ctx.membership.roleId) {
+    return { error: "Нельзя изменить роль, которая назначена вам" };
+  }
 
   const parsed = roleSchema.safeParse({
     name: formData.get("name"),
@@ -131,17 +174,23 @@ export async function updateRoleAction(
   if (!parsed.success) {
     return { error: "Укажите название роли" };
   }
+  if (isReservedRoleName(parsed.data.name)) {
+    return { error: RESERVED_NAME_ERROR };
+  }
 
   const matrix = matrixFromFormData(formData);
   const categoryFinance = categoryFinanceFromFormData(
     formData,
-    categoryIdsFromForm(formData),
+    await projectCategoryIdsFromForm(projectId, formData),
   );
   const permissions = buildPermissionsDocument(matrix, categoryFinance);
+  if (!canGrantPermissions(ctx.role, permissions)) {
+    return { error: GRANT_ERROR };
+  }
 
   try {
     await prisma.projectRoleDefinition.update({
-      where: { id: roleId },
+      where: { id: roleId, projectId },
       data: {
         name: parsed.data.name,
         note: parsed.data.note,
@@ -151,6 +200,17 @@ export async function updateRoleAction(
   } catch {
     return { error: "Не удалось сохранить роль" };
   }
+
+  await recordAudit(ctx, {
+    projectId,
+    entityType: AuditEntityType.role,
+    entityId: roleId,
+    action: "UPDATE",
+    summary:
+      role.name === parsed.data.name
+        ? `Изменена роль «${role.name}»`
+        : `Изменена роль «${role.name}» → «${parsed.data.name}»`,
+  });
 
   revalidateRoles(projectId);
   return { success: "Роль сохранена" };
@@ -176,6 +236,15 @@ export async function deleteRoleAction(projectId: string, roleId: string) {
     throw new Error("Role in use");
   }
 
-  await prisma.projectRoleDefinition.delete({ where: { id: roleId } });
+  await prisma.projectRoleDefinition.delete({ where: { id: roleId, projectId } });
+
+  await recordAudit(ctx, {
+    projectId,
+    entityType: AuditEntityType.role,
+    entityId: roleId,
+    action: "DELETE",
+    summary: `Удалена роль «${role.name}»`,
+  });
+
   revalidateRoles(projectId);
 }

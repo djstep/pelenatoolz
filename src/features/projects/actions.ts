@@ -18,6 +18,11 @@ import { DEFAULT_APPROVAL_STATUSES } from "@/features/finance/lib/approval-statu
 import { DEFAULT_LEDGER_TYPES } from "@/features/contracts/lib/vat";
 import { getDefaultProjectRoles } from "@/features/roles/default-roles";
 import { parsePermissionMatrix } from "@/features/roles/permissions-matrix";
+import {
+  canGrantPermissions,
+  countActiveProducers,
+  isProducerRole,
+} from "@/features/roles/role-rules";
 import { AuditEntityType } from "@/shared/audit/entity-types";
 import { recordAudit } from "@/shared/audit/with-audit";
 import { nanoid } from "nanoid";
@@ -387,6 +392,9 @@ export async function createInviteAction(
   if (!roleExists) {
     return { error: "Роль не найдена" };
   }
+  if (!canGrantPermissions(membership.role, roleExists.permissions)) {
+    return { error: "Нельзя пригласить с правами шире ваших собственных" };
+  }
 
   const token = nanoid(32);
   const expiresAt = new Date();
@@ -394,7 +402,7 @@ export async function createInviteAction(
 
   const email = parsed.data.email?.toLowerCase() ?? null;
 
-  await prisma.projectInvite.create({
+  const invite = await prisma.projectInvite.create({
     data: {
       projectId,
       email,
@@ -402,6 +410,20 @@ export async function createInviteAction(
       token,
       expiresAt,
       createdById: user.id!,
+    },
+    select: { id: true },
+  });
+
+  await recordAudit({ user: { id: user.id! } }, {
+    projectId,
+    entityType: AuditEntityType.invite,
+    entityId: invite.id,
+    action: "CREATE",
+    summary: `Создано приглашение с ролью «${roleExists.name}»`,
+    changes: {
+      roleId: roleExists.id,
+      expiresAt: expiresAt.toISOString(),
+      forSpecificEmail: email != null,
     },
   });
 
@@ -419,10 +441,20 @@ export async function revokeInviteAction(inviteId: string, projectId: string) {
   const user = await requireUser();
   await requireProjectAccess(projectId, user.id!, "members:manage");
 
-  await prisma.projectInvite.updateMany({
+  const revoked = await prisma.projectInvite.updateMany({
     where: { id: inviteId, projectId, acceptedAt: null },
     data: { revokedAt: new Date() },
   });
+
+  if (revoked.count > 0) {
+    await recordAudit({ user: { id: user.id! } }, {
+      projectId,
+      entityType: AuditEntityType.invite,
+      entityId: inviteId,
+      action: "UPDATE",
+      summary: "Приглашение отозвано",
+    });
+  }
 
   revalidatePath(`/ru/projects/${projectId}/members`);
 }
@@ -433,7 +465,7 @@ export async function updateMemberRoleAction(
   formData: FormData,
 ): Promise<ActionState> {
   const user = await requireUser();
-  await requireProjectAccess(projectId, user.id!, "members:manage");
+  const actor = await requireProjectAccess(projectId, user.id!, "members:manage");
 
   const parsed = updateMemberRoleSchema.safeParse({
     membershipId: formData.get("membershipId"),
@@ -452,6 +484,9 @@ export async function updateMemberRoleAction(
   if (!target) {
     return { error: "Участник не найден" };
   }
+  if (target.userId === user.id) {
+    return { error: "Нельзя изменить свою роль" };
+  }
 
   const newRole = await prisma.projectRoleDefinition.findFirst({
     where: { id: parsed.data.roleId, projectId },
@@ -460,31 +495,38 @@ export async function updateMemberRoleAction(
     return { error: "Роль не найдена" };
   }
 
-  const producerRoles = await prisma.projectRoleDefinition.findMany({
-    where: { projectId, isSystem: true, name: "Продюсер" },
-  });
-  const producerRoleId = producerRoles[0]?.id;
+  if (!canGrantPermissions(actor.role, target.role.permissions)) {
+    return { error: "Нельзя менять роль участника с правами шире ваших" };
+  }
+  if (!canGrantPermissions(actor.role, newRole.permissions)) {
+    return { error: "Нельзя выдать права шире ваших собственных" };
+  }
 
   if (
-    target.userId === user.id &&
-    producerRoleId &&
-    parsed.data.roleId !== producerRoleId
+    target.status === MembershipStatus.ACTIVE &&
+    isProducerRole(target.role) &&
+    !isProducerRole(newRole) &&
+    (await countActiveProducers(projectId)) <= 1
   ) {
-    const producers = await prisma.projectMembership.count({
-      where: {
-        projectId,
-        status: MembershipStatus.ACTIVE,
-        roleId: producerRoleId,
-      },
-    });
-    if (producers <= 1) {
-      return { error: "В проекте должен остаться хотя бы один продюсер" };
-    }
+    return { error: "В проекте должен остаться хотя бы один продюсер" };
   }
 
   await prisma.projectMembership.update({
-    where: { id: target.id },
+    where: { id: target.id, projectId },
     data: { roleId: parsed.data.roleId },
+  });
+
+  await recordAudit({ user: { id: user.id! } }, {
+    projectId,
+    entityType: AuditEntityType.membership,
+    entityId: target.id,
+    action: "UPDATE",
+    summary: `Роль участника изменена: «${target.role.name}» → «${newRole.name}»`,
+    changes: {
+      userId: target.userId,
+      fromRoleId: target.roleId,
+      toRoleId: newRole.id,
+    },
   });
 
   revalidatePath(`/ru/projects/${projectId}/members`);
@@ -496,7 +538,7 @@ export async function removeMemberAction(
   projectId: string,
 ) {
   const user = await requireUser();
-  await requireProjectAccess(projectId, user.id!, "members:manage");
+  const actor = await requireProjectAccess(projectId, user.id!, "members:manage");
 
   const target = await prisma.projectMembership.findFirst({
     where: { id: membershipId, projectId },
@@ -511,26 +553,30 @@ export async function removeMemberAction(
     throw new Error("Cannot remove yourself via this action");
   }
 
-  const producerRole = await prisma.projectRoleDefinition.findFirst({
-    where: { projectId, isSystem: true, name: "Продюсер" },
-  });
+  if (!canGrantPermissions(actor.role, target.role.permissions)) {
+    throw new Error("Нельзя удалить участника с правами шире ваших");
+  }
 
-  if (producerRole && target.roleId === producerRole.id) {
-    const producers = await prisma.projectMembership.count({
-      where: {
-        projectId,
-        status: MembershipStatus.ACTIVE,
-        roleId: producerRole.id,
-      },
-    });
-    if (producers <= 1) {
-      throw new Error("Last producer cannot be removed");
-    }
+  if (
+    target.status === MembershipStatus.ACTIVE &&
+    isProducerRole(target.role) &&
+    (await countActiveProducers(projectId)) <= 1
+  ) {
+    throw new Error("Last producer cannot be removed");
   }
 
   await prisma.projectMembership.update({
-    where: { id: membershipId },
+    where: { id: membershipId, projectId },
     data: { status: MembershipStatus.REMOVED },
+  });
+
+  await recordAudit({ user: { id: user.id! } }, {
+    projectId,
+    entityType: AuditEntityType.membership,
+    entityId: target.id,
+    action: "DELETE",
+    summary: `Участник с ролью «${target.role.name}» удалён из проекта`,
+    changes: { userId: target.userId, roleId: target.roleId },
   });
 
   revalidatePath(`/ru/projects/${projectId}/members`);
@@ -558,7 +604,18 @@ export async function acceptInviteAction(token: string): Promise<ActionState> {
     };
   }
 
-  await prisma.$transaction(async (tx) => {
+  // Активный участник не может сменить себе роль, приняв приглашение.
+  const current = await prisma.projectMembership.findUnique({
+    where: {
+      projectId_userId: { projectId: invite.projectId, userId: user.id! },
+    },
+    select: { status: true },
+  });
+  if (current?.status === MembershipStatus.ACTIVE) {
+    return { error: "Вы уже участник проекта" };
+  }
+
+  const membershipId = await prisma.$transaction(async (tx) => {
     const existing = await tx.projectMembership.findUnique({
       where: {
         projectId_userId: {
@@ -568,29 +625,38 @@ export async function acceptInviteAction(token: string): Promise<ActionState> {
       },
     });
 
-    if (existing) {
-      await tx.projectMembership.update({
-        where: { id: existing.id },
-        data: {
-          status: MembershipStatus.ACTIVE,
-          roleId: invite.roleId,
-        },
-      });
-    } else {
-      await tx.projectMembership.create({
-        data: {
-          projectId: invite.projectId,
-          userId: user.id!,
-          roleId: invite.roleId,
-          status: MembershipStatus.ACTIVE,
-        },
-      });
-    }
+    const membership = existing
+      ? await tx.projectMembership.update({
+          where: { id: existing.id },
+          data: {
+            status: MembershipStatus.ACTIVE,
+            roleId: invite.roleId,
+          },
+        })
+      : await tx.projectMembership.create({
+          data: {
+            projectId: invite.projectId,
+            userId: user.id!,
+            roleId: invite.roleId,
+            status: MembershipStatus.ACTIVE,
+          },
+        });
 
     await tx.projectInvite.update({
       where: { id: invite.id },
       data: { acceptedAt: new Date() },
     });
+
+    return membership.id;
+  });
+
+  await recordAudit({ user: { id: user.id! } }, {
+    projectId: invite.projectId,
+    entityType: AuditEntityType.membership,
+    entityId: membershipId,
+    action: "CREATE",
+    summary: `Принято приглашение с ролью «${invite.role.name}»`,
+    changes: { inviteId: invite.id, roleId: invite.roleId },
   });
 
   redirect(`/ru/projects/${invite.projectId}`);

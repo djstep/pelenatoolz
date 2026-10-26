@@ -28,6 +28,9 @@ export const AuditEntityType = {
   postTask: "post_task",
   productionReport: "production_report",
   payment: "payment",
+  role: "role",
+  membership: "membership",
+  invite: "invite",
 } as const;
 
 export type AuditEntityTypeValue =
@@ -72,6 +75,9 @@ export const auditEntityLabels: Record<string, string> = {
   [AuditEntityType.postTask]: "Пост-задача",
   [AuditEntityType.productionReport]: "Отчёт о производстве",
   [AuditEntityType.payment]: "Выплата",
+  [AuditEntityType.role]: "Роль",
+  [AuditEntityType.membership]: "Участник",
+  [AuditEntityType.invite]: "Приглашение",
   ShootDay: "Вызывной (устар.)",
 };
 
