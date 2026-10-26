@@ -1,16 +1,18 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/features/auth/session";
 import { appOrigin, signOAuthState } from "@/features/cloud/lib/token-crypto";
+import { safeRedirectPath } from "@/shared/lib/safe-redirect";
 
 export async function GET(request: Request) {
   const user = await requireUser();
   const { searchParams } = new URL(request.url);
   const projectId = searchParams.get("projectId");
-  const returnTo = searchParams.get("returnTo");
+  const returnToRaw = searchParams.get("returnTo");
 
-  if (!projectId || !returnTo) {
+  if (!projectId || !returnToRaw) {
     return NextResponse.json({ error: "projectId и returnTo обязательны" }, { status: 400 });
   }
+  const returnTo = safeRedirectPath(returnToRaw, "/ru/projects");
 
   const clientId = process.env.GOOGLE_CLIENT_ID;
   if (!clientId) {

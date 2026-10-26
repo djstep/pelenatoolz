@@ -12,6 +12,7 @@ import {
   sendPasswordResetEmail,
 } from "@/features/auth/lib/password-reset";
 import { prisma } from "@/shared/db/prisma";
+import { safeRedirectPath } from "@/shared/lib/safe-redirect";
 
 export type ActionState = {
   error?: string;
@@ -68,12 +69,7 @@ export async function registerAction(
     throw error;
   }
 
-  const callbackUrl = formData.get("callbackUrl");
-  redirect(
-    typeof callbackUrl === "string" && callbackUrl.startsWith("/")
-      ? callbackUrl
-      : "/ru/projects",
-  );
+  redirect(safeRedirectPath(formData.get("callbackUrl"), "/ru/projects"));
 }
 
 export async function loginAction(
@@ -108,12 +104,7 @@ export async function loginAction(
     throw error;
   }
 
-  const callbackUrl = formData.get("callbackUrl");
-  redirect(
-    typeof callbackUrl === "string" && callbackUrl.startsWith("/")
-      ? callbackUrl
-      : "/ru/projects",
-  );
+  redirect(safeRedirectPath(formData.get("callbackUrl"), "/ru/projects"));
 }
 
 export async function logoutAction() {

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { auth } from "@/auth";
 import { fetchYandexUserEmail } from "@/features/cloud/lib/yandex-disk";
 import {
   appOrigin,
@@ -6,6 +7,7 @@ import {
   verifyOAuthState,
 } from "@/features/cloud/lib/token-crypto";
 import { prisma } from "@/shared/db/prisma";
+import { safeRedirectPath } from "@/shared/lib/safe-redirect";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -24,6 +26,14 @@ export async function GET(request: Request) {
     return NextResponse.redirect(`${fallback}?cloud_error=state`);
   }
 
+  // Диск привязывается только к тому, кто сейчас вошёл и сам начал подключение.
+  const session = await auth();
+  if (!session?.user?.id || session.user.id !== state.userId) {
+    return NextResponse.redirect(`${fallback}?cloud_error=state`);
+  }
+
+  const returnUrl = `${appOrigin()}${safeRedirectPath(state.returnTo, "/ru/projects")}`;
+
   const body = new URLSearchParams({
     grant_type: "authorization_code",
     code,
@@ -38,7 +48,7 @@ export async function GET(request: Request) {
   });
 
   if (!tokenRes.ok) {
-    return NextResponse.redirect(`${state.returnTo}?cloud_error=token`);
+    return NextResponse.redirect(`${returnUrl}?cloud_error=token`);
   }
 
   const tokens = (await tokenRes.json()) as {
@@ -81,5 +91,5 @@ export async function GET(request: Request) {
     },
   });
 
-  return NextResponse.redirect(`${state.returnTo}?cloud_connected=yandex`);
+  return NextResponse.redirect(`${returnUrl}?cloud_connected=yandex`);
 }
