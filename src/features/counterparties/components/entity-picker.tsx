@@ -74,15 +74,7 @@ export function EntityPicker({
     if (!root) return;
     setCreating(true);
     setCreateError(null);
-    const fd = new FormData();
-    root
-      .querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>(
-        "input[name], select[name], textarea[name]",
-      )
-      .forEach((el) => {
-        fd.append(el.name, el.value);
-      });
-    const result = await onQuickCreate(fd);
+    const result = await onQuickCreate(collectFormData(root));
     setCreating(false);
     if ("error" in result) {
       setCreateError(result.error);
@@ -210,6 +202,10 @@ export function EntityPicker({
               className="space-y-2"
               onKeyDown={(e) => {
                 if (e.key !== "Enter" || creating) return;
+                if (e.nativeEvent.isComposing) return;
+                // Как в обычной форме: Enter в textarea переносит строку, на кнопке нажимает её.
+                if (e.target instanceof HTMLTextAreaElement) return;
+                if (e.target instanceof HTMLButtonElement) return;
                 e.preventDefault();
                 e.stopPropagation();
                 void submitCreate();
@@ -257,6 +253,40 @@ export function EntityPicker({
       ) : null}
     </div>
   );
+}
+
+/**
+ * Собирает поля блока быстрого добавления так же, как браузер собирает форму:
+ * без отключённых полей и кнопок, галочки и переключатели только отмеченные,
+ * у списка с несколькими значениями — каждое выбранное.
+ */
+function collectFormData(root: HTMLElement): FormData {
+  const fd = new FormData();
+  root
+    .querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>(
+      "input[name], select[name], textarea[name]",
+    )
+    .forEach((el) => {
+      if (el.disabled) return;
+      if (el instanceof HTMLInputElement) {
+        if (["button", "submit", "reset", "image"].includes(el.type)) return;
+        if ((el.type === "checkbox" || el.type === "radio") && !el.checked) {
+          return;
+        }
+        if (el.type === "file") {
+          Array.from(el.files ?? []).forEach((file) => fd.append(el.name, file));
+          return;
+        }
+      }
+      if (el instanceof HTMLSelectElement && el.multiple) {
+        Array.from(el.selectedOptions).forEach((opt) =>
+          fd.append(el.name, opt.value),
+        );
+        return;
+      }
+      fd.append(el.name, el.value);
+    });
+  return fd;
 }
 
 export function CounterpartyQuickCreateFields({
