@@ -10,6 +10,10 @@ import {
   ensureCurrentScriptVersion,
   getCurrentScriptVersion,
 } from "@/features/screenplay/lib/versions";
+import {
+  assertInProject,
+  isNotInProjectError,
+} from "@/features/memberships/assert-in-project";
 import { prisma } from "@/shared/db/prisma";
 
 export async function bootstrapScriptBlocks(
@@ -107,6 +111,8 @@ export async function syncSceneFromSlugline(
   const parsed = parseSlugline(slugline);
   if (!parsed) return;
 
+  await assertInProject("Scene", sceneId, projectId);
+
   const locationName = parsed.location.trim();
   let locationId: string | undefined;
   if (locationName) {
@@ -121,7 +127,7 @@ export async function syncSceneFromSlugline(
   }
 
   await prisma.scene.update({
-    where: { id: sceneId },
+    where: { id: sceneId, projectId },
     data: {
       episodeNumber: parsed.episodeNumber,
       number: parsed.number,
@@ -143,6 +149,12 @@ export async function syncSceneCharactersFromBlocks(
   sceneId: string,
   blocks: ScreenplayBlock[],
 ) {
+  const scene = await prisma.scene.findFirst({
+    where: { id: sceneId, projectId },
+    select: { id: true },
+  });
+  if (!scene) return;
+
   const names = extractCharacterNames(blocks);
   const characterIds: string[] = [];
 
@@ -155,7 +167,9 @@ export async function syncSceneCharactersFromBlocks(
     characterIds.push(character.id);
   }
 
-  await prisma.sceneCharacter.deleteMany({ where: { sceneId } });
+  await prisma.sceneCharacter.deleteMany({
+    where: { sceneId, scene: { projectId } },
+  });
   if (characterIds.length > 0) {
     await prisma.sceneCharacter.createMany({
       data: characterIds.map((characterId) => ({ sceneId, characterId })),
@@ -164,24 +178,25 @@ export async function syncSceneCharactersFromBlocks(
 }
 
 export async function syncSceneScriptContent(
+  projectId: string,
   sceneId: string,
   blocks: ScreenplayBlock[],
 ) {
   const content = blocksToScriptContent(blocks);
   await prisma.scene.update({
-    where: { id: sceneId },
+    where: { id: sceneId, projectId },
     data: { scriptContent: content || null },
   });
 }
 
-export async function syncSluglineFromScene(sceneId: string) {
-  const scene = await prisma.scene.findUnique({
-    where: { id: sceneId },
+export async function syncSluglineFromScene(projectId: string, sceneId: string) {
+  const scene = await prisma.scene.findFirst({
+    where: { id: sceneId, projectId },
     include: { locations: { include: { location: true } } },
   });
   if (!scene) return;
 
-  const current = await getCurrentScriptVersion(scene.projectId);
+  const current = await getCurrentScriptVersion(projectId);
   if (!current) return;
 
   const slugline = buildSlugline({
@@ -194,13 +209,18 @@ export async function syncSluglineFromScene(sceneId: string) {
   });
 
   const block = await prisma.scriptBlock.findFirst({
-    where: { sceneId, type: "SLUGLINE", scriptVersionId: current.id },
+    where: {
+      sceneId,
+      type: "SLUGLINE",
+      scriptVersionId: current.id,
+      projectId,
+    },
     orderBy: { sortOrder: "asc" },
   });
 
   if (block) {
     await prisma.scriptBlock.update({
-      where: { id: block.id },
+      where: { id: block.id, projectId },
       data: { content: slugline },
     });
   }
@@ -211,12 +231,37 @@ export async function ensureScenesFromBlocks(
   blocks: ScreenplayBlock[],
 ): Promise<ScreenplayBlock[]> {
   const sorted = [...blocks].sort((a, b) => a.sortOrder - b.sortOrder);
+  const clientSceneIds = [
+    ...new Set(
+      sorted
+        .map((block) => block.sceneId)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  let trustedSceneIds = new Set(clientSceneIds);
+  if (clientSceneIds.length > 0) {
+    try {
+      await assertInProject("Scene", clientSceneIds, projectId);
+    } catch (error) {
+      if (!isNotInProjectError(error)) throw error;
+      const found = await prisma.scene.findMany({
+        where: { id: { in: clientSceneIds }, projectId },
+        select: { id: true },
+      });
+      trustedSceneIds = new Set(found.map((scene) => scene.id));
+    }
+  }
+
+  const trustedSceneId = (sceneId: string | null) =>
+    sceneId && trustedSceneIds.has(sceneId) ? sceneId : null;
+
   const result: ScreenplayBlock[] = [];
   let currentSceneId: string | null = null;
 
   for (const block of sorted) {
     if (block.type === "SLUGLINE") {
-      if (!block.sceneId) {
+      const sceneId = trustedSceneId(block.sceneId);
+      if (!sceneId) {
         const parsed = parseSlugline(block.content);
         const maxOrder = await prisma.scene.aggregate({
           where: { projectId },
@@ -240,15 +285,15 @@ export async function ensureScenesFromBlocks(
           await syncSceneFromSlugline(projectId, scene.id, block.content);
         }
       } else {
-        currentSceneId = block.sceneId;
-        result.push(block);
+        currentSceneId = sceneId;
+        result.push({ ...block, sceneId });
       }
       continue;
     }
 
     result.push({
       ...block,
-      sceneId: block.sceneId ?? currentSceneId,
+      sceneId: trustedSceneId(block.sceneId) ?? currentSceneId,
     });
   }
 
@@ -339,7 +384,7 @@ export async function syncAllScenesFromBlocks(
       await syncSceneFromSlugline(projectId, sceneId, slug.content);
     }
     await syncSceneCharactersFromBlocks(projectId, sceneId, sceneBlocks);
-    await syncSceneScriptContent(sceneId, sceneBlocks);
+    await syncSceneScriptContent(projectId, sceneId, sceneBlocks);
   }
 
   return withSceneIds;
@@ -354,7 +399,7 @@ export async function refreshAllSluglines(projectId: string) {
     select: { id: true },
   });
   for (const scene of scenes) {
-    await syncSluglineFromScene(scene.id);
+    await syncSluglineFromScene(projectId, scene.id);
   }
 }
 

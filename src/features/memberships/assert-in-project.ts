@@ -6,10 +6,21 @@ import { prisma } from "@/shared/db/prisma";
 export type AssertInProjectEntity =
   | "Scene"
   | "ScriptVersion"
+  | "ScriptBlock"
   | "ScriptComment"
   | "Location"
   | "LocationPhoto"
-  | "ResourceItem";
+  | "ResourceItem"
+  | "Company"
+  | "Counterparty"
+  | "ProjectApprovalStatus"
+  | "ProjectLedgerType"
+  | "Contract"
+  | "CashPayment"
+  | "Character"
+  | "Actor"
+  | "Element"
+  | "CastingCandidate";
 
 type TransactionCallback = Extract<
   Parameters<typeof prisma.$transaction>[0],
@@ -26,16 +37,42 @@ type ProjectDb = Pick<
   InteractiveTx,
   | "scene"
   | "scriptVersion"
+  | "scriptBlock"
   | "scriptComment"
   | "location"
   | "locationPhoto"
   | "resourceItem"
+  | "company"
+  | "counterparty"
+  | "projectApprovalStatus"
+  | "projectLedgerType"
+  | "contract"
+  | "cashPayment"
+  | "character"
+  | "actor"
+  | "element"
+  | "castingCandidate"
 >;
+
+/** Нет записи и чужой проект. Текст один, чтобы по ответу нельзя было их различить. */
+export class NotInProjectError extends Error {
+  constructor(message = "Объект не найден") {
+    super(message);
+    this.name = "NotInProjectError";
+  }
+}
+
+export function isNotInProjectError(
+  error: unknown,
+): error is NotInProjectError {
+  return error instanceof NotInProjectError;
+}
 
 /**
  * Проверяет, что записи с этими id принадлежат проекту.
  * Вызывать до любой записи, если id сущности пришёл из браузера.
  * Нет записи и чужой проект дают одну и ту же ошибку.
+ * Пустая строка, null и пустой список — не ссылка, проверка не нужна.
  */
 export async function assertInProject(
   entity: AssertInProjectEntity,
@@ -43,13 +80,16 @@ export async function assertInProject(
   projectId: string,
   tx?: ProjectDb,
 ): Promise<void> {
-  const uniqueIds = [...new Set(typeof ids === "string" ? [ids] : ids)];
+  const list = typeof ids === "string" ? [ids] : ids;
+  const uniqueIds = [
+    ...new Set(list.filter((id) => id.trim().length > 0)),
+  ];
   if (uniqueIds.length === 0) return;
 
   const db: ProjectDb = tx ?? prisma;
   const found = await countInProject(db, entity, uniqueIds, projectId);
   if (found < uniqueIds.length) {
-    throw new Error("Объект не найден");
+    throw new NotInProjectError();
   }
 }
 
@@ -66,6 +106,10 @@ async function countInProject(
       });
     case "ScriptVersion":
       return db.scriptVersion.count({
+        where: { id: { in: ids }, projectId },
+      });
+    case "ScriptBlock":
+      return db.scriptBlock.count({
         where: { id: { in: ids }, projectId },
       });
     case "ScriptComment":
@@ -93,10 +137,50 @@ async function countInProject(
           category: { projectId },
         },
       });
+    case "Company":
+      return db.company.count({
+        where: { id: { in: ids }, projectId },
+      });
+    case "Counterparty":
+      return db.counterparty.count({
+        where: { id: { in: ids }, projectId },
+      });
+    case "ProjectApprovalStatus":
+      return db.projectApprovalStatus.count({
+        where: { id: { in: ids }, projectId },
+      });
+    case "ProjectLedgerType":
+      return db.projectLedgerType.count({
+        where: { id: { in: ids }, projectId },
+      });
+    case "Contract":
+      return db.contract.count({
+        where: { id: { in: ids }, projectId },
+      });
+    case "CashPayment":
+      return db.cashPayment.count({
+        where: { id: { in: ids }, projectId },
+      });
+    case "Character":
+      return db.character.count({
+        where: { id: { in: ids }, projectId },
+      });
+    case "Actor":
+      return db.actor.count({
+        where: { id: { in: ids }, projectId },
+      });
+    case "Element":
+      return db.element.count({
+        where: { id: { in: ids }, projectId },
+      });
+    case "CastingCandidate":
+      return db.castingCandidate.count({
+        where: { id: { in: ids }, projectId },
+      });
     default: {
       const unexpected: never = entity;
       void unexpected;
-      throw new Error("Объект не найден");
+      throw new NotInProjectError();
     }
   }
 }

@@ -8,6 +8,10 @@ import {
 } from "@/features/contracts/lib/vat";
 import { certificateFormSchema, contractFormSchema } from "@/features/contracts/schemas";
 import { ensureApprovalStatuses } from "@/features/finance/queries-approval-statuses";
+import {
+  assertInProject,
+  isNotInProjectError,
+} from "@/features/memberships/assert-in-project";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { AuditEntityType } from "@/shared/audit/entity-types";
 import { recordAudit } from "@/shared/audit/with-audit";
@@ -101,6 +105,26 @@ export async function createContractAction(
     vatAmountManual: parsed.data.vatAmountManual,
   });
 
+  try {
+    await assertInProject("Company", parsed.data.companyId, projectId);
+    await assertInProject("Counterparty", parsed.data.counterpartyId, projectId);
+    await assertInProject(
+      "ProjectApprovalStatus",
+      parsed.data.statusId,
+      projectId,
+    );
+    if (parsed.data.ledgerTypeId) {
+      await assertInProject(
+        "ProjectLedgerType",
+        parsed.data.ledgerTypeId,
+        projectId,
+      );
+    }
+  } catch (error) {
+    if (isNotInProjectError(error)) return { error: "Объект не найден" };
+    throw error;
+  }
+
   const row = await prisma.contract.create({
     data: {
       projectId,
@@ -163,6 +187,26 @@ export async function updateContractAction(
     vatRate: parsed.data.vatRate,
     vatAmountManual: parsed.data.vatAmountManual,
   });
+
+  try {
+    await assertInProject("Company", parsed.data.companyId, projectId);
+    await assertInProject("Counterparty", parsed.data.counterpartyId, projectId);
+    await assertInProject(
+      "ProjectApprovalStatus",
+      parsed.data.statusId,
+      projectId,
+    );
+    if (parsed.data.ledgerTypeId) {
+      await assertInProject(
+        "ProjectLedgerType",
+        parsed.data.ledgerTypeId,
+        projectId,
+      );
+    }
+  } catch (error) {
+    if (isNotInProjectError(error)) return { error: "Объект не найден" };
+    throw error;
+  }
 
   await prisma.contract.update({
     where: { id: contractId },
@@ -405,13 +449,7 @@ export async function createCertificateAction(
   if (!date) return { error: "Некорректная дата" };
 
   let statusId = parsed.data.statusId;
-  if (!statusId) {
-    const fallback = await defaultUnsignedStatusId(projectId);
-    if (!fallback) return { error: "Нет статусов согласования" };
-    statusId = fallback;
-  }
-
-  let paymentId = parsed.data.paymentId ?? null;
+  const paymentId = parsed.data.paymentId ?? null;
   let contractId = parsed.data.contractId ?? null;
   let companyId = parsed.data.companyId;
   let counterpartyId = parsed.data.counterpartyId;
@@ -430,6 +468,25 @@ export async function createCertificateAction(
     companyId = payment.companyId;
     counterpartyId = payment.counterpartyId;
     if (payment.contractId) contractId = payment.contractId;
+  }
+
+  try {
+    await assertInProject("Company", companyId, projectId);
+    await assertInProject("Counterparty", counterpartyId, projectId);
+    if (statusId) {
+      await assertInProject("ProjectApprovalStatus", statusId, projectId);
+    }
+    if (contractId) await assertInProject("Contract", contractId, projectId);
+    if (paymentId) await assertInProject("CashPayment", paymentId, projectId);
+  } catch (error) {
+    if (isNotInProjectError(error)) return { error: "Объект не найден" };
+    throw error;
+  }
+
+  if (!statusId) {
+    const fallback = await defaultUnsignedStatusId(projectId);
+    if (!fallback) return { error: "Нет статусов согласования" };
+    statusId = fallback;
   }
 
   const vat = computeContractVat({
@@ -510,6 +567,29 @@ export async function updateCertificateAction(
     vatRate: parsed.data.vatRate,
     vatAmountManual: parsed.data.vatAmountManual,
   });
+
+  try {
+    await assertInProject("Company", parsed.data.companyId, projectId);
+    await assertInProject(
+      "Counterparty",
+      parsed.data.counterpartyId,
+      projectId,
+    );
+    await assertInProject(
+      "ProjectApprovalStatus",
+      parsed.data.statusId,
+      projectId,
+    );
+    if (parsed.data.contractId) {
+      await assertInProject("Contract", parsed.data.contractId, projectId);
+    }
+    if (parsed.data.paymentId) {
+      await assertInProject("CashPayment", parsed.data.paymentId, projectId);
+    }
+  } catch (error) {
+    if (isNotInProjectError(error)) return { error: "Объект не найден" };
+    throw error;
+  }
 
   await prisma.certificate.update({
     where: { id: certificateId },

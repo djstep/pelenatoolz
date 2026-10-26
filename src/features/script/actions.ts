@@ -3,6 +3,10 @@
 import { ElementType, SceneResourceCategory } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { refreshAllSluglines, syncSluglineFromScene } from "@/features/screenplay/lib/sync";
+import {
+  assertInProject,
+  isNotInProjectError,
+} from "@/features/memberships/assert-in-project";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { manualRenumberSchema } from "@/features/locations/schemas";
 import {
@@ -193,6 +197,20 @@ export async function createSceneAction(
 
   const resources = parseResourceRows(formData);
   const resourceItemLinks = parseResourceItemLinks(formData);
+
+  try {
+    await assertInProject("Location", parsed.data.locationId, projectId);
+    if (parsed.data.characterIds?.length) {
+      await assertInProject("Character", parsed.data.characterIds, projectId);
+    }
+    if (parsed.data.elementIds?.length) {
+      await assertInProject("Element", parsed.data.elementIds, projectId);
+    }
+  } catch (error) {
+    if (isNotInProjectError(error)) return { error: "Объект не найден" };
+    throw error;
+  }
+
   const tagElementIds = await resolveTagElements(projectId, formData);
   const allElementIds = [
     ...new Set([...(parsed.data.elementIds ?? []), ...tagElementIds]),
@@ -296,6 +314,20 @@ export async function updateSceneAction(
 
   const resources = parseResourceRows(formData);
   const resourceItemLinks = parseResourceItemLinks(formData);
+
+  try {
+    await assertInProject("Location", parsed.data.locationId, projectId);
+    if (parsed.data.characterIds?.length) {
+      await assertInProject("Character", parsed.data.characterIds, projectId);
+    }
+    if (parsed.data.elementIds?.length) {
+      await assertInProject("Element", parsed.data.elementIds, projectId);
+    }
+  } catch (error) {
+    if (isNotInProjectError(error)) return { error: "Объект не найден" };
+    throw error;
+  }
+
   const tagElementIds = await resolveTagElements(projectId, formData);
   const allElementIds = [
     ...new Set([...(parsed.data.elementIds ?? []), ...tagElementIds]),
@@ -310,7 +342,7 @@ export async function updateSceneAction(
       prisma.sceneResource.deleteMany({ where: { sceneId } }),
       prisma.sceneResourceItem.deleteMany({ where: { sceneId } }),
       prisma.scene.update({
-        where: { id: sceneId },
+        where: { id: sceneId, projectId },
         data: {
           episodeNumber: parsed.data.episodeNumber ?? 0,
           number: parsed.data.number,
@@ -372,7 +404,7 @@ export async function updateSceneAction(
     summary: `Обновлена сцена ${parsed.data.number}${parsed.data.postfix ?? ""}`,
   });
 
-  await syncSluglineFromScene(sceneId).catch(() => {});
+  await syncSluglineFromScene(projectId, sceneId).catch(() => {});
 
   revalidateScript(projectId, sceneId);
   return { success: "Сцена сохранена" };

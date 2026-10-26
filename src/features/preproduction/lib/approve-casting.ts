@@ -2,6 +2,7 @@ import type { Prisma } from "@prisma/client";
 import { CastingCandidateStatus } from "@prisma/client";
 import type { CharacterCastSnapshot } from "@/features/preproduction/lib/snapshots";
 import { fullNameFromParts } from "@/features/preproduction/lib/snapshots";
+import { assertInProject } from "@/features/memberships/assert-in-project";
 import { prisma } from "@/shared/db/prisma";
 
 type PersonWithRates = {
@@ -58,8 +59,12 @@ export async function approveCastingCandidate(
   });
   if (!candidate) throw new Error("CANDIDATE_NOT_FOUND");
 
+  await assertInProject("CastingCandidate", candidate.id, projectId);
+  await assertInProject("Character", candidate.characterId, projectId);
+
   const hadApproved = await prisma.castingCandidate.findFirst({
     where: {
+      projectId,
       characterId: candidate.characterId,
       status: CastingCandidateStatus.APPROVED,
       id: { not: candidateId },
@@ -72,6 +77,7 @@ export async function approveCastingCandidate(
   await prisma.$transaction(async (tx) => {
     await tx.castingCandidate.updateMany({
       where: {
+        projectId,
         characterId: candidate.characterId,
         id: { not: candidateId },
         status: { not: CastingCandidateStatus.REJECTED },
@@ -83,7 +89,7 @@ export async function approveCastingCandidate(
     });
 
     await tx.castingCandidate.update({
-      where: { id: candidateId },
+      where: { id: candidateId, projectId },
       data: {
         status: CastingCandidateStatus.APPROVED,
         statusChangedAt: new Date(),
@@ -91,7 +97,7 @@ export async function approveCastingCandidate(
     });
 
     await tx.character.update({
-      where: { id: candidate.characterId },
+      where: { id: candidate.characterId, projectId },
       data: {
         castSnapshot: snapshot as unknown as Prisma.InputJsonValue,
         sourceCastingCandidateId: candidateId,
@@ -118,7 +124,7 @@ export async function approveCastingCandidate(
 
     if (existingActor) {
       await tx.actor.update({
-        where: { id: existingActor.id },
+        where: { id: existingActor.id, projectId },
         data: actorData,
       });
     } else {

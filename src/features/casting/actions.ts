@@ -4,6 +4,10 @@ import { CastingCandidateStatus, Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { approveCastingCandidate } from "@/features/preproduction/lib/approve-casting";
+import {
+  assertInProject,
+  isNotInProjectError,
+} from "@/features/memberships/assert-in-project";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { prisma } from "@/shared/db/prisma";
 import { AuditEntityType } from "@/shared/audit/entity-types";
@@ -124,6 +128,15 @@ export async function createCastingPersonAction(
   const characterId = String(formData.get("characterId") ?? "").trim();
   const { skills, physicalParams, ...personData } = parsed.data;
 
+  if (characterId) {
+    try {
+      await assertInProject("Character", characterId, projectId);
+    } catch (error) {
+      if (isNotInProjectError(error)) return { error: "Объект не найден" };
+      throw error;
+    }
+  }
+
   const person = await prisma.castingPerson.create({
     data: {
       projectId,
@@ -201,7 +214,8 @@ export async function updateCastingCandidateStatusAction(
           ? `${result.personName} утверждён на роль «${result.characterName}» (замена предыдущего актёра)`
           : `${result.personName} утверждён на роль «${result.characterName}»`,
       };
-    } catch {
+    } catch (error) {
+      if (isNotInProjectError(error)) return { error: "Объект не найден" };
       return { error: "Не удалось утвердить кандидата" };
     }
   }

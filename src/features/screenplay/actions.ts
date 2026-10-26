@@ -3,7 +3,10 @@
 import { ScriptBlockType, TimingMode } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { assertInProject } from "@/features/memberships/assert-in-project";
+import {
+  assertInProject,
+  isNotInProjectError,
+} from "@/features/memberships/assert-in-project";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import type { ScreenplayBlock } from "@/features/screenplay/lib/block-types";
 import {
@@ -238,7 +241,7 @@ export async function applyLibrettoSyncAction(
   try {
     result = await applyScenesFromPreview(projectId, scenes, formData);
   } catch (error) {
-    if (error instanceof Error && error.message === "Объект не найден") {
+    if (isNotInProjectError(error)) {
       return { error: "Объект не найден" };
     }
     throw error;
@@ -269,7 +272,8 @@ export async function syncSceneSluglineAction(
 ): Promise<void> {
   const ctx = await requireProjectContext(projectId);
   if (!ctx.can("script:write")) return;
-  await syncSluglineFromScene(sceneId);
+  await assertInProject("Scene", sceneId, projectId);
+  await syncSluglineFromScene(projectId, sceneId);
   revalidateScreenplay(projectId);
 }
 
@@ -640,6 +644,16 @@ export async function createScriptCommentAction(
   const version = await getScriptVersion(projectId, versionId);
   if (!version) return { error: "Версия не найдена" };
 
+  const blockIds = [payload.startBlockId, payload.endBlockId].filter(
+    (id) => id.trim().length > 0 && !id.startsWith("new-"),
+  );
+  try {
+    await assertInProject("ScriptBlock", blockIds, projectId);
+  } catch (error) {
+    if (isNotInProjectError(error)) return { error: "Объект не найден" };
+    throw error;
+  }
+
   const comment = await prisma.scriptComment.create({
     data: {
       scriptVersionId: versionId,
@@ -672,7 +686,7 @@ export async function replyScriptCommentAction(
   try {
     await assertInProject("ScriptVersion", versionId, projectId);
   } catch (error) {
-    if (error instanceof Error && error.message === "Объект не найден") {
+    if (isNotInProjectError(error)) {
       return { error: "Объект не найден" };
     }
     throw error;

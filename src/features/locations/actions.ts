@@ -8,7 +8,10 @@ import {
 } from "@/features/locations/schemas";
 import type { LocationScoutSnapshot } from "@/features/preproduction/lib/snapshots";
 import { parseScoutSnapshot } from "@/features/preproduction/lib/snapshots";
-import { assertInProject } from "@/features/memberships/assert-in-project";
+import {
+  assertInProject,
+  isNotInProjectError,
+} from "@/features/memberships/assert-in-project";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { prisma } from "@/shared/db/prisma";
 import { AuditEntityType } from "@/shared/audit/entity-types";
@@ -167,7 +170,7 @@ export async function addLocationPhotoAction(
   try {
     await assertInProject("Location", locationId, projectId);
   } catch (error) {
-    if (error instanceof Error && error.message === "Объект не найден") {
+    if (isNotInProjectError(error)) {
       return { error: "Объект не найден" };
     }
     throw error;

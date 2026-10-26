@@ -2,6 +2,10 @@
 
 import { ActorRoleType, ContractorType, Gender } from "@prisma/client";
 import { revalidatePath } from "next/cache";
+import {
+  assertInProject,
+  isNotInProjectError,
+} from "@/features/memberships/assert-in-project";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { prisma } from "@/shared/db/prisma";
 import { AuditEntityType } from "@/shared/audit/entity-types";
@@ -119,6 +123,15 @@ export async function createActorAction(
     return { error: "Проверьте данные актёра" };
   }
 
+  if (parsed.data.characterId) {
+    try {
+      await assertInProject("Character", parsed.data.characterId, projectId);
+    } catch (error) {
+      if (isNotInProjectError(error)) return { error: "Объект не найден" };
+      throw error;
+    }
+  }
+
   const canFin = ctx.canFinanceWrite("actors");
   const {
     shiftRate,
@@ -189,6 +202,15 @@ export async function updateActorAction(
   const parsed = actorSchema.safeParse(actorFormData(formData));
   if (!parsed.success) {
     return { error: "Проверьте данные актёра" };
+  }
+
+  if (parsed.data.characterId) {
+    try {
+      await assertInProject("Character", parsed.data.characterId, projectId);
+    } catch (error) {
+      if (isNotInProjectError(error)) return { error: "Объект не найден" };
+      throw error;
+    }
   }
 
   const canFin = ctx.canFinanceWrite("actors");

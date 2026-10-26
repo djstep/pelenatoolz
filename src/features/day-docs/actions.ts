@@ -17,6 +17,10 @@ import {
   type ResourceTimingProposal,
 } from "@/features/day-docs/lib/compute-call-timings";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
+import {
+  assertInProject,
+  isNotInProjectError,
+} from "@/features/memberships/assert-in-project";
 import { AuditEntityType } from "@/shared/audit/entity-types";
 import { recordAudit } from "@/shared/audit/with-audit";
 import { prisma } from "@/shared/db/prisma";
@@ -224,6 +228,20 @@ export async function saveTimeSlotsAction(
     return { error: parsed.error.issues[0]?.message ?? "Проверьте слоты" };
   }
 
+  const sceneIds = [
+    ...new Set(
+      parsed.data.rows
+        .map((row) => row.sceneId)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  try {
+    await assertInProject("Scene", sceneIds, projectId);
+  } catch (error) {
+    if (isNotInProjectError(error)) return { error: "Объект не найден" };
+    throw error;
+  }
+
   await prisma.$transaction([
     prisma.shootDayTimeSlot.deleteMany({ where: { shootDayId } }),
     ...parsed.data.rows.map((row, index) =>
@@ -281,6 +299,14 @@ export async function saveActorCallsAction(
       r.readyTime ||
       r.wrapTime,
   );
+
+  const actorIds = [...new Set(parsed.data.rows.map((row) => row.actorId))];
+  try {
+    await assertInProject("Actor", actorIds, projectId);
+  } catch (error) {
+    if (isNotInProjectError(error)) return { error: "Объект не найден" };
+    throw error;
+  }
 
   await prisma.$transaction([
     prisma.shootDayActorCall.deleteMany({ where: { shootDayId } }),
@@ -379,6 +405,14 @@ export async function saveResourceUsagesAction(
   const parsed = saveResourceUsagesSchema.safeParse({ rows });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Проверьте посменные ресурсы" };
+  }
+
+  const itemIds = [...new Set(parsed.data.rows.map((row) => row.itemId))];
+  try {
+    await assertInProject("ResourceItem", itemIds, projectId);
+  } catch (error) {
+    if (isNotInProjectError(error)) return { error: "Объект не найден" };
+    throw error;
   }
 
   await prisma.$transaction(
@@ -579,6 +613,13 @@ export async function applyRecalculateActorTimingsAction(
 
   const gate = await assertCallSheetWrite(projectId, shootDayId);
   if ("error" in gate) return gate;
+
+  try {
+    await assertInProject("Actor", actorIds, projectId);
+  } catch (error) {
+    if (isNotInProjectError(error)) return { error: "Объект не найден" };
+    throw error;
+  }
 
   for (const proposal of toApply) {
     const existing = await prisma.shootDayActorCall.findUnique({

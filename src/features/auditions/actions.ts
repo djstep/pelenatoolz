@@ -2,6 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import {
+  assertInProject,
+  isNotInProjectError,
+} from "@/features/memberships/assert-in-project";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { parseDateInput } from "@/features/schedule/lib/date-range";
 import { prisma } from "@/shared/db/prisma";
@@ -123,6 +127,23 @@ export async function createAuditionAction(
   });
   if (people.length !== personIds.length) {
     return { error: "Один из кандидатов не найден" };
+  }
+
+  const characterIds = [
+    ...new Set(
+      data.actors
+        .map((actor) => actor.characterId)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  try {
+    if (data.sceneId) {
+      await assertInProject("Scene", data.sceneId, projectId);
+    }
+    await assertInProject("Character", characterIds, projectId);
+  } catch (error) {
+    if (isNotInProjectError(error)) return { error: "Объект не найден" };
+    throw error;
   }
 
   await ensureCastingCandidates(projectId, data.actors);
