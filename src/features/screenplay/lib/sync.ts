@@ -427,22 +427,28 @@ export async function linkBlocksToExistingScenes(
     ]),
   );
 
+  // sceneId из браузера оставляем, только если это сцена этого проекта.
+  const projectSceneIds = new Set(scenes.map((scene) => scene.id));
+  const trustedSceneId = (sceneId: string | null) =>
+    sceneId && projectSceneIds.has(sceneId) ? sceneId : null;
+
   let currentSceneId: string | null = null;
   return blocks.map((block) => {
+    const ownSceneId = trustedSceneId(block.sceneId);
     if (block.type === "SLUGLINE") {
       const parsed = parseSlugline(block.content);
       if (parsed) {
         const id =
           byKey.get(
             sceneKey(parsed.episodeNumber, parsed.number, parsed.postfix),
-          ) ?? block.sceneId;
+          ) ?? ownSceneId;
         currentSceneId = id ?? null;
-        return { ...block, sceneId: id ?? block.sceneId };
+        return { ...block, sceneId: id };
       }
     }
     return {
       ...block,
-      sceneId: block.sceneId ?? currentSceneId,
+      sceneId: ownSceneId ?? currentSceneId,
     };
   });
 }

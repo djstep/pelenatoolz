@@ -272,7 +272,12 @@ export async function syncSceneSluglineAction(
 ): Promise<void> {
   const ctx = await requireProjectContext(projectId);
   if (!ctx.can("script:write")) return;
-  await assertInProject("Scene", sceneId, projectId);
+  try {
+    await assertInProject("Scene", sceneId, projectId);
+  } catch (error) {
+    if (isNotInProjectError(error)) return;
+    throw error;
+  }
   await syncSluglineFromScene(projectId, sceneId);
   revalidateScreenplay(projectId);
 }
