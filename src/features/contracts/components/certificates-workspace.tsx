@@ -1,6 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { deleteCertificateAction } from "@/features/contracts/actions";
 import {
   CertificateFormModal,
   type CertificateFormDefaults,
@@ -17,6 +19,7 @@ import { formatDateShort } from "@/shared/i18n/format-date";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
+import { toast } from "@/shared/ui/toast";
 import { cn } from "@/shared/lib/cn";
 
 type StatusOpt = { id: string; name: string; color: string };
@@ -129,6 +132,8 @@ export function CertificatesWorkspace({
     orderedColumns,
   } = useTableLayout(`certificates:${projectId}`, columns);
 
+  const router = useRouter();
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [statusIds, setStatusIds] = useState<Set<string>>(new Set());
   const [counterpartyId, setCounterpartyId] = useState(
@@ -239,6 +244,21 @@ export function CertificatesWorkspace({
       comment: row.comment,
     });
     setModalOpen(true);
+  }
+
+  function removeCertificate(row: CertificateListItem) {
+    if (!confirm(`Удалить акт № ${row.number}?`)) return;
+    setDeletingId(row.id);
+    void deleteCertificateAction(projectId, row.id)
+      .then((res) => {
+        if (res.error) {
+          toast.error(res.error);
+          return;
+        }
+        toast.success(res.success ?? "Акт удалён");
+        router.refresh();
+      })
+      .finally(() => setDeletingId(null));
   }
 
   function openCopy(row: CertificateListItem) {
@@ -539,6 +559,15 @@ export function CertificatesWorkspace({
                     </Button>
                     <Button type="button" variant="ghost" onClick={() => openCopy(row)}>
                       На основе
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="text-[var(--danger)]"
+                      disabled={deletingId === row.id}
+                      onClick={() => removeCertificate(row)}
+                    >
+                      Удалить
                     </Button>
                   </td>
                 ) : null}

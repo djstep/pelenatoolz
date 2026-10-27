@@ -123,7 +123,6 @@ export function ContractFormModal({
       ? String(defaults.vatAmount)
       : "",
   );
-  const [newStatus, setNewStatus] = useState("");
 
   useEffect(() => {
     if (!open) return;
@@ -400,47 +399,28 @@ export function ContractFormModal({
           </>
         ) : null}
 
-        <div>
-          <Label htmlFor="statusId">Статус</Label>
-          <div className="flex flex-wrap gap-2">
-            <Select
-              id="statusId"
-              name="statusId"
-              required
-              value={statusId}
-              onChange={(e) => setStatusId(e.target.value)}
-            >
-              {statuses.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </Select>
-            <Input
-              placeholder="Свой статус…"
-              value={newStatus}
-              onChange={(e) => setNewStatus(e.target.value)}
-              className="max-w-[10rem]"
-            />
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={async () => {
-                const r = await quickCreateApprovalStatusAction(
-                  projectId,
-                  newStatus,
-                );
-                if ("id" in r) {
-                  setStatuses((prev) => [...prev, r]);
-                  setStatusId(r.id);
-                  setNewStatus("");
-                }
-              }}
-            >
-              +
-            </Button>
-          </div>
-        </div>
+        <EntityPicker
+          name="statusId"
+          label="Статус"
+          options={statuses}
+          value={statusId}
+          onChange={setStatusId}
+          allowClear={false}
+          createTitle="Новый статус"
+          createLabel="+ Добавить статус"
+          onQuickCreate={async (fd) => {
+            const name = String(fd.get("name") ?? "");
+            const r = await quickCreateApprovalStatusAction(projectId, name);
+            if ("id" in r) {
+              // Сервер может вернуть уже существующий статус с тем же названием.
+              setStatuses((prev) =>
+                prev.some((x) => x.id === r.id) ? prev : [...prev, r],
+              );
+              setStatusId(r.id);
+            }
+            return r;
+          }}
+        />
 
         <div>
           <Label htmlFor="tags">Теги</Label>

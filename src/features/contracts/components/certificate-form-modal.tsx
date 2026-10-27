@@ -1,9 +1,11 @@
 "use client";
 
 import { useActionState, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   attachCertificateFileAction,
   createCertificateAction,
+  deleteCertificateAction,
   updateCertificateAction,
   type ContractsActionState,
 } from "@/features/contracts/actions";
@@ -28,7 +30,7 @@ import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Modal } from "@/shared/ui/modal";
 import { Select } from "@/shared/ui/select";
-import { useActionToast } from "@/shared/ui/toast";
+import { toast, useActionToast } from "@/shared/ui/toast";
 
 const initial: ContractsActionState = {};
 
@@ -122,6 +124,8 @@ export function CertificateFormModal({
     : createCertificateAction.bind(null, projectId);
   const [state, action, pending] = useActionState(bound, initial);
   useActionToast(state);
+  const router = useRouter();
+  const [deleting, setDeleting] = useState(false);
 
   const [companyOpts, setCompanyOpts] = useState(companies);
   const [cpOpts, setCpOpts] = useState(counterparties);
@@ -255,6 +259,31 @@ export function CertificateFormModal({
           <Button type="button" variant="secondary" onClick={onClose}>
             Отмена
           </Button>
+          {isEdit ? (
+            <Button
+              type="button"
+              variant="danger"
+              className="ml-auto"
+              disabled={pending || uploading || deleting}
+              onClick={() => {
+                if (!confirm("Удалить акт?")) return;
+                setDeleting(true);
+                void deleteCertificateAction(projectId, defaults!.id!)
+                  .then((res) => {
+                    if (res.error) {
+                      toast.error(res.error);
+                      return;
+                    }
+                    toast.success(res.success ?? "Акт удалён");
+                    onClose();
+                    router.refresh();
+                  })
+                  .finally(() => setDeleting(false));
+              }}
+            >
+              {deleting ? "…" : "Удалить"}
+            </Button>
+          ) : null}
           {state.error ? (
             <span className="w-full text-sm text-[var(--danger)]">
               {state.error}
@@ -354,9 +383,13 @@ export function CertificateFormModal({
 
         <div>
           <Label htmlFor="contractId">Договор</Label>
+          {/* Заблокированный список браузер не отправляет — значение уходит скрытым полем. */}
+          {lockContract ? (
+            <input type="hidden" name="contractId" value={contractId} />
+          ) : null}
           <Select
             id="contractId"
-            name="contractId"
+            name={lockContract ? undefined : "contractId"}
             value={contractId}
             disabled={lockContract}
             onChange={(e) => {
@@ -377,9 +410,12 @@ export function CertificateFormModal({
           <>
             <div>
               <Label htmlFor="paymentId">Платёж</Label>
+              {lockPayment ? (
+                <input type="hidden" name="paymentId" value={paymentId} />
+              ) : null}
               <Select
                 id="paymentId"
-                name="paymentId"
+                name={lockPayment ? undefined : "paymentId"}
                 value={paymentId}
                 disabled={lockPayment}
                 onChange={(e) => {

@@ -356,12 +356,23 @@ export async function quickCreateApprovalStatusAction(
   );
   const hex = normalizeApprovalColor(color) ?? "#64748b";
 
+  // Статус с таким же названием (без учёта регистра) уже есть — выбираем его, а не плодим дубль.
+  const findExisting = () =>
+    prisma.projectApprovalStatus.findFirst({
+      where: { projectId, name: { equals: trimmed, mode: "insensitive" } },
+      select: { id: true, name: true, color: true },
+    });
+
+  const existing = await findExisting();
+  if (existing) return existing;
+
+  let row: { id: string; name: string; color: string };
   try {
     const max = await prisma.projectApprovalStatus.aggregate({
       where: { projectId },
       _max: { sortOrder: true },
     });
-    const row = await prisma.projectApprovalStatus.create({
+    row = await prisma.projectApprovalStatus.create({
       data: {
         projectId,
         name: trimmed,
@@ -369,13 +380,25 @@ export async function quickCreateApprovalStatusAction(
         isSystem: false,
         sortOrder: (max._max.sortOrder ?? 100) + 10,
       },
+      select: { id: true, name: true, color: true },
     });
-    revalidatePath(`/ru/projects/${projectId}/finance/settings`);
-    revalidateContracts(projectId);
-    return { id: row.id, name: row.name, color: row.color };
   } catch {
-    return { error: "Статус с таким названием уже есть" };
+    // Тот же статус только что создал кто-то другой.
+    const raced = await findExisting();
+    if (raced) return raced;
+    return { error: "Не удалось добавить статус" };
   }
+
+  await recordAudit(ctx, {
+    projectId,
+    entityType: AuditEntityType.approvalStatus,
+    entityId: row.id,
+    action: "CREATE",
+    summary: `Добавлен статус ${row.name}`,
+  });
+  revalidatePath(`/ru/projects/${projectId}/finance/settings`);
+  revalidateContracts(projectId);
+  return row;
 }
 
 export async function attachContractFileAction(
