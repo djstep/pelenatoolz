@@ -257,6 +257,8 @@ export function ContractFormModal({
             <Select
               id="ledgerTypeId"
               name="ledgerTypeId"
+              // Без ширины список в строке сжимался до «—» и обрезал название.
+              className="min-w-[12rem] flex-1"
               value={ledgerTypeId}
               onChange={(e) => setLedgerTypeId(e.target.value)}
             >
