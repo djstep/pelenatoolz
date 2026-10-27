@@ -15,23 +15,34 @@ function EditableDiffCell({
   field,
   oldVal,
   newVal,
-  defaultChecked,
+  isNew,
+  truncate,
   children,
 }: {
   sceneKey: string;
   field: string;
   oldVal?: string | null;
   newVal?: string | null;
-  defaultChecked?: boolean;
+  /** Сцены ещё нет в либретто — переносим все поля. */
+  isNew: boolean;
+  /** Сколько символов старого значения показывать; сравнение — по полному тексту. */
+  truncate?: number;
   children: ReactNode;
 }) {
   const changed = (oldVal ?? "") !== (newVal ?? "");
+  // У существующей сцены сразу отмечаем только реально изменённые поля.
+  // Пустое новое значение не отмечаем: иначе оно сотрёт данные в либретто.
+  const suggested = isNew || (changed && (newVal ?? "").trim() !== "");
+  const shownOld =
+    truncate && oldVal && oldVal.length > truncate
+      ? `${oldVal.slice(0, truncate)}…`
+      : oldVal;
   return (
     <td className={cn("py-2 pr-2 align-top", changed && "bg-yellow-500/10")}>
-      {oldVal != null && oldVal !== "" ? (
+      {shownOld != null && shownOld !== "" ? (
         <>
           <div className="text-[10px] text-[var(--muted-fg)]">Старое</div>
-          <div className="mb-1 text-[var(--muted-fg)]">{oldVal}</div>
+          <div className="mb-1 text-[var(--muted-fg)]">{shownOld}</div>
         </>
       ) : null}
       <div className="text-[10px] text-[var(--muted-fg)]">Новое</div>
@@ -41,7 +52,7 @@ function EditableDiffCell({
           <input
             type="checkbox"
             name={`upd_${sceneKey}_${field}`}
-            defaultChecked={defaultChecked ?? true}
+            defaultChecked={suggested}
             className="accent-[var(--accent)]"
           />
           обновить
@@ -125,7 +136,7 @@ export function LibrettoPreviewTable({ scenes }: { scenes: ImportPreviewScene[] 
                     ? intExtLabels[row.intExt as IntExt] ?? row.intExt
                     : undefined
                 }
-                defaultChecked={!row.existingId}
+                isNew={!row.existingId}
               >
                 <select
                   name={`scene_${row.key}_intExt`}
@@ -145,7 +156,7 @@ export function LibrettoPreviewTable({ scenes }: { scenes: ImportPreviewScene[] 
                 field="location"
                 oldVal={row.old?.location}
                 newVal={row.location}
-                defaultChecked={!row.existingId}
+                isNew={!row.existingId}
               >
                 <Input
                   name={`scene_${row.key}_location`}
@@ -158,7 +169,7 @@ export function LibrettoPreviewTable({ scenes }: { scenes: ImportPreviewScene[] 
                 field="characters"
                 oldVal={row.old?.characters.join(", ")}
                 newVal={row.characters.join(", ")}
-                defaultChecked={!row.existingId}
+                isNew={!row.existingId}
               >
                 <Input
                   name={`scene_${row.key}_characters`}
@@ -171,7 +182,7 @@ export function LibrettoPreviewTable({ scenes }: { scenes: ImportPreviewScene[] 
                 field="timing"
                 oldVal={row.old?.timing}
                 newVal={row.timing}
-                defaultChecked={!row.existingId}
+                isNew={!row.existingId}
               >
                 <Input
                   name={`scene_${row.key}_timing`}
@@ -191,7 +202,7 @@ export function LibrettoPreviewTable({ scenes }: { scenes: ImportPreviewScene[] 
                 newVal={
                   row.scriptDay != null ? String(row.scriptDay) : undefined
                 }
-                defaultChecked={!row.existingId}
+                isNew={!row.existingId}
               >
                 <Input
                   name={`scene_${row.key}_scriptDay`}
@@ -215,7 +226,7 @@ export function LibrettoPreviewTable({ scenes }: { scenes: ImportPreviewScene[] 
                     ? dayNightLabels[row.dayNight as DayNight] ?? row.dayNight
                     : undefined
                 }
-                defaultChecked={!row.existingId}
+                isNew={!row.existingId}
               >
                 <select
                   name={`scene_${row.key}_dayNight`}
@@ -233,9 +244,10 @@ export function LibrettoPreviewTable({ scenes }: { scenes: ImportPreviewScene[] 
               <EditableDiffCell
                 sceneKey={row.key}
                 field="script"
-                oldVal={row.old?.script?.slice(0, 80)}
-                newVal={row.script?.slice(0, 80)}
-                defaultChecked={!row.existingId}
+                oldVal={row.old?.script}
+                newVal={row.script}
+                truncate={80}
+                isNew={!row.existingId}
               >
                 <textarea
                   name={`scene_${row.key}_script`}

@@ -119,5 +119,6 @@ export function buildLibrettoPreviewFromBlocks(
 export type LibrettoSyncResult = {
   created: number;
   updated: number;
+  unchanged: number;
   skipped: number;
 };

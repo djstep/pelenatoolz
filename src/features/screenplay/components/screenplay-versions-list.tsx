@@ -6,8 +6,10 @@ import { useState, useTransition } from "react";
 import {
   deleteScriptVersionAction,
   duplicateScriptVersionAction,
+  setScriptVersionCurrentAction,
   setScriptVersionLockedAction,
 } from "@/features/screenplay/actions";
+import { confirmMakeCurrent } from "@/features/screenplay/lib/confirm-make-current";
 import type { ScriptVersionOverviewRow } from "@/features/screenplay/lib/version-types";
 import { ScriptVersionTitleEditor } from "@/features/screenplay/components/script-version-title-editor";
 import { ScriptVersionNoteEditor } from "@/features/screenplay/components/script-version-note-editor";
@@ -107,6 +109,19 @@ export function ScreenplayVersionsList({
       toast.success(
         version.isLocked ? "Версия разблокирована" : "Версия заблокирована",
       );
+      router.refresh();
+    });
+  }
+
+  function makeCurrent(version: ScriptVersionOverviewRow) {
+    if (!confirmMakeCurrent(version)) return;
+    runAction(async () => {
+      const result = await setScriptVersionCurrentAction(projectId, version.id);
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success(result.success ?? "Версия отмечена как текущая");
       router.refresh();
     });
   }
@@ -259,6 +274,18 @@ export function ScreenplayVersionsList({
                         <span className="shrink-0 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium text-emerald-400">
                           Текущая
                         </span>
+                      ) : canWrite ? (
+                        <button
+                          type="button"
+                          disabled={pending}
+                          className="shrink-0 rounded-full border border-[var(--border)] px-2 py-0.5 text-[10px] font-medium text-[var(--muted-fg)] hover:border-emerald-500/50 hover:text-emerald-400 disabled:opacity-50"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            makeCurrent(version);
+                          }}
+                        >
+                          Сделать текущей
+                        </button>
                       ) : null}
                     </div>
                   </td>

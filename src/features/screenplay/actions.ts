@@ -262,7 +262,10 @@ export async function applyLibrettoSyncAction(
 
   revalidateScreenplay(projectId);
   return {
-    success: `Либретто обновлено: создано сцен ${result.created}, обновлено ${result.updated}, пропущено ${result.skipped}`,
+    success:
+      `Либретто обновлено: создано сцен ${result.created}, обновлено ${result.updated}` +
+      (result.unchanged ? `, без изменений ${result.unchanged}` : "") +
+      (result.skipped ? `, пропущено ${result.skipped}` : ""),
   };
 }
 
@@ -483,8 +486,20 @@ export async function setScriptVersionCurrentAction(
 
   const version = await getScriptVersion(projectId, versionId);
   if (!version) return { error: "Версия не найдена" };
+  if (version.isCurrent) return { success: "Версия уже текущая" };
 
   await setCurrentScriptVersion(projectId, versionId);
+
+  await recordAudit(ctx, {
+    projectId,
+    entityType: AuditEntityType.scriptVersion,
+    entityId: versionId,
+    action: "UPDATE",
+    summary: `Текущей выбрана версия сценария ${version.versionNumber}${
+      version.title?.trim() ? ` «${version.title.trim()}»` : ""
+    }`,
+  });
+
   revalidateScreenplay(projectId);
   return { success: "Версия отмечена как текущая (без обновления либретто)" };
 }

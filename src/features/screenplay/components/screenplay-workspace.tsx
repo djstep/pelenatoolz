@@ -15,8 +15,10 @@ import {
   exportScreenplayFountainAction,
   exportScreenplayPrintHtmlAction,
   saveScreenplayVersionAction,
+  setScriptVersionCurrentAction,
   updateProjectTimingAction,
 } from "@/features/screenplay/actions";
+import { confirmMakeCurrent } from "@/features/screenplay/lib/confirm-make-current";
 import { quickCreateCharacterAction } from "@/features/script/actions";
 import type { TimingMode } from "@prisma/client";
 import { cn } from "@/shared/lib/cn";
@@ -171,6 +173,32 @@ export function ScreenplayWorkspace({
     [projectId],
   );
 
+  function makeCurrent() {
+    if (!confirmMakeCurrent(version)) return;
+    startTransition(async () => {
+      const result = await setScriptVersionCurrentAction(projectId, version.id);
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success(result.success ?? "Версия отмечена как текущая");
+      router.refresh();
+    });
+  }
+
+  function openLibretto() {
+    // Окно сравнивает либретто с сохранённым текстом версии, а не с тем, что сейчас в редакторе.
+    if (
+      isDirty &&
+      !window.confirm(
+        "В редакторе есть несохранённые правки. В либретто попадёт последний сохранённый текст версии, без этих правок.\n\nСначала сохраните версию, если правки нужны в либретто. Продолжить без них?",
+      )
+    ) {
+      return;
+    }
+    setLibrettoOpen(true);
+  }
+
   function persist(mode: "same" | "new", title?: string) {
     if (!pendingBlocks) return;
     startTransition(async () => {
@@ -271,6 +299,15 @@ export function ScreenplayWorkspace({
             />
             {version.isCurrent ? (
               <span className="text-sm font-normal text-emerald-400">(текущая)</span>
+            ) : canWrite ? (
+              <button
+                type="button"
+                disabled={pending}
+                onClick={makeCurrent}
+                className="rounded-full border border-[var(--border)] px-2.5 py-0.5 text-xs text-[var(--muted-fg)] hover:border-emerald-500/50 hover:text-emerald-400 disabled:opacity-50"
+              >
+                Сделать текущей
+              </button>
             ) : null}
             {version.isLocked ? (
               <span className="text-sm font-normal text-amber-300">(заблокирована)</span>
@@ -317,7 +354,7 @@ export function ScreenplayWorkspace({
         sidebarExports={{
           exporting,
           pending,
-          onLibretto: () => setLibrettoOpen(true),
+          onLibretto: openLibretto,
           onExportFountain: () => void handleExportFountain(),
           onExportDocx: () => void handleExportDocx(),
           onExportPdf: () => void handleExportPdf(),

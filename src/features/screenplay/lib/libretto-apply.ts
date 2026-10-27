@@ -39,6 +39,8 @@ export async function applyScenesFromPreview(
 ) {
   let created = 0;
   let updated = 0;
+  // Сцена выбрана, но ни одно поле не отмечено — в либретто ничего не поменялось.
+  let unchanged = 0;
   let skipped = 0;
 
   await assertInProject(
@@ -140,14 +142,18 @@ export async function applyScenesFromPreview(
       data.scriptContent = scene.script;
     }
 
+    let touched = false;
+
     if (Object.keys(data).length > 0) {
       await prisma.scene.update({
         where: { id: scene.existingId, projectId },
         data,
       });
+      touched = true;
     }
 
     if (take.location && scene.location) {
+      touched = true;
       const loc =
         (await prisma.location.findFirst({
           where: {
@@ -167,6 +173,7 @@ export async function applyScenesFromPreview(
     }
 
     if (take.characters) {
+      touched = true;
       const characterIds: string[] = [];
       for (const name of scene.characters) {
         const ch =
@@ -189,8 +196,9 @@ export async function applyScenesFromPreview(
       }
     }
 
-    updated += 1;
+    if (touched) updated += 1;
+    else unchanged += 1;
   }
 
-  return { created, updated, skipped };
+  return { created, updated, unchanged, skipped };
 }
