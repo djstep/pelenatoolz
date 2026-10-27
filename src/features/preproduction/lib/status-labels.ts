@@ -6,6 +6,7 @@ export const castingStatusLabels: Record<CastingCandidateStatus, string> = {
   CASTING: "Кастинг",
   UNDER_REVIEW: "На рассмотрении",
   APPROVED: "Утверждён",
+  RESERVE: "Резерв",
   REJECTED: "Отказ",
 };
 

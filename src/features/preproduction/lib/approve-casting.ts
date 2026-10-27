@@ -80,7 +80,10 @@ export async function approveCastingCandidate(
         projectId,
         characterId: candidate.characterId,
         id: { not: candidateId },
-        status: { not: CastingCandidateStatus.REJECTED },
+        // Резерв — запасной вариант на роль: при утверждении другого его не трогаем.
+        status: {
+          notIn: [CastingCandidateStatus.REJECTED, CastingCandidateStatus.RESERVE],
+        },
       },
       data: {
         status: CastingCandidateStatus.REJECTED,

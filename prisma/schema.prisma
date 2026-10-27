@@ -175,6 +175,7 @@ enum CastingCandidateStatus {
   CASTING
   UNDER_REVIEW
   APPROVED
+  RESERVE
   REJECTED
 }
 
