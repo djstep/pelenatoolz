@@ -156,7 +156,7 @@ export function MultiSelect({
                     "flex h-4 w-4 shrink-0 items-center justify-center rounded border",
                     isSelected
                       ? "border-[var(--accent)] bg-[var(--accent)] text-white"
-                      : "border-[var(--border-strong)] bg-white/5",
+                      : "border-[var(--border-strong)] bg-[rgb(var(--tint-rgb)/0.05)]",
                   )}
                   aria-hidden
                 >
@@ -186,7 +186,7 @@ export function MultiSelect({
               key={selected[index]}
               type="button"
               disabled={disabled}
-              className="rounded-md border border-[var(--border)] bg-white/5 px-2 py-0.5 text-xs text-[var(--muted-fg)] hover:bg-white/10"
+              className="rounded-md border border-[var(--border)] bg-[rgb(var(--tint-rgb)/0.05)] px-2 py-0.5 text-xs text-[var(--muted-fg)] hover:bg-[rgb(var(--tint-rgb)/0.1)]"
               onClick={() => toggleValue(selected[index]!)}
             >
               {label} ×

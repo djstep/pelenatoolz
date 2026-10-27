@@ -298,19 +298,19 @@ export function ScreenplayWorkspace({
               variant="heading"
             />
             {version.isCurrent ? (
-              <span className="text-sm font-normal text-emerald-400">(текущая)</span>
+              <span className="text-sm font-normal text-[var(--tone-success-strong)]">(текущая)</span>
             ) : canWrite ? (
               <button
                 type="button"
                 disabled={pending}
                 onClick={makeCurrent}
-                className="rounded-full border border-[var(--border)] px-2.5 py-0.5 text-xs text-[var(--muted-fg)] hover:border-emerald-500/50 hover:text-emerald-400 disabled:opacity-50"
+                className="rounded-full border border-[var(--border)] px-2.5 py-0.5 text-xs text-[var(--muted-fg)] hover:border-emerald-500/50 hover:text-[var(--tone-success-strong)] disabled:opacity-50"
               >
                 Сделать текущей
               </button>
             ) : null}
             {version.isLocked ? (
-              <span className="text-sm font-normal text-amber-300">(заблокирована)</span>
+              <span className="text-sm font-normal text-[var(--tone-warning)]">(заблокирована)</span>
             ) : null}
           </div>
           <div className="mt-2 max-w-2xl">

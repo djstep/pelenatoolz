@@ -54,19 +54,19 @@ export const sceneStatusLabels: Record<SceneStatus, string> = {
 };
 
 export const sceneStatusColors: Record<SceneStatus, string> = {
-  SHOT: "bg-green-600/20 text-green-300 border-green-500/30",
-  RESHOOT_REQUIRED: "bg-yellow-600/20 text-yellow-200 border-yellow-500/30",
-  PLANNING: "bg-zinc-500/20 text-zinc-300 border-zinc-400/30",
-  OFF_PLAN: "bg-zinc-800/40 text-zinc-400 border-zinc-600/30",
-  NOT_SHOT: "bg-red-600/20 text-red-300 border-red-500/30",
+  SHOT: "bg-green-600/20 text-[var(--tone-success)] border-green-500/30",
+  RESHOOT_REQUIRED: "bg-yellow-600/20 text-[var(--tone-warning-soft)] border-yellow-500/30",
+  PLANNING: "bg-zinc-500/20 text-[var(--tone-neutral)] border-zinc-400/30",
+  OFF_PLAN: "bg-[var(--badge-muted-bg)] text-[var(--muted-fg)] border-zinc-600/30",
+  NOT_SHOT: "bg-red-600/20 text-[var(--tone-danger)] border-red-500/30",
 };
 
 export const sceneStatusRowColors: Record<SceneStatus, string> = {
-  SHOT: "bg-green-950/35 hover:bg-green-950/45",
-  RESHOOT_REQUIRED: "bg-yellow-950/35 hover:bg-yellow-950/45",
-  PLANNING: "bg-zinc-900/40 hover:bg-zinc-900/50",
-  OFF_PLAN: "bg-black/50 hover:bg-black/60",
-  NOT_SHOT: "bg-red-950/35 hover:bg-red-950/45",
+  SHOT: "bg-[var(--row-success)] hover:bg-[var(--row-success-hover)]",
+  RESHOOT_REQUIRED: "bg-[var(--row-warning)] hover:bg-[var(--row-warning-hover)]",
+  PLANNING: "bg-[var(--row-neutral)] hover:bg-[var(--row-neutral-hover)]",
+  OFF_PLAN: "bg-[var(--row-muted)] hover:bg-[var(--row-muted-hover)]",
+  NOT_SHOT: "bg-[var(--row-danger)] hover:bg-[var(--row-danger-hover)]",
 };
 
 /** Цвета статусов факта отчёта — те же, что у SceneStatus в либретто. */

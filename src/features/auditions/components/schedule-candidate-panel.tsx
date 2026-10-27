@@ -32,8 +32,8 @@ function Stars({
           disabled={disabled || !onChange}
           className={cn(
             "text-xs leading-none",
-            (value ?? 0) >= n ? "text-amber-400" : "text-[var(--muted-fg)]/40",
-            onChange && !disabled && "cursor-pointer hover:text-amber-300",
+            (value ?? 0) >= n ? "text-[var(--tone-warning-strong)]" : "text-[var(--muted-fg)]/40",
+            onChange && !disabled && "cursor-pointer hover:text-[var(--tone-warning)]",
           )}
           onClick={() => onChange?.(value === n ? null : n)}
           aria-label={`${n} из 5`}

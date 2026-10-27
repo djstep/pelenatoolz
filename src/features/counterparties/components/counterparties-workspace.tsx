@@ -277,8 +277,8 @@ export function CounterpartiesWorkspace({
               className={cn(
                 "rounded-md px-3 py-1.5 text-xs",
                 tab === id
-                  ? "bg-white/10 text-white"
-                  : "text-[var(--muted-fg)] hover:text-white",
+                  ? "bg-[rgb(var(--tint-rgb)/0.1)] text-[rgb(var(--tint-rgb))]"
+                  : "text-[var(--muted-fg)] hover:text-[rgb(var(--tint-rgb))]",
               )}
               onClick={() => setTab(id)}
             >

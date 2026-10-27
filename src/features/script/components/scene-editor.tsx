@@ -123,7 +123,7 @@ export function SceneEditor({
             <Link
               href={`/${locale}/projects/${projectId}/libretto/${prev.id}`}
               title={`Сцена ${neighborLabel(prev)}`}
-              className="inline-flex items-center rounded-xl px-3 py-2 text-sm hover:bg-white/8"
+              className="inline-flex items-center rounded-xl px-3 py-2 text-sm hover:bg-[rgb(var(--tint-rgb)/0.08)]"
             >
               ← {neighborLabel(prev)}
             </Link>
@@ -137,7 +137,7 @@ export function SceneEditor({
             <Link
               href={`/${locale}/projects/${projectId}/libretto/${next.id}`}
               title={`Сцена ${neighborLabel(next)}`}
-              className="inline-flex items-center rounded-xl px-3 py-2 text-sm hover:bg-white/8"
+              className="inline-flex items-center rounded-xl px-3 py-2 text-sm hover:bg-[rgb(var(--tint-rgb)/0.08)]"
             >
               {neighborLabel(next)} →
             </Link>
@@ -171,7 +171,7 @@ export function SceneEditor({
         </p>
       )}
       {state.success ? (
-        <p className="text-sm text-green-400">{state.success}</p>
+        <p className="text-sm text-[var(--tone-success-strong)]">{state.success}</p>
       ) : null}
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_280px]">

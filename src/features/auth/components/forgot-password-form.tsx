@@ -40,12 +40,12 @@ export function ForgotPasswordForm({ locale }: { locale: string }) {
         </p>
       ) : null}
       {state.success ? (
-        <p className="text-sm text-emerald-400" role="status">
+        <p className="text-sm text-[var(--tone-success-strong)]" role="status">
           {state.success}
         </p>
       ) : null}
       {state.devResetUrl ? (
-        <p className="rounded-lg border border-amber-500/30 bg-amber-950/30 p-3 text-xs text-amber-100">
+        <p className="rounded-lg border border-amber-500/30 bg-[var(--tone-warning-bg)] p-3 text-xs text-[var(--tone-warning-soft)]">
           Режим разработки (письмо не отправлено):{" "}
           <a href={state.devResetUrl} className="underline">
             открыть ссылку сброса

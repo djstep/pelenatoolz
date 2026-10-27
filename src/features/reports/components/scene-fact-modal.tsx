@@ -164,7 +164,7 @@ export function SceneFactModal({
             {canEdit ? "Отмена" : "Закрыть"}
           </Button>
           {returnsToPool && canEdit ? (
-            <p className="ml-auto max-w-md text-xs text-amber-200/90">
+            <p className="ml-auto max-w-md text-xs text-[var(--tone-warning-soft)]/90">
               При статусе «{productionSceneFactStatusLabels[status]}» сцена
               вернётся в неспланированные КПП, но останется в этом отчёте.
             </p>

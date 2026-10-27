@@ -19,7 +19,7 @@ import {
 } from "@/features/contracts/components/contract-form-modal";
 import type { ContractFinanceAccess } from "@/features/contracts/lib/finance-access";
 import { formatDateShort } from "@/shared/i18n/format-date";
-import { Badge } from "@/shared/ui/badge";
+import { Badge, statusBadgeStyle } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
@@ -121,12 +121,8 @@ export function ContractDetailView({
           Договор {contract.number}
         </h1>
         <Badge
-          style={{
-            backgroundColor: `${contract.status.color}33`,
-            borderColor: `${contract.status.color}66`,
-            color: contract.status.color,
-          }}
-          className="border"
+          style={statusBadgeStyle(contract.status.color)}
+          className="status-badge"
         >
           {contract.status.name}
         </Badge>
@@ -390,12 +386,8 @@ export function ContractDetailView({
                 {a.files.length ? ` · файлов: ${a.files.length}` : ""}
               </span>
               <Badge
-                className="border"
-                style={{
-                  backgroundColor: `${a.status.color}33`,
-                  borderColor: `${a.status.color}66`,
-                  color: a.status.color,
-                }}
+                className="status-badge"
+                style={statusBadgeStyle(a.status.color)}
               >
                 {a.status.name}
               </Badge>

@@ -341,7 +341,7 @@ export function ContractFormModal({
             </div>
 
             {vatEnabled ? (
-              <div className="grid gap-3 rounded-xl border border-[var(--border)] bg-white/[0.02] p-3 sm:grid-cols-3">
+              <div className="grid gap-3 rounded-xl border border-[var(--border)] bg-[rgb(var(--tint-rgb)/0.02)] p-3 sm:grid-cols-3">
                 <div>
                   <Label htmlFor="vatRate">Ставка %</Label>
                   <Select

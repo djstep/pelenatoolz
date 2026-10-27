@@ -47,11 +47,11 @@ function SystemVariableRow({
             {variable.key}
           </span>
           {variable.fromProjectDefault ? (
-            <span className="text-[10px] text-emerald-400/90">
+            <span className="text-[10px] text-[var(--tone-success-strong)]/90">
               из параметров проекта
             </span>
           ) : (
-            <span className="text-[10px] text-amber-300/90">переопределено</span>
+            <span className="text-[10px] text-[var(--tone-warning)]/90">переопределено</span>
           )}
         </div>
         {variable.description ? (

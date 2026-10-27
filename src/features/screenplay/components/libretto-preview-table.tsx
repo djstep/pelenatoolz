@@ -67,7 +67,7 @@ export function LibrettoPreviewTable({ scenes }: { scenes: ImportPreviewScene[] 
     <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
       <table className="w-full min-w-[56rem] text-left text-xs">
         <thead>
-          <tr className="border-b border-[var(--border)] bg-white/[0.03] text-[var(--muted-fg)]">
+          <tr className="border-b border-[var(--border)] bg-[rgb(var(--tint-rgb)/0.03)] text-[var(--muted-fg)]">
             <th className="px-3 py-2.5">Сцена</th>
             <th className="px-3 py-2.5">Тип объекта</th>
             <th className="px-3 py-2.5">Объект</th>
@@ -118,9 +118,9 @@ export function LibrettoPreviewTable({ scenes }: { scenes: ImportPreviewScene[] 
                   />
                 </div>
                 {!row.existingId ? (
-                  <span className="text-[10px] text-emerald-400">новая</span>
+                  <span className="text-[10px] text-[var(--tone-success-strong)]">новая</span>
                 ) : (
-                  <span className="text-[10px] text-amber-300">есть</span>
+                  <span className="text-[10px] text-[var(--tone-warning)]">есть</span>
                 )}
               </td>
               <EditableDiffCell

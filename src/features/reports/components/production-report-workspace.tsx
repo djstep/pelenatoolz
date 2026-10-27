@@ -67,21 +67,21 @@ export function ProductionReportWorkspace({
           <p className="text-sm text-[var(--muted-fg)]">
             <Link
               href={`/${locale}/projects/${projectId}/reports`}
-              className="hover:text-white"
+              className="hover:text-[rgb(var(--tint-rgb))]"
             >
               ← Все отчёты
             </Link>
             {" · "}
             <Link
               href={`/${locale}/projects/${projectId}/schedule`}
-              className="hover:text-white"
+              className="hover:text-[rgb(var(--tint-rgb))]"
             >
               КПП
             </Link>
             {" · "}
             <Link
               href={`/${locale}/projects/${projectId}/call-sheets/${day.id}`}
-              className="hover:text-white"
+              className="hover:text-[rgb(var(--tint-rgb))]"
             >
               Вызывной
             </Link>
@@ -284,7 +284,7 @@ function SceneFactsTable({
             <tr
               key={fact.id}
               className={cn(
-                "cursor-pointer border-b border-[var(--border)]/60 hover:bg-white/5",
+                "cursor-pointer border-b border-[var(--border)]/60 hover:bg-[rgb(var(--tint-rgb)/0.05)]",
                 muted && "opacity-70",
               )}
               onClick={() => onOpen(fact.id)}

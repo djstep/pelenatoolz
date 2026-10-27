@@ -26,10 +26,10 @@ export function Checkbox({
         <span
           className={cn(
             "glass-checkbox absolute inset-0 rounded-[0.3rem] border border-[var(--border-strong)]",
-            "bg-white/5 transition-all duration-150",
+            "bg-[rgb(var(--tint-rgb)/0.05)] transition-all duration-150",
             "peer-focus-visible:border-[var(--accent)] peer-focus-visible:shadow-[0_0_0_3px_rgba(110,168,255,0.15)]",
             "peer-checked:border-[var(--accent)] peer-checked:bg-[var(--accent)]/25",
-            "group-hover:border-[var(--border-strong)] group-hover:bg-white/8",
+            "group-hover:border-[var(--border-strong)] group-hover:bg-[rgb(var(--tint-rgb)/0.08)]",
           )}
           aria-hidden
         />

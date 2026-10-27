@@ -264,21 +264,21 @@ export function ScreenplayVersionsList({
                       />
                       {version.isLocked ? (
                         <span
-                          className="shrink-0 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-medium text-amber-300"
+                          className="shrink-0 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-medium text-[var(--tone-warning)]"
                           title="Версия заблокирована"
                         >
                           🔒
                         </span>
                       ) : null}
                       {version.isCurrent ? (
-                        <span className="shrink-0 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium text-emerald-400">
+                        <span className="shrink-0 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium text-[var(--tone-success-strong)]">
                           Текущая
                         </span>
                       ) : canWrite ? (
                         <button
                           type="button"
                           disabled={pending}
-                          className="shrink-0 rounded-full border border-[var(--border)] px-2 py-0.5 text-[10px] font-medium text-[var(--muted-fg)] hover:border-emerald-500/50 hover:text-emerald-400 disabled:opacity-50"
+                          className="shrink-0 rounded-full border border-[var(--border)] px-2 py-0.5 text-[10px] font-medium text-[var(--muted-fg)] hover:border-emerald-500/50 hover:text-[var(--tone-success-strong)] disabled:opacity-50"
                           onClick={(event) => {
                             event.stopPropagation();
                             makeCurrent(version);

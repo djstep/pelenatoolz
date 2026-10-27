@@ -64,10 +64,10 @@ function MenuItem({
         disabled
           ? "cursor-not-allowed text-[var(--muted-fg)] opacity-50"
           : danger
-            ? "text-red-300 hover:bg-red-500/15"
+            ? "text-[var(--tone-danger)] hover:bg-red-500/15"
             : active
-              ? "bg-[var(--accent)]/25 text-white"
-              : "text-[var(--foreground)] hover:bg-white/10",
+              ? "bg-[var(--accent)]/25 text-[rgb(var(--tint-rgb))]"
+              : "text-[var(--foreground)] hover:bg-[rgb(var(--tint-rgb)/0.1)]",
       )}
     >
       {icon ? (
@@ -160,7 +160,7 @@ export function DayContextMenu({
       <div
         ref={panelRef}
         style={{ top: pos.top, left: pos.left, width: MENU_WIDTH }}
-        className="absolute z-10 max-h-[min(70vh,32rem)] overflow-hidden rounded-2xl border border-[var(--border-strong)] bg-[#0c1220] shadow-2xl"
+        className="absolute z-10 max-h-[min(70vh,32rem)] overflow-hidden rounded-2xl border border-[var(--border-strong)] bg-[var(--kpp-menu-bg)] shadow-2xl"
         role="menu"
       >
         <div className="border-b border-[var(--border)] px-3 py-2.5">

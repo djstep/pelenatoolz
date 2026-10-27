@@ -78,7 +78,7 @@ export function CreateSmetaWizard({
         <div className="grid gap-3">
           <button
             type="button"
-            className="rounded-xl border border-[var(--border)] px-4 py-3 text-left transition hover:bg-white/5"
+            className="rounded-xl border border-[var(--border)] px-4 py-3 text-left transition hover:bg-[rgb(var(--tint-rgb)/0.05)]"
             onClick={() => setMode("blank")}
           >
             <div className="font-medium">С нуля</div>
@@ -88,7 +88,7 @@ export function CreateSmetaWizard({
           </button>
           <button
             type="button"
-            className="rounded-xl border border-[var(--border)] px-4 py-3 text-left transition hover:bg-white/5"
+            className="rounded-xl border border-[var(--border)] px-4 py-3 text-left transition hover:bg-[rgb(var(--tint-rgb)/0.05)]"
             onClick={() => setMode("template")}
           >
             <div className="font-medium">Из шаблона</div>
@@ -98,7 +98,7 @@ export function CreateSmetaWizard({
           </button>
           <button
             type="button"
-            className="rounded-xl border border-[var(--border)] px-4 py-3 text-left transition hover:bg-white/5"
+            className="rounded-xl border border-[var(--border)] px-4 py-3 text-left transition hover:bg-[rgb(var(--tint-rgb)/0.05)]"
             onClick={() => setMode("excel")}
           >
             <div className="font-medium">Импорт Excel / CSV</div>
@@ -135,7 +135,7 @@ export function CreateSmetaWizard({
                     key={t.id}
                     className={`flex cursor-pointer items-start gap-3 rounded-xl border px-3 py-2 ${
                       templateId === t.id
-                        ? "border-[var(--foreground)]/40 bg-white/5"
+                        ? "border-[var(--foreground)]/40 bg-[rgb(var(--tint-rgb)/0.05)]"
                         : "border-[var(--border)]"
                     }`}
                   >

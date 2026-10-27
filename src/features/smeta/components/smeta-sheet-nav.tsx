@@ -176,7 +176,7 @@ export function SmetaSheetNavigator({
                   >
                     <span className="block truncate">
                       {sheet.pinned ? (
-                        <span className="mr-1 text-amber-400" aria-hidden>
+                        <span className="mr-1 text-[var(--tone-warning-strong)]" aria-hidden>
                           ★
                         </span>
                       ) : null}
@@ -190,7 +190,7 @@ export function SmetaSheetNavigator({
                     className={cn(
                       "shrink-0 rounded-lg px-1.5 text-sm transition-colors",
                       sheet.pinned
-                        ? "text-amber-400 hover:bg-amber-500/10"
+                        ? "text-[var(--tone-warning-strong)] hover:bg-amber-500/10"
                         : "text-[var(--foreground)]/55 hover:bg-[var(--nav-hover-bg)] hover:text-[var(--foreground)]",
                       !canWrite && "opacity-40",
                     )}

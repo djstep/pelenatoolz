@@ -168,7 +168,7 @@ export function ShootDayForm({
         <p className="mt-2 text-sm text-[var(--danger)]">{state.error}</p>
       ) : null}
       {state.success ? (
-        <p className="mt-2 text-sm text-emerald-300">{state.success}</p>
+        <p className="mt-2 text-sm text-[var(--tone-success)]">{state.success}</p>
       ) : null}
     </form>
   );

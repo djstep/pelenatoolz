@@ -79,7 +79,7 @@ export function CreateProjectForm() {
                 "rounded-lg border px-4 py-2 text-sm transition",
                 projectType === type
                   ? "border-[var(--accent)] bg-[var(--accent)]/20 font-medium text-[var(--foreground)]"
-                  : "border-[var(--border)] bg-white/5 hover:bg-white/10",
+                  : "border-[var(--border)] bg-[rgb(var(--tint-rgb)/0.05)] hover:bg-[rgb(var(--tint-rgb)/0.1)]",
               )}
             >
               {projectTypeLabels[type]}

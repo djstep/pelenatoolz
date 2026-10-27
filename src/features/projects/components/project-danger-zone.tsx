@@ -110,7 +110,7 @@ export function ProjectDangerZone({
       </div>
 
       <div className="rounded-lg border border-red-500/30 bg-red-500/5 p-4">
-        <h4 className="font-semibold text-red-300">Удаление проекта</h4>
+        <h4 className="font-semibold text-[var(--tone-danger)]">Удаление проекта</h4>
         <p className="mt-1 text-sm text-[var(--muted-fg)]">
           Безвозвратно удалит проект, сцены, КПП, актёров и все связанные данные.
         </p>

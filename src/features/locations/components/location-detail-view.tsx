@@ -86,7 +86,7 @@ export function LocationDetailView({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-sm text-[var(--muted-fg)]">
-            <a href={`/${locale}/projects/${projectId}/locations`} className="hover:text-white">
+            <a href={`/${locale}/projects/${projectId}/locations`} className="hover:text-[rgb(var(--tint-rgb))]">
               ← Все локации
             </a>
           </p>

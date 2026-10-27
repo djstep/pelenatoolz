@@ -15,7 +15,7 @@ import type {
 } from "@/features/contracts/queries";
 import { counterpartyTypeLabels } from "@/features/counterparties/labels";
 import { formatDateShort } from "@/shared/i18n/format-date";
-import { Badge } from "@/shared/ui/badge";
+import { Badge, statusBadgeStyle } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 
 function money(n: number | string | { toString(): string } | null | undefined) {
@@ -152,19 +152,15 @@ export function CounterpartyDetailView({
                 <li key={c.id}>
                   <Link
                     href={`/${locale}/projects/${projectId}/counterparties/contracts/${c.id}`}
-                    className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm hover:bg-white/[0.03]"
+                    className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm hover:bg-[rgb(var(--tint-rgb)/0.03)]"
                   >
                     <span>
                       {formatDateShort(c.date)} · № {c.number}
                       {finance.read ? ` · ${money(c.amountWithVat)}` : ""}
                     </span>
                     <Badge
-                      className="border"
-                      style={{
-                        backgroundColor: `${c.status.color}33`,
-                        borderColor: `${c.status.color}66`,
-                        color: c.status.color,
-                      }}
+                      className="status-badge"
+                      style={statusBadgeStyle(c.status.color)}
                     >
                       {c.status.name}
                     </Badge>

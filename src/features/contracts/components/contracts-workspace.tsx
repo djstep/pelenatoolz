@@ -15,7 +15,7 @@ import {
 import type { ContractListItem } from "@/features/contracts/queries";
 import { useTableLayout } from "@/shared/hooks/use-table-layout";
 import { formatDateShort } from "@/shared/i18n/format-date";
-import { Badge } from "@/shared/ui/badge";
+import { Badge, statusBadgeStyle } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { cn } from "@/shared/lib/cn";
@@ -483,7 +483,7 @@ export function ContractsWorkspace({
                   key={row.id}
                   style={statusStyle}
                   className={cn(
-                    "border-b border-[var(--border)]/50 cursor-pointer hover:bg-white/[0.03]",
+                    "border-b border-[var(--border)]/50 cursor-pointer hover:bg-[rgb(var(--tint-rgb)/0.03)]",
                     row.isPreliminary && "text-[var(--muted-fg)]",
                     compact ? "align-middle" : "align-top",
                   )}
@@ -526,12 +526,8 @@ export function ContractsWorkspace({
                     >
                       {col.id === "status" && colorMode && !rowColorMode ? (
                         <Badge
-                          className="border"
-                          style={{
-                            backgroundColor: `${row.status.color}33`,
-                            borderColor: `${row.status.color}66`,
-                            color: row.status.color,
-                          }}
+                          className="status-badge"
+                          style={statusBadgeStyle(row.status.color)}
                         >
                           {row.status.name}
                         </Badge>

@@ -196,7 +196,7 @@ export function EntityPicker({
                 <button
                   type="button"
                   className={cn(
-                    "mt-1 w-full rounded-md py-1.5 text-xs text-[var(--accent)] hover:bg-white/5",
+                    "mt-1 w-full rounded-md py-1.5 text-xs text-[var(--accent)] hover:bg-[rgb(var(--tint-rgb)/0.05)]",
                   )}
                   onClick={() => openCreate(query.trim())}
                 >

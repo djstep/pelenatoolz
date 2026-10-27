@@ -67,8 +67,8 @@ function ReportSubTabs({
           className={cn(
             "rounded-lg px-3 py-1.5 text-sm transition",
             active === t.id
-              ? "bg-white/10 text-[var(--foreground)]"
-              : "text-[var(--muted-fg)] hover:bg-white/5",
+              ? "bg-[rgb(var(--tint-rgb)/0.1)] text-[var(--foreground)]"
+              : "text-[var(--muted-fg)] hover:bg-[rgb(var(--tint-rgb)/0.05)]",
           )}
         >
           {t.label}
@@ -167,7 +167,7 @@ export function PlanFactReportView({
               className={cn(
                 "mt-1 text-lg font-semibold",
                 label === "Не оплачено" && value > 0
-                  ? "text-amber-300/90"
+                  ? "text-[var(--tone-warning)]/90"
                   : undefined,
               )}
             >
@@ -206,7 +206,7 @@ export function PlanFactReportView({
                   <td
                     className={cn(
                       "px-4 py-3",
-                      r.variancePlan < 0 ? "text-red-300" : undefined,
+                      r.variancePlan < 0 ? "text-[var(--tone-danger)]" : undefined,
                     )}
                   >
                     {money(r.variancePlan, currency)}
@@ -214,7 +214,7 @@ export function PlanFactReportView({
                   <td
                     className={cn(
                       "px-4 py-3",
-                      r.unpaid > 0 ? "text-amber-300/90" : undefined,
+                      r.unpaid > 0 ? "text-[var(--tone-warning)]/90" : undefined,
                     )}
                   >
                     {money(r.unpaid, currency)}

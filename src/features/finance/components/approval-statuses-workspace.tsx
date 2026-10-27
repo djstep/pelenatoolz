@@ -58,7 +58,7 @@ function ColorField({
             key={preset}
             type="button"
             title={preset}
-            className="h-6 w-6 rounded-full border border-white/20 ring-offset-1 ring-offset-[var(--panel-solid)] transition hover:scale-110 focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
+            className="h-6 w-6 rounded-full border border-[rgb(var(--tint-rgb)/0.2)] ring-offset-1 ring-offset-[var(--panel-solid)] transition hover:scale-110 focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
             style={{ backgroundColor: preset }}
             onClick={() => setColor(preset)}
           />
@@ -185,7 +185,7 @@ export function ApprovalStatusesWorkspace({
                 className="flex flex-wrap items-center gap-3 px-4 py-3"
               >
                 <span
-                  className="h-3.5 w-3.5 shrink-0 rounded-full border border-white/15"
+                  className="h-3.5 w-3.5 shrink-0 rounded-full border border-[rgb(var(--tint-rgb)/0.15)]"
                   style={{ backgroundColor: row.color }}
                   aria-hidden
                 />

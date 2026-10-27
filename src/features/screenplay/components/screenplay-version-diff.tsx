@@ -163,10 +163,10 @@ export function ScreenplayVersionDiff({
           <h2 className="font-display text-xl font-semibold">Сравнение версий</h2>
           <p className="text-sm text-[var(--muted-fg)]">
             {versionLabel(newerMeta)}{" "}
-            <span className="text-[var(--muted-fg)]/70">(новее)</span>
+            <span className="text-[var(--muted-fg)]">(новее)</span>
             {" ↔ "}
             {versionLabel(olderMeta)}{" "}
-            <span className="text-[var(--muted-fg)]/70">(раньше)</span>
+            <span className="text-[var(--muted-fg)]">(раньше)</span>
           </p>
         </div>
         <div className="flex gap-2">
@@ -251,11 +251,11 @@ export function ScreenplayVersionDiff({
 
       <p className="text-xs text-[var(--muted-fg)]">
         Легенда:{" "}
-        <span className="text-red-400">удалено</span> — в старой версии текст
+        <span className="text-[var(--tone-danger-strong)]">удалено</span> — в старой версии текст
         выделен, в новой тот же текст зачёркнут;{" "}
-        <span className="text-emerald-400">добавлено</span> — в новой заливка, в
+        <span className="text-[var(--tone-success-strong)]">добавлено</span> — в новой заливка, в
         старой зачёркнутый «призрак»;{" "}
-        <span className="text-amber-400">изменено</span> — свой текст с каждой
+        <span className="text-[var(--tone-warning-strong)]">изменено</span> — свой текст с каждой
         стороны.
       </p>
     </div>

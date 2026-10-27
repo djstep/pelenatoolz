@@ -165,7 +165,7 @@ export function UsageLedgerSummary({
             <tbody>
               {groups.map(([title, groupRows]) => (
                 <Fragment key={title}>
-                  <tr className="border-b border-[var(--border)] bg-white/[0.03]">
+                  <tr className="border-b border-[var(--border)] bg-[rgb(var(--tint-rgb)/0.03)]">
                     <td
                       colSpan={7}
                       className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted-fg)]"
@@ -232,7 +232,7 @@ export function UsageLedgerSummary({
                   })}
                 </Fragment>
               ))}
-              <tr className="bg-white/[0.04] font-semibold">
+              <tr className="bg-[rgb(var(--tint-rgb)/0.04)] font-semibold">
                 <td className="px-3 py-3">Итого</td>
                 <td className="px-3 py-3" />
                 <td className="px-3 py-3 tabular-nums">

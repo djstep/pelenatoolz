@@ -439,12 +439,12 @@ export function AvailabilityCalendar({
             </div>
 
             {editor.kppLocked ? (
-              <p className="rounded-lg border border-violet-400/40 bg-violet-500/15 px-3 py-2 text-sm text-violet-100">
+              <p className="rounded-lg border border-violet-400/40 bg-violet-500/15 px-3 py-2 text-sm text-[var(--tone-violet)]">
                 Этот день занят по КПП — статус задаётся автоматически. Можно добавить
                 комментарий.
               </p>
             ) : editor.status === "BUSY_OUR_PROJECT" ? (
-              <p className="rounded-lg border border-violet-400/40 bg-violet-500/15 px-3 py-2 text-sm text-violet-100">
+              <p className="rounded-lg border border-violet-400/40 bg-violet-500/15 px-3 py-2 text-sm text-[var(--tone-violet)]">
                 Ручная бронь на наш проект (без сцены в КПП). Подсказки при перетаскивании
                 в КПП учитывают этот статус.
               </p>

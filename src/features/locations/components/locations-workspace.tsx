@@ -209,7 +209,7 @@ export function LocationsWorkspace({
             </thead>
             <tbody>
               {filtered.map((loc) => (
-                <tr key={loc.id} className="border-b border-[var(--border)]/60 align-top hover:bg-white/[0.03]">
+                <tr key={loc.id} className="border-b border-[var(--border)]/60 align-top hover:bg-[rgb(var(--tint-rgb)/0.03)]">
                   {visibleColumns.map((col) => (
                     <td key={col.id} className="px-3 py-3">
                       {col.id === "name" ? (

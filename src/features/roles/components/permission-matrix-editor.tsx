@@ -139,7 +139,7 @@ export function PermissionMatrixEditor({
                   />
                 </td>
               </tr>
-              <tr className="border-b border-[var(--border)]/50 bg-white/[0.02]">
+              <tr className="border-b border-[var(--border)]/50 bg-[rgb(var(--tint-rgb)/0.02)]">
                 <td className="py-2 pr-3 font-medium">
                   Новые категории ресурсов
                   <span className="mt-0.5 block text-[10px] font-normal text-[var(--muted-fg)]">

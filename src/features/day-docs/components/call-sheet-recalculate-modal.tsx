@@ -54,7 +54,7 @@ function ProposalTable({
             <td className="py-1 pr-2 font-mono text-[var(--muted-fg)]">
               {change?.current || "—"}
             </td>
-            <td className="py-1 font-mono text-emerald-300">
+            <td className="py-1 font-mono text-[var(--tone-success)]">
               {change?.proposed || "—"}
             </td>
           </tr>
@@ -209,7 +209,7 @@ export function CallSheetRecalculateModal({
             ? actorProposals.map((proposal) => (
                 <div
                   key={proposal.actorId}
-                  className="rounded-xl border border-[var(--border)] bg-black/15 p-3"
+                  className="rounded-xl border border-[var(--border)] bg-[var(--inset-bg)] p-3"
                 >
                   <label className="flex items-center gap-2 text-sm font-medium">
                     <input
@@ -232,7 +232,7 @@ export function CallSheetRecalculateModal({
             : resourceProposals.map((proposal) => (
                 <div
                   key={proposal.key}
-                  className="rounded-xl border border-[var(--border)] bg-black/15 p-3"
+                  className="rounded-xl border border-[var(--border)] bg-[var(--inset-bg)] p-3"
                 >
                   <label className="flex items-center gap-2 text-sm font-medium">
                     <input

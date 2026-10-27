@@ -186,7 +186,7 @@ export function CreatableMultiSelect({
             <button
               key={value[i]}
               type="button"
-              className="rounded-md border border-[var(--border)] bg-white/5 px-2 py-0.5 text-xs"
+              className="rounded-md border border-[var(--border)] bg-[rgb(var(--tint-rgb)/0.05)] px-2 py-0.5 text-xs"
               onClick={() => onChange(value.filter((id) => id !== value[i]))}
             >
               {n} ×
@@ -231,7 +231,7 @@ export function CreatableMultiSelect({
           </ul>
           <button
             type="button"
-            className="mt-1 w-full rounded-md py-1 text-xs text-[var(--muted-fg)] hover:bg-white/5"
+            className="mt-1 w-full rounded-md py-1 text-xs text-[var(--muted-fg)] hover:bg-[rgb(var(--tint-rgb)/0.05)]"
             onClick={() => setOpen(false)}
           >
             Закрыть

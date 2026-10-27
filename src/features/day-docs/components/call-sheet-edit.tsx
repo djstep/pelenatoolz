@@ -614,7 +614,7 @@ export function CallSheetEditor({
                       <span className="text-[var(--muted-fg)]">
                         {label}
                         {manual && computed ? (
-                          <span className="ml-1 text-amber-300/90" title={`Расчётное: ${computed}`}>
+                          <span className="ml-1 text-[var(--tone-warning)]/90" title={`Расчётное: ${computed}`}>
                             · ручн.
                           </span>
                         ) : null}
@@ -685,7 +685,7 @@ export function CallSheetEditor({
                       <span className="text-[var(--muted-fg)]">
                         {label}
                         {manual && computed ? (
-                          <span className="ml-1 text-amber-300/90" title={`Расчётное: ${computed}`}>
+                          <span className="ml-1 text-[var(--tone-warning)]/90" title={`Расчётное: ${computed}`}>
                             · ручн.
                           </span>
                         ) : null}

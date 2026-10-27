@@ -103,7 +103,7 @@ export function OvertimeHistoryTable({
                     className={cn(
                       "rounded px-1.5 py-0.5 tabular-nums hover:underline",
                       row.hasExtras
-                        ? "font-medium text-red-400"
+                        ? "font-medium text-[var(--tone-danger-strong)]"
                         : "text-[var(--muted-fg)]",
                     )}
                     title="Дополнительные выплаты"

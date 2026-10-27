@@ -202,7 +202,7 @@ function StaticPlanRow({
   return (
     <div
       className={cn(
-        "rounded-xl border border-[var(--border)] bg-black/15 p-3",
+        "rounded-xl border border-[var(--border)] bg-[var(--inset-bg)] p-3",
         disabled && "opacity-70",
       )}
     >
@@ -249,7 +249,7 @@ function SortablePlanRow({
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn(
-        "rounded-xl border border-[var(--border)] bg-black/15 p-3",
+        "rounded-xl border border-[var(--border)] bg-[var(--inset-bg)] p-3",
         isDragging && "z-10 opacity-80 ring-1 ring-[var(--accent)]/50",
         disabled && "opacity-70",
       )}
@@ -305,14 +305,14 @@ function BreakPresetsEditor({
   }
 
   return (
-    <div className="space-y-2 rounded-xl border border-[var(--border)] bg-black/10 p-3">
+    <div className="space-y-2 rounded-xl border border-[var(--border)] bg-[var(--inset-bg-soft)] p-3">
       <p className="text-xs font-medium text-[var(--muted-fg)]">
         Шаблоны перерывов (добавление / изменение / удаление)
       </p>
       {presets.map((preset) => (
         <div
           key={preset.id}
-          className="grid gap-2 rounded-lg border border-[var(--border)]/60 bg-black/10 p-2 sm:grid-cols-[1fr_10rem_6rem_auto]"
+          className="grid gap-2 rounded-lg border border-[var(--border)]/60 bg-[var(--inset-bg-soft)] p-2 sm:grid-cols-[1fr_10rem_6rem_auto]"
         >
           <Input
             value={preset.label}
@@ -576,7 +576,7 @@ export function CallSheetPlanner({
       ) : null}
 
       {planLocked ? (
-        <p className="text-sm text-amber-400/90">
+        <p className="text-sm text-[var(--tone-warning-strong)]/90">
           План зафиксирован — снимите фиксацию, чтобы редактировать.
         </p>
       ) : null}

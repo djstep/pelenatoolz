@@ -233,7 +233,7 @@ export function PostWorkspace({
                 items.map((task) => (
                   <div
                     key={task.id}
-                    className="rounded-xl border border-white/10 bg-[#121a2a] p-3"
+                    className="rounded-xl border border-[rgb(var(--tint-rgb)/0.1)] bg-[var(--post-card-bg)] p-3"
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div>
@@ -271,7 +271,7 @@ export function PostWorkspace({
                             key={status}
                             type="button"
                             disabled={task.status === status}
-                            className="rounded px-1.5 py-0.5 text-[10px] text-[var(--muted-fg)] hover:bg-white/10 disabled:opacity-40"
+                            className="rounded px-1.5 py-0.5 text-[10px] text-[var(--muted-fg)] hover:bg-[rgb(var(--tint-rgb)/0.1)] disabled:opacity-40"
                             onClick={() =>
                               void setPostTaskStatusAction(
                                 projectId,
@@ -285,7 +285,7 @@ export function PostWorkspace({
                         ))}
                         <button
                           type="button"
-                          className="ml-auto rounded px-1.5 py-0.5 text-[10px] hover:bg-white/10"
+                          className="ml-auto rounded px-1.5 py-0.5 text-[10px] hover:bg-[rgb(var(--tint-rgb)/0.1)]"
                           onClick={() => setEditing(task)}
                         >
                           Изменить
@@ -297,7 +297,7 @@ export function PostWorkspace({
                         >
                           <button
                             type="submit"
-                            className="rounded px-1.5 py-0.5 text-[10px] text-red-300 hover:bg-red-500/15"
+                            className="rounded px-1.5 py-0.5 text-[10px] text-[var(--tone-danger)] hover:bg-red-500/15"
                           >
                             Удалить
                           </button>

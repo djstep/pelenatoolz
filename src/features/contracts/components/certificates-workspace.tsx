@@ -16,7 +16,7 @@ import {
 import type { CertificateListItem } from "@/features/contracts/queries";
 import { useTableLayout } from "@/shared/hooks/use-table-layout";
 import { formatDateShort } from "@/shared/i18n/format-date";
-import { Badge } from "@/shared/ui/badge";
+import { Badge, statusBadgeStyle } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { toast } from "@/shared/ui/toast";
@@ -538,12 +538,8 @@ export function CertificatesWorkspace({
                   >
                     {col.id === "status" && colorMode && !rowColorMode ? (
                       <Badge
-                        className="border"
-                        style={{
-                          backgroundColor: `${row.status.color}33`,
-                          borderColor: `${row.status.color}66`,
-                          color: row.status.color,
-                        }}
+                        className="status-badge"
+                        style={statusBadgeStyle(row.status.color)}
                       >
                         {row.status.name}
                       </Badge>

@@ -611,7 +611,7 @@ export function PaymentsWorkspace({
                   </td>
                   <td className="px-4 py-3">
                     {p.isLocked ? (
-                      <span className="text-amber-300/90">зафиксирован</span>
+                      <span className="text-[var(--tone-warning)]/90">зафиксирован</span>
                     ) : (
                       <span className="text-[var(--muted-fg)]">открыт</span>
                     )}

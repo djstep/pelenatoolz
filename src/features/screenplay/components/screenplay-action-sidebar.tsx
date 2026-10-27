@@ -71,7 +71,7 @@ export function ScreenplayActionSidebar({
             </div>
           ) : null}
           {isDirty ? (
-            <div className="mt-2 text-amber-400">Есть несохранённые изменения</div>
+            <div className="mt-2 text-[var(--tone-warning-strong)]">Есть несохранённые изменения</div>
           ) : null}
 
           <div className="mt-3 border-t border-[var(--border)] pt-3">

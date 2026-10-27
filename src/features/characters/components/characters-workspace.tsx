@@ -282,7 +282,7 @@ export function CharactersWorkspace({
               {filtered.map((row) => (
                 <tr
                   key={row.id}
-                  className="border-b border-[var(--border)]/60 align-top hover:bg-white/[0.03]"
+                  className="border-b border-[var(--border)]/60 align-top hover:bg-[rgb(var(--tint-rgb)/0.03)]"
                 >
                   {visibleColumns.map((col) => (
                     <td key={col.id} className="px-3 py-3">
@@ -294,7 +294,7 @@ export function CharactersWorkspace({
                           {cell(row, col.id)}
                         </Link>
                       ) : col.id === "approvedActor" && row.approvedPersonName ? (
-                        <span className="text-emerald-400">{row.approvedPersonName}</span>
+                        <span className="text-[var(--tone-success-strong)]">{row.approvedPersonName}</span>
                       ) : (
                         <span className={col.id === "description" || col.id === "roleRequirements" ? "line-clamp-2" : undefined}>
                           {cell(row, col.id)}
