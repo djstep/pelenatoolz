@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import {
   removeMemberAction,
@@ -7,6 +8,7 @@ import {
 } from "@/features/projects/actions";
 import { Button } from "@/shared/ui/button";
 import { Select } from "@/shared/ui/select";
+import { useToast } from "@/shared/ui/toast";
 
 type RoleOption = { id: string; name: string };
 
@@ -30,6 +32,25 @@ export function MembersTable({
   canManage: boolean;
 }) {
   const t = useTranslations("members");
+  const toast = useToast();
+  const [pending, startTransition] = useTransition();
+  // Меняется при отказе сервера: списки пересоздаются и снова показывают роль из базы.
+  const [resetVersion, setResetVersion] = useState(0);
+
+  function changeRole(member: MemberRow, roleId: string) {
+    const formData = new FormData();
+    formData.set("membershipId", member.id);
+    formData.set("roleId", roleId);
+    startTransition(async () => {
+      const result = await updateMemberRoleAction(projectId, {}, formData);
+      if (result.error) {
+        setResetVersion((v) => v + 1);
+        toast.error(result.error);
+      } else if (result.success) {
+        toast.success(result.success);
+      }
+    });
+  }
 
   if (members.length === 0) {
     return <p className="text-sm text-[var(--muted-fg)]">{t("noMembers")}</p>;
@@ -54,26 +75,21 @@ export function MembersTable({
                 {member.user.email}
               </td>
               <td className="py-3 pr-3 align-middle">
-                {canManage ? (
-                  <form
-                    action={async (formData) => {
-                      await updateMemberRoleAction(projectId, {}, formData);
-                    }}
+                {canManage && member.user.id !== currentUserId ? (
+                  <Select
+                    key={`${member.id}-${member.role.id}-${resetVersion}`}
+                    name="roleId"
+                    defaultValue={member.role.id}
+                    className="min-w-[10rem]"
+                    disabled={pending}
+                    onChange={(e) => changeRole(member, e.currentTarget.value)}
                   >
-                    <input type="hidden" name="membershipId" value={member.id} />
-                    <Select
-                      name="roleId"
-                      defaultValue={member.role.id}
-                      className="min-w-[10rem]"
-                      onChange={(e) => e.currentTarget.form?.requestSubmit()}
-                    >
-                      {roles.map((role) => (
-                        <option key={role.id} value={role.id}>
-                          {role.name}
-                        </option>
-                      ))}
-                    </Select>
-                  </form>
+                    {roles.map((role) => (
+                      <option key={role.id} value={role.id}>
+                        {role.name}
+                      </option>
+                    ))}
+                  </Select>
                 ) : (
                   member.role.name
                 )}

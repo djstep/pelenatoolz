@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { getTranslations } from "next-intl/server";
 import { auth } from "@/auth";
-import { acceptInviteAction } from "@/features/projects/actions";
+import { AcceptInviteForm } from "@/features/memberships/components/accept-invite-form";
 import { prisma } from "@/shared/db/prisma";
 import { Button } from "@/shared/ui/button";
 import { Card } from "@/shared/ui/card";
@@ -63,16 +63,7 @@ export default async function InvitePage({ params }: Props) {
         </dl>
 
         {session?.user ? (
-          <form
-            action={async () => {
-              "use server";
-              await acceptInviteAction(token);
-            }}
-          >
-            <Button type="submit" className="w-full">
-              {t("accept")}
-            </Button>
-          </form>
+          <AcceptInviteForm token={token} label={t("accept")} />
         ) : (
           <div className="space-y-3">
             <p className="text-sm text-[var(--muted-fg)]">{t("needAuth")}</p>

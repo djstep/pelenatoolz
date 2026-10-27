@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import {
   createRoleAction,
   deleteRoleAction,
@@ -50,6 +50,9 @@ function RoleEditorModal({
     : createRoleAction.bind(null, projectId);
   const [state, action, pending] = useActionState(bound, initial);
   useActionToast(state);
+  useEffect(() => {
+    if (state.success) onClose();
+  }, [state, onClose]);
   const matrix: PermissionMatrix = role
     ? parsePermissionMatrix(role.permissions)
     : buildEmptyMatrix();
@@ -179,6 +182,8 @@ export function RolesManager({
       </div>
 
       <RoleEditorModal
+        // Новый key на каждое открытие: форма начинает с чистого состояния, без прошлого «успеха».
+        key={editing?.id ?? (creating ? "new" : "closed")}
         projectId={projectId}
         role={editing ?? undefined}
         open={creating || editing != null}
