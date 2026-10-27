@@ -17,6 +17,47 @@ function formatDate(iso: string) {
   return formatDateTimeShort(iso);
 }
 
+function CommentActionIcon({
+  icon,
+}: {
+  icon: "resolve" | "reopen" | "delete";
+}) {
+  const common = {
+    width: 20,
+    height: 20,
+    viewBox: "0 0 20 20",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.75,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+    "aria-hidden": true,
+  };
+
+  switch (icon) {
+    case "resolve":
+      return (
+        <svg {...common}>
+          <path d="M4.5 10.5l3.5 3.5 7.5-8" />
+        </svg>
+      );
+    case "reopen":
+      return (
+        <svg {...common}>
+          <path d="M4.5 10a5.5 5.5 0 1 0 1.6-3.9" />
+          <path d="M4.5 3.5v3h3" />
+        </svg>
+      );
+    case "delete":
+      return (
+        <svg {...common}>
+          <path d="M5.5 5.5l9 9" />
+          <path d="M14.5 5.5l-9 9" />
+        </svg>
+      );
+  }
+}
+
 export function ScreenplayCommentsMargin({
   threads,
   canWrite,
@@ -48,24 +89,30 @@ export function ScreenplayCommentsMargin({
               </div>
             </div>
             {canWrite ? (
-              <div className="flex shrink-0 gap-1">
+              <div className="-mr-1 -mt-1 flex shrink-0 gap-2">
                 <button
                   type="button"
                   title={thread.status === "RESOLVED" ? "Открыть" : "Решено"}
-                  className="text-[10px] text-[var(--muted-fg)] hover:text-[var(--foreground)]"
+                  aria-label={
+                    thread.status === "RESOLVED" ? "Открыть" : "Решено"
+                  }
+                  className="screenplay-comment-action-btn"
                   onClick={() =>
                     onResolve(thread.id, thread.status !== "RESOLVED")
                   }
                 >
-                  {thread.status === "RESOLVED" ? "↺" : "✓"}
+                  <CommentActionIcon
+                    icon={thread.status === "RESOLVED" ? "reopen" : "resolve"}
+                  />
                 </button>
                 <button
                   type="button"
                   title="Удалить"
-                  className="text-[10px] text-[var(--danger)]"
+                  aria-label="Удалить"
+                  className="screenplay-comment-action-btn screenplay-comment-action-btn--danger"
                   onClick={() => onDelete(thread.id)}
                 >
-                  ×
+                  <CommentActionIcon icon="delete" />
                 </button>
               </div>
             ) : null}
