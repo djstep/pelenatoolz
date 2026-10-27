@@ -872,7 +872,18 @@ main {
   left: calc(100% + 0.75rem);
   width: 12rem;
   z-index: 15;
+  /* Пустая часть блока не перехватывает клики по карточкам комментариев под ним. */
+  pointer-events: none;
+}
+
+.screenplay-block-comment-anchor > * {
   pointer-events: auto;
+}
+
+/* Значок 💬 — на правом краю листа, а не в колонке карточек, чтобы не закрывать поле «Ответ…». */
+.screenplay-block-comment-anchor--icon {
+  left: calc(100% - 1.25rem);
+  width: auto;
 }
 
 .screenplay-block-comment-anchor-btn {

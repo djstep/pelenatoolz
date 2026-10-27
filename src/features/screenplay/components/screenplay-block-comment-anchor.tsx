@@ -66,7 +66,10 @@ export function ScreenplayBlockCommentAnchor({
 
   return (
     <div
-      className="screenplay-block-comment-anchor"
+      className={cn(
+        "screenplay-block-comment-anchor",
+        !composing && "screenplay-block-comment-anchor--icon",
+      )}
       style={{ top }}
       data-block-comment-anchor={blockId}
     >
