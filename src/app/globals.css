@@ -662,22 +662,27 @@ main {
   color: var(--muted-fg);
 }
 
+/*
+ * Отступы — в долях ширины строки, а не в дюймах: на полном листе (8.5in) это те же
+ * 2.2in / 1in / 1.5in / 1.6in / 2in, а на узком экране лист сужается пропорционально
+ * и имена персонажей не рвутся посреди слова. Экспорт задаёт свои отступы отдельно.
+ */
 .screenplay-block--character {
   text-transform: uppercase;
   text-align: center;
   margin-top: 0.75rem;
-  padding-left: 2.2in;
-  padding-right: 2.2in;
+  padding-left: 27.6%;
+  padding-right: 27.6%;
 }
 
 .screenplay-block--dialogue {
-  padding-left: 1in;
-  padding-right: 1.5in;
+  padding-left: 12.55%;
+  padding-right: 18.83%;
 }
 
 .screenplay-block--parenthetical {
-  padding-left: 1.6in;
-  padding-right: 2in;
+  padding-left: 20.08%;
+  padding-right: 25.1%;
   font-style: italic;
 }
 
@@ -756,7 +761,8 @@ main {
   max-width: 100%;
   min-width: 0;
   box-sizing: border-box;
-  flex-wrap: nowrap;
+  /* На узком листе (рядом колонка комментариев) группы переносятся, а не наезжают друг на друга. */
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 0.25rem;
@@ -779,6 +785,15 @@ main {
   position: relative;
   width: 100%;
   max-width: 100%;
+}
+
+/*
+ * Место справа от листа под колонку комментариев (14rem + зазор), чтобы она не уходила
+ * под правую панель. На широком экране отступ 0 и лист по центру; когда места мало,
+ * лист сдвигается влево, а на узком — сужается.
+ */
+.screenplay-editor-document--with-comments {
+  padding-right: clamp(0px, calc(2 * 15rem + 8.5in - 100%), 15rem);
 }
 
 .screenplay-editor-paper {

@@ -433,7 +433,14 @@ export function ScreenplayBlockEditor({
     >
       <div className="screenplay-editor-main">
         <div className="screenplay-editor-column">
-          <div className="screenplay-editor-document">
+          <div
+            className={cn(
+              "screenplay-editor-document",
+              !compact &&
+                (commentThreads.length > 0 || isComposing) &&
+                "screenplay-editor-document--with-comments",
+            )}
+          >
             <div
               ref={setPaperColumnEl}
               className="screenplay-editor-paper-column"
