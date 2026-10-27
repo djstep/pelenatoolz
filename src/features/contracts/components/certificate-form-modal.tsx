@@ -76,6 +76,18 @@ function moneyLabel(n: number | string) {
     : String(n);
 }
 
+/** Ставка из списка или «custom», если сохранённой ставки среди вариантов нет. */
+function vatRateChoice(rate?: number | null) {
+  const value = rate ?? 22;
+  return (VAT_RATE_PRESETS as readonly number[]).includes(value)
+    ? String(value)
+    : "custom";
+}
+
+function vatRateCustom(rate?: number | null) {
+  return vatRateChoice(rate) === "custom" ? String(rate) : "";
+}
+
 export function CertificateFormModal({
   projectId,
   open,
@@ -127,9 +139,12 @@ export function CertificateFormModal({
   );
   const [amount, setAmount] = useState(String(defaults?.amount ?? ""));
   const [vatEnabled, setVatEnabled] = useState(defaults?.vatEnabled ?? false);
-  const [vatRate, setVatRate] = useState(String(defaults?.vatRate ?? 22));
+  const [vatRate, setVatRate] = useState(() => vatRateChoice(defaults?.vatRate));
+  const [vatCustom, setVatCustom] = useState(() => vatRateCustom(defaults?.vatRate));
   const [vatManual, setVatManual] = useState("");
   const [uploading, setUploading] = useState(false);
+  // На сервер уходит число: выбранный вариант или введённое вручную.
+  const effectiveVatRate = vatRate === "custom" ? vatCustom.trim() : vatRate;
   const [pendingFile, setPendingFile] = useState<File | null>(null);
 
   useEffect(() => {
@@ -143,7 +158,8 @@ export function CertificateFormModal({
     setStatusId(defaults?.statusId ?? defaultStatusId);
     setAmount(String(defaults?.amount ?? ""));
     setVatEnabled(defaults?.vatEnabled ?? false);
-    setVatRate(String(defaults?.vatRate ?? 22));
+    setVatRate(vatRateChoice(defaults?.vatRate));
+    setVatCustom(vatRateCustom(defaults?.vatRate));
     setVatManual("");
     setPendingFile(null);
   }, [open, defaults, companies, counterparties, defaultStatusId]);
@@ -219,10 +235,10 @@ export function CertificateFormModal({
     return computeContractVat({
       amount: amt,
       vatEnabled,
-      vatRate: Number(vatRate) || 22,
+      vatRate: effectiveVatRate === "" ? 22 : Number(effectiveVatRate) || 0,
       vatAmountManual: Number.isFinite(manual as number) ? manual : null,
     });
-  }, [amount, vatEnabled, vatRate, vatManual]);
+  }, [amount, vatEnabled, effectiveVatRate, vatManual]);
 
   return (
     <Modal
@@ -411,7 +427,6 @@ export function CertificateFormModal({
               <Label htmlFor="vatRate">Ставка %</Label>
               <Select
                 id="vatRate"
-                name="vatRate"
                 value={vatRate}
                 onChange={(e) => {
                   setVatRate(e.target.value);
@@ -419,11 +434,29 @@ export function CertificateFormModal({
                 }}
               >
                 {VAT_RATE_PRESETS.map((r) => (
-                  <option key={r} value={r}>
-                    {r}%
+                  <option key={r} value={String(r)}>
+                    {`${r}%`}
                   </option>
                 ))}
+                <option value="custom">Другая…</option>
               </Select>
+              {vatRate === "custom" ? (
+                <Input
+                  className="mt-2"
+                  type="number"
+                  min={0}
+                  max={100}
+                  step="0.01"
+                  placeholder="%"
+                  aria-label="Своя ставка НДС, %"
+                  value={vatCustom}
+                  onChange={(e) => {
+                    setVatCustom(e.target.value);
+                    setVatManual("");
+                  }}
+                />
+              ) : null}
+              <input type="hidden" name="vatRate" value={effectiveVatRate} />
             </div>
             <div>
               <Label htmlFor="vatAmountManual">НДС вручную</Label>

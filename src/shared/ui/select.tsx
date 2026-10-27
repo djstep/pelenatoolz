@@ -20,18 +20,26 @@ type OptionData = {
   disabled?: boolean;
 };
 
+/** Текст подписи: `{r}%` — это массив [22, "%"], склеиваем без запятых. */
+function textOf(node: ReactNode): string {
+  if (typeof node === "string" || typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(textOf).join("");
+  return "";
+}
+
 function parseOptions(children: ReactNode): OptionData[] {
   const options: OptionData[] = [];
   Children.forEach(children, (child) => {
     if (isValidElement(child) && child.type === "option") {
       const props = child.props as {
-        value?: string;
+        value?: string | number;
         disabled?: boolean;
         children?: ReactNode;
       };
       options.push({
-        value: props.value ?? "",
-        label: String(props.children ?? ""),
+        // Значение всегда строка, как у настоящего <select>: иначе числовые варианты не находятся.
+        value: String(props.value ?? ""),
+        label: textOf(props.children),
         disabled: props.disabled,
       });
     }
