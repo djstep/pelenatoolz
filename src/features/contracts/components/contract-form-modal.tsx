@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useState } from "react";
+import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   createContractAction,
@@ -141,7 +141,13 @@ export function ContractFormModal({
     setStatuses(initialStatuses);
   }, [open, defaults, defaultStatusId, companies, counterparties, initialLedgerTypes, initialStatuses]);
 
+  // Каждый ответ сервера обрабатываем один раз: иначе «успех» остаётся в состоянии,
+  // а onClose (новая функция при каждой отрисовке у родителя) закрывает окно и обновляет
+  // страницу снова и снова.
+  const handledState = useRef(state);
   useEffect(() => {
+    if (handledState.current === state) return;
+    handledState.current = state;
     if (state.success && state.contractId && !isEdit) {
       onClose();
       router.push(
@@ -150,7 +156,7 @@ export function ContractFormModal({
     } else if (state.success && isEdit) {
       onClose();
     }
-  }, [state.success, state.contractId, isEdit, onClose, router, locale, projectId]);
+  }, [state, isEdit, onClose, router, locale, projectId]);
 
   const vatPreview = useMemo(() => {
     const amt = Number(amount) || 0;

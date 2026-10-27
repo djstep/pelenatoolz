@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useState } from "react";
+import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   attachCertificateFileAction,
@@ -165,7 +165,12 @@ export function CertificateFormModal({
     setPendingFile(null);
   }, [open, defaults, companies, counterparties, defaultStatusId]);
 
+  // Каждый ответ сервера обрабатываем один раз: иначе «успех» остаётся в состоянии,
+  // и окно закрывается (а файл грузится) снова при каждой отрисовке родителя.
+  const handledState = useRef(state);
   useEffect(() => {
+    if (handledState.current === state) return;
+    handledState.current = state;
     if (state.success) {
       const certId = state.certificateId ?? state.actId;
       if (certId && pendingFile) {
@@ -196,7 +201,7 @@ export function CertificateFormModal({
         onClose();
       }
     }
-  }, [state.success, state.certificateId, state.actId, pendingFile, projectId, onClose]);
+  }, [state, pendingFile, projectId, onClose]);
 
   const filteredContracts = useMemo(
     () =>
