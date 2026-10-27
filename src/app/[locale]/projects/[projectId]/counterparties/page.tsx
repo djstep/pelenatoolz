@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { CounterpartiesWorkspace } from "@/features/counterparties/components/counterparties-workspace";
 import {
   listCompanies,
@@ -14,6 +15,10 @@ export default async function CounterpartiesPage({ params }: Props) {
   const ctx = await requireProjectContext(projectId);
 
   if (!ctx.can("finance:read")) {
+    // Справочник недоступен, но договоры можно смотреть — сразу к ним.
+    if (ctx.can("contracts:read")) {
+      redirect(`/${locale}/projects/${projectId}/counterparties/contracts`);
+    }
     return (
       <p className="text-sm text-[var(--danger)]">Нет доступа к финансам</p>
     );

@@ -7,7 +7,11 @@ import {
   type ContractFormDefaults,
 } from "@/features/contracts/components/contract-form-modal";
 import { exportContractsXls } from "@/features/contracts/lib/export-contracts-xls";
-import { CONTRACT_COLUMNS } from "@/features/contracts/lib/table-columns";
+import type { ContractFinanceAccess } from "@/features/contracts/lib/finance-access";
+import {
+  CONTRACT_AMOUNT_COLUMNS,
+  CONTRACT_COLUMNS,
+} from "@/features/contracts/lib/table-columns";
 import type { ContractListItem } from "@/features/contracts/queries";
 import { useTableLayout } from "@/shared/hooks/use-table-layout";
 import { formatDateShort } from "@/shared/i18n/format-date";
@@ -67,6 +71,8 @@ export function ContractsWorkspace({
   existingTags,
   defaultStatusId,
   canWrite,
+  finance,
+  canCreateParties,
   initialCounterpartyId,
 }: {
   projectId: string;
@@ -79,9 +85,18 @@ export function ContractsWorkspace({
   existingTags: string[];
   defaultStatusId: string;
   canWrite: boolean;
+  finance: ContractFinanceAccess;
+  canCreateParties: boolean;
   initialCounterpartyId?: string;
 }) {
   const router = useRouter();
+  const columns = useMemo(
+    () =>
+      finance.read
+        ? CONTRACT_COLUMNS
+        : CONTRACT_COLUMNS.filter((c) => !CONTRACT_AMOUNT_COLUMNS.has(c.id)),
+    [finance.read],
+  );
   const {
     visibleColumns,
     widths,
@@ -90,7 +105,7 @@ export function ContractsWorkspace({
     setVisibleIds,
     visibleIds,
     orderedColumns,
-  } = useTableLayout(`contracts:${projectId}`, CONTRACT_COLUMNS);
+  } = useTableLayout(`contracts:${projectId}`, columns);
 
   const [search, setSearch] = useState("");
   const [statusIds, setStatusIds] = useState<Set<string>>(new Set());
@@ -264,7 +279,9 @@ export function ContractsWorkspace({
           <Button
             type="button"
             variant="secondary"
-            onClick={() => void exportContractsXls(contracts, projectId, "all")}
+            onClick={() =>
+              void exportContractsXls(contracts, projectId, "all", finance.read)
+            }
           >
             Excel: всё
           </Button>
@@ -272,7 +289,12 @@ export function ContractsWorkspace({
             type="button"
             variant="secondary"
             onClick={() =>
-              void exportContractsXls(filtered, projectId, "filtered")
+              void exportContractsXls(
+                filtered,
+                projectId,
+                "filtered",
+                finance.read,
+              )
             }
           >
             Excel: фильтр
@@ -286,6 +308,7 @@ export function ContractsWorkspace({
                 exportRows,
                 projectId,
                 selected.size ? "selected" : "filtered",
+                finance.read,
               )
             }
           >
@@ -559,6 +582,8 @@ export function ContractsWorkspace({
           existingTags={existingTags}
           defaults={formDefaults}
           defaultStatusId={defaultStatusId}
+          finance={finance}
+          canCreateParties={canCreateParties}
         />
       ) : null}
     </div>

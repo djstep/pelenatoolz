@@ -8,6 +8,7 @@ import {
   type ContractFormDefaults,
 } from "@/features/contracts/components/contract-form-modal";
 import { CertificatesWorkspace } from "@/features/contracts/components/certificates-workspace";
+import type { ContractFinanceAccess } from "@/features/contracts/lib/finance-access";
 import type {
   CertificateListItem,
   ContractListItem,
@@ -38,7 +39,10 @@ export function CounterpartyDetailView({
   statuses,
   existingTags,
   defaultStatusId,
+  showContracts,
   canWrite,
+  finance,
+  canCreateParties,
 }: {
   projectId: string;
   locale: string;
@@ -73,7 +77,12 @@ export function CounterpartyDetailView({
   statuses: { id: string; name: string; color: string }[];
   existingTags: string[];
   defaultStatusId: string;
+  /** Право просмотра договоров и актов; без него блоки договоров и актов скрыты. */
+  showContracts: boolean;
+  /** Право изменения договоров и актов. */
   canWrite: boolean;
+  finance: ContractFinanceAccess;
+  canCreateParties: boolean;
 }) {
   const router = useRouter();
   const [contractOpen, setContractOpen] = useState(false);
@@ -110,88 +119,95 @@ export function CounterpartyDetailView({
         </div>
       </dl>
 
-      <section className="space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="font-display text-lg font-semibold">Договоры</h2>
-          <div className="flex gap-2">
-            <Link
-              href={`/${locale}/projects/${projectId}/counterparties/contracts?counterpartyId=${counterparty.id}`}
-              className="text-sm text-[var(--accent)] hover:underline"
-            >
-              Все договоры →
-            </Link>
-            {canWrite ? (
-              <Button
-                type="button"
-                onClick={() => {
-                  setPrefill({
-                    counterpartyId: counterparty.id,
-                    statusId: defaultStatusId,
-                  });
-                  setContractOpen(true);
-                }}
-              >
-                Добавить
-              </Button>
-            ) : null}
-          </div>
-        </div>
-        <ul className="divide-y divide-[var(--border)]/60 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--panel-solid)]">
-          {contracts.map((c) => (
-            <li key={c.id}>
-              <Link
-                href={`/${locale}/projects/${projectId}/counterparties/contracts/${c.id}`}
-                className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm hover:bg-white/[0.03]"
-              >
-                <span>
-                  {formatDateShort(c.date)} · № {c.number} · {money(c.amountWithVat)}
-                </span>
-                <Badge
-                  className="border"
-                  style={{
-                    backgroundColor: `${c.status.color}33`,
-                    borderColor: `${c.status.color}66`,
-                    color: c.status.color,
-                  }}
+      {showContracts ? (
+        <>
+          <section className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="font-display text-lg font-semibold">Договоры</h2>
+              <div className="flex gap-2">
+                <Link
+                  href={`/${locale}/projects/${projectId}/counterparties/contracts?counterpartyId=${counterparty.id}`}
+                  className="text-sm text-[var(--accent)] hover:underline"
                 >
-                  {c.status.name}
-                </Badge>
+                  Все договоры →
+                </Link>
+                {canWrite ? (
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      setPrefill({
+                        counterpartyId: counterparty.id,
+                        statusId: defaultStatusId,
+                      });
+                      setContractOpen(true);
+                    }}
+                  >
+                    Добавить
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+            <ul className="divide-y divide-[var(--border)]/60 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--panel-solid)]">
+              {contracts.map((c) => (
+                <li key={c.id}>
+                  <Link
+                    href={`/${locale}/projects/${projectId}/counterparties/contracts/${c.id}`}
+                    className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm hover:bg-white/[0.03]"
+                  >
+                    <span>
+                      {formatDateShort(c.date)} · № {c.number}
+                      {finance.read ? ` · ${money(c.amountWithVat)}` : ""}
+                    </span>
+                    <Badge
+                      className="border"
+                      style={{
+                        backgroundColor: `${c.status.color}33`,
+                        borderColor: `${c.status.color}66`,
+                        color: c.status.color,
+                      }}
+                    >
+                      {c.status.name}
+                    </Badge>
+                  </Link>
+                </li>
+              ))}
+              {contracts.length === 0 ? (
+                <li className="px-4 py-6 text-sm text-[var(--muted-fg)]">
+                  Договоров с этим контрагентом пока нет
+                </li>
+              ) : null}
+            </ul>
+          </section>
+
+          <section className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="font-display text-lg font-semibold">Акты</h2>
+              <Link
+                href={`/${locale}/projects/${projectId}/counterparties/acts?counterpartyId=${counterparty.id}`}
+                className="text-sm text-[var(--accent)] hover:underline"
+              >
+                Все акты →
               </Link>
-            </li>
-          ))}
-          {contracts.length === 0 ? (
-            <li className="px-4 py-6 text-sm text-[var(--muted-fg)]">
-              Договоров с этим контрагентом пока нет
-            </li>
-          ) : null}
-        </ul>
-      </section>
+            </div>
+            <CertificatesWorkspace
+              projectId={projectId}
+              certificates={certificates}
+              companies={companies}
+              counterparties={counterparties}
+              contracts={contractOptions}
+              payments={payments}
+              statuses={statuses}
+              defaultStatusId={defaultStatusId}
+              canWrite={canWrite}
+              finance={finance}
+              canCreateParties={canCreateParties}
+              initialCounterpartyId={counterparty.id}
+            />
+          </section>
+        </>
+      ) : null}
 
-      <section className="space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="font-display text-lg font-semibold">Акты</h2>
-          <Link
-            href={`/${locale}/projects/${projectId}/counterparties/acts?counterpartyId=${counterparty.id}`}
-            className="text-sm text-[var(--accent)] hover:underline"
-          >
-            Все акты →
-          </Link>
-        </div>
-        <CertificatesWorkspace
-          projectId={projectId}
-          certificates={certificates}
-          companies={companies}
-          counterparties={counterparties}
-          contracts={contractOptions}
-          payments={payments}
-          statuses={statuses}
-          defaultStatusId={defaultStatusId}
-          canWrite={canWrite}
-          initialCounterpartyId={counterparty.id}
-        />
-      </section>
-
-      {canWrite ? (
+      {showContracts && canWrite ? (
         <ContractFormModal
           projectId={projectId}
           locale={locale}
@@ -207,6 +223,8 @@ export function CounterpartyDetailView({
           existingTags={existingTags}
           defaults={prefill}
           defaultStatusId={defaultStatusId}
+          finance={finance}
+          canCreateParties={canCreateParties}
         />
       ) : null}
     </div>

@@ -9,6 +9,7 @@ import {
   updateContractAction,
   type ContractsActionState,
 } from "@/features/contracts/actions";
+import type { ContractFinanceAccess } from "@/features/contracts/lib/finance-access";
 import {
   VAT_RATE_PRESETS,
   computeContractVat,
@@ -70,6 +71,8 @@ export function ContractFormModal({
   existingTags,
   defaults,
   defaultStatusId,
+  finance,
+  canCreateParties,
 }: {
   projectId: string;
   locale: string;
@@ -82,6 +85,10 @@ export function ContractFormModal({
   existingTags: string[];
   defaults?: ContractFormDefaults | null;
   defaultStatusId: string;
+  /** Без права менять финансы поля сумм скрыты, сервер их не принимает. */
+  finance: ContractFinanceAccess;
+  /** Новые компании и контрагенты добавляются в справочник «Финансов». */
+  canCreateParties: boolean;
 }) {
   const router = useRouter();
   const isEdit = Boolean(defaults?.id);
@@ -208,17 +215,21 @@ export function ContractFormModal({
           options={companyOptions}
           value={companyId}
           onChange={setCompanyId}
-          onQuickCreate={async (fd) => {
-            const name = String(fd.get("name") ?? "");
-            const r = await quickCreateCompanyAction(projectId, name);
-            if ("id" in r) {
-              setCompanyOptions((prev) =>
-                prev.some((x) => x.id === r.id) ? prev : [...prev, r],
-              );
-              setCompanyId(r.id);
-            }
-            return r;
-          }}
+          onQuickCreate={
+            canCreateParties
+              ? async (fd) => {
+                  const name = String(fd.get("name") ?? "");
+                  const r = await quickCreateCompanyAction(projectId, name);
+                  if ("id" in r) {
+                    setCompanyOptions((prev) =>
+                      prev.some((x) => x.id === r.id) ? prev : [...prev, r],
+                    );
+                    setCompanyId(r.id);
+                  }
+                  return r;
+                }
+              : undefined
+          }
         />
 
         <EntityPicker
@@ -227,23 +238,31 @@ export function ContractFormModal({
           options={cpOptions}
           value={counterpartyId}
           onChange={setCounterpartyId}
-          onQuickCreate={async (fd) => {
-            const name = String(fd.get("name") ?? "");
-            const type = (String(fd.get("type") ?? "LEGAL_ENTITY") ||
-              "LEGAL_ENTITY") as
-              | "LEGAL_ENTITY"
-              | "IP"
-              | "INDIVIDUAL"
-              | "SELF_EMPLOYED";
-            const r = await quickCreateCounterpartyAction(projectId, name, type);
-            if ("id" in r) {
-              setCpOptions((prev) =>
-                prev.some((x) => x.id === r.id) ? prev : [...prev, r],
-              );
-              setCounterpartyId(r.id);
-            }
-            return r;
-          }}
+          onQuickCreate={
+            canCreateParties
+              ? async (fd) => {
+                  const name = String(fd.get("name") ?? "");
+                  const type = (String(fd.get("type") ?? "LEGAL_ENTITY") ||
+                    "LEGAL_ENTITY") as
+                    | "LEGAL_ENTITY"
+                    | "IP"
+                    | "INDIVIDUAL"
+                    | "SELF_EMPLOYED";
+                  const r = await quickCreateCounterpartyAction(
+                    projectId,
+                    name,
+                    type,
+                  );
+                  if ("id" in r) {
+                    setCpOptions((prev) =>
+                      prev.some((x) => x.id === r.id) ? prev : [...prev, r],
+                    );
+                    setCounterpartyId(r.id);
+                  }
+                  return r;
+                }
+              : undefined
+          }
           createFields={
             <div>
               <Label htmlFor="cp-type">Тип</Label>
@@ -279,103 +298,107 @@ export function ContractFormModal({
           }}
         />
 
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div>
-            <Label htmlFor="amount">Сумма (без НДС) *</Label>
-            <Input
-              id="amount"
-              name="amount"
-              type="number"
-              min={0}
-              step="0.01"
-              required
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-            />
-          </div>
-          <div className="flex flex-col justify-end gap-2 pb-1">
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                name="vatEnabled"
-                checked={vatEnabled}
-                onChange={(e) => setVatEnabled(e.target.checked)}
-              />
-              С НДС
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                name="isPreliminary"
-                defaultChecked={defaults?.isPreliminary ?? false}
-              />
-              Предварительная сумма
-            </label>
-          </div>
-        </div>
-
-        {vatEnabled ? (
-          <div className="grid gap-3 rounded-xl border border-[var(--border)] bg-white/[0.02] p-3 sm:grid-cols-3">
-            <div>
-              <Label htmlFor="vatRate">Ставка %</Label>
-              <Select
-                id="vatRate"
-                value={vatRate}
-                onChange={(e) => {
-                  setVatRate(e.target.value);
-                  setVatManual("");
-                }}
-              >
-                {VAT_RATE_PRESETS.map((r) => (
-                  <option key={r} value={String(r)}>
-                    {`${r}%`}
-                  </option>
-                ))}
-                <option value="custom">Другая…</option>
-              </Select>
-              {vatRate === "custom" ? (
+        {finance.write ? (
+          <>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <Label htmlFor="amount">Сумма (без НДС) *</Label>
                 <Input
-                  className="mt-2"
+                  id="amount"
+                  name="amount"
                   type="number"
                   min={0}
-                  max={100}
                   step="0.01"
-                  placeholder="%"
-                  aria-label="Своя ставка НДС, %"
-                  value={vatCustom}
-                  onChange={(e) => {
-                    setVatCustom(e.target.value);
-                    setVatManual("");
-                  }}
+                  required
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
                 />
-              ) : null}
-              <input type="hidden" name="vatRate" value={effectiveVatRate} />
+              </div>
+              <div className="flex flex-col justify-end gap-2 pb-1">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    name="vatEnabled"
+                    checked={vatEnabled}
+                    onChange={(e) => setVatEnabled(e.target.checked)}
+                  />
+                  С НДС
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    name="isPreliminary"
+                    defaultChecked={defaults?.isPreliminary ?? false}
+                  />
+                  Предварительная сумма
+                </label>
+              </div>
             </div>
-            <div>
-              <Label htmlFor="vatAmountManual">НДС вручную</Label>
-              <Input
-                id="vatAmountManual"
-                name="vatAmountManual"
-                type="number"
-                min={0}
-                step="0.01"
-                value={vatManual}
-                onChange={(e) => setVatManual(e.target.value)}
-                placeholder="авто"
-              />
-            </div>
-            <div>
-              <Label>Итого с НДС</Label>
-              <p className="mt-2 text-lg font-semibold tabular-nums">
-                {vatPreview.amountWithVat.toLocaleString("ru-RU", {
-                  minimumFractionDigits: 2,
-                })}
-              </p>
-            </div>
-          </div>
-        ) : (
-          <input type="hidden" name="vatRate" value="" />
-        )}
+
+            {vatEnabled ? (
+              <div className="grid gap-3 rounded-xl border border-[var(--border)] bg-white/[0.02] p-3 sm:grid-cols-3">
+                <div>
+                  <Label htmlFor="vatRate">Ставка %</Label>
+                  <Select
+                    id="vatRate"
+                    value={vatRate}
+                    onChange={(e) => {
+                      setVatRate(e.target.value);
+                      setVatManual("");
+                    }}
+                  >
+                    {VAT_RATE_PRESETS.map((r) => (
+                      <option key={r} value={String(r)}>
+                        {`${r}%`}
+                      </option>
+                    ))}
+                    <option value="custom">Другая…</option>
+                  </Select>
+                  {vatRate === "custom" ? (
+                    <Input
+                      className="mt-2"
+                      type="number"
+                      min={0}
+                      max={100}
+                      step="0.01"
+                      placeholder="%"
+                      aria-label="Своя ставка НДС, %"
+                      value={vatCustom}
+                      onChange={(e) => {
+                        setVatCustom(e.target.value);
+                        setVatManual("");
+                      }}
+                    />
+                  ) : null}
+                  <input type="hidden" name="vatRate" value={effectiveVatRate} />
+                </div>
+                <div>
+                  <Label htmlFor="vatAmountManual">НДС вручную</Label>
+                  <Input
+                    id="vatAmountManual"
+                    name="vatAmountManual"
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={vatManual}
+                    onChange={(e) => setVatManual(e.target.value)}
+                    placeholder="авто"
+                  />
+                </div>
+                <div>
+                  <Label>Итого с НДС</Label>
+                  <p className="mt-2 text-lg font-semibold tabular-nums">
+                    {vatPreview.amountWithVat.toLocaleString("ru-RU", {
+                      minimumFractionDigits: 2,
+                    })}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <input type="hidden" name="vatRate" value="" />
+            )}
+          </>
+        ) : null}
 
         <div>
           <Label htmlFor="statusId">Статус</Label>

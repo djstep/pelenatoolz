@@ -7,6 +7,7 @@ import {
   updateCertificateAction,
   type ContractsActionState,
 } from "@/features/contracts/actions";
+import type { ContractFinanceAccess } from "@/features/contracts/lib/finance-access";
 import {
   VAT_RATE_PRESETS,
   computeContractVat,
@@ -93,6 +94,8 @@ export function CertificateFormModal({
   lockCounterparty = false,
   lockContract = false,
   lockPayment = false,
+  finance,
+  canCreateParties,
 }: {
   projectId: string;
   open: boolean;
@@ -108,6 +111,10 @@ export function CertificateFormModal({
   lockCounterparty?: boolean;
   lockContract?: boolean;
   lockPayment?: boolean;
+  /** Без права менять финансы суммы и платёж скрыты, сервер их не принимает. */
+  finance: ContractFinanceAccess;
+  /** Новые компании и контрагенты добавляются в справочник «Финансов». */
+  canCreateParties: boolean;
 }) {
   const isEdit = Boolean(defaults?.id);
   const bound = isEdit
@@ -290,19 +297,23 @@ export function CertificateFormModal({
               if (!lockContract) setContractId("");
               if (!lockPayment) setPaymentId("");
             }}
-            onQuickCreate={async (fd) => {
-              const r = await quickCreateCompanyAction(
-                projectId,
-                String(fd.get("name") ?? ""),
-              );
-              if ("id" in r) {
-                setCompanyOpts((p) =>
-                  p.some((x) => x.id === r.id) ? p : [...p, r],
-                );
-                setCompanyId(r.id);
-              }
-              return r;
-            }}
+            onQuickCreate={
+              canCreateParties
+                ? async (fd) => {
+                    const r = await quickCreateCompanyAction(
+                      projectId,
+                      String(fd.get("name") ?? ""),
+                    );
+                    if ("id" in r) {
+                      setCompanyOpts((p) =>
+                        p.some((x) => x.id === r.id) ? p : [...p, r],
+                      );
+                      setCompanyId(r.id);
+                    }
+                    return r;
+                  }
+                : undefined
+            }
           />
         ) : (
           <input type="hidden" name="companyId" value={companyId} />
@@ -319,19 +330,23 @@ export function CertificateFormModal({
               if (!lockContract) setContractId("");
               if (!lockPayment) setPaymentId("");
             }}
-            onQuickCreate={async (fd) => {
-              const r = await quickCreateCounterpartyAction(
-                projectId,
-                String(fd.get("name") ?? ""),
-              );
-              if ("id" in r) {
-                setCpOpts((p) =>
-                  p.some((x) => x.id === r.id) ? p : [...p, r],
-                );
-                setCounterpartyId(r.id);
-              }
-              return r;
-            }}
+            onQuickCreate={
+              canCreateParties
+                ? async (fd) => {
+                    const r = await quickCreateCounterpartyAction(
+                      projectId,
+                      String(fd.get("name") ?? ""),
+                    );
+                    if ("id" in r) {
+                      setCpOpts((p) =>
+                        p.some((x) => x.id === r.id) ? p : [...p, r],
+                      );
+                      setCounterpartyId(r.id);
+                    }
+                    return r;
+                  }
+                : undefined
+            }
           />
         ) : (
           <input type="hidden" name="counterpartyId" value={counterpartyId} />
@@ -358,117 +373,121 @@ export function CertificateFormModal({
           </Select>
         </div>
 
-        <div>
-          <Label htmlFor="paymentId">Платёж</Label>
-          <Select
-            id="paymentId"
-            name="paymentId"
-            value={paymentId}
-            disabled={lockPayment}
-            onChange={(e) => {
-              const id = e.target.value;
-              setPaymentId(id);
-              const p = payments.find((x) => x.id === id);
-              if (p) {
-                setCompanyId(p.companyId);
-                setCounterpartyId(p.counterpartyId);
-                if (p.contractId) setContractId(p.contractId);
-              }
-            }}
-          >
-            <option value="">—</option>
-            {filteredPayments.map((p) => (
-              <option key={p.id} value={p.id}>
-                {formatDateShort(p.date)} · {moneyLabel(p.amountWithTax)}
-                {p.comment ? ` — ${p.comment}` : ""}
-              </option>
-            ))}
-          </Select>
-        </div>
-
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div>
-            <Label htmlFor="amount">Сумма (без НДС) *</Label>
-            <Input
-              id="amount"
-              name="amount"
-              type="number"
-              step="0.01"
-              min={0}
-              required
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-            />
-          </div>
-          <label className="flex items-end gap-2 pb-2 text-sm">
-            <input
-              type="checkbox"
-              name="vatEnabled"
-              checked={vatEnabled}
-              onChange={(e) => setVatEnabled(e.target.checked)}
-            />
-            С НДС
-          </label>
-        </div>
-
-        {vatEnabled ? (
-          <div className="grid gap-3 rounded-xl border border-[var(--border)] p-3 sm:grid-cols-3">
+        {finance.write ? (
+          <>
             <div>
-              <Label htmlFor="vatRate">Ставка %</Label>
+              <Label htmlFor="paymentId">Платёж</Label>
               <Select
-                id="vatRate"
-                value={vatRate}
+                id="paymentId"
+                name="paymentId"
+                value={paymentId}
+                disabled={lockPayment}
                 onChange={(e) => {
-                  setVatRate(e.target.value);
-                  setVatManual("");
+                  const id = e.target.value;
+                  setPaymentId(id);
+                  const p = payments.find((x) => x.id === id);
+                  if (p) {
+                    setCompanyId(p.companyId);
+                    setCounterpartyId(p.counterpartyId);
+                    if (p.contractId) setContractId(p.contractId);
+                  }
                 }}
               >
-                {VAT_RATE_PRESETS.map((r) => (
-                  <option key={r} value={String(r)}>
-                    {`${r}%`}
+                <option value="">—</option>
+                {filteredPayments.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {formatDateShort(p.date)} · {moneyLabel(p.amountWithTax)}
+                    {p.comment ? ` — ${p.comment}` : ""}
                   </option>
                 ))}
-                <option value="custom">Другая…</option>
               </Select>
-              {vatRate === "custom" ? (
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <Label htmlFor="amount">Сумма (без НДС) *</Label>
                 <Input
-                  className="mt-2"
+                  id="amount"
+                  name="amount"
                   type="number"
-                  min={0}
-                  max={100}
                   step="0.01"
-                  placeholder="%"
-                  aria-label="Своя ставка НДС, %"
-                  value={vatCustom}
-                  onChange={(e) => {
-                    setVatCustom(e.target.value);
-                    setVatManual("");
-                  }}
+                  min={0}
+                  required
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
                 />
-              ) : null}
-              <input type="hidden" name="vatRate" value={effectiveVatRate} />
+              </div>
+              <label className="flex items-end gap-2 pb-2 text-sm">
+                <input
+                  type="checkbox"
+                  name="vatEnabled"
+                  checked={vatEnabled}
+                  onChange={(e) => setVatEnabled(e.target.checked)}
+                />
+                С НДС
+              </label>
             </div>
-            <div>
-              <Label htmlFor="vatAmountManual">НДС вручную</Label>
-              <Input
-                id="vatAmountManual"
-                name="vatAmountManual"
-                type="number"
-                step="0.01"
-                value={vatManual}
-                onChange={(e) => setVatManual(e.target.value)}
-                placeholder="авто"
-              />
-            </div>
-            <div>
-              <Label>Итого с НДС</Label>
-              <p className="mt-2 text-lg font-semibold tabular-nums">
-                {vatPreview.amountWithVat.toLocaleString("ru-RU", {
-                  minimumFractionDigits: 2,
-                })}
-              </p>
-            </div>
-          </div>
+
+            {vatEnabled ? (
+              <div className="grid gap-3 rounded-xl border border-[var(--border)] p-3 sm:grid-cols-3">
+                <div>
+                  <Label htmlFor="vatRate">Ставка %</Label>
+                  <Select
+                    id="vatRate"
+                    value={vatRate}
+                    onChange={(e) => {
+                      setVatRate(e.target.value);
+                      setVatManual("");
+                    }}
+                  >
+                    {VAT_RATE_PRESETS.map((r) => (
+                      <option key={r} value={String(r)}>
+                        {`${r}%`}
+                      </option>
+                    ))}
+                    <option value="custom">Другая…</option>
+                  </Select>
+                  {vatRate === "custom" ? (
+                    <Input
+                      className="mt-2"
+                      type="number"
+                      min={0}
+                      max={100}
+                      step="0.01"
+                      placeholder="%"
+                      aria-label="Своя ставка НДС, %"
+                      value={vatCustom}
+                      onChange={(e) => {
+                        setVatCustom(e.target.value);
+                        setVatManual("");
+                      }}
+                    />
+                  ) : null}
+                  <input type="hidden" name="vatRate" value={effectiveVatRate} />
+                </div>
+                <div>
+                  <Label htmlFor="vatAmountManual">НДС вручную</Label>
+                  <Input
+                    id="vatAmountManual"
+                    name="vatAmountManual"
+                    type="number"
+                    step="0.01"
+                    value={vatManual}
+                    onChange={(e) => setVatManual(e.target.value)}
+                    placeholder="авто"
+                  />
+                </div>
+                <div>
+                  <Label>Итого с НДС</Label>
+                  <p className="mt-2 text-lg font-semibold tabular-nums">
+                    {vatPreview.amountWithVat.toLocaleString("ru-RU", {
+                      minimumFractionDigits: 2,
+                    })}
+                  </p>
+                </div>
+              </div>
+            ) : null}
+          </>
         ) : null}
 
         <div>

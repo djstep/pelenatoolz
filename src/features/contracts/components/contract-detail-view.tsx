@@ -17,6 +17,7 @@ import {
   ContractFormModal,
   type ContractFormDefaults,
 } from "@/features/contracts/components/contract-form-modal";
+import type { ContractFinanceAccess } from "@/features/contracts/lib/finance-access";
 import { formatDateShort } from "@/shared/i18n/format-date";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
@@ -46,6 +47,8 @@ export function ContractDetailView({
   existingTags,
   defaultStatusId,
   canWrite,
+  finance,
+  canCreateParties,
 }: {
   projectId: string;
   locale: string;
@@ -57,6 +60,9 @@ export function ContractDetailView({
   existingTags: string[];
   defaultStatusId: string;
   canWrite: boolean;
+  /** Суммы, платежи и начисления — только с правом на финансы. */
+  finance: ContractFinanceAccess;
+  canCreateParties: boolean;
 }) {
   const router = useRouter();
   const [editOpen, setEditOpen] = useState(false);
@@ -186,12 +192,14 @@ export function ContractDetailView({
               <dt className="text-xs text-[var(--muted-fg)]">Ведомость</dt>
               <dd>{contract.ledgerType?.name ?? "—"}</dd>
             </div>
-            <div>
-              <dt className="text-xs text-[var(--muted-fg)]">Сумма / с НДС</dt>
-              <dd>
-                {money(contract.amount)} / {money(contract.amountWithVat)}
-              </dd>
-            </div>
+            {finance.read ? (
+              <div>
+                <dt className="text-xs text-[var(--muted-fg)]">Сумма / с НДС</dt>
+                <dd>
+                  {money(contract.amount)} / {money(contract.amountWithVat)}
+                </dd>
+              </div>
+            ) : null}
             <div className="sm:col-span-2">
               <dt className="text-xs text-[var(--muted-fg)]">Содержание</dt>
               <dd className="whitespace-pre-wrap">{contract.summary || "—"}</dd>
@@ -320,41 +328,43 @@ export function ContractDetailView({
         </aside>
       </div>
 
-      <section className="rounded-2xl border border-[var(--border)] bg-[var(--panel-solid)] p-4">
-        <div className="flex items-center justify-between gap-2">
-          <h3 className="font-semibold">Платежи и начисления</h3>
-        </div>
-        <div className="mt-3 grid gap-4 md:grid-cols-2">
-          <div>
-            <p className="text-xs text-[var(--muted-fg)]">Кассовые платежи</p>
-            <ul className="mt-2 space-y-1 text-sm">
-              {contract.cashPayments.map((p) => (
-                <li key={p.id}>
-                  {formatDateShort(p.date)} · {money(p.amountWithTax)}
-                  {p.comment ? ` — ${p.comment}` : ""}
-                </li>
-              ))}
-              {contract.cashPayments.length === 0 ? (
-                <li className="text-[var(--muted-fg)]">Нет привязанных платежей</li>
-              ) : null}
-            </ul>
+      {finance.read ? (
+        <section className="rounded-2xl border border-[var(--border)] bg-[var(--panel-solid)] p-4">
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="font-semibold">Платежи и начисления</h3>
           </div>
-          <div>
-            <p className="text-xs text-[var(--muted-fg)]">Начисления</p>
-            <ul className="mt-2 space-y-1 text-sm">
-              {contract.accruals.map((p) => (
-                <li key={p.id}>
-                  {formatDateShort(p.date)} · {money(p.amountWithTax)}
-                  {p.comment ? ` — ${p.comment}` : ""}
-                </li>
-              ))}
-              {contract.accruals.length === 0 ? (
-                <li className="text-[var(--muted-fg)]">Нет привязанных начислений</li>
-              ) : null}
-            </ul>
+          <div className="mt-3 grid gap-4 md:grid-cols-2">
+            <div>
+              <p className="text-xs text-[var(--muted-fg)]">Кассовые платежи</p>
+              <ul className="mt-2 space-y-1 text-sm">
+                {contract.cashPayments.map((p) => (
+                  <li key={p.id}>
+                    {formatDateShort(p.date)} · {money(p.amountWithTax)}
+                    {p.comment ? ` — ${p.comment}` : ""}
+                  </li>
+                ))}
+                {contract.cashPayments.length === 0 ? (
+                  <li className="text-[var(--muted-fg)]">Нет привязанных платежей</li>
+                ) : null}
+              </ul>
+            </div>
+            <div>
+              <p className="text-xs text-[var(--muted-fg)]">Начисления</p>
+              <ul className="mt-2 space-y-1 text-sm">
+                {contract.accruals.map((p) => (
+                  <li key={p.id}>
+                    {formatDateShort(p.date)} · {money(p.amountWithTax)}
+                    {p.comment ? ` — ${p.comment}` : ""}
+                  </li>
+                ))}
+                {contract.accruals.length === 0 ? (
+                  <li className="text-[var(--muted-fg)]">Нет привязанных начислений</li>
+                ) : null}
+              </ul>
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      ) : null}
 
       <section className="rounded-2xl border border-[var(--border)] bg-[var(--panel-solid)] p-4">
         <div className="flex items-center justify-between gap-2">
@@ -372,9 +382,9 @@ export function ContractDetailView({
               className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--border)] px-3 py-2"
             >
               <span>
-                {formatDateShort(a.date)} · № {a.number} ·{" "}
-                {money(a.amountWithVat)}
-                {a.payment
+                {formatDateShort(a.date)} · № {a.number}
+                {finance.read ? ` · ${money(a.amountWithVat)}` : ""}
+                {finance.read && a.payment
                   ? ` · платёж ${formatDateShort(a.payment.date)}`
                   : ""}
                 {a.files.length ? ` · файлов: ${a.files.length}` : ""}
@@ -414,6 +424,8 @@ export function ContractDetailView({
             existingTags={existingTags}
             defaults={editDefaults}
             defaultStatusId={defaultStatusId}
+            finance={finance}
+            canCreateParties={canCreateParties}
           />
           <CertificateFormModal
             projectId={projectId}
@@ -453,6 +465,8 @@ export function ContractDetailView({
             lockCompany
             lockCounterparty
             lockContract
+            finance={finance}
+            canCreateParties={canCreateParties}
           />
         </>
       ) : null}

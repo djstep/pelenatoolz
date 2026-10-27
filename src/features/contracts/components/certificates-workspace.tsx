@@ -6,7 +6,11 @@ import {
   type CertificateFormDefaults,
 } from "@/features/contracts/components/certificate-form-modal";
 import { exportCertificatesXls } from "@/features/contracts/lib/export-certificates-xls";
-import { CERTIFICATE_COLUMNS } from "@/features/contracts/lib/table-columns";
+import type { ContractFinanceAccess } from "@/features/contracts/lib/finance-access";
+import {
+  CERTIFICATE_COLUMNS,
+  CERTIFICATE_FINANCE_COLUMNS,
+} from "@/features/contracts/lib/table-columns";
 import type { CertificateListItem } from "@/features/contracts/queries";
 import { useTableLayout } from "@/shared/hooks/use-table-layout";
 import { formatDateShort } from "@/shared/i18n/format-date";
@@ -81,6 +85,8 @@ export function CertificatesWorkspace({
   statuses,
   defaultStatusId,
   canWrite,
+  finance,
+  canCreateParties,
   initialCounterpartyId,
   initialContractId,
   initialPaymentId,
@@ -96,12 +102,23 @@ export function CertificatesWorkspace({
   statuses: StatusOpt[];
   defaultStatusId: string;
   canWrite: boolean;
+  finance: ContractFinanceAccess;
+  canCreateParties: boolean;
   initialCounterpartyId?: string;
   initialContractId?: string;
   initialPaymentId?: string;
   initialCompanyId?: string;
   hideCreate?: boolean;
 }) {
+  const columns = useMemo(
+    () =>
+      finance.read
+        ? CERTIFICATE_COLUMNS
+        : CERTIFICATE_COLUMNS.filter(
+            (c) => !CERTIFICATE_FINANCE_COLUMNS.has(c.id),
+          ),
+    [finance.read],
+  );
   const {
     visibleColumns,
     widths,
@@ -110,7 +127,7 @@ export function CertificatesWorkspace({
     setVisibleIds,
     visibleIds,
     orderedColumns,
-  } = useTableLayout(`certificates:${projectId}`, CERTIFICATE_COLUMNS);
+  } = useTableLayout(`certificates:${projectId}`, columns);
 
   const [search, setSearch] = useState("");
   const [statusIds, setStatusIds] = useState<Set<string>>(new Set());
@@ -294,7 +311,12 @@ export function CertificatesWorkspace({
             type="button"
             variant="secondary"
             onClick={() =>
-              void exportCertificatesXls(certificates, projectId, "all")
+              void exportCertificatesXls(
+                certificates,
+                projectId,
+                "all",
+                finance.read,
+              )
             }
           >
             Excel: всё
@@ -303,7 +325,12 @@ export function CertificatesWorkspace({
             type="button"
             variant="secondary"
             onClick={() =>
-              void exportCertificatesXls(filtered, projectId, "filtered")
+              void exportCertificatesXls(
+                filtered,
+                projectId,
+                "filtered",
+                finance.read,
+              )
             }
           >
             Excel: фильтр
@@ -317,6 +344,7 @@ export function CertificatesWorkspace({
                 exportRows,
                 projectId,
                 selected.size ? "selected" : "filtered",
+                finance.read,
               )
             }
           >
@@ -552,6 +580,8 @@ export function CertificatesWorkspace({
           lockCounterparty={Boolean(initialCounterpartyId || initialPaymentId)}
           lockContract={Boolean(initialContractId)}
           lockPayment={Boolean(initialPaymentId)}
+          finance={finance}
+          canCreateParties={canCreateParties}
         />
       ) : null}
 

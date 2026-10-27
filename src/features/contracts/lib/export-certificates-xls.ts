@@ -13,6 +13,8 @@ export async function exportCertificatesXls(
   rows: CertificateListItem[],
   projectId: string,
   fileSuffix = "all",
+  /** Без права на финансы платёж и суммы не выгружаются. */
+  includeFinance = true,
 ) {
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet("Акты");
@@ -22,10 +24,7 @@ export async function exportCertificatesXls(
     "Контрагент",
     "Компания",
     "Договор",
-    "Платёж",
-    "Сумма",
-    "НДС",
-    "С НДС",
+    ...(includeFinance ? ["Платёж", "Сумма", "НДС", "С НДС"] : []),
     "Статус",
     "Содержание",
     "Файлы",
@@ -38,12 +37,16 @@ export async function exportCertificatesXls(
       r.counterparty.name,
       r.company.name,
       r.contract?.number ?? "",
-      r.payment
-        ? `${formatDateShort(r.payment.date)} ${money(r.payment.amountWithTax)}`
-        : "",
-      money(r.amount),
-      money(r.vatAmount),
-      money(r.amountWithVat),
+      ...(includeFinance
+        ? [
+            r.payment
+              ? `${formatDateShort(r.payment.date)} ${money(r.payment.amountWithTax)}`
+              : "",
+            money(r.amount),
+            money(r.vatAmount),
+            money(r.amountWithVat),
+          ]
+        : []),
       r.status.name,
       r.summary ?? "",
       r.files.length,

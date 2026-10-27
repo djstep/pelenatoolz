@@ -10,6 +10,7 @@ export const PERMISSION_SECTIONS = [
   { id: "budget", label: "Смета" },
   { id: "reports", label: "Производственные отчёты" },
   { id: "finance", label: "Финансы" },
+  { id: "contracts", label: "Договоры и акты" },
   { id: "post", label: "Постпродакшн" },
   { id: "members", label: "Участники и роли" },
   { id: "project_settings", label: "Настройки проекта" },

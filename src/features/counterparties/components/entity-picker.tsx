@@ -37,7 +37,8 @@ export function EntityPicker({
   options: PickerOption[];
   value: string;
   onChange: (id: string) => void;
-  onQuickCreate: (form: FormData) => Promise<
+  /** Без него добавить новое из списка нельзя: нет кнопки «+» и пункта создания. */
+  onQuickCreate?: (form: FormData) => Promise<
     { id: string; name: string } | { error: string }
   >;
   placeholder?: string;
@@ -74,7 +75,7 @@ export function EntityPicker({
 
   async function submitCreate() {
     const root = createRootRef.current;
-    if (!root) return;
+    if (!root || !onQuickCreate) return;
     setCreating(true);
     setCreateError(null);
     const result = await onQuickCreate(collectFormData(root));
@@ -115,15 +116,17 @@ export function EntityPicker({
             <span className="text-[var(--muted-fg)]">Выберите…</span>
           )}
         </button>
-        <Button
-          type="button"
-          variant="secondary"
-          className="px-3"
-          title={createTitle}
-          onClick={() => openCreate(query.trim())}
-        >
-          +
-        </Button>
+        {onQuickCreate ? (
+          <Button
+            type="button"
+            variant="secondary"
+            className="px-3"
+            title={createTitle}
+            onClick={() => openCreate(query.trim())}
+          >
+            +
+          </Button>
+        ) : null}
       </div>
 
       {open ? (
@@ -189,15 +192,17 @@ export function EntityPicker({
                   </li>
                 ) : null}
               </ul>
-              <button
-                type="button"
-                className={cn(
-                  "mt-1 w-full rounded-md py-1.5 text-xs text-[var(--accent)] hover:bg-white/5",
-                )}
-                onClick={() => openCreate(query.trim())}
-              >
-                {createLabel}
-              </button>
+              {onQuickCreate ? (
+                <button
+                  type="button"
+                  className={cn(
+                    "mt-1 w-full rounded-md py-1.5 text-xs text-[var(--accent)] hover:bg-white/5",
+                  )}
+                  onClick={() => openCreate(query.trim())}
+                >
+                  {createLabel}
+                </button>
+              ) : null}
             </>
           ) : (
             <div
