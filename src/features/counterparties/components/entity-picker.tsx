@@ -29,6 +29,7 @@ export function EntityPicker({
   placeholder = "Поиск…",
   allowClear = true,
   createTitle = "Быстрое добавление",
+  createLabel = "+ Добавить нового",
   createFields,
 }: {
   name: string;
@@ -42,6 +43,8 @@ export function EntityPicker({
   placeholder?: string;
   allowClear?: boolean;
   createTitle?: string;
+  /** Текст пункта создания внизу списка. */
+  createLabel?: string;
   createFields?: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -193,7 +196,7 @@ export function EntityPicker({
                 )}
                 onClick={() => openCreate(query.trim())}
               >
-                + Добавить нового
+                {createLabel}
               </button>
             </>
           ) : (

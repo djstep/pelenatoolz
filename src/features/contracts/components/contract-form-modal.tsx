@@ -116,7 +116,6 @@ export function ContractFormModal({
       ? String(defaults.vatAmount)
       : "",
   );
-  const [newLedger, setNewLedger] = useState("");
   const [newStatus, setNewStatus] = useState("");
 
   useEffect(() => {
@@ -258,46 +257,27 @@ export function ContractFormModal({
           }
         />
 
-        <div>
-          <Label htmlFor="ledgerTypeId">Тип ведомости</Label>
-          <div className="flex flex-wrap gap-2">
-            <Select
-              id="ledgerTypeId"
-              name="ledgerTypeId"
-              // Без ширины список в строке сжимался до «—» и обрезал название.
-              className="min-w-[12rem] flex-1"
-              value={ledgerTypeId}
-              onChange={(e) => setLedgerTypeId(e.target.value)}
-            >
-              <option value="">—</option>
-              {ledgerTypes.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </Select>
-            <Input
-              placeholder="Свой тип…"
-              value={newLedger}
-              onChange={(e) => setNewLedger(e.target.value)}
-              className="max-w-[10rem]"
-            />
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={async () => {
-                const r = await createLedgerTypeAction(projectId, newLedger);
-                if ("id" in r) {
-                  setLedgerTypes((prev) => [...prev, r]);
-                  setLedgerTypeId(r.id);
-                  setNewLedger("");
-                }
-              }}
-            >
-              +
-            </Button>
-          </div>
-        </div>
+        <EntityPicker
+          name="ledgerTypeId"
+          label="Тип ведомости"
+          options={ledgerTypes}
+          value={ledgerTypeId}
+          onChange={setLedgerTypeId}
+          createTitle="Новый тип ведомости"
+          createLabel="+ Добавить тип"
+          onQuickCreate={async (fd) => {
+            const name = String(fd.get("name") ?? "");
+            const r = await createLedgerTypeAction(projectId, name);
+            if ("id" in r) {
+              // Сервер может вернуть уже существующий тип с тем же названием.
+              setLedgerTypes((prev) =>
+                prev.some((x) => x.id === r.id) ? prev : [...prev, r],
+              );
+              setLedgerTypeId(r.id);
+            }
+            return r;
+          }}
+        />
 
         <div className="grid gap-3 sm:grid-cols-2">
           <div>

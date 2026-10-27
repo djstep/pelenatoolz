@@ -278,24 +278,47 @@ export async function createLedgerTypeAction(
   const trimmed = name.trim();
   if (!trimmed) return { error: "Укажите название" };
 
+  // Тип с таким же названием (без учёта регистра) уже есть — выбираем его, а не плодим дубль.
+  const findExisting = () =>
+    prisma.projectLedgerType.findFirst({
+      where: { projectId, name: { equals: trimmed, mode: "insensitive" } },
+      select: { id: true, name: true },
+    });
+
+  const existing = await findExisting();
+  if (existing) return existing;
+
+  let row: { id: string; name: string };
   try {
     const max = await prisma.projectLedgerType.aggregate({
       where: { projectId },
       _max: { sortOrder: true },
     });
-    const row = await prisma.projectLedgerType.create({
+    row = await prisma.projectLedgerType.create({
       data: {
         projectId,
         name: trimmed,
         isSystem: false,
         sortOrder: (max._max.sortOrder ?? 100) + 10,
       },
+      select: { id: true, name: true },
     });
-    revalidateContracts(projectId);
-    return { id: row.id, name: row.name };
   } catch {
-    return { error: "Такой тип уже есть" };
+    // Тот же тип только что создал кто-то другой.
+    const raced = await findExisting();
+    if (raced) return raced;
+    return { error: "Не удалось добавить тип" };
   }
+
+  await recordAudit(ctx, {
+    projectId,
+    entityType: AuditEntityType.ledgerType,
+    entityId: row.id,
+    action: "CREATE",
+    summary: `Добавлен тип ведомости ${row.name}`,
+  });
+  revalidateContracts(projectId);
+  return row;
 }
 
 export async function quickCreateApprovalStatusAction(
