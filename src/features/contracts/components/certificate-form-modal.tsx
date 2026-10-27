@@ -10,6 +10,8 @@ import {
 import {
   VAT_RATE_PRESETS,
   computeContractVat,
+  vatRateChoice,
+  vatRateCustom,
 } from "@/features/contracts/lib/vat";
 import {
   EntityPicker,
@@ -74,18 +76,6 @@ function moneyLabel(n: number | string) {
   return Number.isFinite(v)
     ? v.toLocaleString("ru-RU", { minimumFractionDigits: 2 })
     : String(n);
-}
-
-/** Ставка из списка или «custom», если сохранённой ставки среди вариантов нет. */
-function vatRateChoice(rate?: number | null) {
-  const value = rate ?? 22;
-  return (VAT_RATE_PRESETS as readonly number[]).includes(value)
-    ? String(value)
-    : "custom";
-}
-
-function vatRateCustom(rate?: number | null) {
-  return vatRateChoice(rate) === "custom" ? String(rate) : "";
 }
 
 export function CertificateFormModal({

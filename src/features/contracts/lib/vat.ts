@@ -7,6 +7,19 @@ export const DEFAULT_LEDGER_TYPES = [
 
 export const VAT_RATE_PRESETS = [5, 7, 22] as const;
 
+/** Значение списка ставок: вариант из списка или «custom», если сохранённой ставки среди вариантов нет. */
+export function vatRateChoice(rate?: number | null) {
+  const value = rate ?? 22;
+  return (VAT_RATE_PRESETS as readonly number[]).includes(value)
+    ? String(value)
+    : "custom";
+}
+
+/** Своя ставка для поля «Другая…» (пусто, если ставка из списка). */
+export function vatRateCustom(rate?: number | null) {
+  return vatRateChoice(rate) === "custom" ? String(rate) : "";
+}
+
 export function computeContractVat(input: {
   amount: number;
   vatEnabled: boolean;

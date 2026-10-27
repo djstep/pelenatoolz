@@ -9,7 +9,12 @@ import {
   updateContractAction,
   type ContractsActionState,
 } from "@/features/contracts/actions";
-import { VAT_RATE_PRESETS, computeContractVat } from "@/features/contracts/lib/vat";
+import {
+  VAT_RATE_PRESETS,
+  computeContractVat,
+  vatRateChoice,
+  vatRateCustom,
+} from "@/features/contracts/lib/vat";
 import {
   EntityPicker,
   type PickerOption,
@@ -102,9 +107,10 @@ export function ContractFormModal({
   );
   const [amount, setAmount] = useState(String(defaults?.amount ?? ""));
   const [vatEnabled, setVatEnabled] = useState(defaults?.vatEnabled ?? true);
-  const [vatRate, setVatRate] = useState(
-    String(defaults?.vatRate ?? 22),
-  );
+  const [vatRate, setVatRate] = useState(() => vatRateChoice(defaults?.vatRate));
+  const [vatCustom, setVatCustom] = useState(() => vatRateCustom(defaults?.vatRate));
+  // На сервер уходит число: выбранный вариант или введённое вручную, а не слово «custom».
+  const effectiveVatRate = vatRate === "custom" ? vatCustom.trim() : vatRate;
   const [vatManual, setVatManual] = useState(
     defaults?.vatAmount != null && defaults?.vatRate == null
       ? String(defaults.vatAmount)
@@ -121,7 +127,8 @@ export function ContractFormModal({
     setStatusId(defaults?.statusId ?? defaultStatusId);
     setAmount(String(defaults?.amount ?? ""));
     setVatEnabled(defaults?.vatEnabled ?? true);
-    setVatRate(String(defaults?.vatRate ?? 22));
+    setVatRate(vatRateChoice(defaults?.vatRate));
+    setVatCustom(vatRateCustom(defaults?.vatRate));
     setVatManual("");
     setCompanyOptions(companies);
     setCpOptions(counterparties);
@@ -146,10 +153,10 @@ export function ContractFormModal({
     return computeContractVat({
       amount: amt,
       vatEnabled,
-      vatRate: Number(vatRate) || 22,
+      vatRate: effectiveVatRate === "" ? 22 : Number(effectiveVatRate) || 0,
       vatAmountManual: Number.isFinite(manual as number) ? manual : null,
     });
-  }, [amount, vatEnabled, vatRate, vatManual]);
+  }, [amount, vatEnabled, effectiveVatRate, vatManual]);
 
   return (
     <Modal
@@ -333,7 +340,6 @@ export function ContractFormModal({
               <Label htmlFor="vatRate">Ставка %</Label>
               <Select
                 id="vatRate"
-                name="vatRate"
                 value={vatRate}
                 onChange={(e) => {
                   setVatRate(e.target.value);
@@ -341,8 +347,8 @@ export function ContractFormModal({
                 }}
               >
                 {VAT_RATE_PRESETS.map((r) => (
-                  <option key={r} value={r}>
-                    {r}%
+                  <option key={r} value={String(r)}>
+                    {`${r}%`}
                   </option>
                 ))}
                 <option value="custom">Другая…</option>
@@ -354,11 +360,16 @@ export function ContractFormModal({
                   min={0}
                   max={100}
                   step="0.01"
-                  name="vatRate"
                   placeholder="%"
-                  defaultValue={defaults?.vatRate ?? ""}
+                  aria-label="Своя ставка НДС, %"
+                  value={vatCustom}
+                  onChange={(e) => {
+                    setVatCustom(e.target.value);
+                    setVatManual("");
+                  }}
                 />
               ) : null}
+              <input type="hidden" name="vatRate" value={effectiveVatRate} />
             </div>
             <div>
               <Label htmlFor="vatAmountManual">НДС вручную</Label>
