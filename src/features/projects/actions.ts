@@ -11,6 +11,7 @@ import {
   updateMemberRoleSchema,
   updateProjectSchema,
 } from "@/features/projects/schemas";
+import { inviteOrigin } from "@/features/memberships/lib/invite-origin";
 import { canManageMembers } from "@/features/memberships/permissions";
 import { requireProjectAccess, listProjectRoles } from "@/features/memberships/queries";
 import { prisma } from "@/shared/db/prisma";
@@ -427,8 +428,7 @@ export async function createInviteAction(
     },
   });
 
-  const appUrl = process.env.APP_URL ?? "http://localhost:3000";
-  const inviteUrl = `${appUrl}/ru/invite/${token}`;
+  const inviteUrl = `${await inviteOrigin()}/ru/invite/${token}`;
 
   revalidatePath(`/ru/projects/${projectId}/members`);
   return {

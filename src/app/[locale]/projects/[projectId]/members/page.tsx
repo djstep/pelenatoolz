@@ -2,6 +2,7 @@ import { getTranslations } from "next-intl/server";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { canManageMembers } from "@/features/memberships/permissions";
 import { InviteForm } from "@/features/memberships/components/invite-form";
+import { inviteOrigin } from "@/features/memberships/lib/invite-origin";
 import { InvitesList } from "@/features/memberships/components/invites-list";
 import { MembersTable } from "@/features/memberships/components/members-table";
 import {
@@ -28,7 +29,7 @@ export default async function ProjectMembersPage({ params }: Props) {
   ]);
 
   const roleOptions = roles.map((r) => ({ id: r.id, name: r.name }));
-  const appUrl = process.env.APP_URL ?? "http://localhost:3000";
+  const appUrl = await inviteOrigin();
 
   return (
     <div className="space-y-6">
