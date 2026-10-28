@@ -155,7 +155,7 @@ export function MultiSelect({
                   className={cn(
                     "flex h-4 w-4 shrink-0 items-center justify-center rounded border",
                     isSelected
-                      ? "border-[var(--accent)] bg-[var(--accent)] text-white"
+                      ? "border-[var(--accent)] bg-[var(--accent)] text-[var(--accent-fg)]"
                       : "border-[var(--border-strong)] bg-[rgb(var(--tint-rgb)/0.05)]",
                   )}
                   aria-hidden

@@ -294,7 +294,7 @@ export function CounterpartiesWorkspace({
               onClick={() => setTab(id)}
             >
               {label}
-              <span className="ml-1 opacity-60">
+              <span className="ml-1">
                 (
                 {id === "companies" ? companies.length : counterparties.length}
                 )

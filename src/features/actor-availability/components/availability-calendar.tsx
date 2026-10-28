@@ -245,7 +245,7 @@ export function AvailabilityCalendar({
                 <button
                   key={mode}
                   type="button"
-                  className={`rounded-md px-3 py-1 ${viewMode === mode ? "bg-[var(--accent)] text-white" : ""}`}
+                  className={`rounded-md px-3 py-1 ${viewMode === mode ? "bg-[var(--accent)] text-[var(--accent-fg)]" : ""}`}
                   onClick={() => setViewMode(mode)}
                 >
                   {VIEW_LABELS[mode]}

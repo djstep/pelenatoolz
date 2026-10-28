@@ -376,7 +376,7 @@ export function WorkRowsSection({
                       className="py-2.5 pr-3 text-xs font-semibold uppercase tracking-wide text-[var(--muted-fg)]"
                     >
                       {title}
-                      <span className="ml-2 font-normal normal-case tracking-normal opacity-70">
+                      <span className="ml-2 font-normal normal-case tracking-normal">
                         · {groupRows.length}
                       </span>
                     </td>

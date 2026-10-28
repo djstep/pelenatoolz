@@ -32,7 +32,7 @@ function Stars({
           disabled={disabled || !onChange}
           className={cn(
             "text-xs leading-none",
-            (value ?? 0) >= n ? "text-[var(--tone-warning-strong)]" : "text-[var(--muted-fg)]/40",
+            (value ?? 0) >= n ? "text-[var(--tone-warning-strong)]" : "text-[var(--muted)]",
             onChange && !disabled && "cursor-pointer hover:text-[var(--tone-warning)]",
           )}
           onClick={() => onChange?.(value === n ? null : n)}

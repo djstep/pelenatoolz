@@ -27,7 +27,7 @@ export function AuditionFavoriteButton({
       aria-label={isFavorite ? "Убрать из избранного" : "В избранное"}
       className={cn(
         "text-base leading-none",
-        isFavorite ? "text-[var(--tone-warning-strong)]" : "text-[var(--muted-fg)]/50",
+        isFavorite ? "text-[var(--tone-warning-strong)]" : "text-[var(--muted)]",
         canWrite && "hover:text-[var(--tone-warning)]",
       )}
       onClick={() => {
