@@ -8,7 +8,6 @@ import {
   type ActionState,
 } from "@/features/projects/actions";
 import {
-  formatMinutesHhMm,
   projectStatusLabels,
   projectTypeLabels,
   timingModeLabels,

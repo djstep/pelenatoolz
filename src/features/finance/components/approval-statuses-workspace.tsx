@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useState } from "react";
 import {
   createApprovalStatusAction,
   deleteApprovalStatusAction,
@@ -16,6 +16,7 @@ import { Label } from "@/shared/ui/label";
 import { Modal } from "@/shared/ui/modal";
 import { useActionSuccess } from "@/shared/ui/unsaved/use-action-success";
 import { useActionToast } from "@/shared/ui/toast";
+import { useOnChange } from "@/shared/hooks/use-on-change";
 
 const initial: ApprovalStatusActionState = {};
 
@@ -28,9 +29,9 @@ function ColorField({
 }) {
   const [color, setColor] = useState(defaultValue);
 
-  useEffect(() => {
+  useOnChange([defaultValue], () => {
     setColor(defaultValue);
-  }, [defaultValue]);
+  });
 
   return (
     <div className="space-y-2">

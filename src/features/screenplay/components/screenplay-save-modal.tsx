@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Modal } from "@/shared/ui/modal";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
+import { useOnChange } from "@/shared/hooks/use-on-change";
 
 type Props = {
   open: boolean;
@@ -26,16 +27,16 @@ export function ScreenplaySaveModal({
   const [newTitle, setNewTitle] = useState("");
   const [localError, setLocalError] = useState<string | null>(null);
 
-  useEffect(() => {
+  useOnChange([open], () => {
     if (open) {
       setNewTitle("");
       setLocalError(null);
     }
-  }, [open]);
+  });
 
-  useEffect(() => {
+  useOnChange([error], () => {
     if (error) setLocalError(error);
-  }, [error]);
+  });
 
   function submitNewVersion() {
     const trimmed = newTitle.trim();

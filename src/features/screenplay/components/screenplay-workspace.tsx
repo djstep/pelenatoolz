@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState, useTransition } from "react";
+import { useCallback, useState, useTransition } from "react";
 import { quickCreateLocationAction } from "@/features/locations/actions";
 import { ScreenplayBlockEditor } from "@/features/screenplay/components/screenplay-block-editor";
 import { ScreenplayLibrettoSyncPanel } from "@/features/screenplay/components/screenplay-libretto-sync-panel";
@@ -27,6 +27,7 @@ import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
 import { useUnsavedChanges } from "@/shared/ui/unsaved/unsaved-changes-provider";
 
 import type { SceneTimingRef } from "@/features/screenplay/lib/timing";
+import { useOnChange } from "@/shared/hooks/use-on-change";
 
 type Option = { id: string; name: string };
 
@@ -117,10 +118,10 @@ export function ScreenplayWorkspace({
     [projectId, toast],
   );
 
-  useEffect(() => {
+  useOnChange([timingMode, pageToMinuteRatio], () => {
     setTimingModeState(timingMode);
     setPageRatioState(pageToMinuteRatio);
-  }, [timingMode, pageToMinuteRatio]);
+  });
 
   const handleTimingModeChange = useCallback(
     (mode: TimingMode) => {

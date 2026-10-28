@@ -1,6 +1,5 @@
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { LocationsWorkspace } from "@/features/locations/components/locations-workspace";
-import { formatLocationTitle } from "@/features/locations/lib/format-location";
 import {
   listLocationsWithStats,
   listProjectAddresses,

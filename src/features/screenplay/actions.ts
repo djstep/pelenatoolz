@@ -36,7 +36,6 @@ import {
   replaceVersionBlocks,
   setCurrentScriptVersion,
 } from "@/features/screenplay/lib/versions";
-import { bootstrapScriptBlocks } from "@/features/screenplay/lib/sync";
 import { listScenes } from "@/features/script/queries";
 import { prisma } from "@/shared/db/prisma";
 import { AuditEntityType } from "@/shared/audit/entity-types";

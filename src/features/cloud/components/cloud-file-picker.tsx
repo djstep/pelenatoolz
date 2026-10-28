@@ -10,6 +10,7 @@ import {
 import { Button } from "@/shared/ui/button";
 import { Modal } from "@/shared/ui/modal";
 import { cn } from "@/shared/lib/cn";
+import { useOnChange } from "@/shared/hooks/use-on-change";
 
 type Connection = {
   id: string;
@@ -80,11 +81,11 @@ export function CloudFilePicker({
     void load();
   }, [open, provider, load]);
 
-  useEffect(() => {
+  useOnChange([open, connections], () => {
     if (!open) return;
     setFolderStack([]);
     setProvider(connections[0]?.provider ?? null);
-  }, [open, connections]);
+  });
 
   const returnTo = `/${locale}/projects/${projectId}${returnPath}`;
 

@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import type { ProjectType } from "@prisma/client";
 import {
-  resourceCategoryPath,
   resourceItemPath,
   resourcesBasePath,
 } from "@/features/resources/lib/paths";

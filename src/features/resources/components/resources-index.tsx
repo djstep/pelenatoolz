@@ -2,10 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import {
-  resourceCategoryPath,
-  resourcesBasePath,
-} from "@/features/resources/lib/paths";
+import { resourceCategoryPath } from "@/features/resources/lib/paths";
 import { deleteResourceCategoryAction } from "@/features/resources/actions";
 import { CategoryModal } from "@/features/resources/components/category-modal";
 import type { ResourceCategoryRow } from "@/features/resources/queries";

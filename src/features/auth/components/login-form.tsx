@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useState } from "react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import {
@@ -10,6 +10,7 @@ import {
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
+import { useOnChange } from "@/shared/hooks/use-on-change";
 
 const initial: ActionState = {};
 
@@ -28,14 +29,14 @@ export function LoginForm({
   const [email, setEmail] = useState("");
   const [passwordKey, setPasswordKey] = useState(0);
 
-  useEffect(() => {
+  useOnChange([state], () => {
     if (state.email != null) {
       setEmail(state.email);
     }
     if (state.error) {
       setPasswordKey((k) => k + 1);
     }
-  }, [state]);
+  });
 
   return (
     <form action={action} className="space-y-4">

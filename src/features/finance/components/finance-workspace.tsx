@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useState } from "react";
+import { useActionState, useMemo, useState } from "react";
 import { CounterpartyType, FinanceOpCategory, FinanceOpType } from "@prisma/client";
 import {
   quickCreateCompanyAction,
@@ -33,6 +33,7 @@ import { useActionSuccess } from "@/shared/ui/unsaved/use-action-success";
 import { Select } from "@/shared/ui/select";
 import { cn } from "@/shared/lib/cn";
 import { useActionToast } from "@/shared/ui/toast";
+import { useOnChange } from "@/shared/hooks/use-on-change";
 
 const initial: FinanceActionState = {};
 
@@ -95,12 +96,12 @@ function OpForm({
   const [companyOpts, setCompanyOpts] = useState(companies);
   const [cpOpts, setCpOpts] = useState(counterparties);
 
-  useEffect(() => {
+  useOnChange([companies], () => {
     setCompanyOpts(companies);
-  }, [companies]);
-  useEffect(() => {
+  });
+  useOnChange([counterparties], () => {
     setCpOpts(counterparties);
-  }, [counterparties]);
+  });
 
   return (
     <div className="grid gap-3 sm:grid-cols-2">

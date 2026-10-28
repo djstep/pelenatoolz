@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useActionState, useEffect, useState, useTransition } from "react";
+import { useActionState, useState, useTransition } from "react";
 import type { ProjectType } from "@prisma/client";
 import {
   duplicateSceneAction,
@@ -19,6 +19,7 @@ import { formatSceneNumber } from "@/features/script/lib/libretto-display";
 import { Button } from "@/shared/ui/button";
 import { useActionSuccess } from "@/shared/ui/unsaved/use-action-success";
 import { useFormGuard } from "@/shared/ui/unsaved/use-form-guard";
+import { useOnChange } from "@/shared/hooks/use-on-change";
 
 const initial: ActionState = {};
 
@@ -75,20 +76,20 @@ export function SceneEditor({
   const { ref: formRef, markClean: markFormClean } = useFormGuard(canWrite, formKey, state);
   useActionSuccess(state, markFormClean);
 
-  useEffect(() => {
+  useOnChange([initialLocations], () => {
     setLocations(initialLocations);
-  }, [initialLocations]);
+  });
 
-  useEffect(() => {
+  useOnChange([initialCharacters], () => {
     setCharacters(initialCharacters);
-  }, [initialCharacters]);
+  });
 
-  useEffect(() => {
+  useOnChange([scene], () => {
     setLocationId(scene.locations[0]?.locationId ?? "");
     setCharacterIds(scene.characters.map((c) => c.characterId));
     setFormKey((k) => k + 1);
     setDupError(null);
-  }, [scene]);
+  });
 
   const title = formatSceneNumber(scene, projectType);
   const librettoHref = `/${locale}/projects/${projectId}/libretto`;

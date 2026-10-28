@@ -33,6 +33,7 @@ import { Label } from "@/shared/ui/label";
 import { Modal } from "@/shared/ui/modal";
 import { Select } from "@/shared/ui/select";
 import { toast, useActionToast } from "@/shared/ui/toast";
+import { useOnChange } from "@/shared/hooks/use-on-change";
 
 const initial: ContractsActionState = {};
 
@@ -237,17 +238,17 @@ export function CertificateFormModal({
     });
   }, [payments, contractId, companyId, counterpartyId]);
 
-  useEffect(() => {
+  useOnChange([filteredPayments, paymentId, lockPayment], () => {
     if (paymentId && !filteredPayments.some((p) => p.id === paymentId)) {
       if (!lockPayment) setPaymentId("");
     }
-  }, [filteredPayments, paymentId, lockPayment]);
+  });
 
-  useEffect(() => {
+  useOnChange([filteredContracts, contractId, lockContract], () => {
     if (contractId && !filteredContracts.some((c) => c.id === contractId)) {
       if (!lockContract) setContractId("");
     }
-  }, [filteredContracts, contractId, lockContract]);
+  });
 
   const vatPreview = useMemo(() => {
     const amt = Number(amount) || 0;

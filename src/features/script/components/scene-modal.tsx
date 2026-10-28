@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useState } from "react";
 import type { ProjectType, TimingMode } from "@prisma/client";
 import {
   createSceneAction,
@@ -14,6 +14,7 @@ import type { SceneCategoryOption } from "@/features/script/components/scene-cat
 import { Button } from "@/shared/ui/button";
 import { Modal } from "@/shared/ui/modal";
 import { useActionSuccess } from "@/shared/ui/unsaved/use-action-success";
+import { useOnChange } from "@/shared/hooks/use-on-change";
 
 export type { SceneEditData };
 
@@ -58,20 +59,20 @@ export function SceneModal({
   const [characterIds, setCharacterIds] = useState<string[]>([]);
   const [formKey, setFormKey] = useState(0);
 
-  useEffect(() => {
+  useOnChange([initialLocations], () => {
     setLocations(initialLocations);
-  }, [initialLocations]);
+  });
 
-  useEffect(() => {
+  useOnChange([initialCharacters], () => {
     setCharacters(initialCharacters);
-  }, [initialCharacters]);
+  });
 
-  useEffect(() => {
+  useOnChange([open], () => {
     if (!open) return;
     setLocationId("");
     setCharacterIds([]);
     setFormKey((k) => k + 1);
-  }, [open]);
+  });
 
   useActionSuccess(state, (s) => {
     if (!s.keepOpen) {

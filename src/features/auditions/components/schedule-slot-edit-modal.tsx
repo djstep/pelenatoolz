@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import {
   deleteAuditionScheduleAction,
   updateAuditionScheduleAction,
@@ -17,6 +17,7 @@ import { Label } from "@/shared/ui/label";
 import { Modal } from "@/shared/ui/modal";
 import { Select } from "@/shared/ui/select";
 import { useToast } from "@/shared/ui/toast";
+import { useOnChange } from "@/shared/hooks/use-on-change";
 
 export function ScheduleSlotEditModal({
   projectId,
@@ -40,14 +41,14 @@ export function ScheduleSlotEditModal({
   const [selected, setSelected] = useState<string[]>([]);
   const [addId, setAddId] = useState("");
 
-  useEffect(() => {
+  useOnChange([schedule], () => {
     if (!schedule) return;
     setDate(schedule.dateKey);
     setTime(schedule.time);
     setComment(schedule.comment ?? "");
     setSelected(schedule.candidates.map((c) => c.castingCandidateId));
     setAddId("");
-  }, [schedule]);
+  });
 
   if (!schedule) return null;
 

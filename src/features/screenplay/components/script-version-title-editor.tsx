@@ -1,10 +1,11 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { renameScriptVersionAction } from "@/features/screenplay/actions";
 import { versionLabel } from "@/features/screenplay/lib/version-label";
 import { cn } from "@/shared/lib/cn";
+import { useOnChange } from "@/shared/hooks/use-on-change";
 
 type Props = {
   projectId: string;
@@ -32,9 +33,9 @@ export function ScriptVersionTitleEditor({
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
-  useEffect(() => {
+  useOnChange([title], () => {
     setValue(title ?? "");
-  }, [title]);
+  });
 
   function startEditing() {
     if (!canWrite || pending) return;

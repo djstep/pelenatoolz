@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { exportAuditionScheduleAction } from "@/features/auditions/actions-schedule-export";
 import {
   defaultScheduleExportFields,
@@ -12,6 +12,7 @@ import { Button } from "@/shared/ui/button";
 import { Label } from "@/shared/ui/label";
 import { Modal } from "@/shared/ui/modal";
 import { useToast } from "@/shared/ui/toast";
+import { useOnChange } from "@/shared/hooks/use-on-change";
 
 function downloadBase64(base64: string, fileName: string, mime: string) {
   const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
@@ -46,9 +47,9 @@ export function ScheduleExportModal({
     defaultScheduleExportFields,
   );
 
-  useEffect(() => {
+  useOnChange([open, dayKey], () => {
     if (open) setScope(dayKey ? "day" : "week");
-  }, [open, dayKey]);
+  });
 
   function toggle(field: ScheduleExportField) {
     setFields((prev) =>

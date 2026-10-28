@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useState, useTransition } from "react";
+import { Fragment, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { updateProductionWorkRowAction } from "@/features/reports/actions";
 import { WorkExtrasModal } from "@/features/reports/components/work-extras-modal";
@@ -17,6 +17,7 @@ import { HhMmInput } from "@/shared/ui/hh-mm-input";
 import { Input } from "@/shared/ui/input";
 import { useToast } from "@/shared/ui/toast";
 import { cn } from "@/shared/lib/cn";
+import { useOnChange } from "@/shared/hooks/use-on-change";
 
 function ExtraPayIcon({ active }: { active: boolean }) {
   return (
@@ -90,12 +91,12 @@ function WorkRowEditor({
 
   const mileageEnabled = showsMileage(row);
 
-  useEffect(() => {
+  useOnChange([row.id, row.factStart, row.factEnd, row.lunchSkipped, row.factKm], () => {
     setFactStart(row.factStart ?? "");
     setFactEnd(row.factEnd ?? "");
     setLunchSkipped(row.lunchSkipped);
     setFactKm(row.factKm != null ? String(row.factKm) : "");
-  }, [row.id, row.factStart, row.factEnd, row.lunchSkipped, row.factKm]);
+  });
 
   function persist(next: {
     factStart: string;

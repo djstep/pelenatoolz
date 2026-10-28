@@ -1,7 +1,7 @@
 "use client";
 
 import type { TimeSlotType } from "@prisma/client";
-import { useEffect, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import {
   deleteAuditionScheduleBreakAction,
   updateAuditionScheduleBreakAction,
@@ -17,6 +17,7 @@ import { Label } from "@/shared/ui/label";
 import { Modal } from "@/shared/ui/modal";
 import { Select } from "@/shared/ui/select";
 import { useToast } from "@/shared/ui/toast";
+import { useOnChange } from "@/shared/hooks/use-on-change";
 
 export function ScheduleBreakEditModal({
   projectId,
@@ -38,14 +39,14 @@ export function ScheduleBreakEditModal({
   const [label, setLabel] = useState("");
   const [notes, setNotes] = useState("");
 
-  useEffect(() => {
+  useOnChange([breakRow], () => {
     if (!breakRow) return;
     setTime(breakRow.time);
     setDuration(breakRow.duration);
     setSlotType(breakRow.slotType);
     setLabel(breakRow.label);
     setNotes(breakRow.notes ?? "");
-  }, [breakRow]);
+  });
 
   if (!breakRow) return null;
 
