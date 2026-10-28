@@ -335,7 +335,7 @@ export async function createLedgerTypeAction(
     entityType: AuditEntityType.ledgerType,
     entityId: row.id,
     action: "CREATE",
-    summary: `Добавлен тип ведомости ${row.name}`,
+    summary: `Добавлен тип договора ${row.name}`,
   });
   revalidateContracts(projectId);
   return row;

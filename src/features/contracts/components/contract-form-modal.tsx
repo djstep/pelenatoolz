@@ -289,11 +289,11 @@ export function ContractFormModal({
 
         <EntityPicker
           name="ledgerTypeId"
-          label="Тип ведомости"
+          label="Тип договора"
           options={ledgerTypes}
           value={ledgerTypeId}
           onChange={setLedgerTypeId}
-          createTitle="Новый тип ведомости"
+          createTitle="Новый тип договора"
           createLabel="+ Добавить тип"
           onQuickCreate={async (fd) => {
             const name = String(fd.get("name") ?? "");

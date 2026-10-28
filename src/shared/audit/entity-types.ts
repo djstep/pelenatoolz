@@ -68,7 +68,7 @@ export const auditEntityLabels: Record<string, string> = {
   [AuditEntityType.counterparty]: "Контрагент",
   [AuditEntityType.financeVariable]: "Финансовая переменная",
   [AuditEntityType.approvalStatus]: "Статус согласования",
-  [AuditEntityType.ledgerType]: "Тип ведомости",
+  [AuditEntityType.ledgerType]: "Тип договора",
   [AuditEntityType.contract]: "Договор",
   [AuditEntityType.act]: "Акт",
   [AuditEntityType.certificate]: "Акт",
