@@ -4,6 +4,7 @@ import { useActionState, useState } from "react";
 import {
   createRoleAction,
   deleteRoleAction,
+  getRoleDeleteImpactAction,
   updateRoleAction,
   type RoleActionState,
 } from "@/features/roles/actions";
@@ -175,6 +176,7 @@ export function RolesManager({
                           onClick={() =>
                             void confirmDelete({
                               title: `Удалить роль „${role.name}“?`,
+                              details: () => getRoleDeleteImpactAction(projectId, role.id),
                               action: async () =>
                                 (await deleteRoleAction(projectId, role.id)).error,
                             })

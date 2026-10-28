@@ -1,5 +1,6 @@
 "use server";
 
+import { MembershipStatus } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import {
@@ -18,7 +19,8 @@ import { AuditEntityType } from "@/shared/audit/entity-types";
 import { recordAudit } from "@/shared/audit/with-audit";
 import { isForeignKeyError, LINKED_ERROR } from "@/shared/db/foreign-key";
 import { prisma } from "@/shared/db/prisma";
-import { listCounts } from "@/shared/lib/plural";
+import { impactLines, listCounts } from "@/shared/lib/plural";
+import { DEFAULT_ROLE_NAMES } from "@/features/roles/default-roles";
 import { z } from "zod";
 
 export type RoleActionState = { error?: string; success?: string };
@@ -233,26 +235,49 @@ export async function deleteRoleAction(
   if (!role) return { error: "Роль не найдена" };
   if (role.isSystem) return { error: "Системную роль удалить нельзя" };
 
-  // На роль ссылаются участники (в том числе удалённые из проекта) и приглашения — в базе запрет.
-  const [active, former, invites] = await Promise.all([
-    prisma.projectMembership.count({ where: { roleId, projectId, status: "ACTIVE" } }),
-    prisma.projectMembership.count({
-      where: { roleId, projectId, status: { not: "ACTIVE" } },
-    }),
-    prisma.projectInvite.count({ where: { roleId, projectId } }),
-  ]);
-  if (active + former + invites > 0) {
+  // Действующие участники и действующие приглашения не дают удалить роль.
+  const now = new Date();
+  const usage = await roleUsage(projectId, roleId, now);
+  if (usage.active + usage.activeInvites > 0) {
     return {
       error: `Роль используется: ${listCounts([
-        [active, ["участник", "участника", "участников"]],
-        [former, ["бывший участник", "бывших участника", "бывших участников"]],
-        [invites, ["приглашение", "приглашения", "приглашений"]],
+        [usage.active, ["участник", "участника", "участников"]],
+        [usage.activeInvites, ["действующее приглашение", "действующих приглашения", "действующих приглашений"]],
       ])} — удалить нельзя`,
     };
   }
 
+  // Бывшие участники (запись остаётся, роль в ней обязательна) переходят на «Наблюдателя»:
+  // доступа у них нет, при возвращении по приглашению роль берётся из приглашения.
+  let viewerId: string | null = null;
+  if (usage.former > 0) {
+    const viewer = await findViewerRole(projectId);
+    if (!viewer) {
+      return {
+        error: "В проекте нет системной роли «Наблюдатель» — некуда перевести бывших участников с этой ролью, удалить нельзя",
+      };
+    }
+    viewerId = viewer.id;
+  }
+
+  // Отменённые, просроченные и принятые приглашения уже отработали — удаляются вместе с ролью.
+  let deletedInvites = 0;
+  let movedMembers = 0;
   try {
-    await prisma.projectRoleDefinition.delete({ where: { id: roleId, projectId } });
+    await prisma.$transaction(async (tx) => {
+      if (viewerId) {
+        const moved = await tx.projectMembership.updateMany({
+          where: { roleId, projectId, status: MembershipStatus.REMOVED },
+          data: { roleId: viewerId },
+        });
+        movedMembers = moved.count;
+      }
+      const deleted = await tx.projectInvite.deleteMany({
+        where: { roleId, projectId, NOT: activeInviteWhere(now) },
+      });
+      deletedInvites = deleted.count;
+      await tx.projectRoleDefinition.delete({ where: { id: roleId, projectId } });
+    });
   } catch (error) {
     if (isForeignKeyError(error)) return { error: LINKED_ERROR };
     throw error;
@@ -264,8 +289,61 @@ export async function deleteRoleAction(
     entityId: roleId,
     action: "DELETE",
     summary: `Удалена роль «${role.name}»`,
+    changes: {
+      deletedInvites,
+      formerMembersMovedToViewer: movedMembers,
+    },
   });
 
   revalidateRoles(projectId);
   return {};
+}
+
+/** Приглашение действует: не принято, не отменено, срок не вышел. */
+function activeInviteWhere(now: Date) {
+  return { acceptedAt: null, revokedAt: null, expiresAt: { gt: now } };
+}
+
+/** Кто ссылается на роль: действующие участники, бывшие, действующие и отработавшие приглашения. */
+async function roleUsage(projectId: string, roleId: string, now: Date) {
+  const [active, former, activeInvites, staleInvites] = await Promise.all([
+    prisma.projectMembership.count({
+      where: {
+        roleId,
+        projectId,
+        status: { in: [MembershipStatus.ACTIVE, MembershipStatus.INVITED] },
+      },
+    }),
+    prisma.projectMembership.count({
+      where: { roleId, projectId, status: MembershipStatus.REMOVED },
+    }),
+    prisma.projectInvite.count({ where: { roleId, projectId, ...activeInviteWhere(now) } }),
+    prisma.projectInvite.count({
+      where: { roleId, projectId, NOT: activeInviteWhere(now) },
+    }),
+  ]);
+  return { active, former, activeInvites, staleInvites };
+}
+
+/** Системная роль «Наблюдатель» — так же, как «Продюсер»: системная и с зарезервированным названием. */
+function findViewerRole(projectId: string) {
+  return prisma.projectRoleDefinition.findFirst({
+    where: { projectId, isSystem: true, name: DEFAULT_ROLE_NAMES.viewer },
+    select: { id: true },
+  });
+}
+
+/** Что произойдёт при удалении роли — для окна подтверждения. */
+export async function getRoleDeleteImpactAction(
+  projectId: string,
+  roleId: string,
+): Promise<string[]> {
+  const ctx = await requireProjectContext(projectId);
+  if (!ctx.can("members:manage")) return [];
+  const usage = await roleUsage(projectId, roleId, new Date());
+  if (usage.active + usage.activeInvites > 0) return [];
+  return impactLines([
+    [usage.staleInvites, "Удалятся отменённые, просроченные и принятые приглашения"],
+    [usage.former, "Бывшие участники перейдут на роль «Наблюдатель»"],
+  ]);
 }
