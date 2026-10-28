@@ -248,6 +248,7 @@ export function CertificateFormModal({
 
   return (
     <Modal
+      guardUnsaved
       open={open}
       onClose={onClose}
       title={isEdit ? "Редактирование акта" : "Новый акт"}
@@ -261,7 +262,12 @@ export function CertificateFormModal({
           >
             {pending || uploading ? "…" : "Сохранить"}
           </Button>
-          <Button type="button" variant="secondary" onClick={onClose}>
+          <Button
+            type="button"
+            variant="secondary"
+            data-modal-cancel
+            onClick={onClose}
+          >
             Отмена
           </Button>
           {isEdit ? (

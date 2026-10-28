@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useEffect, useMemo, useState, useTransition } from "react";
+import { useActionState, useMemo, useState, useTransition } from "react";
 import {
   createCashPaymentAction,
   deleteCashPaymentAction,
@@ -16,6 +16,7 @@ import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Modal } from "@/shared/ui/modal";
+import { useActionSuccess } from "@/shared/ui/unsaved/use-action-success";
 import { Select } from "@/shared/ui/select";
 import { useActionToast, useToast } from "@/shared/ui/toast";
 
@@ -353,12 +354,11 @@ function PaymentModal({
     : createCashPaymentAction.bind(null, projectId);
   const [state, action, pending] = useActionState(bound, initial);
   useActionToast(state);
-  useEffect(() => {
-    if (state.success) onClose();
-  }, [state.success, onClose]);
+  useActionSuccess(state, onClose);
 
   return (
     <Modal
+      guardUnsaved
       open={open}
       onClose={onClose}
       title={payment ? "Редактирование платежа" : "Новый платёж"}
@@ -367,7 +367,12 @@ function PaymentModal({
           <Button type="submit" form="cash-payment-form" disabled={pending}>
             {pending ? "…" : "Сохранить"}
           </Button>
-          <Button type="button" variant="secondary" onClick={onClose}>
+          <Button
+            type="button"
+            variant="secondary"
+            data-modal-cancel
+            onClick={onClose}
+          >
             Отмена
           </Button>
         </div>

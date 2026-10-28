@@ -171,6 +171,7 @@ export function ContractFormModal({
 
   return (
     <Modal
+      guardUnsaved
       open={open}
       onClose={onClose}
       title={isEdit ? "Редактирование договора" : "Новый договор"}
@@ -180,7 +181,12 @@ export function ContractFormModal({
           <Button type="submit" form="contract-form" disabled={pending}>
             {pending ? "…" : "Сохранить"}
           </Button>
-          <Button type="button" variant="secondary" onClick={onClose}>
+          <Button
+            type="button"
+            variant="secondary"
+            data-modal-cancel
+            onClick={onClose}
+          >
             Отмена
           </Button>
           {state.error ? (

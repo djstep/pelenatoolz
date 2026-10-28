@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useState } from "react";
+import { useActionState, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   createCompanyAction,
@@ -23,6 +23,7 @@ import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Modal } from "@/shared/ui/modal";
+import { useActionSuccess } from "@/shared/ui/unsaved/use-action-success";
 import { Select } from "@/shared/ui/select";
 import { useActionToast } from "@/shared/ui/toast";
 import { cn } from "@/shared/lib/cn";
@@ -141,12 +142,11 @@ function CompanyModal({
     : createCompanyAction.bind(null, projectId);
   const [state, action, pending] = useActionState(bound, initial);
   useActionToast(state);
-  useEffect(() => {
-    if (state.success) onClose();
-  }, [state.success, onClose]);
+  useActionSuccess(state, onClose);
 
   return (
     <Modal
+      guardUnsaved
       open={open}
       onClose={onClose}
       title={company ? "Редактирование компании" : "Новая компания"}
@@ -155,7 +155,12 @@ function CompanyModal({
           <Button type="submit" form="company-form" disabled={pending}>
             {pending ? "…" : "Сохранить"}
           </Button>
-          <Button type="button" variant="secondary" onClick={onClose}>
+          <Button
+            type="button"
+            variant="secondary"
+            data-modal-cancel
+            onClick={onClose}
+          >
             Отмена
           </Button>
         </div>
@@ -184,12 +189,11 @@ function CounterpartyModal({
     : createCounterpartyAction.bind(null, projectId);
   const [state, action, pending] = useActionState(bound, initial);
   useActionToast(state);
-  useEffect(() => {
-    if (state.success) onClose();
-  }, [state.success, onClose]);
+  useActionSuccess(state, onClose);
 
   return (
     <Modal
+      guardUnsaved
       open={open}
       onClose={onClose}
       title={counterparty ? "Редактирование контрагента" : "Новый контрагент"}
@@ -198,7 +202,12 @@ function CounterpartyModal({
           <Button type="submit" form="counterparty-form" disabled={pending}>
             {pending ? "…" : "Сохранить"}
           </Button>
-          <Button type="button" variant="secondary" onClick={onClose}>
+          <Button
+            type="button"
+            variant="secondary"
+            data-modal-cancel
+            onClick={onClose}
+          >
             Отмена
           </Button>
         </div>
