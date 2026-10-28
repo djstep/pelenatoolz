@@ -1,4 +1,8 @@
 import { resolveDefaultStatusId } from "@/features/contracts/lib/default-status";
+import {
+  contractFinanceAccess,
+  withoutAmounts,
+} from "@/features/contracts/lib/finance-access";
 import { ContractsWorkspace } from "@/features/contracts/components/contracts-workspace";
 import {
   listContractTags,
@@ -22,11 +26,12 @@ export default async function ContractsPage({ params, searchParams }: Props) {
   const { counterpartyId } = await searchParams;
   const ctx = await requireProjectContext(projectId);
 
-  if (!ctx.can("finance:read")) {
+  if (!ctx.can("contracts:read")) {
     return (
-      <p className="text-sm text-[var(--danger)]">Нет доступа к финансам</p>
+      <p className="text-sm text-[var(--danger)]">Нет доступа к договорам</p>
     );
   }
+  const finance = contractFinanceAccess(ctx.can);
 
   const [contracts, companies, counterparties, ledgerTypes, statuses, tags, statusRes] =
     await Promise.all([
@@ -46,7 +51,7 @@ export default async function ContractsPage({ params, searchParams }: Props) {
     <ContractsWorkspace
       projectId={projectId}
       locale={locale}
-      contracts={contracts}
+      contracts={finance.read ? contracts : contracts.map(withoutAmounts)}
       companies={companies.map((c) => ({ id: c.id, name: c.name }))}
       counterparties={counterparties.map((c) => ({ id: c.id, name: c.name }))}
       ledgerTypes={ledgerTypes.map((t) => ({ id: t.id, name: t.name }))}
@@ -57,7 +62,9 @@ export default async function ContractsPage({ params, searchParams }: Props) {
       }))}
       existingTags={tags}
       defaultStatusId={defaultStatusId}
-      canWrite={ctx.can("finance:write")}
+      canWrite={ctx.can("contracts:write")}
+      finance={finance}
+      canCreateParties={ctx.can("finance:write")}
       initialCounterpartyId={counterpartyId}
     />
   );

@@ -17,6 +17,8 @@ import { ScenePlanningHistory } from "@/features/script/components/scene-plannin
 import type { SceneCategoryOption } from "@/features/script/components/scene-category-resource-block";
 import { formatSceneNumber } from "@/features/script/lib/libretto-display";
 import { Button } from "@/shared/ui/button";
+import { useActionSuccess } from "@/shared/ui/unsaved/use-action-success";
+import { useFormGuard } from "@/shared/ui/unsaved/use-form-guard";
 
 const initial: ActionState = {};
 
@@ -69,6 +71,9 @@ export function SceneEditor({
     () => scene.characters.map((c) => c.characterId) ?? [],
   );
   const [formKey, setFormKey] = useState(0);
+  // Предупреждение о несохранённых изменениях при уходе со страницы.
+  const { ref: formRef, markClean: markFormClean } = useFormGuard(canWrite, formKey);
+  useActionSuccess(state, markFormClean);
 
   useEffect(() => {
     setLocations(initialLocations);
@@ -123,7 +128,7 @@ export function SceneEditor({
             <Link
               href={`/${locale}/projects/${projectId}/libretto/${prev.id}`}
               title={`Сцена ${neighborLabel(prev)}`}
-              className="inline-flex items-center rounded-xl px-3 py-2 text-sm hover:bg-white/8"
+              className="inline-flex items-center rounded-xl px-3 py-2 text-sm hover:bg-[rgb(var(--tint-rgb)/0.08)]"
             >
               ← {neighborLabel(prev)}
             </Link>
@@ -137,7 +142,7 @@ export function SceneEditor({
             <Link
               href={`/${locale}/projects/${projectId}/libretto/${next.id}`}
               title={`Сцена ${neighborLabel(next)}`}
-              className="inline-flex items-center rounded-xl px-3 py-2 text-sm hover:bg-white/8"
+              className="inline-flex items-center rounded-xl px-3 py-2 text-sm hover:bg-[rgb(var(--tint-rgb)/0.08)]"
             >
               {neighborLabel(next)} →
             </Link>
@@ -171,11 +176,12 @@ export function SceneEditor({
         </p>
       )}
       {state.success ? (
-        <p className="text-sm text-green-400">{state.success}</p>
+        <p className="text-sm text-[var(--tone-success-strong)]">{state.success}</p>
       ) : null}
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_280px]">
         <form
+          ref={formRef}
           key={formKey}
           id="scene-editor-form"
           action={canWrite ? action : undefined}

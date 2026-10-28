@@ -31,6 +31,9 @@ import { HhMmInput } from "@/shared/ui/hh-mm-input";
 import { Input } from "@/shared/ui/input";
 import { useActionToast } from "@/shared/ui/toast";
 import { cn } from "@/shared/lib/cn";
+import { useActionSuccess } from "@/shared/ui/unsaved/use-action-success";
+import { useFormGuard } from "@/shared/ui/unsaved/use-form-guard";
+import { useUnsavedChanges } from "@/shared/ui/unsaved/unsaved-changes-provider";
 
 type DeptRow = {
   roleLabel: string;
@@ -69,8 +72,11 @@ function JsonRowsForm({
   label: string;
 }) {
   const [state, formAction, pending] = useActionState(action, {});
+  // Строки таблицы лежат в скрытом поле этой формы — по нему видно несохранённое.
+  const { ref: formRef, markClean: markFormClean } = useFormGuard();
+  useActionSuccess(state, markFormClean);
   return (
-    <form action={formAction} className="space-y-2">
+    <form ref={formRef} action={formAction} className="space-y-2">
       <input type="hidden" name="rows" value={rowsJson} />
       <ActionMessage state={state} />
       <Button type="submit" variant="secondary" disabled={pending}>
@@ -213,6 +219,20 @@ export function CallSheetEditor({
     headerAction,
     {},
   );
+  const { ref: headerFormRef, markClean: markHeaderClean } = useFormGuard(open);
+  useActionSuccess(headerState, markHeaderClean);
+  const unsaved = useUnsavedChanges();
+
+  // «Закрыть» прячет редактор целиком — несохранённое в нём пропало бы.
+  function closeEditor() {
+    if (!unsaved.hasUnsaved()) {
+      setOpen(false);
+      return;
+    }
+    void unsaved.confirm().then((choice) => {
+      if (choice === "discard") setOpen(false);
+    });
+  }
 
   if (!open) {
     return (
@@ -228,13 +248,13 @@ export function CallSheetEditor({
     <section className="rounded-2xl border border-[var(--accent)]/30 bg-[var(--panel-solid)] p-5 print:hidden">
       <div className="mb-4 flex items-center justify-between gap-3">
         <h3 className="font-semibold">Редактирование вызывного</h3>
-        <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
+        <Button type="button" variant="ghost" onClick={closeEditor}>
           Закрыть
         </Button>
       </div>
 
       <div className="space-y-8">
-        <form action={headerFormAction} className="space-y-3">
+        <form ref={headerFormRef} action={headerFormAction} className="space-y-3">
           <h4 className="text-sm font-semibold text-[var(--muted-fg)]">Шапка дня</h4>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <label className="space-y-1 text-xs">
@@ -614,7 +634,7 @@ export function CallSheetEditor({
                       <span className="text-[var(--muted-fg)]">
                         {label}
                         {manual && computed ? (
-                          <span className="ml-1 text-amber-300/90" title={`Расчётное: ${computed}`}>
+                          <span className="ml-1 text-[var(--tone-warning)]/90" title={`Расчётное: ${computed}`}>
                             · ручн.
                           </span>
                         ) : null}
@@ -685,7 +705,7 @@ export function CallSheetEditor({
                       <span className="text-[var(--muted-fg)]">
                         {label}
                         {manual && computed ? (
-                          <span className="ml-1 text-amber-300/90" title={`Расчётное: ${computed}`}>
+                          <span className="ml-1 text-[var(--tone-warning)]/90" title={`Расчётное: ${computed}`}>
                             · ручн.
                           </span>
                         ) : null}

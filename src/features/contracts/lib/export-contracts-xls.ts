@@ -13,6 +13,8 @@ export async function exportContractsXls(
   rows: ContractListItem[],
   projectId: string,
   fileSuffix = "all",
+  /** Без права на финансы суммы не выгружаются. */
+  includeFinance = true,
 ) {
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet("Договоры");
@@ -22,10 +24,7 @@ export async function exportContractsXls(
     "Контрагент",
     "Компания",
     "Ведомость",
-    "Сумма",
-    "НДС",
-    "С НДС",
-    "Предварительный",
+    ...(includeFinance ? ["Сумма", "НДС", "С НДС", "Предварительный"] : []),
     "Статус",
     "Содержание",
     "Примечание",
@@ -39,10 +38,14 @@ export async function exportContractsXls(
       r.counterparty.name,
       r.company.name,
       r.ledgerType?.name ?? "",
-      money(r.amount),
-      money(r.vatAmount),
-      money(r.amountWithVat),
-      r.isPreliminary ? "да" : "",
+      ...(includeFinance
+        ? [
+            money(r.amount),
+            money(r.vatAmount),
+            money(r.amountWithVat),
+            r.isPreliminary ? "да" : "",
+          ]
+        : []),
       r.status.name,
       r.summary ?? "",
       r.comment ?? "",

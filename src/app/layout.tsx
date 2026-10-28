@@ -3,6 +3,7 @@ import { IBM_Plex_Sans, Sora } from "next/font/google";
 import { APP_BRAND } from "@/shared/brand";
 import { ThemeProvider } from "@/shared/theme/theme-provider";
 import { ToastProvider } from "@/shared/ui/toast";
+import { UnsavedChangesProvider } from "@/shared/ui/unsaved/unsaved-changes-provider";
 import "./globals.css";
 
 const body = IBM_Plex_Sans({
@@ -36,7 +37,9 @@ export default function RootLayout({
     >
       <body className="min-h-full antialiased">
         <ThemeProvider>
-          <ToastProvider>{children}</ToastProvider>
+          <ToastProvider>
+            <UnsavedChangesProvider>{children}</UnsavedChangesProvider>
+          </ToastProvider>
         </ThemeProvider>
       </body>
     </html>

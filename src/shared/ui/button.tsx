@@ -7,7 +7,7 @@ const variants: Record<Variant, string> = {
   primary: "glass-btn-primary",
   secondary: "glass-btn-secondary",
   ghost:
-    "text-[var(--foreground)] hover:bg-white/8 border border-transparent hover:border-[var(--border)]",
+    "text-[var(--foreground)] hover:bg-[rgb(var(--tint-rgb)/0.08)] border border-transparent hover:border-[var(--border)]",
   danger:
     "bg-[rgba(251,113,133,0.1)] text-[var(--danger)] border border-[rgba(251,113,133,0.35)] hover:bg-[rgba(251,113,133,0.18)] backdrop-blur-md",
 };

@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useState } from "react";
 import {
   createCharacterRecordAction,
   updateCharacterRecordAction,
@@ -13,6 +13,7 @@ import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Modal } from "@/shared/ui/modal";
+import { useActionSuccess } from "@/shared/ui/unsaved/use-action-success";
 import { Select } from "@/shared/ui/select";
 import { useActionToast } from "@/shared/ui/toast";
 
@@ -42,12 +43,11 @@ export function CharacterModal({
   );
   useActionToast(state);
 
-  useEffect(() => {
-    if (state.success) onClose();
-  }, [state.success, onClose]);
+  useActionSuccess(state, onClose);
 
   return (
     <Modal
+      guardUnsaved
       open={open}
       onClose={onClose}
       title={isEdit ? "Редактирование персонажа" : "Новый персонаж"}
@@ -57,7 +57,12 @@ export function CharacterModal({
           <Button type="submit" form="character-form" disabled={pending}>
             {pending ? "…" : "Сохранить"}
           </Button>
-          <Button type="button" variant="secondary" onClick={onClose}>
+          <Button
+            type="button"
+            variant="secondary"
+            data-modal-cancel
+            onClick={onClose}
+          >
             Отмена
           </Button>
           {!isEdit ? (

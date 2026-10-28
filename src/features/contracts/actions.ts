@@ -2,6 +2,7 @@
 
 import { ContractFileRole } from "@prisma/client";
 import { revalidatePath } from "next/cache";
+import { contractFinanceAccess } from "@/features/contracts/lib/finance-access";
 import {
   computeContractVat,
   parseTags,
@@ -68,6 +69,34 @@ function parseContractForm(formData: FormData) {
   });
 }
 
+type AmountInput = {
+  amount: number;
+  vatEnabled: boolean;
+  vatRate?: number | null;
+  vatAmountManual?: number | null;
+};
+
+/** Поля сумм договора или акта для записи в базу. */
+function amountFields(input: AmountInput) {
+  const vat = computeContractVat({
+    amount: input.amount,
+    vatEnabled: input.vatEnabled,
+    vatRate: input.vatRate,
+    vatAmountManual: input.vatAmountManual,
+  });
+  return {
+    amount: input.amount,
+    vatEnabled: input.vatEnabled,
+    vatRate: input.vatEnabled ? (input.vatRate ?? 22) : null,
+    vatAmount: vat.vatAmount,
+    amountWithVat: vat.amountWithVat,
+  };
+}
+
+function contractAmounts(input: AmountInput & { isPreliminary: boolean }) {
+  return { ...amountFields(input), isPreliminary: input.isPreliminary };
+}
+
 async function defaultUnsignedStatusId(projectId: string) {
   await ensureApprovalStatuses(projectId);
   const unsigned = await prisma.projectApprovalStatus.findFirst({
@@ -89,7 +118,8 @@ export async function createContractAction(
   formData: FormData,
 ): Promise<ContractsActionState> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("finance:write")) return { error: "Недостаточно прав" };
+  if (!ctx.can("contracts:write")) return { error: "Недостаточно прав" };
+  const finance = contractFinanceAccess(ctx.can);
 
   const parsed = parseContractForm(formData);
   if (!parsed.success) {
@@ -97,13 +127,6 @@ export async function createContractAction(
   }
   const date = parseDate(parsed.data.date);
   if (!date) return { error: "Некорректная дата" };
-
-  const vat = computeContractVat({
-    amount: parsed.data.amount,
-    vatEnabled: parsed.data.vatEnabled,
-    vatRate: parsed.data.vatRate,
-    vatAmountManual: parsed.data.vatAmountManual,
-  });
 
   try {
     await assertInProject("Company", parsed.data.companyId, projectId);
@@ -125,6 +148,18 @@ export async function createContractAction(
     throw error;
   }
 
+  // Без права на финансы суммы из формы не принимаются: договор создаётся с нулевой
+  // суммой и ставкой НДС по умолчанию, суммы потом заполнит тот, у кого есть право.
+  const amounts = finance.write
+    ? contractAmounts(parsed.data)
+    : contractAmounts({
+        amount: 0,
+        vatEnabled: true,
+        vatRate: null,
+        vatAmountManual: null,
+        isPreliminary: false,
+      });
+
   const row = await prisma.contract.create({
     data: {
       projectId,
@@ -133,12 +168,7 @@ export async function createContractAction(
       companyId: parsed.data.companyId,
       counterpartyId: parsed.data.counterpartyId,
       ledgerTypeId: parsed.data.ledgerTypeId ?? null,
-      amount: parsed.data.amount,
-      vatEnabled: parsed.data.vatEnabled,
-      vatRate: parsed.data.vatEnabled ? (parsed.data.vatRate ?? 22) : null,
-      vatAmount: vat.vatAmount,
-      amountWithVat: vat.amountWithVat,
-      isPreliminary: parsed.data.isPreliminary,
+      ...amounts,
       statusId: parsed.data.statusId,
       tags: parsed.data.tags,
       summary: parsed.data.summary,
@@ -166,7 +196,8 @@ export async function updateContractAction(
   formData: FormData,
 ): Promise<ContractsActionState> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("finance:write")) return { error: "Недостаточно прав" };
+  if (!ctx.can("contracts:write")) return { error: "Недостаточно прав" };
+  const finance = contractFinanceAccess(ctx.can);
 
   const existing = await prisma.contract.findFirst({
     where: { id: contractId, projectId },
@@ -180,13 +211,6 @@ export async function updateContractAction(
   }
   const date = parseDate(parsed.data.date);
   if (!date) return { error: "Некорректная дата" };
-
-  const vat = computeContractVat({
-    amount: parsed.data.amount,
-    vatEnabled: parsed.data.vatEnabled,
-    vatRate: parsed.data.vatRate,
-    vatAmountManual: parsed.data.vatAmountManual,
-  });
 
   try {
     await assertInProject("Company", parsed.data.companyId, projectId);
@@ -216,12 +240,8 @@ export async function updateContractAction(
       companyId: parsed.data.companyId,
       counterpartyId: parsed.data.counterpartyId,
       ledgerTypeId: parsed.data.ledgerTypeId ?? null,
-      amount: parsed.data.amount,
-      vatEnabled: parsed.data.vatEnabled,
-      vatRate: parsed.data.vatEnabled ? (parsed.data.vatRate ?? 22) : null,
-      vatAmount: vat.vatAmount,
-      amountWithVat: vat.amountWithVat,
-      isPreliminary: parsed.data.isPreliminary,
+      // Без права на финансы суммы остаются прежними.
+      ...(finance.write ? contractAmounts(parsed.data) : {}),
       statusId: parsed.data.statusId,
       tags: parsed.data.tags,
       summary: parsed.data.summary,
@@ -247,7 +267,7 @@ export async function deleteContractAction(
   contractId: string,
 ): Promise<ContractsActionState> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("finance:write")) return { error: "Недостаточно прав" };
+  if (!ctx.can("contracts:write")) return { error: "Недостаточно прав" };
 
   const existing = await prisma.contract.findFirst({
     where: { id: contractId, projectId },
@@ -274,28 +294,51 @@ export async function createLedgerTypeAction(
   name: string,
 ): Promise<{ id: string; name: string } | { error: string }> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("finance:write")) return { error: "Недостаточно прав" };
+  if (!ctx.can("contracts:write")) return { error: "Недостаточно прав" };
   const trimmed = name.trim();
   if (!trimmed) return { error: "Укажите название" };
 
+  // Тип с таким же названием (без учёта регистра) уже есть — выбираем его, а не плодим дубль.
+  const findExisting = () =>
+    prisma.projectLedgerType.findFirst({
+      where: { projectId, name: { equals: trimmed, mode: "insensitive" } },
+      select: { id: true, name: true },
+    });
+
+  const existing = await findExisting();
+  if (existing) return existing;
+
+  let row: { id: string; name: string };
   try {
     const max = await prisma.projectLedgerType.aggregate({
       where: { projectId },
       _max: { sortOrder: true },
     });
-    const row = await prisma.projectLedgerType.create({
+    row = await prisma.projectLedgerType.create({
       data: {
         projectId,
         name: trimmed,
         isSystem: false,
         sortOrder: (max._max.sortOrder ?? 100) + 10,
       },
+      select: { id: true, name: true },
     });
-    revalidateContracts(projectId);
-    return { id: row.id, name: row.name };
   } catch {
-    return { error: "Такой тип уже есть" };
+    // Тот же тип только что создал кто-то другой.
+    const raced = await findExisting();
+    if (raced) return raced;
+    return { error: "Не удалось добавить тип" };
   }
+
+  await recordAudit(ctx, {
+    projectId,
+    entityType: AuditEntityType.ledgerType,
+    entityId: row.id,
+    action: "CREATE",
+    summary: `Добавлен тип договора ${row.name}`,
+  });
+  revalidateContracts(projectId);
+  return row;
 }
 
 export async function quickCreateApprovalStatusAction(
@@ -304,7 +347,7 @@ export async function quickCreateApprovalStatusAction(
   color = "#64748b",
 ): Promise<{ id: string; name: string; color: string } | { error: string }> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("finance:write")) return { error: "Недостаточно прав" };
+  if (!ctx.can("contracts:write")) return { error: "Недостаточно прав" };
   const trimmed = name.trim();
   if (!trimmed) return { error: "Укажите название" };
 
@@ -313,12 +356,23 @@ export async function quickCreateApprovalStatusAction(
   );
   const hex = normalizeApprovalColor(color) ?? "#64748b";
 
+  // Статус с таким же названием (без учёта регистра) уже есть — выбираем его, а не плодим дубль.
+  const findExisting = () =>
+    prisma.projectApprovalStatus.findFirst({
+      where: { projectId, name: { equals: trimmed, mode: "insensitive" } },
+      select: { id: true, name: true, color: true },
+    });
+
+  const existing = await findExisting();
+  if (existing) return existing;
+
+  let row: { id: string; name: string; color: string };
   try {
     const max = await prisma.projectApprovalStatus.aggregate({
       where: { projectId },
       _max: { sortOrder: true },
     });
-    const row = await prisma.projectApprovalStatus.create({
+    row = await prisma.projectApprovalStatus.create({
       data: {
         projectId,
         name: trimmed,
@@ -326,13 +380,25 @@ export async function quickCreateApprovalStatusAction(
         isSystem: false,
         sortOrder: (max._max.sortOrder ?? 100) + 10,
       },
+      select: { id: true, name: true, color: true },
     });
-    revalidatePath(`/ru/projects/${projectId}/finance/settings`);
-    revalidateContracts(projectId);
-    return { id: row.id, name: row.name, color: row.color };
   } catch {
-    return { error: "Статус с таким названием уже есть" };
+    // Тот же статус только что создал кто-то другой.
+    const raced = await findExisting();
+    if (raced) return raced;
+    return { error: "Не удалось добавить статус" };
   }
+
+  await recordAudit(ctx, {
+    projectId,
+    entityType: AuditEntityType.approvalStatus,
+    entityId: row.id,
+    action: "CREATE",
+    summary: `Добавлен статус ${row.name}`,
+  });
+  revalidatePath(`/ru/projects/${projectId}/finance/settings`);
+  revalidateContracts(projectId);
+  return row;
 }
 
 export async function attachContractFileAction(
@@ -342,7 +408,7 @@ export async function attachContractFileAction(
   role: ContractFileRole = "OTHER",
 ): Promise<ContractsActionState> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("finance:write")) return { error: "Недостаточно прав" };
+  if (!ctx.can("contracts:write")) return { error: "Недостаточно прав" };
 
   const contract = await prisma.contract.findFirst({
     where: { id: contractId, projectId },
@@ -372,7 +438,7 @@ export async function detachContractFileAction(
   linkId: string,
 ): Promise<ContractsActionState> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("finance:write")) return { error: "Недостаточно прав" };
+  if (!ctx.can("contracts:write")) return { error: "Недостаточно прав" };
 
   await prisma.contractFile.deleteMany({
     where: { id: linkId, contract: { projectId, id: contractId } },
@@ -388,7 +454,7 @@ export async function updateContractFileRoleAction(
   role: ContractFileRole,
 ): Promise<ContractsActionState> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("finance:write")) return { error: "Недостаточно прав" };
+  if (!ctx.can("contracts:write")) return { error: "Недостаточно прав" };
 
   await prisma.contractFile.updateMany({
     where: { id: linkId, contractId, contract: { projectId } },
@@ -439,7 +505,8 @@ export async function createCertificateAction(
   formData: FormData,
 ): Promise<ContractsActionState> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("finance:write")) return { error: "Недостаточно прав" };
+  if (!ctx.can("contracts:write")) return { error: "Недостаточно прав" };
+  const finance = contractFinanceAccess(ctx.can);
 
   const parsed = parseCertificateForm(formData);
   if (!parsed.success) {
@@ -449,7 +516,8 @@ export async function createCertificateAction(
   if (!date) return { error: "Некорректная дата" };
 
   let statusId = parsed.data.statusId;
-  const paymentId = parsed.data.paymentId ?? null;
+  // Платёж — данные «Финансов»: без права на них привязка из формы не принимается.
+  const paymentId = finance.write ? (parsed.data.paymentId ?? null) : null;
   let contractId = parsed.data.contractId ?? null;
   let companyId = parsed.data.companyId;
   let counterpartyId = parsed.data.counterpartyId;
@@ -489,12 +557,12 @@ export async function createCertificateAction(
     statusId = fallback;
   }
 
-  const vat = computeContractVat({
-    amount: parsed.data.amount,
-    vatEnabled: parsed.data.vatEnabled,
-    vatRate: parsed.data.vatRate,
-    vatAmountManual: parsed.data.vatAmountManual,
-  });
+  // Без права на финансы акт создаётся с нулевой суммой, без НДС (как в пустой форме акта).
+  const amounts = amountFields(
+    finance.write
+      ? parsed.data
+      : { amount: 0, vatEnabled: false, vatRate: null, vatAmountManual: null },
+  );
 
   const row = await prisma.certificate.create({
     data: {
@@ -505,11 +573,7 @@ export async function createCertificateAction(
       counterpartyId,
       contractId,
       paymentId,
-      amount: parsed.data.amount,
-      vatEnabled: parsed.data.vatEnabled,
-      vatRate: parsed.data.vatEnabled ? (parsed.data.vatRate ?? 22) : null,
-      vatAmount: vat.vatAmount,
-      amountWithVat: vat.amountWithVat,
+      ...amounts,
       statusId,
       summary: parsed.data.summary,
       comment: parsed.data.comment,
@@ -546,7 +610,8 @@ export async function updateCertificateAction(
   formData: FormData,
 ): Promise<ContractsActionState> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("finance:write")) return { error: "Недостаточно прав" };
+  if (!ctx.can("contracts:write")) return { error: "Недостаточно прав" };
+  const finance = contractFinanceAccess(ctx.can);
 
   const existing = await prisma.certificate.findFirst({
     where: { id: certificateId, projectId },
@@ -561,12 +626,10 @@ export async function updateCertificateAction(
   const date = parseDate(parsed.data.date);
   if (!date) return { error: "Некорректная дата" };
 
-  const vat = computeContractVat({
-    amount: parsed.data.amount,
-    vatEnabled: parsed.data.vatEnabled,
-    vatRate: parsed.data.vatRate,
-    vatAmountManual: parsed.data.vatAmountManual,
-  });
+  // Без права на финансы суммы и привязка к платежу остаются прежними.
+  const paymentId = finance.write
+    ? (parsed.data.paymentId ?? null)
+    : existing.paymentId;
 
   try {
     await assertInProject("Company", parsed.data.companyId, projectId);
@@ -583,8 +646,8 @@ export async function updateCertificateAction(
     if (parsed.data.contractId) {
       await assertInProject("Contract", parsed.data.contractId, projectId);
     }
-    if (parsed.data.paymentId) {
-      await assertInProject("CashPayment", parsed.data.paymentId, projectId);
+    if (finance.write && paymentId) {
+      await assertInProject("CashPayment", paymentId, projectId);
     }
   } catch (error) {
     if (isNotInProjectError(error)) return { error: "Объект не найден" };
@@ -599,21 +662,26 @@ export async function updateCertificateAction(
       companyId: parsed.data.companyId,
       counterpartyId: parsed.data.counterpartyId,
       contractId: parsed.data.contractId ?? null,
-      paymentId: parsed.data.paymentId ?? null,
-      amount: parsed.data.amount,
-      vatEnabled: parsed.data.vatEnabled,
-      vatRate: parsed.data.vatEnabled ? (parsed.data.vatRate ?? 22) : null,
-      vatAmount: vat.vatAmount,
-      amountWithVat: vat.amountWithVat,
+      paymentId,
+      ...(finance.write ? amountFields(parsed.data) : {}),
       statusId: parsed.data.statusId,
       summary: parsed.data.summary,
       comment: parsed.data.comment,
     },
   });
 
+  // Как у договоров: только номер, без сумм и данных контрагента.
+  await recordAudit(ctx, {
+    projectId,
+    entityType: AuditEntityType.certificate,
+    entityId: certificateId,
+    action: "UPDATE",
+    summary: `Обновлён акт ${parsed.data.number}`,
+  });
+
   revalidateCertificates(projectId, {
     contractId: parsed.data.contractId ?? existing.contractId,
-    paymentId: parsed.data.paymentId ?? existing.paymentId,
+    paymentId: paymentId ?? existing.paymentId,
     certificateId,
   });
   return { success: "Акт сохранён", certificateId, actId: certificateId };
@@ -626,7 +694,7 @@ export async function deleteCertificateAction(
   certificateId: string,
 ): Promise<ContractsActionState> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("finance:write")) return { error: "Недостаточно прав" };
+  if (!ctx.can("contracts:write")) return { error: "Недостаточно прав" };
 
   const existing = await prisma.certificate.findFirst({
     where: { id: certificateId, projectId },
@@ -635,6 +703,15 @@ export async function deleteCertificateAction(
   if (!existing) return { error: "Акт не найден" };
 
   await prisma.certificate.delete({ where: { id: certificateId } });
+
+  await recordAudit(ctx, {
+    projectId,
+    entityType: AuditEntityType.certificate,
+    entityId: certificateId,
+    action: "DELETE",
+    summary: `Удалён акт ${existing.number}`,
+  });
+
   revalidateCertificates(projectId, {
     contractId: existing.contractId,
     paymentId: existing.paymentId,
@@ -651,7 +728,7 @@ export async function attachCertificateFileAction(
   role: ContractFileRole = "OTHER",
 ): Promise<ContractsActionState> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("finance:write")) return { error: "Недостаточно прав" };
+  if (!ctx.can("contracts:write")) return { error: "Недостаточно прав" };
 
   const cert = await prisma.certificate.findFirst({
     where: { id: certificateId, projectId },
@@ -687,7 +764,7 @@ export async function detachCertificateFileAction(
   linkId: string,
 ): Promise<ContractsActionState> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("finance:write")) return { error: "Недостаточно прав" };
+  if (!ctx.can("contracts:write")) return { error: "Недостаточно прав" };
 
   const link = await prisma.certificateFile.findFirst({
     where: {

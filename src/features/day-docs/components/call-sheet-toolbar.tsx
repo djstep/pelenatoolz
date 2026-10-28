@@ -84,7 +84,7 @@ export function CallSheetToolbar({
             })}
           </span>
         ) : (
-          <span className="text-xs text-amber-400/90">Черновик</span>
+          <span className="text-xs text-[var(--tone-warning-strong)]/90">Черновик</span>
         )}
       </div>
 

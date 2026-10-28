@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import {
   clearShootDayAction,
@@ -14,6 +14,7 @@ import { formatDateLong } from "@/shared/i18n/format-date";
 import { shootDayTypeLabels } from "@/shared/i18n/domain-labels";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
+import { useUnsavedChanges } from "@/shared/ui/unsaved/unsaved-changes-provider";
 import { cn } from "@/shared/lib/cn";
 
 export type MenuAnchor = {
@@ -64,10 +65,10 @@ function MenuItem({
         disabled
           ? "cursor-not-allowed text-[var(--muted-fg)] opacity-50"
           : danger
-            ? "text-red-300 hover:bg-red-500/15"
+            ? "text-[var(--tone-danger)] hover:bg-red-500/15"
             : active
-              ? "bg-[var(--accent)]/25 text-white"
-              : "text-[var(--foreground)] hover:bg-white/10",
+              ? "bg-[var(--accent)]/25 text-[rgb(var(--tint-rgb))]"
+              : "text-[var(--foreground)] hover:bg-[rgb(var(--tint-rgb)/0.1)]",
       )}
     >
       {icon ? (
@@ -131,6 +132,28 @@ export function DayContextMenu({
   const [comment, setComment] = useState(day.comment ?? "");
   const [prepNote, setPrepNote] = useState(day.prepNote ?? "");
   const [busy, setBusy] = useState(false);
+  const unsaved = useUnsavedChanges();
+
+  // Несохранённые изменения — открытая форма комментария или заметки отличается от исходной.
+  const isDirty =
+    (mode === "comment" && comment !== (day.comment ?? "")) ||
+    (mode === "prep" && prepNote !== (day.prepNote ?? ""));
+  const dirtyRef = useRef(isDirty);
+  useEffect(() => {
+    dirtyRef.current = isDirty;
+  }, [isDirty]);
+  useEffect(() => unsaved.register(() => dirtyRef.current), [unsaved]);
+
+  function requestClose() {
+    if (unsaved.isPrompting()) return;
+    if (!dirtyRef.current) {
+      onClose();
+      return;
+    }
+    void unsaved.confirm().then((choice) => {
+      if (choice === "discard") onClose();
+    });
+  }
 
   useLayoutEffect(() => {
     const el = panelRef.current;
@@ -155,12 +178,12 @@ export function DayContextMenu({
         type="button"
         className="absolute inset-0 cursor-default bg-transparent"
         aria-label="Закрыть"
-        onClick={onClose}
+        onClick={requestClose}
       />
       <div
         ref={panelRef}
         style={{ top: pos.top, left: pos.left, width: MENU_WIDTH }}
-        className="absolute z-10 max-h-[min(70vh,32rem)] overflow-hidden rounded-2xl border border-[var(--border-strong)] bg-[#0c1220] shadow-2xl"
+        className="absolute z-10 max-h-[min(70vh,32rem)] overflow-hidden rounded-2xl border border-[var(--border-strong)] bg-[var(--kpp-menu-bg)] shadow-2xl"
         role="menu"
       >
         <div className="border-b border-[var(--border)] px-3 py-2.5">

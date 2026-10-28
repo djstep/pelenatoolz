@@ -28,14 +28,14 @@ export function ActorEmploymentView({
           <p className="text-sm text-[var(--muted-fg)]">
             <Link
               href={`/${locale}/projects/${projectId}/schedule`}
-              className="hover:text-white"
+              className="hover:text-[rgb(var(--tint-rgb))]"
             >
               ← КПП
             </Link>
             {" · "}
             <Link
               href={`/${locale}/projects/${projectId}/characters`}
-              className="hover:text-white"
+              className="hover:text-[rgb(var(--tint-rgb))]"
             >
               Актёры
             </Link>
@@ -88,7 +88,7 @@ export function ActorEmploymentView({
                   >
                     <td className="py-2 pr-3 font-medium">
                       {row.actorName || (
-                        <span className="text-amber-300">не назначен</span>
+                        <span className="text-[var(--tone-warning)]">не назначен</span>
                       )}
                     </td>
                     <td className="py-2 pr-3">{row.characterName}</td>

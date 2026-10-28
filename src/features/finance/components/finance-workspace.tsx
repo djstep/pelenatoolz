@@ -28,6 +28,7 @@ import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Modal } from "@/shared/ui/modal";
+import { useActionSuccess } from "@/shared/ui/unsaved/use-action-success";
 import { Select } from "@/shared/ui/select";
 import { cn } from "@/shared/lib/cn";
 import { useActionToast } from "@/shared/ui/toast";
@@ -268,12 +269,11 @@ function OpModal({
   const [state, action, pending] = useActionState(bound, initial);
   useActionToast(state);
 
-  useEffect(() => {
-    if (state.success) onClose();
-  }, [state.success, onClose]);
+  useActionSuccess(state, onClose);
 
   return (
     <Modal
+      guardUnsaved
       open={open}
       onClose={onClose}
       title={op ? "Редактирование операции" : "Новая операция"}
@@ -282,7 +282,12 @@ function OpModal({
           <Button type="submit" form="finance-op-form" disabled={pending}>
             {pending ? "…" : "Сохранить"}
           </Button>
-          <Button type="button" variant="secondary" onClick={onClose}>
+          <Button
+            type="button"
+            variant="secondary"
+            data-modal-cancel
+            onClick={onClose}
+          >
             Отмена
           </Button>
         </div>
@@ -348,7 +353,7 @@ export function FinanceWorkspace({
           <div className="text-xs uppercase tracking-wide text-[var(--muted-fg)]">
             Приход
           </div>
-          <div className="mt-1 text-xl font-semibold text-emerald-300">
+          <div className="mt-1 text-xl font-semibold text-[var(--tone-success)]">
             {money(totals.income, currency)}
           </div>
         </div>
@@ -356,7 +361,7 @@ export function FinanceWorkspace({
           <div className="text-xs uppercase tracking-wide text-[var(--muted-fg)]">
             Расход
           </div>
-          <div className="mt-1 text-xl font-semibold text-red-300">
+          <div className="mt-1 text-xl font-semibold text-[var(--tone-danger)]">
             {money(totals.expense, currency)}
           </div>
         </div>
@@ -367,7 +372,7 @@ export function FinanceWorkspace({
           <div
             className={cn(
               "mt-1 text-xl font-semibold",
-              totals.balance < 0 ? "text-red-300" : "text-emerald-300",
+              totals.balance < 0 ? "text-[var(--tone-danger)]" : "text-[var(--tone-success)]",
             )}
           >
             {money(totals.balance, currency)}
@@ -395,8 +400,8 @@ export function FinanceWorkspace({
               className={cn(
                 "rounded-md px-3 py-1.5 text-xs",
                 filter === value
-                  ? "bg-white/10 text-white"
-                  : "text-[var(--muted-fg)] hover:text-white",
+                  ? "bg-[rgb(var(--tint-rgb)/0.1)] text-[rgb(var(--tint-rgb))]"
+                  : "text-[var(--muted-fg)] hover:text-[rgb(var(--tint-rgb))]",
               )}
               onClick={() => setFilter(value)}
             >
@@ -480,8 +485,8 @@ export function FinanceWorkspace({
                       className={cn(
                         "rounded-md border px-2 py-0.5 text-xs",
                         op.type === "INCOME"
-                          ? "border-emerald-500/30 text-emerald-300"
-                          : "border-red-500/30 text-red-300",
+                          ? "border-emerald-500/30 text-[var(--tone-success)]"
+                          : "border-red-500/30 text-[var(--tone-danger)]",
                       )}
                     >
                       {financeOpTypeLabels[op.type]}
@@ -501,7 +506,7 @@ export function FinanceWorkspace({
                   <td
                     className={cn(
                       "px-4 py-3 font-medium whitespace-nowrap",
-                      op.type === "INCOME" ? "text-emerald-300" : "text-red-300",
+                      op.type === "INCOME" ? "text-[var(--tone-success)]" : "text-[var(--tone-danger)]",
                     )}
                   >
                     {op.type === "INCOME" ? "+" : "−"}

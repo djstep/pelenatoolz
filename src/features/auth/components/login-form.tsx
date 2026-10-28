@@ -74,7 +74,7 @@ export function LoginForm({
         />
       </div>
       {resetSuccess ? (
-        <p className="text-sm text-emerald-400" role="status">
+        <p className="text-sm text-[var(--tone-success-strong)]" role="status">
           {t("resetPasswordDone")}
         </p>
       ) : null}

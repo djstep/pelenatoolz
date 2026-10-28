@@ -1,4 +1,4 @@
-import { type HTMLAttributes } from "react";
+import { type CSSProperties, type HTMLAttributes } from "react";
 import { cn } from "@/shared/lib/cn";
 
 export function Badge({
@@ -14,4 +14,12 @@ export function Badge({
       {...props}
     />
   );
+}
+
+/**
+ * Бейдж со своим цветом (статусы согласования): вместе с className="status-badge".
+ * Цвета задаёт globals.css — в светлой теме текст затемняется ради контраста.
+ */
+export function statusBadgeStyle(color: string): CSSProperties {
+  return { "--status-color": color } as CSSProperties;
 }

@@ -313,7 +313,7 @@ export function SceneFormFields({
         />
       </div>
 
-      <div className="rounded-xl border border-[var(--border)] bg-white/[0.02] p-4">
+      <div className="rounded-xl border border-[var(--border)] bg-[rgb(var(--tint-rgb)/0.02)] p-4">
         <Label>Сценарий</Label>
         {isEdit ? (
           <div className="mt-2 flex flex-wrap items-center gap-2">

@@ -178,7 +178,7 @@ export function TagMultiField({
             <button
               key={t}
               type="button"
-              className="rounded-md border border-[var(--border)] bg-white/5 px-2 py-0.5 text-xs"
+              className="rounded-md border border-[var(--border)] bg-[rgb(var(--tint-rgb)/0.05)] px-2 py-0.5 text-xs"
               onClick={() => setTags((prev) => prev.filter((x) => x !== t))}
             >
               {t} ×

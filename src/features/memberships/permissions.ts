@@ -25,6 +25,8 @@ export const PERMISSIONS = [
   "finance:read",
   "finance:write",
   "finance:unlock",
+  "contracts:read",
+  "contracts:write",
   "post:read",
   "post:write",
 ] as const;
@@ -65,6 +67,9 @@ const PERMISSION_TO_SECTION: Record<
   "finance:read": { section: "finance", action: "finance" },
   "finance:write": { section: "finance", action: "write" },
   "finance:unlock": { section: "finance", action: "financeUnlock" },
+  /** Договоры и акты. Суммы в них дополнительно требуют прав раздела «Финансы». */
+  "contracts:read": { section: "contracts", action: "read" },
+  "contracts:write": { section: "contracts", action: "write" },
   "post:read": { section: "post", action: "read" },
   "post:write": { section: "post", action: "write" },
 };

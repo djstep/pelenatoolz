@@ -82,14 +82,14 @@ export function CallSheetView({
           <p className="text-sm text-[var(--muted-fg)]">
             <Link
               href={`/${locale}/projects/${projectId}/call-sheets`}
-              className="hover:text-white"
+              className="hover:text-[rgb(var(--tint-rgb))]"
             >
               ← Все вызывные
             </Link>
             {" · "}
             <Link
               href={`/${locale}/projects/${projectId}/schedule`}
-              className="hover:text-white"
+              className="hover:text-[rgb(var(--tint-rgb))]"
             >
               КПП
             </Link>
@@ -215,7 +215,7 @@ export function CallSheetView({
           <p className="mt-2 text-xs text-[var(--muted-fg)]">
             <Link
               href={`/${locale}/projects/${projectId}/call-sheets/${nextDay.id}`}
-              className="hover:text-white"
+              className="hover:text-[rgb(var(--tint-rgb))]"
             >
               Открыть вызывной →
             </Link>

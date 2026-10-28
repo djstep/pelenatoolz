@@ -149,6 +149,7 @@ export function SceneFactModal({
 
   return (
     <Modal
+      guardUnsaved
       open={open}
       onClose={onClose}
       title={title}
@@ -160,11 +161,11 @@ export function SceneFactModal({
               {pending ? "Сохранение…" : "Сохранить"}
             </Button>
           ) : null}
-          <Button type="button" variant="secondary" onClick={onClose}>
+          <Button type="button" variant="secondary" onClick={onClose} data-modal-cancel>
             {canEdit ? "Отмена" : "Закрыть"}
           </Button>
           {returnsToPool && canEdit ? (
-            <p className="ml-auto max-w-md text-xs text-amber-200/90">
+            <p className="ml-auto max-w-md text-xs text-[var(--tone-warning-soft)]/90">
               При статусе «{productionSceneFactStatusLabels[status]}» сцена
               вернётся в неспланированные КПП, но останется в этом отчёте.
             </p>

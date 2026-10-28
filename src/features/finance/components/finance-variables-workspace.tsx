@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useState } from "react";
 import {
   createCustomFinanceVariableAction,
   deleteCustomFinanceVariableAction,
@@ -14,6 +14,7 @@ import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Modal } from "@/shared/ui/modal";
+import { useActionSuccess } from "@/shared/ui/unsaved/use-action-success";
 import { useActionToast } from "@/shared/ui/toast";
 
 const initial: FinanceVariableActionState = {};
@@ -47,11 +48,11 @@ function SystemVariableRow({
             {variable.key}
           </span>
           {variable.fromProjectDefault ? (
-            <span className="text-[10px] text-emerald-400/90">
+            <span className="text-[10px] text-[var(--tone-success-strong)]/90">
               из параметров проекта
             </span>
           ) : (
-            <span className="text-[10px] text-amber-300/90">переопределено</span>
+            <span className="text-[10px] text-[var(--tone-warning)]/90">переопределено</span>
           )}
         </div>
         {variable.description ? (
@@ -116,12 +117,11 @@ function CustomVariableModal({
       : createCustomFinanceVariableAction.bind(null, projectId);
   const [state, action, pending] = useActionState(bound, initial);
   useActionToast(state);
-  useEffect(() => {
-    if (state.success) onClose();
-  }, [state.success, onClose]);
+  useActionSuccess(state, onClose);
 
   return (
     <Modal
+      guardUnsaved
       open={open}
       onClose={onClose}
       title={variable ? "Редактирование переменной" : "Новая переменная"}
@@ -130,7 +130,12 @@ function CustomVariableModal({
           <Button type="submit" form="finance-var-form" disabled={pending}>
             {pending ? "…" : "Сохранить"}
           </Button>
-          <Button type="button" variant="secondary" onClick={onClose}>
+          <Button
+            type="button"
+            variant="secondary"
+            data-modal-cancel
+            onClick={onClose}
+          >
             Отмена
           </Button>
         </div>

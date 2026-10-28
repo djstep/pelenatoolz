@@ -13,6 +13,7 @@ import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Modal } from "@/shared/ui/modal";
+import { useActionSuccess } from "@/shared/ui/unsaved/use-action-success";
 import { useActionToast } from "@/shared/ui/toast";
 
 const initial: ApprovalStatusActionState = {};
@@ -58,7 +59,7 @@ function ColorField({
             key={preset}
             type="button"
             title={preset}
-            className="h-6 w-6 rounded-full border border-white/20 ring-offset-1 ring-offset-[var(--panel-solid)] transition hover:scale-110 focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
+            className="h-6 w-6 rounded-full border border-[rgb(var(--tint-rgb)/0.2)] ring-offset-1 ring-offset-[var(--panel-solid)] transition hover:scale-110 focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
             style={{ backgroundColor: preset }}
             onClick={() => setColor(preset)}
           />
@@ -84,12 +85,11 @@ function StatusModal({
     : createApprovalStatusAction.bind(null, projectId);
   const [state, action, pending] = useActionState(bound, initial);
   useActionToast(state);
-  useEffect(() => {
-    if (state.success) onClose();
-  }, [state.success, onClose]);
+  useActionSuccess(state, onClose);
 
   return (
     <Modal
+      guardUnsaved
       open={open}
       onClose={onClose}
       title={status ? "Редактирование статуса" : "Новый статус согласования"}
@@ -98,7 +98,12 @@ function StatusModal({
           <Button type="submit" form="approval-status-form" disabled={pending}>
             {pending ? "…" : "Сохранить"}
           </Button>
-          <Button type="button" variant="secondary" onClick={onClose}>
+          <Button
+            type="button"
+            variant="secondary"
+            data-modal-cancel
+            onClick={onClose}
+          >
             Отмена
           </Button>
           {state.error ? (
@@ -185,7 +190,7 @@ export function ApprovalStatusesWorkspace({
                 className="flex flex-wrap items-center gap-3 px-4 py-3"
               >
                 <span
-                  className="h-3.5 w-3.5 shrink-0 rounded-full border border-white/15"
+                  className="h-3.5 w-3.5 shrink-0 rounded-full border border-[rgb(var(--tint-rgb)/0.15)]"
                   style={{ backgroundColor: row.color }}
                   aria-hidden
                 />

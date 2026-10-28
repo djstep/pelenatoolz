@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useState } from "react";
 import {
   createResourceItemAction,
   updateResourceItemAction,
@@ -18,6 +18,7 @@ import { HhMmInput } from "@/shared/ui/hh-mm-input";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Modal } from "@/shared/ui/modal";
+import { useActionSuccess } from "@/shared/ui/unsaved/use-action-success";
 
 const initial: ResourceActionState = {};
 
@@ -157,9 +158,7 @@ export function ItemModal({
     : createResourceItemAction.bind(null, projectId, categoryId);
   const [state, action, pending] = useActionState(bound, initial);
   useActionToast(state);
-  useEffect(() => {
-    if (state.success) onClose();
-  }, [state.success, onClose]);
+  useActionSuccess(state, onClose);
 
   const formItem: ItemLike | undefined = item
     ? { ...item, tracksMileage: item.tracksMileage ?? tracksMileage }
@@ -177,6 +176,7 @@ export function ItemModal({
 
   return (
     <Modal
+      guardUnsaved
       open={open}
       onClose={onClose}
       title={itemId ? "Редактирование ресурса" : "Новый ресурс"}
@@ -186,7 +186,12 @@ export function ItemModal({
           <Button type="submit" form="resource-item-form" disabled={pending}>
             {pending ? "…" : "Сохранить"}
           </Button>
-          <Button type="button" variant="secondary" onClick={onClose}>
+          <Button
+            type="button"
+            variant="secondary"
+            data-modal-cancel
+            onClick={onClose}
+          >
             Отмена
           </Button>
         </div>

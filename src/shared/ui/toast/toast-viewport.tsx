@@ -10,7 +10,7 @@ const TYPE_STYLES: Record<
 > = {
   success: {
     border: "border-l-emerald-400/80",
-    icon: "text-emerald-400",
+    icon: "text-[var(--tone-success-strong)]",
     label: "Успешно",
   },
   error: {
@@ -25,7 +25,7 @@ const TYPE_STYLES: Record<
   },
   warning: {
     border: "border-l-amber-400",
-    icon: "text-amber-400",
+    icon: "text-[var(--tone-warning-strong)]",
     label: "Внимание",
   },
 };

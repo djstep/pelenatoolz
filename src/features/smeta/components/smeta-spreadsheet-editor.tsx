@@ -745,7 +745,7 @@ export function SmetaSpreadsheetEditor({
           className="shrink-0 border-b border-amber-500/40 bg-amber-500/10 px-4 py-2.5 text-sm"
           role="status"
         >
-          <p className="font-medium text-amber-100">
+          <p className="font-medium text-[var(--tone-warning-soft)]">
             Импорт выполнен с ограничениями — что не перенесено полностью:
           </p>
           <ul className="mt-1 list-disc space-y-0.5 pl-5 text-[var(--foreground)]">

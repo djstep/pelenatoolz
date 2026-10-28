@@ -187,7 +187,7 @@ function ShootDayAccordionRow({
     <>
       <tr
         className={cn(
-          "border-b border-[var(--border)] cursor-pointer transition hover:bg-white/5",
+          "border-b border-[var(--border)] cursor-pointer transition hover:bg-[rgb(var(--tint-rgb)/0.05)]",
           expanded && "glass-row-expanded",
         )}
         onClick={onToggle}
@@ -223,7 +223,7 @@ function ShootDayAccordionRow({
       </tr>
 
       {expanded ? (
-        <tr className="border-b border-[var(--border)] bg-white/4">
+        <tr className="border-b border-[var(--border)] bg-[rgb(var(--tint-rgb)/0.04)]">
           <td colSpan={canWrite ? 7 : 6} className="px-4 pb-4 pt-2">
             {day.notes ? (
               <p className="mb-3 text-sm text-[var(--muted-fg)]">{day.notes}</p>

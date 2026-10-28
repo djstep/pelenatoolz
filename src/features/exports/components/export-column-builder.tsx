@@ -170,7 +170,7 @@ function SortableFieldChip({
       <span className="min-w-0 flex-1 truncate">{label}</span>
       <button
         type="button"
-        className="rounded px-1 text-[var(--muted-fg)] opacity-60 hover:bg-white/10 hover:opacity-100"
+        className="rounded px-1 text-[var(--muted-fg)] opacity-60 hover:bg-[rgb(var(--tint-rgb)/0.1)] hover:opacity-100"
         aria-label="Убрать"
         onClick={onRemove}
       >

@@ -233,7 +233,7 @@ function WorkRowEditor({
             type="button"
             className={cn(
               "inline-flex h-8 w-8 items-center justify-center rounded-lg border border-transparent",
-              "hover:border-[var(--border)] hover:bg-white/5",
+              "hover:border-[var(--border)] hover:bg-[rgb(var(--tint-rgb)/0.05)]",
               hasExtras && "border-[var(--accent)]/40 bg-[var(--accent)]/10",
             )}
             title={
@@ -253,7 +253,7 @@ function WorkRowEditor({
         </td>
       </tr>
       {mileageEnabled ? (
-        <tr className="border-b border-[var(--border)]/40 bg-white/[0.02]">
+        <tr className="border-b border-[var(--border)]/40 bg-[rgb(var(--tint-rgb)/0.02)]">
           <td
             colSpan={colCount - 1}
             className="py-1.5 pl-6 pr-3 text-xs text-[var(--muted-fg)]"
@@ -370,7 +370,7 @@ export function WorkRowsSection({
             <tbody>
               {groups.map(([title, groupRows]) => (
                 <Fragment key={title}>
-                  <tr className="border-b border-[var(--border)] bg-white/[0.03]">
+                  <tr className="border-b border-[var(--border)] bg-[rgb(var(--tint-rgb)/0.03)]">
                     <td
                       colSpan={colCount}
                       className="py-2.5 pr-3 text-xs font-semibold uppercase tracking-wide text-[var(--muted-fg)]"

@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { resolveDefaultStatusId } from "@/features/contracts/lib/default-status";
+import { contractFinanceAccess } from "@/features/contracts/lib/finance-access";
 import {
   listCertificates,
   listContractTags,
@@ -34,6 +35,10 @@ export default async function CounterpartyDetailPage({ params }: Props) {
     );
   }
 
+  // Справочник — раздел «Финансы»; договоры и акты в карточке — по правам раздела «Договоры и акты».
+  const showContracts = ctx.can("contracts:read");
+  const finance = contractFinanceAccess(ctx.can);
+
   const [
     counterparty,
     allContracts,
@@ -47,9 +52,9 @@ export default async function CounterpartyDetailPage({ params }: Props) {
     statusRes,
   ] = await Promise.all([
     getCounterparty(projectId, counterpartyId),
-    listContracts(projectId),
-    listCertificates(projectId),
-    listPaymentsForCertificateForm(projectId),
+    showContracts ? listContracts(projectId) : [],
+    showContracts ? listCertificates(projectId) : [],
+    showContracts ? listPaymentsForCertificateForm(projectId) : [],
     listCompanies(projectId),
     listCounterparties(projectId),
     listLedgerTypes(projectId),
@@ -105,7 +110,10 @@ export default async function CounterpartyDetailPage({ params }: Props) {
       }))}
       existingTags={tags}
       defaultStatusId={defaultStatusId}
-      canWrite={ctx.can("finance:write")}
+      showContracts={showContracts}
+      canWrite={ctx.can("contracts:write")}
+      finance={finance}
+      canCreateParties={ctx.can("finance:write")}
     />
   );
 }

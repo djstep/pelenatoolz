@@ -13,6 +13,7 @@ import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Modal } from "@/shared/ui/modal";
+import { useActionSuccess } from "@/shared/ui/unsaved/use-action-success";
 import { Select } from "@/shared/ui/select";
 
 const initial: LocationActionState = {};
@@ -42,9 +43,7 @@ export function LocationModal({
     addresses.map((a) => ({ id: a, name: a })),
   );
 
-  useEffect(() => {
-    if (state.success) onClose();
-  }, [state.success, onClose]);
+  useActionSuccess(state, onClose);
 
   useEffect(() => {
     if (open) setAddress(location?.address ?? "");
@@ -52,6 +51,7 @@ export function LocationModal({
 
   return (
     <Modal
+      guardUnsaved
       open={open}
       onClose={onClose}
       title={isEdit ? "Редактирование локации" : "Добавление локации"}
@@ -61,7 +61,12 @@ export function LocationModal({
           <Button type="submit" form="location-form" disabled={pending}>
             {pending ? "…" : "Сохранить"}
           </Button>
-          <Button type="button" variant="secondary" onClick={onClose}>
+          <Button
+            type="button"
+            variant="secondary"
+            data-modal-cancel
+            onClick={onClose}
+          >
             Отмена
           </Button>
           {!isEdit ? (

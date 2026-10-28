@@ -61,6 +61,95 @@
   --nav-section-bg: rgba(255, 255, 255, 0.03);
   --nav-section-open-bg: rgba(110, 168, 255, 0.08);
   --nav-hover-bg: rgba(255, 255, 255, 0.06);
+
+  /* Подсветки и рамки: белые в тёмной теме, тёмные в светлой (та же прозрачность). */
+  --tint-rgb: 255 255 255;
+  /* Вложенные плашки внутри карточек. */
+  --inset-bg: rgba(0, 0, 0, 0.15);
+  --inset-bg-soft: rgba(0, 0, 0, 0.1);
+
+  /* Текст со смыслом. */
+  --tone-success: #6ee7b7;
+  --tone-warning: #fcd34d;
+  --tone-danger: #fca5a5;
+  --tone-info: #bae6fd;
+  --tone-violet: #ede9fe;
+  --tone-neutral: #d4d4d8;
+  --tone-warning-bg: rgba(69, 26, 3, 0.3);
+  /* Мягкие (очень светлые в тёмной теме) варианты. */
+  --tone-success-soft: #d1fae5;
+  --tone-warning-soft: #fef3c7;
+  --tone-danger-soft: #ffe4e6;
+  --tone-info-soft: #e0f2fe;
+  /* Яркие (оттенок 400 в тёмной теме) варианты. */
+  --tone-success-strong: #34d399;
+  --tone-warning-strong: #fbbf24;
+  --tone-danger-strong: #f87171;
+
+  /* Строки по статусу сцены (либретто). */
+  --row-success: rgba(5, 46, 22, 0.35);
+  --row-success-hover: rgba(5, 46, 22, 0.45);
+  --row-warning: rgba(66, 32, 6, 0.35);
+  --row-warning-hover: rgba(66, 32, 6, 0.45);
+  --row-neutral: rgba(24, 24, 27, 0.4);
+  --row-neutral-hover: rgba(24, 24, 27, 0.5);
+  --row-muted: rgba(0, 0, 0, 0.5);
+  --row-muted-hover: rgba(0, 0, 0, 0.6);
+  --row-danger: rgba(69, 10, 10, 0.35);
+  --row-danger-hover: rgba(69, 10, 10, 0.45);
+  --badge-muted-bg: rgba(39, 39, 42, 0.4);
+
+  /* КПП: доска, панель несплан. сцен, карточки, типы дней. */
+  --kpp-board-bg: linear-gradient(to bottom right, #020617, #0a1224, rgba(30, 27, 75, 0.5));
+  --kpp-panel-bg: linear-gradient(to bottom, rgba(4, 47, 46, 0.7), #0b1520, #081018);
+  --kpp-panel-head-bg: rgba(4, 47, 46, 0.4);
+  --kpp-panel-border: rgba(20, 184, 166, 0.4);
+  --kpp-panel-head-border: rgba(20, 184, 166, 0.25);
+  --kpp-panel-title: #f0fdfa;
+  --kpp-panel-fg: rgba(204, 251, 241, 0.8);
+  --kpp-panel-muted: rgba(153, 246, 228, 0.65);
+  --kpp-panel-btn-hover: rgba(45, 212, 191, 0.15);
+  --kpp-panel-btn-active: rgba(45, 212, 191, 0.2);
+  --kpp-group-loc-bg: rgba(19, 78, 74, 0.45);
+  --kpp-group-loc-fg: rgba(204, 251, 241, 0.9);
+  --kpp-group-actor-bg: rgba(76, 29, 149, 0.45);
+  --kpp-group-actor-fg: rgba(237, 233, 254, 0.9);
+  --kpp-day-group-loc-bg: rgba(12, 74, 110, 0.55);
+  --kpp-day-group-loc-fg: rgba(224, 242, 254, 0.9);
+  --kpp-day-group-actor-bg: rgba(76, 29, 149, 0.55);
+  --kpp-day-group-actor-fg: rgba(237, 233, 254, 0.9);
+  --kpp-bar-bg: rgba(0, 0, 0, 0.3);
+  --kpp-drop-bg: rgba(0, 0, 0, 0.2);
+  --kpp-card-bg: rgba(18, 26, 42, 0.95);
+  --kpp-menu-bg: #0c1220;
+  --kpp-work-bg: rgba(8, 47, 73, 0.35);
+  --kpp-work-border: rgba(14, 165, 233, 0.3);
+  --kpp-work-head-bg: rgba(12, 74, 110, 0.3);
+  --kpp-work-head-border: rgba(14, 165, 233, 0.2);
+  --kpp-work-fg: #bae6fd;
+  --kpp-off-bg: rgba(24, 24, 27, 0.55);
+  --kpp-off-border: rgba(113, 113, 122, 0.35);
+  --kpp-off-head-bg: rgba(39, 39, 42, 0.5);
+  --kpp-off-head-border: rgba(113, 113, 122, 0.25);
+  --kpp-off-fg: #d4d4d8;
+  --kpp-rest-bg: rgba(69, 26, 3, 0.4);
+  --kpp-rest-border: rgba(245, 158, 11, 0.35);
+  --kpp-rest-head-bg: rgba(120, 53, 15, 0.35);
+  --kpp-rest-head-border: rgba(245, 158, 11, 0.25);
+  --kpp-rest-fg: #fde68a;
+  --kpp-prep-bg: rgba(2, 44, 34, 0.4);
+  --kpp-prep-border: rgba(16, 185, 129, 0.35);
+  --kpp-prep-head-bg: rgba(6, 78, 59, 0.35);
+  --kpp-prep-head-border: rgba(16, 185, 129, 0.25);
+  --kpp-prep-fg: #a7f3d0;
+  --kpp-prep-note: rgba(209, 250, 229, 0.85);
+  --kpp-work-muted: rgba(203, 213, 225, 0.75);
+  --kpp-off-muted: rgba(203, 213, 225, 0.75);
+  --kpp-rest-muted: rgba(203, 213, 225, 0.75);
+  --kpp-prep-muted: rgba(203, 213, 225, 0.75);
+
+  /* Пост: карточки задач. */
+  --post-card-bg: #121a2a;
   color-scheme: dark;
 }
 
@@ -74,13 +163,14 @@
   --panel-elevated: #f8fafc;
   --border: rgba(15, 23, 42, 0.1);
   --border-strong: rgba(15, 23, 42, 0.16);
-  --muted: rgba(51, 65, 85, 0.45);
+  /* Подсказки в полях: контраст к белому не ниже 4.5:1. */
+  --muted: rgba(51, 65, 85, 0.75);
   --muted-fg: #475569;
   --accent: #2563eb;
   --accent-2: #7c3aed;
   --accent-fg: #ffffff;
   --accent-glow: rgba(37, 99, 235, 0.28);
-  --danger: #e11d48;
+  --danger: #be123c;
   --glass-blur: 20px;
   --glass-shadow: 0 10px 40px rgba(15, 23, 42, 0.08);
   --glass-inset: inset 0 1px 0 rgba(255, 255, 255, 0.9);
@@ -123,7 +213,103 @@
   --nav-section-bg: rgba(255, 255, 255, 0.9);
   --nav-section-open-bg: rgba(37, 99, 235, 0.06);
   --nav-hover-bg: rgba(15, 23, 42, 0.05);
+
+  --tint-rgb: 15 23 42;
+  --inset-bg: rgba(15, 23, 42, 0.035);
+  --inset-bg-soft: rgba(15, 23, 42, 0.025);
+
+  /* Тёмные оттенки той же гаммы: контраст к светлому фону не ниже 4.5:1. */
+  --tone-success: #065f46;
+  --tone-warning: #92400e;
+  --tone-danger: #991b1b;
+  --tone-info: #075985;
+  --tone-violet: #5b21b6;
+  --tone-neutral: #3f3f46;
+  --tone-warning-bg: #fffbeb;
+  --tone-success-soft: #065f46;
+  --tone-warning-soft: #92400e;
+  --tone-danger-soft: #9f1239;
+  --tone-info-soft: #075985;
+  --tone-success-strong: #065f46;
+  --tone-warning-strong: #92400e;
+  --tone-danger-strong: #991b1b;
+
+  --row-success: #f0fdf4;
+  --row-success-hover: #dcfce7;
+  --row-warning: #fefce8;
+  --row-warning-hover: #fef9c3;
+  --row-neutral: #f8fafc;
+  --row-neutral-hover: #f1f5f9;
+  --row-muted: #e4e4e7;
+  --row-muted-hover: #d4d4d8;
+  --row-danger: #fef2f2;
+  --row-danger-hover: #fee2e2;
+  --badge-muted-bg: rgba(113, 113, 122, 0.12);
+
+  --kpp-board-bg: linear-gradient(to bottom right, #f1f5f9, #e8edf5, rgba(224, 231, 255, 0.6));
+  --kpp-panel-bg: linear-gradient(to bottom, #ccfbf1, #f0fdfa, #f8fafc);
+  --kpp-panel-head-bg: #ccfbf1;
+  --kpp-panel-border: #5eead4;
+  --kpp-panel-head-border: #99f6e4;
+  --kpp-panel-title: #134e4a;
+  --kpp-panel-fg: #115e59;
+  --kpp-panel-muted: #0f766e;
+  --kpp-panel-btn-hover: rgba(20, 184, 166, 0.15);
+  --kpp-panel-btn-active: rgba(20, 184, 166, 0.25);
+  --kpp-group-loc-bg: #ccfbf1;
+  --kpp-group-loc-fg: #134e4a;
+  --kpp-group-actor-bg: #ede9fe;
+  --kpp-group-actor-fg: #4c1d95;
+  --kpp-day-group-loc-bg: #e0f2fe;
+  --kpp-day-group-loc-fg: #0c4a6e;
+  --kpp-day-group-actor-bg: #ede9fe;
+  --kpp-day-group-actor-fg: #4c1d95;
+  --kpp-bar-bg: rgba(15, 23, 42, 0.04);
+  --kpp-drop-bg: transparent;
+  --kpp-card-bg: #ffffff;
+  --kpp-menu-bg: #ffffff;
+  /* Типы дней различаются и цветом, и светлотой (читаются в ч/б):
+     рабочий — самый светлый, затем подготовительный, отсыпной, выходной — самый тёмный. */
+  --kpp-work-bg: #f0f9ff;
+  --kpp-work-border: #7dd3fc;
+  --kpp-work-head-bg: #e0f2fe;
+  --kpp-work-head-border: #7dd3fc;
+  --kpp-work-fg: #0c4a6e;
+  --kpp-prep-bg: #a7f3d0;
+  --kpp-prep-border: #10b981;
+  --kpp-prep-head-bg: #6ee7b7;
+  --kpp-prep-head-border: #10b981;
+  --kpp-prep-fg: #064e3b;
+  --kpp-prep-note: #064e3b;
+  --kpp-rest-bg: #fbbf24;
+  --kpp-rest-border: #d97706;
+  --kpp-rest-head-bg: #f59e0b;
+  --kpp-rest-head-border: #d97706;
+  --kpp-rest-fg: #451a03;
+  --kpp-off-bg: #a1a1aa;
+  --kpp-off-border: #52525b;
+  --kpp-off-head-bg: #8f8f99;
+  --kpp-off-head-border: #52525b;
+  --kpp-off-fg: #18181b;
+  --kpp-work-muted: #334155;
+  --kpp-off-muted: #27272a;
+  --kpp-rest-muted: #451a03;
+  --kpp-prep-muted: #065f46;
+
+  --post-card-bg: #ffffff;
   color-scheme: light;
+}
+
+/* Бейдж со своим цветом (статусы согласования): в светлой теме текст затемняется. */
+.glass-badge.status-badge {
+  border-width: 1px;
+  background-color: color-mix(in srgb, var(--status-color) 20%, transparent);
+  border-color: color-mix(in srgb, var(--status-color) 40%, transparent);
+  color: var(--status-color);
+}
+
+[data-theme="light"] .glass-badge.status-badge {
+  color: color-mix(in srgb, var(--status-color) 45%, #000);
 }
 
 /* Brand logo: white on dark theme, black on light theme */
@@ -173,8 +359,8 @@ html {
 *::-webkit-scrollbar-thumb {
   background: linear-gradient(
     180deg,
-    rgba(255, 255, 255, 0.22) 0%,
-    rgba(255, 255, 255, 0.1) 100%
+    rgb(var(--tint-rgb) / 0.22) 0%,
+    rgb(var(--tint-rgb) / 0.1) 100%
   );
   border: 2px solid transparent;
   background-clip: padding-box;
@@ -315,7 +501,7 @@ input[type="number"].glass-input::-webkit-inner-spin-button,
   align-items: center;
   justify-content: center;
   color: var(--muted-fg);
-  background: rgba(255, 255, 255, 0.04);
+  background: rgb(var(--tint-rgb) / 0.04);
   border: none;
   cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease;
@@ -662,22 +848,27 @@ main {
   color: var(--muted-fg);
 }
 
+/*
+ * Отступы — в долях ширины строки, а не в дюймах: на полном листе (8.5in) это те же
+ * 2.2in / 1in / 1.5in / 1.6in / 2in, а на узком экране лист сужается пропорционально
+ * и имена персонажей не рвутся посреди слова. Экспорт задаёт свои отступы отдельно.
+ */
 .screenplay-block--character {
   text-transform: uppercase;
   text-align: center;
   margin-top: 0.75rem;
-  padding-left: 2.2in;
-  padding-right: 2.2in;
+  padding-left: 27.6%;
+  padding-right: 27.6%;
 }
 
 .screenplay-block--dialogue {
-  padding-left: 1in;
-  padding-right: 1.5in;
+  padding-left: 12.55%;
+  padding-right: 18.83%;
 }
 
 .screenplay-block--parenthetical {
-  padding-left: 1.6in;
-  padding-right: 2in;
+  padding-left: 20.08%;
+  padding-right: 25.1%;
   font-style: italic;
 }
 
@@ -756,7 +947,8 @@ main {
   max-width: 100%;
   min-width: 0;
   box-sizing: border-box;
-  flex-wrap: nowrap;
+  /* На узком листе (рядом колонка комментариев) группы переносятся, а не наезжают друг на друга. */
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 0.25rem;
@@ -779,6 +971,15 @@ main {
   position: relative;
   width: 100%;
   max-width: 100%;
+}
+
+/*
+ * Место справа от листа под колонку комментариев (14rem + зазор), чтобы она не уходила
+ * под правую панель. На широком экране отступ 0 и лист по центру; когда места мало,
+ * лист сдвигается влево, а на узком — сужается.
+ */
+.screenplay-editor-document--with-comments {
+  padding-right: clamp(0px, calc(2 * 15rem + 8.5in - 100%), 15rem);
 }
 
 .screenplay-editor-paper {
@@ -1081,6 +1282,44 @@ main {
 
 .screenplay-comment-card {
   font-size: 0.75rem;
+}
+
+.screenplay-comment-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 0.5rem;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted-fg);
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    color 0.15s,
+    border-color 0.15s;
+}
+
+.screenplay-comment-action-btn:hover {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface-2));
+  color: var(--foreground);
+}
+
+.screenplay-comment-action-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.screenplay-comment-action-btn--danger {
+  color: var(--danger);
+}
+
+.screenplay-comment-action-btn--danger:hover {
+  border-color: color-mix(in srgb, var(--danger) 35%, var(--border));
+  background: color-mix(in srgb, var(--danger) 8%, var(--surface-2));
+  color: var(--danger);
 }
 
 .screenplay-editor-shell--fullscreen {

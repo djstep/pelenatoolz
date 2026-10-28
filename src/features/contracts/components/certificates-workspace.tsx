@@ -1,18 +1,25 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { deleteCertificateAction } from "@/features/contracts/actions";
 import {
   CertificateFormModal,
   type CertificateFormDefaults,
 } from "@/features/contracts/components/certificate-form-modal";
 import { exportCertificatesXls } from "@/features/contracts/lib/export-certificates-xls";
-import { CERTIFICATE_COLUMNS } from "@/features/contracts/lib/table-columns";
+import type { ContractFinanceAccess } from "@/features/contracts/lib/finance-access";
+import {
+  CERTIFICATE_COLUMNS,
+  CERTIFICATE_FINANCE_COLUMNS,
+} from "@/features/contracts/lib/table-columns";
 import type { CertificateListItem } from "@/features/contracts/queries";
 import { useTableLayout } from "@/shared/hooks/use-table-layout";
 import { formatDateShort } from "@/shared/i18n/format-date";
-import { Badge } from "@/shared/ui/badge";
+import { Badge, statusBadgeStyle } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
+import { toast } from "@/shared/ui/toast";
 import { cn } from "@/shared/lib/cn";
 
 type StatusOpt = { id: string; name: string; color: string };
@@ -81,6 +88,8 @@ export function CertificatesWorkspace({
   statuses,
   defaultStatusId,
   canWrite,
+  finance,
+  canCreateParties,
   initialCounterpartyId,
   initialContractId,
   initialPaymentId,
@@ -96,12 +105,23 @@ export function CertificatesWorkspace({
   statuses: StatusOpt[];
   defaultStatusId: string;
   canWrite: boolean;
+  finance: ContractFinanceAccess;
+  canCreateParties: boolean;
   initialCounterpartyId?: string;
   initialContractId?: string;
   initialPaymentId?: string;
   initialCompanyId?: string;
   hideCreate?: boolean;
 }) {
+  const columns = useMemo(
+    () =>
+      finance.read
+        ? CERTIFICATE_COLUMNS
+        : CERTIFICATE_COLUMNS.filter(
+            (c) => !CERTIFICATE_FINANCE_COLUMNS.has(c.id),
+          ),
+    [finance.read],
+  );
   const {
     visibleColumns,
     widths,
@@ -110,8 +130,10 @@ export function CertificatesWorkspace({
     setVisibleIds,
     visibleIds,
     orderedColumns,
-  } = useTableLayout(`certificates:${projectId}`, CERTIFICATE_COLUMNS);
+  } = useTableLayout(`certificates:${projectId}`, columns);
 
+  const router = useRouter();
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [statusIds, setStatusIds] = useState<Set<string>>(new Set());
   const [counterpartyId, setCounterpartyId] = useState(
@@ -224,6 +246,21 @@ export function CertificatesWorkspace({
     setModalOpen(true);
   }
 
+  function removeCertificate(row: CertificateListItem) {
+    if (!confirm(`Удалить акт № ${row.number}?`)) return;
+    setDeletingId(row.id);
+    void deleteCertificateAction(projectId, row.id)
+      .then((res) => {
+        if (res.error) {
+          toast.error(res.error);
+          return;
+        }
+        toast.success(res.success ?? "Акт удалён");
+        router.refresh();
+      })
+      .finally(() => setDeletingId(null));
+  }
+
   function openCopy(row: CertificateListItem) {
     openCreate({
       date: new Date().toISOString().slice(0, 10),
@@ -294,7 +331,12 @@ export function CertificatesWorkspace({
             type="button"
             variant="secondary"
             onClick={() =>
-              void exportCertificatesXls(certificates, projectId, "all")
+              void exportCertificatesXls(
+                certificates,
+                projectId,
+                "all",
+                finance.read,
+              )
             }
           >
             Excel: всё
@@ -303,7 +345,12 @@ export function CertificatesWorkspace({
             type="button"
             variant="secondary"
             onClick={() =>
-              void exportCertificatesXls(filtered, projectId, "filtered")
+              void exportCertificatesXls(
+                filtered,
+                projectId,
+                "filtered",
+                finance.read,
+              )
             }
           >
             Excel: фильтр
@@ -317,6 +364,7 @@ export function CertificatesWorkspace({
                 exportRows,
                 projectId,
                 selected.size ? "selected" : "filtered",
+                finance.read,
               )
             }
           >
@@ -490,12 +538,8 @@ export function CertificatesWorkspace({
                   >
                     {col.id === "status" && colorMode && !rowColorMode ? (
                       <Badge
-                        className="border"
-                        style={{
-                          backgroundColor: `${row.status.color}33`,
-                          borderColor: `${row.status.color}66`,
-                          color: row.status.color,
-                        }}
+                        className="status-badge"
+                        style={statusBadgeStyle(row.status.color)}
                       >
                         {row.status.name}
                       </Badge>
@@ -511,6 +555,15 @@ export function CertificatesWorkspace({
                     </Button>
                     <Button type="button" variant="ghost" onClick={() => openCopy(row)}>
                       На основе
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="text-[var(--danger)]"
+                      disabled={deletingId === row.id}
+                      onClick={() => removeCertificate(row)}
+                    >
+                      Удалить
                     </Button>
                   </td>
                 ) : null}
@@ -552,6 +605,8 @@ export function CertificatesWorkspace({
           lockCounterparty={Boolean(initialCounterpartyId || initialPaymentId)}
           lockContract={Boolean(initialContractId)}
           lockPayment={Boolean(initialPaymentId)}
+          finance={finance}
+          canCreateParties={canCreateParties}
         />
       ) : null}
 

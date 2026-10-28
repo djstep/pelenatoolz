@@ -7,11 +7,15 @@ import {
   type ContractFormDefaults,
 } from "@/features/contracts/components/contract-form-modal";
 import { exportContractsXls } from "@/features/contracts/lib/export-contracts-xls";
-import { CONTRACT_COLUMNS } from "@/features/contracts/lib/table-columns";
+import type { ContractFinanceAccess } from "@/features/contracts/lib/finance-access";
+import {
+  CONTRACT_AMOUNT_COLUMNS,
+  CONTRACT_COLUMNS,
+} from "@/features/contracts/lib/table-columns";
 import type { ContractListItem } from "@/features/contracts/queries";
 import { useTableLayout } from "@/shared/hooks/use-table-layout";
 import { formatDateShort } from "@/shared/i18n/format-date";
-import { Badge } from "@/shared/ui/badge";
+import { Badge, statusBadgeStyle } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { cn } from "@/shared/lib/cn";
@@ -67,6 +71,8 @@ export function ContractsWorkspace({
   existingTags,
   defaultStatusId,
   canWrite,
+  finance,
+  canCreateParties,
   initialCounterpartyId,
 }: {
   projectId: string;
@@ -79,9 +85,18 @@ export function ContractsWorkspace({
   existingTags: string[];
   defaultStatusId: string;
   canWrite: boolean;
+  finance: ContractFinanceAccess;
+  canCreateParties: boolean;
   initialCounterpartyId?: string;
 }) {
   const router = useRouter();
+  const columns = useMemo(
+    () =>
+      finance.read
+        ? CONTRACT_COLUMNS
+        : CONTRACT_COLUMNS.filter((c) => !CONTRACT_AMOUNT_COLUMNS.has(c.id)),
+    [finance.read],
+  );
   const {
     visibleColumns,
     widths,
@@ -90,7 +105,7 @@ export function ContractsWorkspace({
     setVisibleIds,
     visibleIds,
     orderedColumns,
-  } = useTableLayout(`contracts:${projectId}`, CONTRACT_COLUMNS);
+  } = useTableLayout(`contracts:${projectId}`, columns);
 
   const [search, setSearch] = useState("");
   const [statusIds, setStatusIds] = useState<Set<string>>(new Set());
@@ -264,7 +279,9 @@ export function ContractsWorkspace({
           <Button
             type="button"
             variant="secondary"
-            onClick={() => void exportContractsXls(contracts, projectId, "all")}
+            onClick={() =>
+              void exportContractsXls(contracts, projectId, "all", finance.read)
+            }
           >
             Excel: всё
           </Button>
@@ -272,7 +289,12 @@ export function ContractsWorkspace({
             type="button"
             variant="secondary"
             onClick={() =>
-              void exportContractsXls(filtered, projectId, "filtered")
+              void exportContractsXls(
+                filtered,
+                projectId,
+                "filtered",
+                finance.read,
+              )
             }
           >
             Excel: фильтр
@@ -286,6 +308,7 @@ export function ContractsWorkspace({
                 exportRows,
                 projectId,
                 selected.size ? "selected" : "filtered",
+                finance.read,
               )
             }
           >
@@ -460,7 +483,7 @@ export function ContractsWorkspace({
                   key={row.id}
                   style={statusStyle}
                   className={cn(
-                    "border-b border-[var(--border)]/50 cursor-pointer hover:bg-white/[0.03]",
+                    "border-b border-[var(--border)]/50 cursor-pointer hover:bg-[rgb(var(--tint-rgb)/0.03)]",
                     row.isPreliminary && "text-[var(--muted-fg)]",
                     compact ? "align-middle" : "align-top",
                   )}
@@ -503,12 +526,8 @@ export function ContractsWorkspace({
                     >
                       {col.id === "status" && colorMode && !rowColorMode ? (
                         <Badge
-                          className="border"
-                          style={{
-                            backgroundColor: `${row.status.color}33`,
-                            borderColor: `${row.status.color}66`,
-                            color: row.status.color,
-                          }}
+                          className="status-badge"
+                          style={statusBadgeStyle(row.status.color)}
                         >
                           {row.status.name}
                         </Badge>
@@ -559,6 +578,8 @@ export function ContractsWorkspace({
           existingTags={existingTags}
           defaults={formDefaults}
           defaultStatusId={defaultStatusId}
+          finance={finance}
+          canCreateParties={canCreateParties}
         />
       ) : null}
     </div>

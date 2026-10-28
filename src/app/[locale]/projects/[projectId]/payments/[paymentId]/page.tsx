@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { resolveDefaultStatusId } from "@/features/contracts/lib/default-status";
 import { CertificatesWorkspace } from "@/features/contracts/components/certificates-workspace";
+import { contractFinanceAccess } from "@/features/contracts/lib/finance-access";
 import {
   listCertificates,
   listContracts,
@@ -37,6 +38,9 @@ export default async function PaymentDetailPage({ params }: Props) {
     );
   }
 
+  // Акты платежа — по правам раздела «Договоры и акты».
+  const showCertificates = ctx.can("contracts:read");
+
   const [
     payment,
     allCertificates,
@@ -48,7 +52,7 @@ export default async function PaymentDetailPage({ params }: Props) {
     statusRes,
   ] = await Promise.all([
     getCashPayment(projectId, paymentId),
-    listCertificates(projectId),
+    showCertificates ? listCertificates(projectId) : [],
     listCompanies(projectId),
     listCounterparties(projectId),
     listContracts(projectId),
@@ -111,39 +115,43 @@ export default async function PaymentDetailPage({ params }: Props) {
         ) : null}
       </dl>
 
-      <section className="space-y-3">
-        <h2 className="font-display text-lg font-semibold">Акты</h2>
-        <CertificatesWorkspace
-          projectId={projectId}
-          certificates={certificateRows}
-          companies={companies.map((c) => ({ id: c.id, name: c.name }))}
-          counterparties={counterparties.map((c) => ({
-            id: c.id,
-            name: c.name,
-          }))}
-          contracts={contracts.map((c) => ({
-            id: c.id,
-            number: c.number,
-            companyId: c.companyId,
-            counterpartyId: c.counterpartyId,
-          }))}
-          payments={payments.map((p) => ({
-            ...p,
-            amountWithTax: Number(p.amountWithTax),
-          }))}
-          statuses={statuses.map((s) => ({
-            id: s.id,
-            name: s.name,
-            color: s.color,
-          }))}
-          defaultStatusId={defaultStatusId}
-          canWrite={ctx.can("finance:write")}
-          initialCompanyId={payment.companyId}
-          initialCounterpartyId={payment.counterpartyId}
-          initialContractId={payment.contractId ?? undefined}
-          initialPaymentId={payment.id}
-        />
-      </section>
+      {showCertificates ? (
+        <section className="space-y-3">
+          <h2 className="font-display text-lg font-semibold">Акты</h2>
+          <CertificatesWorkspace
+            projectId={projectId}
+            certificates={certificateRows}
+            companies={companies.map((c) => ({ id: c.id, name: c.name }))}
+            counterparties={counterparties.map((c) => ({
+              id: c.id,
+              name: c.name,
+            }))}
+            contracts={contracts.map((c) => ({
+              id: c.id,
+              number: c.number,
+              companyId: c.companyId,
+              counterpartyId: c.counterpartyId,
+            }))}
+            payments={payments.map((p) => ({
+              ...p,
+              amountWithTax: Number(p.amountWithTax),
+            }))}
+            statuses={statuses.map((s) => ({
+              id: s.id,
+              name: s.name,
+              color: s.color,
+            }))}
+            defaultStatusId={defaultStatusId}
+            canWrite={ctx.can("contracts:write")}
+            finance={contractFinanceAccess(ctx.can)}
+            canCreateParties={ctx.can("finance:write")}
+            initialCompanyId={payment.companyId}
+            initialCounterpartyId={payment.counterpartyId}
+            initialContractId={payment.contractId ?? undefined}
+            initialPaymentId={payment.id}
+          />
+        </section>
+      ) : null}
     </div>
   );
 }

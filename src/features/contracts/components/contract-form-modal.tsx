@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useState } from "react";
+import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   createContractAction,
@@ -9,6 +9,7 @@ import {
   updateContractAction,
   type ContractsActionState,
 } from "@/features/contracts/actions";
+import type { ContractFinanceAccess } from "@/features/contracts/lib/finance-access";
 import {
   VAT_RATE_PRESETS,
   computeContractVat,
@@ -70,6 +71,8 @@ export function ContractFormModal({
   existingTags,
   defaults,
   defaultStatusId,
+  finance,
+  canCreateParties,
 }: {
   projectId: string;
   locale: string;
@@ -82,6 +85,10 @@ export function ContractFormModal({
   existingTags: string[];
   defaults?: ContractFormDefaults | null;
   defaultStatusId: string;
+  /** Без права менять финансы поля сумм скрыты, сервер их не принимает. */
+  finance: ContractFinanceAccess;
+  /** Новые компании и контрагенты добавляются в справочник «Финансов». */
+  canCreateParties: boolean;
 }) {
   const router = useRouter();
   const isEdit = Boolean(defaults?.id);
@@ -116,8 +123,6 @@ export function ContractFormModal({
       ? String(defaults.vatAmount)
       : "",
   );
-  const [newLedger, setNewLedger] = useState("");
-  const [newStatus, setNewStatus] = useState("");
 
   useEffect(() => {
     if (!open) return;
@@ -136,7 +141,13 @@ export function ContractFormModal({
     setStatuses(initialStatuses);
   }, [open, defaults, defaultStatusId, companies, counterparties, initialLedgerTypes, initialStatuses]);
 
+  // Каждый ответ сервера обрабатываем один раз: иначе «успех» остаётся в состоянии,
+  // а onClose (новая функция при каждой отрисовке у родителя) закрывает окно и обновляет
+  // страницу снова и снова.
+  const handledState = useRef(state);
   useEffect(() => {
+    if (handledState.current === state) return;
+    handledState.current = state;
     if (state.success && state.contractId && !isEdit) {
       onClose();
       router.push(
@@ -145,7 +156,7 @@ export function ContractFormModal({
     } else if (state.success && isEdit) {
       onClose();
     }
-  }, [state.success, state.contractId, isEdit, onClose, router, locale, projectId]);
+  }, [state, isEdit, onClose, router, locale, projectId]);
 
   const vatPreview = useMemo(() => {
     const amt = Number(amount) || 0;
@@ -160,6 +171,7 @@ export function ContractFormModal({
 
   return (
     <Modal
+      guardUnsaved
       open={open}
       onClose={onClose}
       title={isEdit ? "Редактирование договора" : "Новый договор"}
@@ -169,7 +181,12 @@ export function ContractFormModal({
           <Button type="submit" form="contract-form" disabled={pending}>
             {pending ? "…" : "Сохранить"}
           </Button>
-          <Button type="button" variant="secondary" onClick={onClose}>
+          <Button
+            type="button"
+            variant="secondary"
+            data-modal-cancel
+            onClick={onClose}
+          >
             Отмена
           </Button>
           {state.error ? (
@@ -209,17 +226,21 @@ export function ContractFormModal({
           options={companyOptions}
           value={companyId}
           onChange={setCompanyId}
-          onQuickCreate={async (fd) => {
-            const name = String(fd.get("name") ?? "");
-            const r = await quickCreateCompanyAction(projectId, name);
-            if ("id" in r) {
-              setCompanyOptions((prev) =>
-                prev.some((x) => x.id === r.id) ? prev : [...prev, r],
-              );
-              setCompanyId(r.id);
-            }
-            return r;
-          }}
+          onQuickCreate={
+            canCreateParties
+              ? async (fd) => {
+                  const name = String(fd.get("name") ?? "");
+                  const r = await quickCreateCompanyAction(projectId, name);
+                  if ("id" in r) {
+                    setCompanyOptions((prev) =>
+                      prev.some((x) => x.id === r.id) ? prev : [...prev, r],
+                    );
+                    setCompanyId(r.id);
+                  }
+                  return r;
+                }
+              : undefined
+          }
         />
 
         <EntityPicker
@@ -228,23 +249,31 @@ export function ContractFormModal({
           options={cpOptions}
           value={counterpartyId}
           onChange={setCounterpartyId}
-          onQuickCreate={async (fd) => {
-            const name = String(fd.get("name") ?? "");
-            const type = (String(fd.get("type") ?? "LEGAL_ENTITY") ||
-              "LEGAL_ENTITY") as
-              | "LEGAL_ENTITY"
-              | "IP"
-              | "INDIVIDUAL"
-              | "SELF_EMPLOYED";
-            const r = await quickCreateCounterpartyAction(projectId, name, type);
-            if ("id" in r) {
-              setCpOptions((prev) =>
-                prev.some((x) => x.id === r.id) ? prev : [...prev, r],
-              );
-              setCounterpartyId(r.id);
-            }
-            return r;
-          }}
+          onQuickCreate={
+            canCreateParties
+              ? async (fd) => {
+                  const name = String(fd.get("name") ?? "");
+                  const type = (String(fd.get("type") ?? "LEGAL_ENTITY") ||
+                    "LEGAL_ENTITY") as
+                    | "LEGAL_ENTITY"
+                    | "IP"
+                    | "INDIVIDUAL"
+                    | "SELF_EMPLOYED";
+                  const r = await quickCreateCounterpartyAction(
+                    projectId,
+                    name,
+                    type,
+                  );
+                  if ("id" in r) {
+                    setCpOptions((prev) =>
+                      prev.some((x) => x.id === r.id) ? prev : [...prev, r],
+                    );
+                    setCounterpartyId(r.id);
+                  }
+                  return r;
+                }
+              : undefined
+          }
           createFields={
             <div>
               <Label htmlFor="cp-type">Тип</Label>
@@ -258,186 +287,152 @@ export function ContractFormModal({
           }
         />
 
-        <div>
-          <Label htmlFor="ledgerTypeId">Тип ведомости</Label>
-          <div className="flex flex-wrap gap-2">
-            <Select
-              id="ledgerTypeId"
-              name="ledgerTypeId"
-              // Без ширины список в строке сжимался до «—» и обрезал название.
-              className="min-w-[12rem] flex-1"
-              value={ledgerTypeId}
-              onChange={(e) => setLedgerTypeId(e.target.value)}
-            >
-              <option value="">—</option>
-              {ledgerTypes.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </Select>
-            <Input
-              placeholder="Свой тип…"
-              value={newLedger}
-              onChange={(e) => setNewLedger(e.target.value)}
-              className="max-w-[10rem]"
-            />
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={async () => {
-                const r = await createLedgerTypeAction(projectId, newLedger);
-                if ("id" in r) {
-                  setLedgerTypes((prev) => [...prev, r]);
-                  setLedgerTypeId(r.id);
-                  setNewLedger("");
-                }
-              }}
-            >
-              +
-            </Button>
-          </div>
-        </div>
+        <EntityPicker
+          name="ledgerTypeId"
+          label="Тип договора"
+          options={ledgerTypes}
+          value={ledgerTypeId}
+          onChange={setLedgerTypeId}
+          createTitle="Новый тип договора"
+          createLabel="+ Добавить тип"
+          onQuickCreate={async (fd) => {
+            const name = String(fd.get("name") ?? "");
+            const r = await createLedgerTypeAction(projectId, name);
+            if ("id" in r) {
+              // Сервер может вернуть уже существующий тип с тем же названием.
+              setLedgerTypes((prev) =>
+                prev.some((x) => x.id === r.id) ? prev : [...prev, r],
+              );
+              setLedgerTypeId(r.id);
+            }
+            return r;
+          }}
+        />
 
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div>
-            <Label htmlFor="amount">Сумма (без НДС) *</Label>
-            <Input
-              id="amount"
-              name="amount"
-              type="number"
-              min={0}
-              step="0.01"
-              required
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-            />
-          </div>
-          <div className="flex flex-col justify-end gap-2 pb-1">
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                name="vatEnabled"
-                checked={vatEnabled}
-                onChange={(e) => setVatEnabled(e.target.checked)}
-              />
-              С НДС
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                name="isPreliminary"
-                defaultChecked={defaults?.isPreliminary ?? false}
-              />
-              Предварительная сумма
-            </label>
-          </div>
-        </div>
-
-        {vatEnabled ? (
-          <div className="grid gap-3 rounded-xl border border-[var(--border)] bg-white/[0.02] p-3 sm:grid-cols-3">
-            <div>
-              <Label htmlFor="vatRate">Ставка %</Label>
-              <Select
-                id="vatRate"
-                value={vatRate}
-                onChange={(e) => {
-                  setVatRate(e.target.value);
-                  setVatManual("");
-                }}
-              >
-                {VAT_RATE_PRESETS.map((r) => (
-                  <option key={r} value={String(r)}>
-                    {`${r}%`}
-                  </option>
-                ))}
-                <option value="custom">Другая…</option>
-              </Select>
-              {vatRate === "custom" ? (
+        {finance.write ? (
+          <>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <Label htmlFor="amount">Сумма (без НДС) *</Label>
                 <Input
-                  className="mt-2"
+                  id="amount"
+                  name="amount"
                   type="number"
                   min={0}
-                  max={100}
                   step="0.01"
-                  placeholder="%"
-                  aria-label="Своя ставка НДС, %"
-                  value={vatCustom}
-                  onChange={(e) => {
-                    setVatCustom(e.target.value);
-                    setVatManual("");
-                  }}
+                  required
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
                 />
-              ) : null}
-              <input type="hidden" name="vatRate" value={effectiveVatRate} />
+              </div>
+              <div className="flex flex-col justify-end gap-2 pb-1">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    name="vatEnabled"
+                    checked={vatEnabled}
+                    onChange={(e) => setVatEnabled(e.target.checked)}
+                  />
+                  С НДС
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    name="isPreliminary"
+                    defaultChecked={defaults?.isPreliminary ?? false}
+                  />
+                  Предварительная сумма
+                </label>
+              </div>
             </div>
-            <div>
-              <Label htmlFor="vatAmountManual">НДС вручную</Label>
-              <Input
-                id="vatAmountManual"
-                name="vatAmountManual"
-                type="number"
-                min={0}
-                step="0.01"
-                value={vatManual}
-                onChange={(e) => setVatManual(e.target.value)}
-                placeholder="авто"
-              />
-            </div>
-            <div>
-              <Label>Итого с НДС</Label>
-              <p className="mt-2 text-lg font-semibold tabular-nums">
-                {vatPreview.amountWithVat.toLocaleString("ru-RU", {
-                  minimumFractionDigits: 2,
-                })}
-              </p>
-            </div>
-          </div>
-        ) : (
-          <input type="hidden" name="vatRate" value="" />
-        )}
 
-        <div>
-          <Label htmlFor="statusId">Статус</Label>
-          <div className="flex flex-wrap gap-2">
-            <Select
-              id="statusId"
-              name="statusId"
-              required
-              value={statusId}
-              onChange={(e) => setStatusId(e.target.value)}
-            >
-              {statuses.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </Select>
-            <Input
-              placeholder="Свой статус…"
-              value={newStatus}
-              onChange={(e) => setNewStatus(e.target.value)}
-              className="max-w-[10rem]"
-            />
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={async () => {
-                const r = await quickCreateApprovalStatusAction(
-                  projectId,
-                  newStatus,
-                );
-                if ("id" in r) {
-                  setStatuses((prev) => [...prev, r]);
-                  setStatusId(r.id);
-                  setNewStatus("");
-                }
-              }}
-            >
-              +
-            </Button>
-          </div>
-        </div>
+            {vatEnabled ? (
+              <div className="grid gap-3 rounded-xl border border-[var(--border)] bg-[rgb(var(--tint-rgb)/0.02)] p-3 sm:grid-cols-3">
+                <div>
+                  <Label htmlFor="vatRate">Ставка %</Label>
+                  <Select
+                    id="vatRate"
+                    value={vatRate}
+                    onChange={(e) => {
+                      setVatRate(e.target.value);
+                      setVatManual("");
+                    }}
+                  >
+                    {VAT_RATE_PRESETS.map((r) => (
+                      <option key={r} value={String(r)}>
+                        {`${r}%`}
+                      </option>
+                    ))}
+                    <option value="custom">Другая…</option>
+                  </Select>
+                  {vatRate === "custom" ? (
+                    <Input
+                      className="mt-2"
+                      type="number"
+                      min={0}
+                      max={100}
+                      step="0.01"
+                      placeholder="%"
+                      aria-label="Своя ставка НДС, %"
+                      value={vatCustom}
+                      onChange={(e) => {
+                        setVatCustom(e.target.value);
+                        setVatManual("");
+                      }}
+                    />
+                  ) : null}
+                  <input type="hidden" name="vatRate" value={effectiveVatRate} />
+                </div>
+                <div>
+                  <Label htmlFor="vatAmountManual">НДС вручную</Label>
+                  <Input
+                    id="vatAmountManual"
+                    name="vatAmountManual"
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={vatManual}
+                    onChange={(e) => setVatManual(e.target.value)}
+                    placeholder="авто"
+                  />
+                </div>
+                <div>
+                  <Label>Итого с НДС</Label>
+                  <p className="mt-2 text-lg font-semibold tabular-nums">
+                    {vatPreview.amountWithVat.toLocaleString("ru-RU", {
+                      minimumFractionDigits: 2,
+                    })}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <input type="hidden" name="vatRate" value="" />
+            )}
+          </>
+        ) : null}
+
+        <EntityPicker
+          name="statusId"
+          label="Статус"
+          options={statuses}
+          value={statusId}
+          onChange={setStatusId}
+          allowClear={false}
+          createTitle="Новый статус"
+          createLabel="+ Добавить статус"
+          onQuickCreate={async (fd) => {
+            const name = String(fd.get("name") ?? "");
+            const r = await quickCreateApprovalStatusAction(projectId, name);
+            if ("id" in r) {
+              // Сервер может вернуть уже существующий статус с тем же названием.
+              setStatuses((prev) =>
+                prev.some((x) => x.id === r.id) ? prev : [...prev, r],
+              );
+              setStatusId(r.id);
+            }
+            return r;
+          }}
+        />
 
         <div>
           <Label htmlFor="tags">Теги</Label>

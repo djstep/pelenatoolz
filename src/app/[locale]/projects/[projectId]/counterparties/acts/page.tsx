@@ -1,4 +1,8 @@
 import { resolveDefaultStatusId } from "@/features/contracts/lib/default-status";
+import {
+  certificateWithoutFinance,
+  contractFinanceAccess,
+} from "@/features/contracts/lib/finance-access";
 import { CertificatesWorkspace } from "@/features/contracts/components/certificates-workspace";
 import {
   listCertificates,
@@ -26,11 +30,12 @@ export default async function ActsPage({ params, searchParams }: Props) {
   const { counterpartyId, contractId, paymentId } = await searchParams;
   const ctx = await requireProjectContext(projectId);
 
-  if (!ctx.can("finance:read")) {
+  if (!ctx.can("contracts:read")) {
     return (
-      <p className="text-sm text-[var(--danger)]">Нет доступа к финансам</p>
+      <p className="text-sm text-[var(--danger)]">Нет доступа к договорам</p>
     );
   }
+  const finance = contractFinanceAccess(ctx.can);
 
   const [
     certificates,
@@ -45,7 +50,7 @@ export default async function ActsPage({ params, searchParams }: Props) {
     listCompanies(projectId),
     listCounterparties(projectId),
     listContracts(projectId),
-    listPaymentsForCertificateForm(projectId),
+    finance.read ? listPaymentsForCertificateForm(projectId) : [],
     listApprovalStatuses(projectId),
     resolveDefaultStatusId(projectId),
   ]);
@@ -56,7 +61,11 @@ export default async function ActsPage({ params, searchParams }: Props) {
   return (
     <CertificatesWorkspace
       projectId={projectId}
-      certificates={certificates}
+      certificates={
+        finance.read
+          ? certificates
+          : certificates.map(certificateWithoutFinance)
+      }
       companies={companies.map((c) => ({ id: c.id, name: c.name }))}
       counterparties={counterparties.map((c) => ({ id: c.id, name: c.name }))}
       contracts={contracts.map((c) => ({
@@ -75,7 +84,9 @@ export default async function ActsPage({ params, searchParams }: Props) {
         color: s.color,
       }))}
       defaultStatusId={defaultStatusId}
-      canWrite={ctx.can("finance:write")}
+      canWrite={ctx.can("contracts:write")}
+      finance={finance}
+      canCreateParties={ctx.can("finance:write")}
       initialCounterpartyId={counterpartyId}
       initialContractId={contractId}
       initialPaymentId={paymentId}

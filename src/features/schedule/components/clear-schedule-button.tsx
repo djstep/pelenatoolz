@@ -57,7 +57,7 @@ export function ClearScheduleButton({
           className={
             message.includes("Недостаточно") || message.includes("ошиб")
               ? "text-sm text-[var(--danger)]"
-              : "text-sm text-emerald-300"
+              : "text-sm text-[var(--tone-success)]"
           }
         >
           {message}

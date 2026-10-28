@@ -36,6 +36,7 @@ import { useBlockHistory } from "@/features/screenplay/lib/use-block-history";
 import { parseSlugline } from "@/features/screenplay/lib/slugline";
 import { cn } from "@/shared/lib/cn";
 import { useActionToast } from "@/shared/ui/toast";
+import { useUnsavedChanges } from "@/shared/ui/unsaved/unsaved-changes-provider";
 
 type Option = { id: string; name: string };
 
@@ -213,15 +214,13 @@ export function ScreenplayBlockEditor({
     return () => window.clearTimeout(timer);
   }, [scrollToSceneId, blocks]);
 
+  // Несохранённый текст — в общем механизме: переход по меню и закрытие вкладки спросят.
+  const unsaved = useUnsavedChanges();
+  const dirtyRef = useRef(isDirty);
   useEffect(() => {
-    if (!isDirty) return;
-    const handler = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
-      event.returnValue = "";
-    };
-    window.addEventListener("beforeunload", handler);
-    return () => window.removeEventListener("beforeunload", handler);
+    dirtyRef.current = isDirty;
   }, [isDirty]);
+  useEffect(() => unsaved.register(() => dirtyRef.current), [unsaved]);
 
   const visibleBlocks = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -433,7 +432,14 @@ export function ScreenplayBlockEditor({
     >
       <div className="screenplay-editor-main">
         <div className="screenplay-editor-column">
-          <div className="screenplay-editor-document">
+          <div
+            className={cn(
+              "screenplay-editor-document",
+              !compact &&
+                (commentThreads.length > 0 || isComposing) &&
+                "screenplay-editor-document--with-comments",
+            )}
+          >
             <div
               ref={setPaperColumnEl}
               className="screenplay-editor-paper-column"

@@ -29,3 +29,11 @@ export const CERTIFICATE_COLUMNS: ColumnDef[] = [
 ];
 
 export const ACT_COLUMNS = CERTIFICATE_COLUMNS;
+
+/** Колонки с суммами: без права на финансы их нет в таблице. */
+export const CONTRACT_AMOUNT_COLUMNS = new Set(["amount", "amountWithVat"]);
+export const CERTIFICATE_FINANCE_COLUMNS = new Set([
+  "amount",
+  "amountWithVat",
+  "payment",
+]);

@@ -48,7 +48,7 @@ export function ScenePlanningHistory({
             return (
               <li
                 key={attempt.id}
-                className="rounded-xl border border-[var(--border)] bg-white/[0.02] p-3"
+                className="rounded-xl border border-[var(--border)] bg-[rgb(var(--tint-rgb)/0.02)] p-3"
               >
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>

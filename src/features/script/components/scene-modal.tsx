@@ -13,6 +13,7 @@ import {
 import type { SceneCategoryOption } from "@/features/script/components/scene-category-resource-block";
 import { Button } from "@/shared/ui/button";
 import { Modal } from "@/shared/ui/modal";
+import { useActionSuccess } from "@/shared/ui/unsaved/use-action-success";
 
 export type { SceneEditData };
 
@@ -72,19 +73,20 @@ export function SceneModal({
     setFormKey((k) => k + 1);
   }, [open]);
 
-  useEffect(() => {
-    if (state.success && !state.keepOpen) {
+  useActionSuccess(state, (s) => {
+    if (!s.keepOpen) {
       onClose();
+      return;
     }
-    if (state.success && state.keepOpen) {
-      setLocationId("");
-      setCharacterIds([]);
-      setFormKey((k) => k + 1);
-    }
-  }, [state.success, state.keepOpen, onClose]);
+    setLocationId("");
+    setCharacterIds([]);
+    setFormKey((k) => k + 1);
+  });
 
   return (
     <Modal
+      guardUnsaved
+      baselineKey={formKey}
       open={open}
       onClose={onClose}
       title="Добавление сцены"
@@ -104,10 +106,18 @@ export function SceneModal({
           >
             Сохранить и пересчитать хрон.
           </Button>
-          <Button type="button" variant="secondary" onClick={onClose}>
+          <Button
+            type="button"
+            variant="secondary"
+            data-modal-cancel
+            onClick={onClose}
+          >
             Отмена
           </Button>
-          <label className="ml-auto flex items-center gap-2 text-sm">
+          <label
+            className="ml-auto flex items-center gap-2 text-sm"
+            data-unsaved-ignore
+          >
             <input type="checkbox" name="createAnother" form="scene-form" />
             Создать ещё
           </label>

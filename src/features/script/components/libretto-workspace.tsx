@@ -288,7 +288,7 @@ export function LibrettoWorkspace({
               {orderedColumns.map((col) => (
                 <label
                   key={col.id}
-                  className="flex items-center gap-2 rounded-md px-2 py-1 text-sm hover:bg-white/5"
+                  className="flex items-center gap-2 rounded-md px-2 py-1 text-sm hover:bg-[rgb(var(--tint-rgb)/0.05)]"
                 >
                   <input
                     type="checkbox"
@@ -365,7 +365,7 @@ export function LibrettoWorkspace({
         </div>
       ) : null}
 
-      {message ? <p className="text-sm text-emerald-300">{message}</p> : null}
+      {message ? <p className="text-sm text-[var(--tone-success)]">{message}</p> : null}
       <p className="text-xs text-[var(--muted-fg)]">
         Показано {filtered.length} из {scenes.length} сцен
       </p>

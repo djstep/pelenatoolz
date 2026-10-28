@@ -29,6 +29,7 @@ export function EntityPicker({
   placeholder = "Поиск…",
   allowClear = true,
   createTitle = "Быстрое добавление",
+  createLabel = "+ Добавить нового",
   createFields,
 }: {
   name: string;
@@ -36,12 +37,15 @@ export function EntityPicker({
   options: PickerOption[];
   value: string;
   onChange: (id: string) => void;
-  onQuickCreate: (form: FormData) => Promise<
+  /** Без него добавить новое из списка нельзя: нет кнопки «+» и пункта создания. */
+  onQuickCreate?: (form: FormData) => Promise<
     { id: string; name: string } | { error: string }
   >;
   placeholder?: string;
   allowClear?: boolean;
   createTitle?: string;
+  /** Текст пункта создания внизу списка. */
+  createLabel?: string;
   createFields?: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -71,7 +75,7 @@ export function EntityPicker({
 
   async function submitCreate() {
     const root = createRootRef.current;
-    if (!root) return;
+    if (!root || !onQuickCreate) return;
     setCreating(true);
     setCreateError(null);
     const result = await onQuickCreate(collectFormData(root));
@@ -112,19 +116,25 @@ export function EntityPicker({
             <span className="text-[var(--muted-fg)]">Выберите…</span>
           )}
         </button>
-        <Button
-          type="button"
-          variant="secondary"
-          className="px-3"
-          title={createTitle}
-          onClick={() => openCreate(query.trim())}
-        >
-          +
-        </Button>
+        {onQuickCreate ? (
+          <Button
+            type="button"
+            variant="secondary"
+            className="px-3"
+            title={createTitle}
+            onClick={() => openCreate(query.trim())}
+          >
+            +
+          </Button>
+        ) : null}
       </div>
 
       {open ? (
-        <div className="glass-dropdown absolute z-[80] mt-1.5 w-full p-2 shadow-xl">
+        // Поиск и быстрое добавление — не данные формы.
+        <div
+          className="glass-dropdown absolute z-[80] mt-1.5 w-full p-2 shadow-xl"
+          data-unsaved-ignore
+        >
           {mode === "list" ? (
             <>
               <input
@@ -186,15 +196,17 @@ export function EntityPicker({
                   </li>
                 ) : null}
               </ul>
-              <button
-                type="button"
-                className={cn(
-                  "mt-1 w-full rounded-md py-1.5 text-xs text-[var(--accent)] hover:bg-white/5",
-                )}
-                onClick={() => openCreate(query.trim())}
-              >
-                + Добавить нового
-              </button>
+              {onQuickCreate ? (
+                <button
+                  type="button"
+                  className={cn(
+                    "mt-1 w-full rounded-md py-1.5 text-xs text-[var(--accent)] hover:bg-[rgb(var(--tint-rgb)/0.05)]",
+                  )}
+                  onClick={() => openCreate(query.trim())}
+                >
+                  {createLabel}
+                </button>
+              ) : null}
             </>
           ) : (
             <div

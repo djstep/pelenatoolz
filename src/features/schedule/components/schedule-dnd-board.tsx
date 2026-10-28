@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, useEffect } from "react";
+import { useMemo, useRef, useState, useEffect, type CSSProperties } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -193,31 +193,40 @@ function SortableDayScene({
   );
 }
 
+/**
+ * Цвета типов дней — переменные темы (globals.css, --kpp-*).
+ * muted — приглушённый текст внутри колонки: на насыщенном фоне светлой темы
+ * обычный серый нечитаем, поэтому берётся тёмный оттенок того же цвета.
+ */
 function dayTypeTone(dayType: keyof typeof shootDayTypeLabels) {
   switch (dayType) {
     case "OFF":
       return {
-        column: "border-zinc-500/35 bg-zinc-900/55",
-        header: "border-zinc-500/25 bg-zinc-800/50",
-        accent: "text-zinc-300",
+        column: "border-[var(--kpp-off-border)] bg-[var(--kpp-off-bg)]",
+        header: "border-[var(--kpp-off-head-border)] bg-[var(--kpp-off-head-bg)]",
+        accent: "text-[var(--kpp-off-fg)]",
+        muted: "var(--kpp-off-muted)",
       };
     case "REST":
       return {
-        column: "border-amber-500/35 bg-amber-950/40",
-        header: "border-amber-500/25 bg-amber-900/35",
-        accent: "text-amber-200",
+        column: "border-[var(--kpp-rest-border)] bg-[var(--kpp-rest-bg)]",
+        header: "border-[var(--kpp-rest-head-border)] bg-[var(--kpp-rest-head-bg)]",
+        accent: "text-[var(--kpp-rest-fg)]",
+        muted: "var(--kpp-rest-muted)",
       };
     case "PREP":
       return {
-        column: "border-emerald-500/35 bg-emerald-950/40",
-        header: "border-emerald-500/25 bg-emerald-900/35",
-        accent: "text-emerald-200",
+        column: "border-[var(--kpp-prep-border)] bg-[var(--kpp-prep-bg)]",
+        header: "border-[var(--kpp-prep-head-border)] bg-[var(--kpp-prep-head-bg)]",
+        accent: "text-[var(--kpp-prep-fg)]",
+        muted: "var(--kpp-prep-muted)",
       };
     default:
       return {
-        column: "border-sky-500/30 bg-sky-950/35",
-        header: "border-sky-500/20 bg-sky-900/30",
-        accent: "text-sky-200",
+        column: "border-[var(--kpp-work-border)] bg-[var(--kpp-work-bg)]",
+        header: "border-[var(--kpp-work-head-border)] bg-[var(--kpp-work-head-bg)]",
+        accent: "text-[var(--kpp-work-fg)]",
+        muted: "var(--kpp-work-muted)",
       };
   }
 }
@@ -240,8 +249,8 @@ function SceneCardBody({ scene }: { scene: SceneCard }) {
 
 function sceneCardClass(isDragging?: boolean) {
   return cn(
-    "rounded-xl border border-white/10 bg-[#121a2a]/95 p-2 text-xs",
-    "shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]",
+    "rounded-xl border border-[rgb(var(--tint-rgb)/0.1)] bg-[var(--kpp-card-bg)] p-2 text-xs",
+    "shadow-[inset_0_1px_0_rgb(var(--tint-rgb)/0.06)]",
     isDragging && "opacity-40",
   );
 }
@@ -258,8 +267,8 @@ function DaySceneGroupHeader({
       className={cn(
         "rounded-md px-2 py-1 text-[10px] font-semibold leading-snug",
         mode === "location"
-          ? "bg-sky-900/55 text-sky-100/90"
-          : "bg-violet-900/55 text-violet-100/90",
+          ? "bg-[var(--kpp-day-group-loc-bg)] text-[var(--kpp-day-group-loc-fg)]"
+          : "bg-[var(--kpp-day-group-actor-bg)] text-[var(--kpp-day-group-actor-fg)]",
       )}
     >
       {label}
@@ -311,8 +320,9 @@ function DayColumn({
   return (
     <div
       ref={columnRef}
+      style={{ "--muted-fg": tone.muted } as CSSProperties}
       className={cn(
-        "flex h-full w-56 shrink-0 flex-col overflow-hidden rounded-xl border shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]",
+        "flex h-full w-56 shrink-0 flex-col overflow-hidden rounded-xl border shadow-[inset_0_1px_0_rgb(var(--tint-rgb)/0.06)]",
         tone.column,
         day.isNightShift && "ring-1 ring-indigo-400/40",
         isOver && acceptsScenes && "ring-2 ring-[var(--accent)]",
@@ -333,7 +343,7 @@ function DayColumn({
           {canWrite ? (
             <button
               type="button"
-              className="rounded px-1.5 py-0.5 text-[var(--muted-fg)] hover:bg-white/10 hover:text-white"
+              className="rounded px-1.5 py-0.5 text-[var(--muted-fg)] hover:bg-[rgb(var(--tint-rgb)/0.1)] hover:text-[rgb(var(--tint-rgb))]"
               onClick={() => {
                 const r = columnRef.current?.getBoundingClientRect();
                 if (!r) return;
@@ -355,7 +365,7 @@ function DayColumn({
         </div>
         {day.isLocked ? <Badge className="mt-1">Зафиксирован</Badge> : null}
         {day.dayType === "PREP" && day.prepNote ? (
-          <p className="mt-1 line-clamp-2 text-[10px] text-emerald-100/85">
+          <p className="mt-1 line-clamp-2 text-[10px] text-[var(--kpp-prep-note)]">
             {day.prepNote}
           </p>
         ) : null}
@@ -368,7 +378,7 @@ function DayColumn({
       <div
         ref={setNodeRef}
         className={cn(
-          "flex min-h-[8rem] flex-1 flex-col gap-2 bg-black/20 p-2",
+          "flex min-h-[8rem] flex-1 flex-col gap-2 bg-[var(--kpp-drop-bg)] p-2",
           !acceptsScenes && "opacity-90",
         )}
       >
@@ -603,18 +613,18 @@ export function ScheduleDnDBoard({
       onDragEnd={handleDragEnd}
     >
       <div className="flex h-full min-h-[28rem] overflow-hidden rounded-2xl border border-[var(--border-strong)] shadow-[var(--glass-shadow)]">
-        <aside className="flex w-80 shrink-0 flex-col overflow-hidden border-r-2 border-teal-500/40 bg-gradient-to-b from-teal-950/70 via-[#0b1520] to-[#081018]">
-          <div className="border-b border-teal-500/25 bg-teal-950/40 p-3">
+        <aside className="flex w-80 shrink-0 flex-col overflow-hidden border-r-2 border-[var(--kpp-panel-border)] bg-[image:var(--kpp-panel-bg)]">
+          <div className="border-b border-[var(--kpp-panel-head-border)] bg-[var(--kpp-panel-head-bg)] p-3">
             <div className="flex items-start justify-between gap-2">
-              <h3 className="text-sm font-semibold leading-snug text-teal-50">
+              <h3 className="text-sm font-semibold leading-snug text-[var(--kpp-panel-title)]">
                 Неспланированные сцены
               </h3>
               <button
                 type="button"
                 className={cn(
-                  "shrink-0 rounded-md px-2 py-1 text-[11px] text-teal-100/80 hover:bg-teal-400/15",
+                  "shrink-0 rounded-md px-2 py-1 text-[11px] text-[var(--kpp-panel-fg)] hover:bg-[var(--kpp-panel-btn-hover)]",
                   (filtersOpen || hasActiveFilters) &&
-                    "bg-teal-400/20 text-teal-50",
+                    "bg-[var(--kpp-panel-btn-active)] text-[var(--kpp-panel-title)]",
                 )}
                 onClick={() => setFiltersOpen((v) => !v)}
               >
@@ -622,7 +632,7 @@ export function ScheduleDnDBoard({
                 {hasActiveFilters ? " ·" : ""}
               </button>
             </div>
-            <p className="mt-1 text-[11px] text-teal-200/65">
+            <p className="mt-1 text-[11px] text-[var(--kpp-panel-muted)]">
               {filtered.length}
               {hasActiveFilters ? ` из ${unscheduled.length}` : ""} сц.
             </p>
@@ -695,7 +705,7 @@ export function ScheduleDnDBoard({
                 {hasActiveFilters || unscheduledGroupBy !== "none" ? (
                   <button
                     type="button"
-                    className="text-[11px] text-[var(--muted-fg)] underline-offset-2 hover:text-white hover:underline"
+                    className="text-[11px] text-[var(--muted-fg)] underline-offset-2 hover:text-[rgb(var(--tint-rgb))] hover:underline"
                     onClick={resetFilters}
                   >
                     Сбросить фильтры
@@ -709,12 +719,12 @@ export function ScheduleDnDBoard({
             {displayBlocks.map(([loc, items]) => (
               <div key={loc || "__flat"}>
                 {unscheduledGroupBy === "location" && loc ? (
-                  <div className="mb-2 rounded-md bg-teal-900/45 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-teal-100/90">
+                  <div className="mb-2 rounded-md bg-[var(--kpp-group-loc-bg)] px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--kpp-group-loc-fg)]">
                     {loc} ({items.length})
                   </div>
                 ) : null}
                 {unscheduledGroupBy === "actor" && loc ? (
-                  <div className="mb-2 rounded-md bg-violet-900/45 px-2 py-1 text-[11px] font-semibold tracking-wide text-violet-100/90">
+                  <div className="mb-2 rounded-md bg-[var(--kpp-group-actor-bg)] px-2 py-1 text-[11px] font-semibold tracking-wide text-[var(--kpp-group-actor-fg)]">
                     {loc} ({items.length})
                   </div>
                 ) : null}
@@ -742,7 +752,7 @@ export function ScheduleDnDBoard({
         </aside>
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-          <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-b border-white/10 bg-black/30 px-3 py-2 text-[10px] text-[var(--muted-fg)]">
+          <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-b border-[rgb(var(--tint-rgb)/0.1)] bg-[var(--kpp-bar-bg)] px-3 py-2 text-[10px] text-[var(--muted-fg)]">
             <label className="inline-flex items-center gap-2">
               <span className="shrink-0 text-[var(--foreground)]/80">
                 Сцены в дне:
@@ -757,27 +767,27 @@ export function ScheduleDnDBoard({
                 <option value="actor">По актёру</option>
               </select>
             </label>
-            <span className="hidden h-3 w-px bg-white/15 sm:inline" aria-hidden />
+            <span className="hidden h-3 w-px bg-[rgb(var(--tint-rgb)/0.15)] sm:inline" aria-hidden />
             <span className="text-[var(--foreground)]/80">Типы дней:</span>
             <span className="inline-flex items-center gap-1">
-              <span className="h-2.5 w-5 rounded border border-sky-500/40 bg-sky-950/60" />
+              <span className="h-2.5 w-5 rounded border border-[var(--kpp-work-border)] bg-[var(--kpp-work-bg)]" />
               {shootDayTypeLabels.WORKING}
             </span>
             <span className="inline-flex items-center gap-1">
-              <span className="h-2.5 w-5 rounded border border-zinc-500/40 bg-zinc-900/60" />
+              <span className="h-2.5 w-5 rounded border border-[var(--kpp-off-border)] bg-[var(--kpp-off-bg)]" />
               {shootDayTypeLabels.OFF}
             </span>
             <span className="inline-flex items-center gap-1">
-              <span className="h-2.5 w-5 rounded border border-amber-500/40 bg-amber-950/50" />
+              <span className="h-2.5 w-5 rounded border border-[var(--kpp-rest-border)] bg-[var(--kpp-rest-bg)]" />
               {shootDayTypeLabels.REST}
             </span>
             <span className="inline-flex items-center gap-1">
-              <span className="h-2.5 w-5 rounded border border-emerald-500/40 bg-emerald-950/50" />
+              <span className="h-2.5 w-5 rounded border border-[var(--kpp-prep-border)] bg-[var(--kpp-prep-bg)]" />
               {shootDayTypeLabels.PREP}
             </span>
           </div>
           {activeScene && availContext ? (
-            <div className="flex shrink-0 flex-wrap gap-3 border-b border-white/10 bg-black/30 px-3 py-2 text-[10px] text-[var(--muted-fg)]">
+            <div className="flex shrink-0 flex-wrap gap-3 border-b border-[rgb(var(--tint-rgb)/0.1)] bg-[var(--kpp-bar-bg)] px-3 py-2 text-[10px] text-[var(--muted-fg)]">
               <span>Занятость актёров сцены:</span>
               <span className="inline-flex items-center gap-1">
                 <span className="h-2 w-6 rounded ring-2 ring-emerald-400/70" /> все свободны
@@ -790,7 +800,7 @@ export function ScheduleDnDBoard({
               </span>
             </div>
           ) : null}
-          <div className="flex min-h-0 min-w-0 flex-1 gap-3 overflow-x-auto bg-gradient-to-br from-slate-950 via-[#0a1224] to-indigo-950/50 p-3">
+          <div className="flex min-h-0 min-w-0 flex-1 gap-3 overflow-x-auto bg-[image:var(--kpp-board-bg)] p-3">
           {shootDays.map((day) => (
             <DayColumn
               key={day.id}

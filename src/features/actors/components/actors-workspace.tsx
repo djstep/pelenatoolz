@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useState } from "react";
 import {
   ActorRoleType,
   ContractorType,
@@ -27,6 +27,7 @@ import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Modal } from "@/shared/ui/modal";
+import { useActionSuccess } from "@/shared/ui/unsaved/use-action-success";
 import { Select } from "@/shared/ui/select";
 import { useActionToast } from "@/shared/ui/toast";
 
@@ -268,9 +269,6 @@ function ActorFormFields({
   );
 }
 
-const DISCARD_ACTOR_EDITS_MESSAGE =
-  "Есть несохранённые изменения. Закрыть без сохранения?";
-
 function ActorEditorModal({
   projectId,
   actor,
@@ -289,30 +287,15 @@ function ActorEditorModal({
     ? updateActorAction.bind(null, projectId, actor!.id)
     : createActorAction.bind(null, projectId);
   const [state, action, pending] = useActionState(bound, initial);
-  const [dirty, setDirty] = useState(false);
   useActionToast(state);
-
-  useEffect(() => {
-    if (open) setDirty(false);
-  }, [open, actor?.id]);
-
-  const guardedClose = () => {
-    if (dirty && !window.confirm(DISCARD_ACTOR_EDITS_MESSAGE)) return;
-    setDirty(false);
-    onClose();
-  };
-
-  useEffect(() => {
-    if (state.success) {
-      setDirty(false);
-      onClose();
-    }
-  }, [state.success, onClose]);
+  // Несохранённые изменения отслеживает Modal (guardUnsaved) — общий механизм.
+  useActionSuccess(state, onClose);
 
   return (
     <Modal
+      guardUnsaved
       open={open}
-      onClose={guardedClose}
+      onClose={onClose}
       title={isEdit ? "Редактирование актёра" : "Добавление актёра"}
       wide
       footer={
@@ -320,7 +303,12 @@ function ActorEditorModal({
           <Button type="submit" form="actor-form" disabled={pending}>
             {pending ? "…" : "Сохранить"}
           </Button>
-          <Button type="button" variant="secondary" onClick={guardedClose}>
+          <Button
+            type="button"
+            variant="secondary"
+            data-modal-cancel
+            onClick={onClose}
+          >
             Отмена
           </Button>
         </div>
@@ -330,8 +318,6 @@ function ActorEditorModal({
         id="actor-form"
         action={action}
         key={actor?.id ?? "new"}
-        onInput={() => setDirty(true)}
-        onChange={() => setDirty(true)}
       >
         <ActorFormFields actor={actor} characters={characters} />
       </form>

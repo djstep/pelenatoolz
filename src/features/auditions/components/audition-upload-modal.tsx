@@ -239,13 +239,14 @@ export function AuditionUploadModal({
 
   return (
     <Modal
+      guardUnsaved
       open={open}
       onClose={onClose}
       title="Добавить пробы"
       wide
       footer={
         <div className="flex flex-wrap justify-end gap-2">
-          <Button type="button" variant="ghost" onClick={onClose} disabled={saving}>
+          <Button type="button" variant="ghost" onClick={onClose} disabled={saving} data-modal-cancel>
             Отмена
           </Button>
           <Button
