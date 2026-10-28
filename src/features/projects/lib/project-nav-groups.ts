@@ -1,6 +1,7 @@
 import type { NavGroup, NavItem } from "@/features/projects/components/project-nav";
 import type { Permission } from "@/features/memberships/permissions";
 import type { PermissionMatrix } from "@/features/roles/permissions-matrix";
+import { isProducerRole } from "@/features/roles/role-rules";
 
 /**
  * Что знает фильтр меню о пользователе. Права — из того же контекста проекта, что и проверки
@@ -12,6 +13,19 @@ export type NavAccess = {
   matrix: PermissionMatrix;
   isProducer: boolean;
 };
+
+/** Доступ для фильтра меню из контекста проекта (`requireProjectContext`). */
+export function navAccessFromContext(ctx: {
+  can: NavAccess["can"];
+  matrix: PermissionMatrix;
+  role: { isSystem: boolean; name: string };
+}): NavAccess {
+  return {
+    can: ctx.can,
+    matrix: ctx.matrix,
+    isProducer: isProducerRole(ctx.role),
+  };
+}
 
 /** Условие видимости пункта или группы меню. Нет условия — виден всем участникам проекта. */
 export type NavVisibility = (access: NavAccess) => boolean;
