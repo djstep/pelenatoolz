@@ -214,13 +214,49 @@ export function ScreenplayBlockEditor({
     return () => window.clearTimeout(timer);
   }, [scrollToSceneId, blocks]);
 
+  // Текст к сохранению: правка одной сцены встаёт на её место в полном тексте версии.
+  const buildSavePayload = () => {
+    if (!sceneId) return blocks;
+    const all = [...initialBlocks];
+    const filtered = filterSceneBlocks(all, sceneId);
+    const start = all.findIndex((block) => block.id === filtered[0]?.id);
+    const next = [...all];
+    if (start >= 0) {
+      next.splice(start, filtered.length, ...blocks);
+    } else {
+      next.push(...blocks);
+    }
+    return normalizeBlocks(next);
+  };
+
   // Несохранённый текст — в общем механизме: переход по меню и закрытие вкладки спросят.
+  // «Сохранить» в вопросе о переходе пишет в эту же версию; ошибка — сообщением редактора.
   const unsaved = useUnsavedChanges();
   const dirtyRef = useRef(isDirty);
+  const saveOnLeaveRef = useRef<() => Promise<boolean>>(async () => false);
   useEffect(() => {
     dirtyRef.current = isDirty;
   }, [isDirty]);
-  useEffect(() => unsaved.register(() => dirtyRef.current), [unsaved]);
+  useEffect(() => {
+    saveOnLeaveRef.current = async () => {
+      const result = await saveScreenplayVersionAction(
+        projectId,
+        versionId,
+        "same",
+        JSON.stringify({ blocks: buildSavePayload() }),
+      );
+      setMessage(result);
+      return !result.error;
+    };
+  });
+  useEffect(
+    () =>
+      unsaved.register(
+        () => dirtyRef.current,
+        canWrite ? () => saveOnLeaveRef.current() : undefined,
+      ),
+    [unsaved, canWrite],
+  );
 
   const visibleBlocks = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -309,20 +345,7 @@ export function ScreenplayBlockEditor({
   );
 
   const handleSave = () => {
-    const payload = sceneId
-      ? (() => {
-          const all = [...initialBlocks];
-          const filtered = filterSceneBlocks(all, sceneId);
-          const start = all.findIndex((block) => block.id === filtered[0]?.id);
-          const next = [...all];
-          if (start >= 0) {
-            next.splice(start, filtered.length, ...blocks);
-          } else {
-            next.push(...blocks);
-          }
-          return normalizeBlocks(next);
-        })()
-      : blocks;
+    const payload = buildSavePayload();
 
     if (onRequestSave) {
       onRequestSave(payload);

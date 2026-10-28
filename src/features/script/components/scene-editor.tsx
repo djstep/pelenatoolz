@@ -72,7 +72,7 @@ export function SceneEditor({
   );
   const [formKey, setFormKey] = useState(0);
   // Предупреждение о несохранённых изменениях при уходе со страницы.
-  const { ref: formRef, markClean: markFormClean } = useFormGuard(canWrite, formKey);
+  const { ref: formRef, markClean: markFormClean } = useFormGuard(canWrite, formKey, state);
   useActionSuccess(state, markFormClean);
 
   useEffect(() => {

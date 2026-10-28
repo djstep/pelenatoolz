@@ -78,7 +78,11 @@ export function CharacterDetailView({
   );
   const [reqState, reqAction, reqPending] = useActionState(reqBound, initial);
   useActionToast(reqState);
-  const { ref: reqFormRef, markClean: markReqClean } = useFormGuard();
+  const { ref: reqFormRef, markClean: markReqClean } = useFormGuard(
+    true,
+    undefined,
+    reqState,
+  );
   useActionSuccess(reqState, markReqClean);
 
   const snapBound = updateCharacterCastSnapshotAction.bind(
@@ -88,7 +92,11 @@ export function CharacterDetailView({
   );
   const [snapState, snapAction, snapPending] = useActionState(snapBound, initial);
   useActionToast(snapState);
-  const { ref: snapFormRef, markClean: markSnapClean } = useFormGuard();
+  const { ref: snapFormRef, markClean: markSnapClean } = useFormGuard(
+    true,
+    undefined,
+    snapState,
+  );
   useActionSuccess(snapState, markSnapClean);
 
   const actor = character.actors[0];
@@ -381,7 +389,11 @@ function CharacterPayrollSection({
   const bound = updateActorAction.bind(null, projectId, actor.id);
   const [state, action, pending] = useActionState(bound, actorInitial);
   useActionToast(state);
-  const { ref: feeFormRef, markClean: markFeeClean } = useFormGuard();
+  const { ref: feeFormRef, markClean: markFeeClean } = useFormGuard(
+    true,
+    undefined,
+    state,
+  );
   useActionSuccess(state, markFeeClean);
 
   return (

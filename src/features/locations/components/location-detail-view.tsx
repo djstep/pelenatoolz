@@ -58,19 +58,31 @@ export function LocationDetailView({
   const reqBound = updateLocationRequirementsAction.bind(null, projectId, location.id);
   const [reqState, reqAction, reqPending] = useActionState(reqBound, initial);
   useActionToast(reqState);
-  const { ref: reqFormRef, markClean: markReqClean } = useFormGuard();
+  const { ref: reqFormRef, markClean: markReqClean } = useFormGuard(
+    true,
+    undefined,
+    reqState,
+  );
   useActionSuccess(reqState, markReqClean);
 
   const snapBound = updateLocationScoutSnapshotAction.bind(null, projectId, location.id);
   const [snapState, snapAction, snapPending] = useActionState(snapBound, initial);
   useActionToast(snapState);
-  const { ref: snapFormRef, markClean: markSnapClean } = useFormGuard();
+  const { ref: snapFormRef, markClean: markSnapClean } = useFormGuard(
+    true,
+    undefined,
+    snapState,
+  );
   useActionSuccess(snapState, markSnapClean);
 
   const finBound = updateLocationFinancialAction.bind(null, projectId, location.id);
   const [finState, finAction, finPending] = useActionState(finBound, initial);
   useActionToast(finState);
-  const { ref: finFormRef, markClean: markFinClean } = useFormGuard();
+  const { ref: finFormRef, markClean: markFinClean } = useFormGuard(
+    true,
+    undefined,
+    finState,
+  );
   useActionSuccess(finState, markFinClean);
 
   const scoutSnapshot = location.scoutSnapshot;
