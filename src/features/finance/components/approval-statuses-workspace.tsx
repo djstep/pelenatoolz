@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState, useTransition } from "react";
+import { useActionState, useEffect, useState } from "react";
 import {
   createApprovalStatusAction,
   deleteApprovalStatusAction,
@@ -10,6 +10,7 @@ import {
 import { APPROVAL_STATUS_COLOR_PRESETS } from "@/features/finance/lib/approval-statuses";
 import type { ApprovalStatusRow } from "@/features/finance/queries-approval-statuses";
 import { Button } from "@/shared/ui/button";
+import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Modal } from "@/shared/ui/modal";
@@ -146,7 +147,7 @@ export function ApprovalStatusesWorkspace({
 }) {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<ApprovalStatusRow | undefined>();
-  const [pending, startTransition] = useTransition();
+  const confirmDelete = useConfirm();
 
   function openCreate() {
     setEditing(undefined);
@@ -220,19 +221,13 @@ export function ApprovalStatusesWorkspace({
                       <Button
                         type="button"
                         variant="danger"
-                        disabled={pending}
-                        onClick={() => {
-                          if (
-                            !confirm(
-                              `Удалить статус «${row.name}»? Это нельзя отменить.`,
-                            )
-                          ) {
-                            return;
-                          }
-                          startTransition(async () => {
-                            await deleteApprovalStatusAction(projectId, row.id);
-                          });
-                        }}
+                        onClick={() =>
+                          void confirmDelete({
+                            title: `Удалить статус „${row.name}“?`,
+                            action: async () =>
+                              (await deleteApprovalStatusAction(projectId, row.id)).error,
+                          })
+                        }
                       >
                         Удалить
                       </Button>

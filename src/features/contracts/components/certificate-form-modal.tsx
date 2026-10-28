@@ -26,6 +26,7 @@ import {
 } from "@/features/counterparties/actions";
 import { formatDateShort } from "@/shared/i18n/format-date";
 import { Button } from "@/shared/ui/button";
+import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Modal } from "@/shared/ui/modal";
@@ -126,6 +127,7 @@ export function CertificateFormModal({
   useActionToast(state);
   const router = useRouter();
   const [deleting, setDeleting] = useState(false);
+  const confirmDelete = useConfirm();
 
   const [companyOpts, setCompanyOpts] = useState(companies);
   const [cpOpts, setCpOpts] = useState(counterparties);
@@ -276,21 +278,24 @@ export function CertificateFormModal({
               variant="danger"
               className="ml-auto"
               disabled={pending || uploading || deleting}
-              onClick={() => {
-                if (!confirm("Удалить акт?")) return;
-                setDeleting(true);
-                void deleteCertificateAction(projectId, defaults!.id!)
-                  .then((res) => {
-                    if (res.error) {
-                      toast.error(res.error);
-                      return;
+              onClick={() =>
+                void confirmDelete({
+                  title: defaults?.number ? `Удалить акт № ${defaults.number}?` : "Удалить акт?",
+                  details: ["Файлы акта удалятся."],
+                  action: async () => {
+                    setDeleting(true);
+                    try {
+                      const res = await deleteCertificateAction(projectId, defaults!.id!);
+                      if (res.error) return res.error;
+                      toast.success(res.success ?? "Акт удалён");
+                      onClose();
+                      router.refresh();
+                    } finally {
+                      setDeleting(false);
                     }
-                    toast.success(res.success ?? "Акт удалён");
-                    onClose();
-                    router.refresh();
-                  })
-                  .finally(() => setDeleting(false));
-              }}
+                  },
+                })
+              }
             >
               {deleting ? "…" : "Удалить"}
             </Button>

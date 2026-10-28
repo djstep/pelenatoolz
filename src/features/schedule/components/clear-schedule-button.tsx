@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { clearScheduleCalendarAction } from "@/features/schedule/actions";
 import { Button } from "@/shared/ui/button";
+import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
 
 export function ClearScheduleButton({
   projectId,
@@ -19,6 +20,7 @@ export function ClearScheduleButton({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
+  const confirmClear = useConfirm();
 
   if (!canWrite || dayCount === 0) return null;
 
@@ -28,27 +30,22 @@ export function ClearScheduleButton({
         type="button"
         variant="danger"
         disabled={pending}
-        onClick={() => {
-          const lines = [
-            `Удалить все съёмочные дни (${dayCount})?`,
-            assignedCount > 0
-              ? `${assignedCount} сцен вернутся в неспланированные.`
-              : "Сцены на календаре не назначены.",
-            "Это действие нельзя отменить.",
-          ];
-          if (!confirm(lines.join("\n\n"))) return;
-
-          setMessage(null);
-          startTransition(async () => {
-            const result = await clearScheduleCalendarAction(projectId);
-            if (result.error) {
-              setMessage(result.error);
-              return;
-            }
-            setMessage(result.success ?? "Календарь очищен");
-            router.refresh();
-          });
-        }}
+        onClick={() =>
+          void confirmClear({
+            title: `Удалить все съёмочные дни (${dayCount})?`,
+            details:
+              assignedCount > 0
+                ? [`Сцены вернутся в неспланированные: ${assignedCount}`]
+                : [],
+            action: async () => {
+              setMessage(null);
+              const result = await clearScheduleCalendarAction(projectId);
+              if (result.error) return result.error;
+              setMessage(result.success ?? "Календарь очищен");
+              startTransition(() => router.refresh());
+            },
+          })
+        }
       >
         {pending ? "Очистка…" : "Очистить календарь"}
       </Button>

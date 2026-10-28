@@ -12,6 +12,7 @@ import {
 import { accrualTypeLabels, computeTaxAmounts } from "@/features/accruals/lib/labels";
 import type { AccrualListRow } from "@/features/accruals/queries";
 import { Button } from "@/shared/ui/button";
+import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Modal } from "@/shared/ui/modal";
@@ -433,6 +434,7 @@ export function AccrualsWorkspace({
         : null,
   );
   const [editing, setEditing] = useState<AccrualListRow | null>(null);
+  const confirmDelete = useConfirm();
 
   const lineMap = useMemo(
     () => new Map(lines.map((l) => [l.id, l.title])),
@@ -627,15 +629,21 @@ export function AccrualsWorkspace({
                         >
                           Изменить
                         </Button>
-                        <form
-                          action={async () => {
-                            await deleteAccrualAction(projectId, a.id);
-                          }}
+                        <Button
+                          type="button"
+                          variant="danger"
+                          aria-label="Удалить начисление"
+                          onClick={() =>
+                            void confirmDelete({
+                              title: `Удалить начисление „${a.budgetLine?.title ?? lineMap.get(a.budgetLineId) ?? "без статьи"}“ от ${formatDateShort(a.date)}, ${money(Number(a.amountWithTax), currency)}?`,
+                              action: async () => {
+                                await deleteAccrualAction(projectId, a.id);
+                              },
+                            })
+                          }
                         >
-                          <Button type="submit" variant="danger">
-                            ×
-                          </Button>
-                        </form>
+                          ×
+                        </Button>
                       </div>
                     </td>
                   ) : null}

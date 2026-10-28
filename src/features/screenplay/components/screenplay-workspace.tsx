@@ -18,11 +18,13 @@ import {
   setScriptVersionCurrentAction,
   updateProjectTimingAction,
 } from "@/features/screenplay/actions";
-import { confirmMakeCurrent } from "@/features/screenplay/lib/confirm-make-current";
+import { makeCurrentConfirm } from "@/features/screenplay/lib/confirm-make-current";
 import { quickCreateCharacterAction } from "@/features/script/actions";
 import type { TimingMode } from "@prisma/client";
 import { cn } from "@/shared/lib/cn";
 import { useToast } from "@/shared/ui/toast";
+import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
+import { useUnsavedChanges } from "@/shared/ui/unsaved/unsaved-changes-provider";
 
 import type { SceneTimingRef } from "@/features/screenplay/lib/timing";
 
@@ -77,6 +79,8 @@ export function ScreenplayWorkspace({
 }: Props) {
   const router = useRouter();
   const toast = useToast();
+  const unsaved = useUnsavedChanges();
+  const confirmAction = useConfirm();
   const base = `/${locale}/projects/${projectId}/screenplay`;
   const [exporting, setExporting] = useState<string | null>(null);
   const [characters, setCharacters] = useState(initialCharacters);
@@ -140,10 +144,8 @@ export function ScreenplayWorkspace({
     void persistTiming(timingModeState, pageRatioState);
   }, [pageRatioState, persistTiming, timingModeState]);
 
-  function navigateBack() {
-    if (isDirty && !window.confirm("Есть несохранённые изменения. Уйти без сохранения?")) {
-      return;
-    }
+  async function navigateBack() {
+    if (isDirty && (await unsaved.confirm()) !== "discard") return;
     router.push(base);
   }
 
@@ -174,29 +176,31 @@ export function ScreenplayWorkspace({
   );
 
   function makeCurrent() {
-    if (!confirmMakeCurrent(version)) return;
-    startTransition(async () => {
-      const result = await setScriptVersionCurrentAction(projectId, version.id);
-      if (result.error) {
-        toast.error(result.error);
-        return;
-      }
-      toast.success(result.success ?? "Версия отмечена как текущая");
-      router.refresh();
-    });
+    void confirmAction(
+      makeCurrentConfirm(version, async () => {
+        const result = await setScriptVersionCurrentAction(projectId, version.id);
+        if (result.error) return result.error;
+        toast.success(result.success ?? "Версия отмечена как текущая");
+        router.refresh();
+      }),
+    );
   }
 
   function openLibretto() {
     // Окно сравнивает либретто с сохранённым текстом версии, а не с тем, что сейчас в редакторе.
-    if (
-      isDirty &&
-      !window.confirm(
-        "В редакторе есть несохранённые правки. В либретто попадёт последний сохранённый текст версии, без этих правок.\n\nСначала сохраните версию, если правки нужны в либретто. Продолжить без них?",
-      )
-    ) {
+    if (!isDirty) {
+      setLibrettoOpen(true);
       return;
     }
-    setLibrettoOpen(true);
+    void confirmAction({
+      title: "Продолжить без несохранённых правок?",
+      details: [
+        "В либретто попадёт последний сохранённый текст версии, без правок из редактора.",
+        "Если правки нужны в либретто — сначала сохраните версию.",
+      ],
+      confirmLabel: "Продолжить",
+      action: async () => setLibrettoOpen(true),
+    });
   }
 
   function persist(mode: "same" | "new", title?: string) {

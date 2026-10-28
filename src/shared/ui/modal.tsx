@@ -84,7 +84,11 @@ export function Modal({
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") requestClose();
+      if (e.key !== "Escape") return;
+      // Окно поверх окна (подтверждение удаления) — Esc закрывает только верхнее.
+      const dialogs = document.querySelectorAll('[role="dialog"]');
+      if (dialogs[dialogs.length - 1] !== dialogRef.current) return;
+      requestClose();
     };
     document.addEventListener("keydown", onKey);
     document.body.style.overflow = "hidden";

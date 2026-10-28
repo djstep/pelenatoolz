@@ -16,6 +16,7 @@ import {
 } from "@/shared/i18n/finance-post-labels";
 import { formatDateShort } from "@/shared/i18n/format-date";
 import { Button } from "@/shared/ui/button";
+import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Modal } from "@/shared/ui/modal";
@@ -177,6 +178,7 @@ export function PostWorkspace({
 }) {
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Task | null>(null);
+  const confirmDelete = useConfirm();
 
   const stats = useMemo(() => {
     const s = { TODO: 0, IN_PROGRESS: 0, DONE: 0, BLOCKED: 0 };
@@ -295,18 +297,20 @@ export function PostWorkspace({
                         >
                           Изменить
                         </button>
-                        <form
-                          action={async () => {
-                            await deletePostTaskAction(projectId, task.id);
-                          }}
+                        <button
+                          type="button"
+                          className="rounded px-1.5 py-0.5 text-[10px] text-[var(--tone-danger)] hover:bg-red-500/15"
+                          onClick={() =>
+                            void confirmDelete({
+                              title: `Удалить задачу „${task.title}“?`,
+                              action: async () => {
+                                await deletePostTaskAction(projectId, task.id);
+                              },
+                            })
+                          }
                         >
-                          <button
-                            type="submit"
-                            className="rounded px-1.5 py-0.5 text-[10px] text-[var(--tone-danger)] hover:bg-red-500/15"
-                          >
-                            Удалить
-                          </button>
-                        </form>
+                          Удалить
+                        </button>
                       </div>
                     ) : null}
                   </div>

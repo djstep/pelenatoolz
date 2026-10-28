@@ -18,6 +18,7 @@ import {
 } from "@/features/cloud/lib/types";
 import { deleteProjectUploadedFileAction } from "@/features/files/actions";
 import { Button } from "@/shared/ui/button";
+import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
 import { useToast } from "@/shared/ui/toast";
 
 type Connection = {
@@ -77,6 +78,7 @@ export function FilesWorkspace({
 }) {
   const router = useRouter();
   const toast = useToast();
+  const confirmDelete = useConfirm();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -259,18 +261,18 @@ export function FilesWorkspace({
                           variant="ghost"
                           disabled={busy}
                           onClick={() =>
-                            startTransition(async () => {
-                              const result =
-                                await deleteProjectUploadedFileAction(
+                            void confirmDelete({
+                              title: `Удалить файл „${file.originalName}“?`,
+                              details: ["Из договоров и актов файл уберётся."],
+                              action: async () => {
+                                const result = await deleteProjectUploadedFileAction(
                                   projectId,
                                   file.id,
                                 );
-                              if (result.error) {
-                                toast.error(result.error);
-                                return;
-                              }
-                              toast.success(result.success ?? "Удалено");
-                              router.refresh();
+                                if (result.error) return result.error;
+                                toast.success(result.success ?? "Удалено");
+                                router.refresh();
+                              },
                             })
                           }
                         >
@@ -342,12 +344,12 @@ export function FilesWorkspace({
                           variant="ghost"
                           disabled={busy}
                           onClick={() =>
-                            startTransition(async () => {
-                              await deleteCloudFileLinkAction(
-                                projectId,
-                                file.id,
-                              );
-                              router.refresh();
+                            void confirmDelete({
+                              title: `Удалить ссылку на „${file.name}“?`,
+                              action: async () => {
+                                await deleteCloudFileLinkAction(projectId, file.id);
+                                router.refresh();
+                              },
                             })
                           }
                         >

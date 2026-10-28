@@ -6,6 +6,7 @@ import {
 } from "@/features/files/lib/storage";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { prisma } from "@/shared/db/prisma";
+import { countOf } from "@/shared/lib/plural";
 
 export async function deleteProjectUploadedFileAction(
   projectId: string,
@@ -27,8 +28,7 @@ export async function deleteProjectUploadedFileAction(
   });
   if (linked > 0) {
     return {
-      error:
-        "Файл используется в пробах. Сначала отвяжите видео от проб или удалите пробы.",
+      error: `Файл привязан к ${countOf(linked, ["пробе", "пробам", "пробам"])} — удалить нельзя. Сначала отвяжите видео от проб или удалите пробы.`,
     };
   }
 

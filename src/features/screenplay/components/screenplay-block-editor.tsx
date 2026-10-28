@@ -36,6 +36,7 @@ import { useBlockHistory } from "@/features/screenplay/lib/use-block-history";
 import { parseSlugline } from "@/features/screenplay/lib/slugline";
 import { cn } from "@/shared/lib/cn";
 import { useActionToast } from "@/shared/ui/toast";
+import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
 import { useUnsavedChanges } from "@/shared/ui/unsaved/unsaved-changes-provider";
 
 type Option = { id: string; name: string };
@@ -177,6 +178,7 @@ export function ScreenplayBlockEditor({
   const [activeIndex, setActiveIndex] = useState(0);
   const [search, setSearch] = useState("");
   const [message, setMessage] = useState<ScreenplayActionState>({});
+  const confirmDelete = useConfirm();
   useActionToast(message);
   const [pending, startTransition] = useTransition();
   const [comments, setComments] = useState(initialComments);
@@ -585,9 +587,18 @@ export function ScreenplayBlockEditor({
                     ).then(() => void refreshComments());
                   }}
                   onDelete={(commentId) => {
-                    void deleteScriptCommentAction(projectId, commentId).then(
-                      () => void refreshComments(),
-                    );
+                    const replies = comments.filter(
+                      (c) => c.parentCommentId === commentId,
+                    ).length;
+                    void confirmDelete({
+                      title: "Удалить комментарий?",
+                      details: replies > 0 ? [`Удалятся ответы: ${replies}`] : [],
+                      action: async () => {
+                        const result = await deleteScriptCommentAction(projectId, commentId);
+                        if (result.error) return result.error;
+                        void refreshComments();
+                      },
+                    });
                   }}
                 />
               ) : null}

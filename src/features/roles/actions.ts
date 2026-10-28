@@ -16,7 +16,9 @@ import {
 } from "@/features/roles/role-rules";
 import { AuditEntityType } from "@/shared/audit/entity-types";
 import { recordAudit } from "@/shared/audit/with-audit";
+import { isForeignKeyError, LINKED_ERROR } from "@/shared/db/foreign-key";
 import { prisma } from "@/shared/db/prisma";
+import { listCounts } from "@/shared/lib/plural";
 import { z } from "zod";
 
 export type RoleActionState = { error?: string; success?: string };
@@ -216,27 +218,45 @@ export async function updateRoleAction(
   return { success: "Роль сохранена" };
 }
 
-export async function deleteRoleAction(projectId: string, roleId: string) {
+export async function deleteRoleAction(
+  projectId: string,
+  roleId: string,
+): Promise<{ error?: string }> {
   const ctx = await requireProjectContext(projectId);
   if (!ctx.can("members:manage")) {
-    throw new Error("FORBIDDEN");
+    return { error: "Недостаточно прав" };
   }
 
   const role = await prisma.projectRoleDefinition.findFirst({
     where: { id: roleId, projectId },
   });
-  if (!role || role.isSystem) {
-    throw new Error("Cannot delete system role");
+  if (!role) return { error: "Роль не найдена" };
+  if (role.isSystem) return { error: "Системную роль удалить нельзя" };
+
+  // На роль ссылаются участники (в том числе удалённые из проекта) и приглашения — в базе запрет.
+  const [active, former, invites] = await Promise.all([
+    prisma.projectMembership.count({ where: { roleId, projectId, status: "ACTIVE" } }),
+    prisma.projectMembership.count({
+      where: { roleId, projectId, status: { not: "ACTIVE" } },
+    }),
+    prisma.projectInvite.count({ where: { roleId, projectId } }),
+  ]);
+  if (active + former + invites > 0) {
+    return {
+      error: `Роль используется: ${listCounts([
+        [active, ["участник", "участника", "участников"]],
+        [former, ["бывший участник", "бывших участника", "бывших участников"]],
+        [invites, ["приглашение", "приглашения", "приглашений"]],
+      ])} — удалить нельзя`,
+    };
   }
 
-  const inUse = await prisma.projectMembership.count({
-    where: { roleId, projectId, status: "ACTIVE" },
-  });
-  if (inUse > 0) {
-    throw new Error("Role in use");
+  try {
+    await prisma.projectRoleDefinition.delete({ where: { id: roleId, projectId } });
+  } catch (error) {
+    if (isForeignKeyError(error)) return { error: LINKED_ERROR };
+    throw error;
   }
-
-  await prisma.projectRoleDefinition.delete({ where: { id: roleId, projectId } });
 
   await recordAudit(ctx, {
     projectId,
@@ -247,4 +267,5 @@ export async function deleteRoleAction(projectId: string, roleId: string) {
   });
 
   revalidateRoles(projectId);
+  return {};
 }

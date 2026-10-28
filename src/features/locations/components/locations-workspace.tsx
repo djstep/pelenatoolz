@@ -3,7 +3,10 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import type { ProjectType } from "@prisma/client";
-import { deleteLocationAction } from "@/features/locations/actions";
+import {
+  deleteLocationAction,
+  getLocationDeleteImpactAction,
+} from "@/features/locations/actions";
 import { LocationsFiltersModal } from "@/features/locations/components/locations-filters-modal";
 import { LocationModal } from "@/features/locations/components/location-modal";
 import {
@@ -23,6 +26,7 @@ import { formatSceneNumber } from "@/features/script/lib/libretto-display";
 import { LOCATION_COLUMNS } from "@/features/script/lib/table-columns";
 import { useTableLayout } from "@/shared/hooks/use-table-layout";
 import { Button } from "@/shared/ui/button";
+import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
 import { Input } from "@/shared/ui/input";
 
 export function LocationsWorkspace({
@@ -54,6 +58,7 @@ export function LocationsWorkspace({
   const [modalOpen, setModalOpen] = useState(false);
   const [editLocation, setEditLocation] = useState<LocationWithStats | null>(null);
   const [columnsOpen, setColumnsOpen] = useState(false);
+  const confirmDelete = useConfirm();
 
   const filtered = useMemo(() => {
     let rows = applyLocationFilters(locations, filters);
@@ -237,15 +242,22 @@ export function LocationsWorkspace({
                         >
                           Изм.
                         </Button>
-                        <form
-                          action={async () => {
-                            if (confirm("Удалить локацию?")) {
-                              await deleteLocationAction(projectId, loc.id);
-                            }
-                          }}
+                        <Button
+                          type="button"
+                          variant="danger"
+                          aria-label="Удалить локацию"
+                          onClick={() =>
+                            void confirmDelete({
+                              title: `Удалить локацию „${cell(loc, "name")}“?`,
+                              details: () => getLocationDeleteImpactAction(projectId, loc.id),
+                              action: async () => {
+                                await deleteLocationAction(projectId, loc.id);
+                              },
+                            })
+                          }
                         >
-                          <Button type="submit" variant="danger">×</Button>
-                        </form>
+                          ×
+                        </Button>
                       </div>
                     </td>
                   ) : null}

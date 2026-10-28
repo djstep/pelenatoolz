@@ -10,6 +10,7 @@ import type { AuditionScheduleBreakRow } from "@/features/auditions/lib/schedule
 import { SCHEDULE_TIME_SLOTS } from "@/features/auditions/lib/schedule-shared";
 import { timeSlotTypeLabels } from "@/features/day-docs/lib/slot-labels";
 import { Button } from "@/shared/ui/button";
+import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
 import { HhMmInput } from "@/shared/ui/hh-mm-input";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
@@ -29,6 +30,7 @@ export function ScheduleBreakEditModal({
   onClose: () => void;
 }) {
   const toast = useToast();
+  const confirmDelete = useConfirm();
   const [pending, start] = useTransition();
   const [time, setTime] = useState("09:00");
   const [duration, setDuration] = useState("01:00");
@@ -72,16 +74,14 @@ export function ScheduleBreakEditModal({
 
   function remove() {
     if (!canWrite) return;
-    start(async () => {
-      const result = await deleteAuditionScheduleBreakAction(
-        projectId,
-        breakRow!.id,
-      );
-      if (result.error) toast.error(result.error);
-      else {
+    void confirmDelete({
+      title: `Удалить перерыв „${breakRow!.label}“?`,
+      action: async () => {
+        const result = await deleteAuditionScheduleBreakAction(projectId, breakRow!.id);
+        if (result.error) return result.error;
         toast.success(result.success ?? "Удалено");
         onClose();
-      }
+      },
     });
   }
 

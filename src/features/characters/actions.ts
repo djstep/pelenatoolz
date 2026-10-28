@@ -8,6 +8,7 @@ import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { AuditEntityType } from "@/shared/audit/entity-types";
 import { auditMutation } from "@/shared/audit/with-audit";
 import { prisma } from "@/shared/db/prisma";
+import { impactLines } from "@/shared/lib/plural";
 
 export type CharacterActionState = { error?: string; success?: string };
 
@@ -277,4 +278,27 @@ export async function deleteCharacterAction(projectId: string, characterId: stri
   );
 
   revalidateCharacters(projectId);
+}
+
+
+/** Что произойдёт при удалении персонажа — для окна подтверждения. */
+export async function getCharacterDeleteImpactAction(
+  projectId: string,
+  characterId: string,
+): Promise<string[]> {
+  const ctx = await requireProjectContext(projectId);
+  if (!ctx.can("script:write")) return [];
+  const character = { id: characterId, projectId };
+  const [candidates, scenes, actors, auditions] = await Promise.all([
+    prisma.castingCandidate.count({ where: { character } }),
+    prisma.sceneCharacter.count({ where: { character } }),
+    prisma.actor.count({ where: { character } }),
+    prisma.auditionActor.count({ where: { character } }),
+  ]);
+  return impactLines([
+    [candidates, "Удалятся кандидаты кастинга на эту роль"],
+    [scenes, "Персонаж уберётся из сцен"],
+    [actors, "Отвяжутся актёры"],
+    [auditions, "Отвяжутся записи в пробах"],
+  ]);
 }

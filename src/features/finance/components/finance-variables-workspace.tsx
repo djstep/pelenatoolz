@@ -11,6 +11,7 @@ import {
 } from "@/features/finance/actions-variables";
 import type { FinanceVariableRow } from "@/features/finance/queries-variables";
 import { Button } from "@/shared/ui/button";
+import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Modal } from "@/shared/ui/modal";
@@ -191,6 +192,7 @@ export function FinanceVariablesWorkspace({
   const custom = variables.filter((v) => !v.isSystem);
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<FinanceVariableRow | null>(null);
+  const confirmDelete = useConfirm();
 
   return (
     <div className="space-y-6">
@@ -265,20 +267,24 @@ export function FinanceVariablesWorkspace({
                         >
                           Изменить
                         </Button>
-                        <form
-                          action={async () => {
-                            if (v.id) {
-                              await deleteCustomFinanceVariableAction(
-                                projectId,
-                                v.id,
-                              );
-                            }
-                          }}
+                        <Button
+                          type="button"
+                          variant="danger"
+                          aria-label="Удалить переменную"
+                          onClick={() =>
+                            void confirmDelete({
+                              title: `Удалить переменную „${v.label}“?`,
+                              details: ["Строки статей, где она задаёт количество, отвяжутся."],
+                              action: async () => {
+                                if (!v.id) return;
+                                return (await deleteCustomFinanceVariableAction(projectId, v.id))
+                                  .error;
+                              },
+                            })
+                          }
                         >
-                          <Button type="submit" variant="danger">
-                            ×
-                          </Button>
-                        </form>
+                          ×
+                        </Button>
                       </div>
                     </td>
                   ) : null}

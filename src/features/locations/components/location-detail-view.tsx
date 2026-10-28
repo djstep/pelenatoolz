@@ -26,6 +26,7 @@ import { scoutStatusLabels } from "@/features/preproduction/lib/status-labels";
 import { formatSecondsMmSs } from "@/shared/i18n/domain-labels";
 import { useActionToast } from "@/shared/ui/toast";
 import { Button } from "@/shared/ui/button";
+import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Card } from "@/shared/ui/card";
@@ -52,6 +53,7 @@ export function LocationDetailView({
   canFinanceWrite?: boolean;
 }) {
   const [editOpen, setEditOpen] = useState(false);
+  const confirmDelete = useConfirm();
   const boundPhoto = addLocationPhotoAction.bind(null, projectId, location.id);
   const [photoState, photoAction, photoPending] = useActionState(boundPhoto, initial);
 
@@ -346,14 +348,22 @@ export function LocationDetailView({
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={photo.url} alt={photo.caption ?? ""} className="aspect-video w-full object-cover" />
                 {canWrite ? (
-                  <form
-                    className="absolute right-2 top-2"
-                    action={async () => {
-                      await deleteLocationPhotoAction(projectId, location.id, photo.id);
-                    }}
+                  <Button
+                    type="button"
+                    variant="danger"
+                    className="absolute right-2 top-2 px-2 py-1 text-xs"
+                    aria-label="Удалить фото"
+                    onClick={() =>
+                      void confirmDelete({
+                        title: photo.caption ? `Удалить фото „${photo.caption}“?` : "Удалить фото?",
+                        action: async () => {
+                          await deleteLocationPhotoAction(projectId, location.id, photo.id);
+                        },
+                      })
+                    }
                   >
-                    <Button type="submit" variant="danger" className="px-2 py-1 text-xs">×</Button>
-                  </form>
+                    ×
+                  </Button>
                 ) : null}
                 {photo.caption ? (
                   <p className="p-2 text-xs text-[var(--muted-fg)]">{photo.caption}</p>

@@ -29,6 +29,7 @@ import {
 } from "@/shared/i18n/format-date";
 import { useToast } from "@/shared/ui/toast";
 import { Button } from "@/shared/ui/button";
+import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Modal } from "@/shared/ui/modal";
@@ -111,6 +112,7 @@ export function AvailabilityCalendar({
   const [editor, setEditor] = useState<DayEditorState | null>(null);
   const [pending, startTransition] = useTransition();
   const toast = useToast();
+  const confirmDelete = useConfirm();
 
   const kppBusy: KppBusyMap = useMemo(() => {
     const map = new Map<string, Set<string>>();
@@ -195,12 +197,16 @@ export function AvailabilityCalendar({
     });
   }
 
-  function runRemove(rowId: string) {
-    if (!confirm("Убрать актёра из календаря занятости?")) return;
-    startTransition(async () => {
-      const r = await removeAvailabilityRowAction(projectId, rowId);
-      if (r.error) toast.error(r.error);
-      if (r.success) toast.success(r.success);
+  function runRemove(row: AvailabilityRow) {
+    void confirmDelete({
+      title: `Убрать „${rowLabel(row)}“ из календаря занятости?`,
+      details: ["Отметки занятости в этой строке удалятся."],
+      confirmLabel: "Убрать",
+      action: async () => {
+        const r = await removeAvailabilityRowAction(projectId, row.id);
+        if (r.error) return r.error;
+        if (r.success) toast.success(r.success);
+      },
     });
   }
 
@@ -416,7 +422,7 @@ export function AvailabilityCalendar({
                         type="button"
                         variant="danger"
                         className="px-2 py-1 text-xs"
-                        onClick={() => runRemove(row.id)}
+                        onClick={() => runRemove(row)}
                       >
                         ×
                       </Button>

@@ -15,6 +15,7 @@ import { scoutStatusOptions } from "@/features/preproduction/lib/status-labels";
 import { StatusSelect } from "@/features/preproduction/components/status-select";
 import { useActionToast, useToast } from "@/shared/ui/toast";
 import { Button } from "@/shared/ui/button";
+import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
 import { Modal } from "@/shared/ui/modal";
 import { useActionSuccess } from "@/shared/ui/unsaved/use-action-success";
 
@@ -42,6 +43,7 @@ export function ScoutWorkspace({
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const toast = useToast();
+  const confirmDelete = useConfirm();
   const bound = createScoutCandidateAction.bind(null, projectId);
   const [state, action, formPending] = useActionState(bound, initial);
   useActionToast(state);
@@ -120,18 +122,25 @@ export function ScoutWorkspace({
                   </td>
                   {canWrite ? (
                     <td className="py-3 px-3 text-right">
-                      <form
-                        action={async () => {
-                          const r = await deleteScoutCandidateAction(projectId, row.id);
-                          if (r.error) toast.error(r.error);
-                          if (r.success) toast.success(r.success);
+                      <Button
+                        type="button"
+                        variant="danger"
+                        aria-label={`Удалить „${row.title}“`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void confirmDelete({
+                            title: `Удалить кандидата „${row.title}“?`,
+                            details: ["Связи с локациями удалятся."],
+                            action: async () => {
+                              const r = await deleteScoutCandidateAction(projectId, row.id);
+                              if (r.error) return r.error;
+                              if (r.success) toast.success(r.success);
+                            },
+                          });
                         }}
-                        onClick={(e) => e.stopPropagation()}
                       >
-                        <Button type="submit" variant="danger">
-                          ×
-                        </Button>
-                      </form>
+                        ×
+                      </Button>
                     </td>
                   ) : null}
                 </tr>

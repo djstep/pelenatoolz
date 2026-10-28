@@ -10,6 +10,7 @@ import { resourcesRevalidatePaths } from "@/features/resources/lib/paths";
 import { parseExtraPaymentFormRows } from "@/features/payroll/lib/parse-extra-payments";
 import { parseOvertimeFormRows } from "@/features/payroll/lib/parse-overtime-form";
 import { prisma } from "@/shared/db/prisma";
+import { countOf } from "@/shared/lib/plural";
 
 export type ResourceActionState = { error?: string; success?: string };
 
@@ -174,15 +175,17 @@ export async function updateResourceCategoryAction(
 export async function deleteResourceCategoryAction(
   projectId: string,
   categoryId: string,
-) {
+): Promise<{ error?: string }> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:write")) throw new Error("FORBIDDEN");
+  if (!ctx.can("script:write")) return { error: "Недостаточно прав" };
 
   const itemCount = await prisma.resourceItem.count({
     where: { categoryId, category: { projectId } },
   });
   if (itemCount > 0) {
-    throw new Error("CATEGORY_HAS_ITEMS");
+    return {
+      error: `В категории ${countOf(itemCount, ["ресурс", "ресурса", "ресурсов"])} — удалить нельзя`,
+    };
   }
 
   await auditMutation(
@@ -200,6 +203,7 @@ export async function deleteResourceCategoryAction(
     },
   );
   revalidateResources(projectId);
+  return {};
 }
 
 function parseItemForm(formData: FormData) {
@@ -389,12 +393,18 @@ export async function deleteResourceItemAction(
   projectId: string,
   categoryId: string,
   itemId: string,
-) {
+): Promise<{ error?: string }> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:write")) throw new Error("FORBIDDEN");
+  if (!ctx.can("script:write")) return { error: "Недостаточно прав" };
 
-  const usage = await prisma.sceneResourceItem.count({ where: { itemId } });
-  if (usage > 0) throw new Error("ITEM_IN_SCENES");
+  const usage = await prisma.sceneResourceItem.count({
+    where: { itemId, item: { categoryId, category: { projectId } } },
+  });
+  if (usage > 0) {
+    return {
+      error: `Ресурс указан в ${countOf(usage, ["сцене", "сценах", "сценах"])} — удалить нельзя`,
+    };
+  }
 
   await auditMutation(
     ctx,
@@ -413,6 +423,7 @@ export async function deleteResourceItemAction(
     },
   );
   revalidateResources(projectId, categoryId);
+  return {};
 }
 
 export async function quickCreateResourceItemAction(

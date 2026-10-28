@@ -25,6 +25,7 @@ import {
 } from "@/shared/i18n/finance-post-labels";
 import { formatDateShort } from "@/shared/i18n/format-date";
 import { Button } from "@/shared/ui/button";
+import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Modal } from "@/shared/ui/modal";
@@ -325,6 +326,7 @@ export function FinanceWorkspace({
 }) {
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Op | null>(null);
+  const confirmDelete = useConfirm();
   const [filter, setFilter] = useState<"ALL" | FinanceOpType>("ALL");
 
   const totals = useMemo(() => {
@@ -530,15 +532,21 @@ export function FinanceWorkspace({
                         >
                           Изменить
                         </Button>
-                        <form
-                          action={async () => {
-                            await deleteFinanceOpAction(projectId, op.id);
-                          }}
+                        <Button
+                          type="button"
+                          variant="danger"
+                          aria-label="Удалить операцию"
+                          onClick={() =>
+                            void confirmDelete({
+                              title: `Удалить операцию „${op.title}“?`,
+                              action: async () => {
+                                await deleteFinanceOpAction(projectId, op.id);
+                              },
+                            })
+                          }
                         >
-                          <Button type="submit" variant="danger">
-                            ×
-                          </Button>
-                        </form>
+                          ×
+                        </Button>
                       </div>
                     </td>
                   ) : null}
