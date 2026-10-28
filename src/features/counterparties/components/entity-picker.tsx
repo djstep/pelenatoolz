@@ -319,3 +319,12 @@ export function CounterpartyQuickCreateFields({
     </div>
   );
 }
+
+/**
+ * Новый список вариантов с сервера плюс добавленные в окне, которых в нём ещё нет:
+ * обновление страницы после быстрого добавления не теряет только что созданное.
+ */
+export function mergePickerOptions<T extends { id: string }>(next: T[], prev: T[]): T[] {
+  const ids = new Set(next.map((o) => o.id));
+  return [...next, ...prev.filter((o) => !ids.has(o.id))];
+}

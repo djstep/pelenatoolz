@@ -18,6 +18,7 @@ import {
 } from "@/features/contracts/lib/vat";
 import {
   EntityPicker,
+  mergePickerOptions,
   type PickerOption,
 } from "@/features/counterparties/components/entity-picker";
 import {
@@ -150,22 +151,33 @@ export function CertificateFormModal({
   const effectiveVatRate = vatRate === "custom" ? vatCustom.trim() : vatRate;
   const [pendingFile, setPendingFile] = useState<File | null>(null);
 
-  useEffect(() => {
-    if (!open) return;
-    setCompanyOpts(companies);
-    setCpOpts(counterparties);
-    setCompanyId(defaults?.companyId ?? "");
-    setCounterpartyId(defaults?.counterpartyId ?? "");
-    setContractId(defaults?.contractId ?? "");
-    setPaymentId(defaults?.paymentId ?? "");
-    setStatusId(defaults?.statusId ?? defaultStatusId);
-    setAmount(String(defaults?.amount ?? ""));
-    setVatEnabled(defaults?.vatEnabled ?? false);
-    setVatRate(vatRateChoice(defaults?.vatRate));
-    setVatCustom(vatRateCustom(defaults?.vatRate));
-    setVatManual("");
-    setPendingFile(null);
-  }, [open, defaults, companies, counterparties, defaultStatusId]);
+  // Поля сбрасываются только при открытии окна. Новые списки с сервера (после быстрого
+  // добавления компании или контрагента) дополняют варианты, выбранное остаётся.
+  const [wasOpen, setWasOpen] = useState(open);
+  const [lists, setLists] = useState({ companies, counterparties });
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (open) {
+      setCompanyOpts(companies);
+      setCpOpts(counterparties);
+      setCompanyId(defaults?.companyId ?? "");
+      setCounterpartyId(defaults?.counterpartyId ?? "");
+      setContractId(defaults?.contractId ?? "");
+      setPaymentId(defaults?.paymentId ?? "");
+      setStatusId(defaults?.statusId ?? defaultStatusId);
+      setAmount(String(defaults?.amount ?? ""));
+      setVatEnabled(defaults?.vatEnabled ?? false);
+      setVatRate(vatRateChoice(defaults?.vatRate));
+      setVatCustom(vatRateCustom(defaults?.vatRate));
+      setVatManual("");
+      setPendingFile(null);
+    }
+  }
+  if (lists.companies !== companies || lists.counterparties !== counterparties) {
+    setLists({ companies, counterparties });
+    setCompanyOpts((prev) => mergePickerOptions(companies, prev));
+    setCpOpts((prev) => mergePickerOptions(counterparties, prev));
+  }
 
   // Каждый ответ сервера обрабатываем один раз: иначе «успех» остаётся в состоянии,
   // и окно закрывается (а файл грузится) снова при каждой отрисовке родителя.
