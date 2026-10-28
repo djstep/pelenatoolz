@@ -1,7 +1,6 @@
 import type {
   ActorRoleType,
   CastingCandidateStatus,
-  TimeSlotType,
 } from "@prisma/client";
 import type { AuditionKind } from "@/features/auditions/lib/types";
 
@@ -87,16 +86,3 @@ export type AuditionScheduleRow = {
   candidates: AuditionScheduleCandidateView[];
 };
 
-export type AuditionScheduleBreakRow = {
-  id: string;
-  projectId: string;
-  date: Date | string;
-  time: string;
-  duration: string;
-  slotType: TimeSlotType;
-  label: string;
-  notes: string | null;
-  createdAt: Date | string;
-  updatedAt: Date | string;
-  dateKey: string;
-};

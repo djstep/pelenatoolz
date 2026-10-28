@@ -5,7 +5,6 @@ import { AuditionScheduleWorkspace } from "@/features/auditions/components/audit
 import { AuditionsWorkspace } from "@/features/auditions/components/auditions-workspace";
 import type { AuditionRow } from "@/features/auditions/queries";
 import type {
-  AuditionScheduleBreakRow,
   AuditionScheduleRow,
   ScheduleCandidateCard,
 } from "@/features/auditions/lib/schedule-shared";
@@ -30,7 +29,6 @@ export function AuditionsHub({
   scenes,
   scheduleCandidates,
   schedules,
-  scheduleBreaks,
   canWrite,
 }: {
   projectId: string;
@@ -41,7 +39,6 @@ export function AuditionsHub({
   scenes: SceneOpt[];
   scheduleCandidates: ScheduleCandidateCard[];
   schedules: AuditionScheduleRow[];
-  scheduleBreaks: AuditionScheduleBreakRow[];
   canWrite: boolean;
 }) {
   const [tab, setTab] = useState<"tapes" | "plan">("plan");
@@ -80,7 +77,6 @@ export function AuditionsHub({
           projectId={projectId}
           candidates={scheduleCandidates}
           schedules={schedules}
-          breaks={scheduleBreaks}
           characters={characters}
           canWrite={canWrite}
         />

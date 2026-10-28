@@ -1,6 +1,5 @@
 import { AuditionsHub } from "@/features/auditions/components/auditions-hub";
 import {
-  listAuditionScheduleBreaks,
   listAuditionSchedules,
   listScheduleCandidates,
 } from "@/features/auditions/lib/schedule-queries";
@@ -32,7 +31,6 @@ export default async function AuditionsPage({ params }: Props) {
     scenes,
     scheduleCandidates,
     schedules,
-    scheduleBreaks,
   ] = await Promise.all([
     listAuditions(projectId),
     listCastingPeopleBrief(projectId),
@@ -40,7 +38,6 @@ export default async function AuditionsPage({ params }: Props) {
     listScenesBriefForAuditions(projectId),
     listScheduleCandidates(projectId),
     listAuditionSchedules(projectId),
-    listAuditionScheduleBreaks(projectId),
   ]);
 
   return (
@@ -61,7 +58,6 @@ export default async function AuditionsPage({ params }: Props) {
           scenes={scenes}
           scheduleCandidates={scheduleCandidates}
           schedules={schedules}
-          scheduleBreaks={scheduleBreaks}
           canWrite={ctx.can("cast:write")}
         />
       </Card>

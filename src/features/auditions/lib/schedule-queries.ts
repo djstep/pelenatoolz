@@ -3,7 +3,6 @@ import {
 } from "@/features/actor-availability/lib/status";
 import { auditionKindFromCount } from "@/features/auditions/lib/types";
 import type {
-  AuditionScheduleBreakRow,
   AuditionScheduleRow,
   ScheduleCandidateCard,
 } from "@/features/auditions/lib/schedule-shared";
@@ -11,7 +10,6 @@ import { fullNameFromParts } from "@/features/preproduction/lib/snapshots";
 import { prisma } from "@/shared/db/prisma";
 
 export type {
-  AuditionScheduleBreakRow,
   AuditionScheduleRow,
   ScheduleCandidateCard,
   SchedulePanelFilters,
@@ -180,30 +178,5 @@ export async function listAuditionSchedules(
       },
       character: link.candidate.character,
     })),
-  }));
-}
-
-export async function listAuditionScheduleBreaks(
-  projectId: string,
-  opts?: { from?: Date; to?: Date },
-): Promise<AuditionScheduleBreakRow[]> {
-  const rows = await prisma.auditionScheduleBreak.findMany({
-    where: {
-      projectId,
-      ...(opts?.from || opts?.to
-        ? {
-            date: {
-              ...(opts.from ? { gte: opts.from } : {}),
-              ...(opts.to ? { lte: opts.to } : {}),
-            },
-          }
-        : {}),
-    },
-    orderBy: [{ date: "asc" }, { time: "asc" }],
-  });
-
-  return rows.map((row) => ({
-    ...row,
-    dateKey: toDateKey(row.date),
   }));
 }

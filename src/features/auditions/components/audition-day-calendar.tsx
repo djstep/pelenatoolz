@@ -4,12 +4,9 @@ import { useDroppable } from "@dnd-kit/core";
 import { useMemo } from "react";
 import {
   SCHEDULE_TIME_SLOTS,
-  type AuditionScheduleBreakRow,
   type AuditionScheduleRow,
 } from "@/features/auditions/lib/schedule-shared";
 import { auditionKindLabels } from "@/features/auditions/lib/types";
-import { addMinutesToTime } from "@/features/day-docs/lib/time-utils";
-import { parseHhMmToMinutes } from "@/shared/i18n/domain-labels";
 import { formatDateShort } from "@/shared/i18n/format-date";
 import { cn } from "@/shared/lib/cn";
 import { Button } from "@/shared/ui/button";
@@ -24,28 +21,18 @@ const WEEKDAY_LONG = [
   "Воскресенье",
 ];
 
-function endTimeLabel(start: string, duration: string) {
-  const mins = parseHhMmToMinutes(duration);
-  if (mins == null) return duration;
-  return addMinutesToTime(start, mins);
-}
-
 function DaySlotCell({
   dateKey,
   time,
   schedules,
-  breaks,
   canWrite,
   onOpenSchedule,
-  onOpenBreak,
 }: {
   dateKey: string;
   time: string;
   schedules: AuditionScheduleRow[];
-  breaks: AuditionScheduleBreakRow[];
   canWrite: boolean;
   onOpenSchedule: (s: AuditionScheduleRow) => void;
-  onOpenBreak: (b: AuditionScheduleBreakRow) => void;
 }) {
   const id = `slot-${dateKey}-${time}`;
   const { setNodeRef, isOver } = useDroppable({
@@ -57,9 +44,6 @@ function DaySlotCell({
   const hereSchedules = schedules.filter(
     (s) => s.dateKey === dateKey && s.time === time,
   );
-  const hereBreaks = breaks.filter(
-    (b) => b.dateKey === dateKey && b.time === time,
-  );
 
   return (
     <div
@@ -70,21 +54,6 @@ function DaySlotCell({
       )}
     >
       <div className="flex flex-wrap gap-2">
-        {hereBreaks.map((b) => (
-          <button
-            key={b.id}
-            type="button"
-            onClick={() => onOpenBreak(b)}
-            className="min-w-[10rem] flex-1 rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-left hover:border-[var(--accent)]"
-          >
-            <div className="text-sm font-medium text-[var(--foreground)]">
-              {b.label}
-            </div>
-            <div className="text-xs text-[var(--muted-fg)]">
-              {b.time}–{endTimeLabel(b.time, b.duration)} · {b.duration}
-            </div>
-          </button>
-        ))}
         {hereSchedules.map((s) => (
           <button
             key={s.id}
@@ -137,30 +106,22 @@ export function AuditionDayCalendar({
   dateKey,
   weekdayIndex,
   schedules,
-  breaks,
   canWrite,
   onBack,
   onOpenSchedule,
-  onOpenBreak,
   onShiftDay,
 }: {
   dateKey: string;
   weekdayIndex: number;
   schedules: AuditionScheduleRow[];
-  breaks: AuditionScheduleBreakRow[];
   canWrite: boolean;
   onBack: () => void;
   onOpenSchedule: (s: AuditionScheduleRow) => void;
-  onOpenBreak: (b: AuditionScheduleBreakRow) => void;
   onShiftDay: (delta: number) => void;
 }) {
   const daySchedules = useMemo(
     () => schedules.filter((s) => s.dateKey === dateKey),
     [schedules, dateKey],
-  );
-  const dayBreaks = useMemo(
-    () => breaks.filter((b) => b.dateKey === dateKey),
-    [breaks, dateKey],
   );
 
   return (
@@ -199,10 +160,8 @@ export function AuditionDayCalendar({
                 dateKey={dateKey}
                 time={time}
                 schedules={daySchedules}
-                breaks={dayBreaks}
                 canWrite={canWrite}
                 onOpenSchedule={onOpenSchedule}
-                onOpenBreak={onOpenBreak}
               />
             </div>
           ))}

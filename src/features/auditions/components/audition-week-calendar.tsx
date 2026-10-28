@@ -4,45 +4,32 @@ import { useDroppable } from "@dnd-kit/core";
 import { useMemo, useState } from "react";
 import {
   SCHEDULE_TIME_SLOTS,
-  type AuditionScheduleBreakRow,
   type AuditionScheduleRow,
 } from "@/features/auditions/lib/schedule-shared";
 import { auditionKindLabels } from "@/features/auditions/lib/types";
-import { addMinutesToTime } from "@/features/day-docs/lib/time-utils";
 import {
   addDays,
   startOfWeekMonday,
   toDateKey,
 } from "@/features/actor-availability/lib/status";
-import { parseHhMmToMinutes } from "@/shared/i18n/domain-labels";
 import { formatDateShort } from "@/shared/i18n/format-date";
 import { cn } from "@/shared/lib/cn";
 import { Button } from "@/shared/ui/button";
 
 const WEEKDAY_SHORT = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 
-function breakEnd(start: string, duration: string) {
-  const mins = parseHhMmToMinutes(duration);
-  if (mins == null) return duration;
-  return addMinutesToTime(start, mins);
-}
-
 function SlotCell({
   dateKey,
   time,
   schedules,
-  breaks,
   canWrite,
   onOpenSchedule,
-  onOpenBreak,
 }: {
   dateKey: string;
   time: string;
   schedules: AuditionScheduleRow[];
-  breaks: AuditionScheduleBreakRow[];
   canWrite: boolean;
   onOpenSchedule: (s: AuditionScheduleRow) => void;
-  onOpenBreak: (b: AuditionScheduleBreakRow) => void;
 }) {
   const id = `slot-${dateKey}-${time}`;
   const { setNodeRef, isOver } = useDroppable({
@@ -54,9 +41,6 @@ function SlotCell({
   const here = schedules.filter(
     (s) => s.dateKey === dateKey && s.time === time,
   );
-  const hereBreaks = breaks.filter(
-    (b) => b.dateKey === dateKey && b.time === time,
-  );
 
   return (
     <div
@@ -66,19 +50,6 @@ function SlotCell({
         isOver && "bg-[var(--accent)]/15",
       )}
     >
-      {hereBreaks.map((b) => (
-        <button
-          key={b.id}
-          type="button"
-          onClick={() => onOpenBreak(b)}
-          className="mb-1 w-full rounded-lg border border-dashed border-[var(--border)] bg-[var(--surface-2)] px-1.5 py-1 text-left text-[10px] hover:border-[var(--accent)]"
-        >
-          <div className="font-medium text-[var(--foreground)]">{b.label}</div>
-          <div className="text-[var(--muted-fg)]">
-            {b.time}–{breakEnd(b.time, b.duration)}
-          </div>
-        </button>
-      ))}
       {here.map((s) => (
         <button
           key={s.id}
@@ -109,19 +80,15 @@ export function AuditionWeekCalendar({
   weekAnchorIso,
   onWeekChange,
   schedules,
-  breaks,
   canWrite,
   onOpenSchedule,
-  onOpenBreak,
   onOpenDay,
 }: {
   weekAnchorIso: string;
   onWeekChange: (iso: string) => void;
   schedules: AuditionScheduleRow[];
-  breaks: AuditionScheduleBreakRow[];
   canWrite: boolean;
   onOpenSchedule: (s: AuditionScheduleRow) => void;
-  onOpenBreak: (b: AuditionScheduleBreakRow) => void;
   onOpenDay: (dateKey: string) => void;
 }) {
   const days = useMemo(() => {
@@ -133,11 +100,6 @@ export function AuditionWeekCalendar({
     const keys = new Set(days.map((d) => toDateKey(d)));
     return schedules.filter((s) => keys.has(s.dateKey));
   }, [schedules, days]);
-
-  const weekBreaks = useMemo(() => {
-    const keys = new Set(days.map((d) => toDateKey(d)));
-    return breaks.filter((b) => keys.has(b.dateKey));
-  }, [breaks, days]);
 
   function shiftWeek(delta: number) {
     const start = startOfWeekMonday(new Date(weekAnchorIso));
@@ -203,10 +165,8 @@ export function AuditionWeekCalendar({
                   dateKey={toDateKey(d)}
                   time={time}
                   schedules={weekSchedules}
-                  breaks={weekBreaks}
                   canWrite={canWrite}
                   onOpenSchedule={onOpenSchedule}
-                  onOpenBreak={onOpenBreak}
                 />
               ))}
             </div>
