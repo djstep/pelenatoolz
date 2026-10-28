@@ -21,6 +21,10 @@ export default async function ProjectMembersPage({ params }: Props) {
   const ctx = await requireProjectContext(projectId);
   const t = await getTranslations("members");
 
+  if (!ctx.can("members:read")) {
+    return <p className="text-sm text-[var(--danger)]">Нет доступа</p>;
+  }
+
   const manage = canManageMembers(ctx.matrix);
   const [members, invites, roles] = await Promise.all([
     listProjectMembers(projectId),
