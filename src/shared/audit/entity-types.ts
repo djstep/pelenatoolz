@@ -32,6 +32,16 @@ export const AuditEntityType = {
   role: "role",
   membership: "membership",
   invite: "invite",
+  availabilityRow: "availability_row",
+  audition: "audition",
+  auditionSchedule: "audition_schedule",
+  auditionBreak: "audition_break",
+  castingComment: "casting_comment",
+  cloudFileLink: "cloud_file_link",
+  projectFile: "project_file",
+  locationPhoto: "location_photo",
+  scriptComment: "script_comment",
+  budgetTemplate: "budget_template",
 } as const;
 
 export type AuditEntityTypeValue =
@@ -80,6 +90,16 @@ export const auditEntityLabels: Record<string, string> = {
   [AuditEntityType.role]: "Роль",
   [AuditEntityType.membership]: "Участник",
   [AuditEntityType.invite]: "Приглашение",
+  [AuditEntityType.availabilityRow]: "Строка занятости",
+  [AuditEntityType.audition]: "Проба",
+  [AuditEntityType.auditionSchedule]: "Слот проб",
+  [AuditEntityType.auditionBreak]: "Перерыв в пробах",
+  [AuditEntityType.castingComment]: "Комментарий кастинга",
+  [AuditEntityType.cloudFileLink]: "Ссылка на облачный файл",
+  [AuditEntityType.projectFile]: "Файл проекта",
+  [AuditEntityType.locationPhoto]: "Фото локации",
+  [AuditEntityType.scriptComment]: "Комментарий к сценарию",
+  [AuditEntityType.budgetTemplate]: "Шаблон сметы",
   ShootDay: "Вызывной (устар.)",
 };
 

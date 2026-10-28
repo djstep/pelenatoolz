@@ -18,6 +18,7 @@ import {
 } from "@dnd-kit/sortable";
 import {
   bulkDeleteScenesAction,
+  getScenesDeleteImpactAction,
   bulkUpdateSceneStatusAction,
   deleteSceneAction,
 } from "@/features/script/actions";
@@ -48,6 +49,7 @@ import {
 import { useTableLayout, type ColumnDef } from "@/shared/hooks/use-table-layout";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
+import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
 import { Input } from "@/shared/ui/input";
 import { cn } from "@/shared/lib/cn";
 
@@ -188,6 +190,7 @@ export function LibrettoWorkspace({
   const [bulkOpen, setBulkOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
+  const confirmDelete = useConfirm();
 
   const fmtNum = (s: LibrettoScene) => formatSceneNumber(s, projectType);
 
@@ -351,10 +354,20 @@ export function LibrettoWorkspace({
                 variant="danger"
                 disabled={pending}
                 onClick={() => {
-                  if (!confirm(`Удалить ${selected.size} сцен?`)) return;
-                  startTransition(async () => {
-                    await bulkDeleteScenesAction(projectId, selectedIds);
-                    setSelected(new Set());
+                  const labels = scenes.filter((s) => selected.has(s.id)).map(fmtNum);
+                  void confirmDelete({
+                    title:
+                      labels.length === 1
+                        ? `Удалить сцену ${labels[0]}?`
+                        : labels.length <= 10
+                          ? `Удалить сцены ${labels.join(", ")}?`
+                          : `Удалить ${labels.length} сцен?`,
+                    details: () => getScenesDeleteImpactAction(projectId, selectedIds),
+                    action: async () => {
+                      const result = await bulkDeleteScenesAction(projectId, selectedIds);
+                      if (result.error) return result.error;
+                      setSelected(new Set());
+                    },
                   });
                 }}
               >

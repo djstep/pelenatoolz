@@ -4,6 +4,8 @@ import { CloudProvider } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/features/auth/session";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
+import { AuditEntityType } from "@/shared/audit/entity-types";
+import { recordAudit } from "@/shared/audit/with-audit";
 import { getCloudConnection } from "@/features/cloud/lib/cloud-service";
 import { prisma } from "@/shared/db/prisma";
 
@@ -72,8 +74,20 @@ export async function deleteCloudFileLinkAction(
     return { error: "Недостаточно прав" };
   }
 
+  const link = await prisma.cloudFileLink.findFirst({
+    where: { id: linkId, projectId },
+    select: { name: true },
+  });
+  if (!link) return { error: "Ссылка не найдена" };
   await prisma.cloudFileLink.deleteMany({
     where: { id: linkId, projectId },
+  });
+  await recordAudit(ctx, {
+    projectId,
+    entityType: AuditEntityType.cloudFileLink,
+    entityId: linkId,
+    action: "DELETE",
+    summary: `Удалена ссылка на облачный файл «${link.name}»`,
   });
 
   revalidatePath(`/ru/projects/${projectId}/files`);

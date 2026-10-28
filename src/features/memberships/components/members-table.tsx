@@ -106,9 +106,8 @@ export function MembersTable({
                         void confirmDelete({
                           title: `Удалить участника „${member.user.name}“ из проекта?`,
                           details: ["Доступ к проекту отключится, его данные в проекте останутся."],
-                          action: async () => {
-                            await removeMemberAction(member.id, projectId);
-                          },
+                          action: async () =>
+                            (await removeMemberAction(member.id, projectId)).error,
                         })
                       }
                     >

@@ -536,7 +536,7 @@ export async function updateMemberRoleAction(
 export async function removeMemberAction(
   membershipId: string,
   projectId: string,
-) {
+): Promise<{ error?: string }> {
   const user = await requireUser();
   const actor = await requireProjectAccess(projectId, user.id!, "members:manage");
 
@@ -546,15 +546,15 @@ export async function removeMemberAction(
   });
 
   if (!target) {
-    return;
+    return { error: "Участник не найден" };
   }
 
   if (target.userId === user.id) {
-    throw new Error("Cannot remove yourself via this action");
+    return { error: "Себя из проекта так удалить нельзя" };
   }
 
   if (!canGrantPermissions(actor.role, target.role.permissions)) {
-    throw new Error("Нельзя удалить участника с правами шире ваших");
+    return { error: "Нельзя удалить участника с правами шире ваших" };
   }
 
   if (
@@ -562,7 +562,7 @@ export async function removeMemberAction(
     isProducerRole(target.role) &&
     (await countActiveProducers(projectId)) <= 1
   ) {
-    throw new Error("Last producer cannot be removed");
+    return { error: "Это единственный продюсер проекта — удалить нельзя" };
   }
 
   await prisma.projectMembership.update({
@@ -580,6 +580,7 @@ export async function removeMemberAction(
   });
 
   revalidatePath(`/ru/projects/${projectId}/members`);
+  return {};
 }
 
 export async function acceptInviteAction(token: string): Promise<ActionState> {

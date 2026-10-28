@@ -1,6 +1,6 @@
 "use server";
 
-import { ElementType, SceneResourceCategory } from "@prisma/client";
+import { ElementType, SceneResourceCategory, type ProjectType } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { refreshAllSluglines, syncSluglineFromScene } from "@/features/screenplay/lib/sync";
 import {
@@ -18,6 +18,8 @@ import { prisma } from "@/shared/db/prisma";
 import { syncShootDaysForScene } from "@/features/schedule/lib/sync-shoot-day-resources";
 import { AuditEntityType } from "@/shared/audit/entity-types";
 import { recordAudit } from "@/shared/audit/with-audit";
+import { formatSceneNumber } from "@/features/script/lib/libretto-display";
+import { countOf, impactLines } from "@/shared/lib/plural";
 
 export type ActionState = { error?: string; success?: string; keepOpen?: boolean };
 
@@ -594,12 +596,15 @@ export async function bulkUpdateSceneStatusAction(
 export async function bulkDeleteScenesAction(
   projectId: string,
   sceneIds: string[],
-) {
+): Promise<{ error?: string }> {
   const ctx = await requireProjectContext(projectId);
   if (!ctx.can("script:write")) {
-    throw new Error("FORBIDDEN");
+    return { error: "Недостаточно прав" };
   }
-  if (sceneIds.length === 0) return;
+  if (sceneIds.length === 0) return {};
+
+  const refusal = await shotScenesRefusal(projectId, ctx.project.type, sceneIds);
+  if (refusal) return { error: refusal };
 
   await prisma.scene.deleteMany({
     where: { projectId, id: { in: sceneIds } },
@@ -614,6 +619,7 @@ export async function bulkDeleteScenesAction(
   });
 
   revalidateScript(projectId);
+  return {};
 }
 
 export async function renumberScenesAction(projectId: string) {
@@ -657,11 +663,17 @@ export async function renumberScenesAction(projectId: string) {
   revalidateScript(projectId);
 }
 
-export async function deleteSceneAction(projectId: string, sceneId: string) {
+export async function deleteSceneAction(
+  projectId: string,
+  sceneId: string,
+): Promise<{ error?: string }> {
   const ctx = await requireProjectContext(projectId);
   if (!ctx.can("script:write")) {
-    throw new Error("FORBIDDEN");
+    return { error: "Недостаточно прав" };
   }
+
+  const refusal = await shotScenesRefusal(projectId, ctx.project.type, [sceneId]);
+  if (refusal) return { error: refusal };
 
   await prisma.scene.deleteMany({ where: { id: sceneId, projectId } });
 
@@ -674,6 +686,56 @@ export async function deleteSceneAction(projectId: string, sceneId: string) {
   });
 
   revalidateScript(projectId);
+  return {};
+}
+
+/**
+ * Сцены с историей съёмок (факт сохраняли в отчёте смены) не удаляются: вместе со сценой
+ * пропали бы история и факт отчётов. Возвращает текст отказа или null.
+ */
+async function shotScenesRefusal(
+  projectId: string,
+  projectType: ProjectType,
+  sceneIds: string[],
+): Promise<string | null> {
+  const attempts = await prisma.sceneShootAttempt.findMany({
+    where: { sceneId: { in: sceneIds }, scene: { projectId } },
+    select: {
+      shootDayId: true,
+      scene: { select: { id: true, number: true, postfix: true, episodeNumber: true } },
+    },
+  });
+  if (attempts.length === 0) return null;
+
+  const scenes = new Map(attempts.map((a) => [a.scene.id, a.scene]));
+  const labels = [...scenes.values()].map((s) => formatSceneNumber(s, projectType));
+  const days = countOf(new Set(attempts.map((a) => a.shootDayId)).size, ["день", "дня", "дней"]);
+  if (sceneIds.length === 1) {
+    return `Сцена ${labels[0]} есть в отчётах смены (${days}) — удалить нельзя, пропадёт история съёмок`;
+  }
+  return `${labels.length === 1 ? "Сцена" : "Сцены"} ${labels.join(", ")} есть в отчётах смены (${days}) — удалить нельзя, пропадёт история съёмок. Уберите ${labels.length === 1 ? "её" : "их"} из выбора`;
+}
+
+/** Что произойдёт при удалении сцен — для окна подтверждения. */
+export async function getScenesDeleteImpactAction(
+  projectId: string,
+  sceneIds: string[],
+): Promise<string[]> {
+  const ctx = await requireProjectContext(projectId);
+  if (!ctx.can("script:write") || sceneIds.length === 0) return [];
+  const scene = { id: { in: sceneIds }, projectId };
+  const [dayLinks, reportRows] = await Promise.all([
+    prisma.shootDayScene.findMany({
+      where: { scene },
+      select: { shootDayId: true },
+      distinct: ["shootDayId"],
+    }),
+    prisma.productionReportSceneFact.count({ where: { scene } }),
+  ]);
+  return impactLines([
+    [dayLinks.length, "Сцены уберутся из дней КПП"],
+    [reportRows, "Удалятся незаполненные строки отчётов смены"],
+  ]);
 }
 
 export async function manualRenumberScenesAction(

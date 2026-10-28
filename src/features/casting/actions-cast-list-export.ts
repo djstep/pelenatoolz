@@ -16,6 +16,8 @@ import type {
   CastListSort,
 } from "@/features/casting/lib/cast-list-export-fields";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
+import { AuditEntityType } from "@/shared/audit/entity-types";
+import { recordAudit } from "@/shared/audit/with-audit";
 import { prisma } from "@/shared/db/prisma";
 
 const tapeSchema = z.discriminatedUnion("kind", [
@@ -178,6 +180,13 @@ export async function deleteCastingCandidateCommentAction(
   }
 
   await prisma.castingCandidateComment.delete({ where: { id: commentId } });
+  await recordAudit(ctx, {
+    projectId,
+    entityType: AuditEntityType.castingComment,
+    entityId: commentId,
+    action: "DELETE",
+    summary: "Удалён комментарий к кандидату кастинга",
+  });
   revalidatePath(
     `/ru/projects/${projectId}/characters/${comment.candidate.characterId}`,
   );

@@ -153,6 +153,18 @@ export async function deletePostTaskAction(projectId: string, taskId: string) {
   if (!ctx.can("post:write")) {
     throw new Error("FORBIDDEN");
   }
+  const task = await prisma.postTask.findFirst({
+    where: { id: taskId, projectId },
+    select: { title: true },
+  });
+  if (!task) return;
   await prisma.postTask.deleteMany({ where: { id: taskId, projectId } });
+  await recordAudit(ctx, {
+    projectId,
+    entityType: AuditEntityType.postTask,
+    entityId: taskId,
+    action: "DELETE",
+    summary: `Удалена задача «${task.title}»`,
+  });
   revalidatePost(projectId);
 }

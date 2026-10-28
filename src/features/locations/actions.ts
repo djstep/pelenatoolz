@@ -147,7 +147,19 @@ export async function deleteLocationAction(
   const gate = await assertScriptWrite(projectId);
   if ("error" in gate) throw new Error(gate.error);
 
+  const location = await prisma.location.findFirst({
+    where: { id: locationId, projectId },
+    select: { name: true },
+  });
+  if (!location) return;
   await prisma.location.deleteMany({ where: { id: locationId, projectId } });
+  await recordAudit(gate.ctx, {
+    projectId,
+    entityType: AuditEntityType.location,
+    entityId: locationId,
+    action: "DELETE",
+    summary: `Удалена локация «${location.name}»`,
+  });
   revalidateLocations(projectId);
 }
 
@@ -211,6 +223,13 @@ export async function deleteLocationPhotoAction(
 
   await prisma.locationPhoto.deleteMany({
     where: { id: photo.id, locationId, location: { projectId } },
+  });
+  await recordAudit(gate.ctx, {
+    projectId,
+    entityType: AuditEntityType.locationPhoto,
+    entityId: photo.id,
+    action: "DELETE",
+    summary: "Удалено фото локации",
   });
   revalidateLocations(projectId, locationId);
 }

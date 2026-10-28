@@ -602,6 +602,13 @@ export async function deleteScriptVersionAction(
   if ("error" in result) {
     return { error: result.error };
   }
+  await recordAudit(ctx, {
+    projectId,
+    entityType: AuditEntityType.scriptVersion,
+    entityId: versionId,
+    action: "DELETE",
+    summary: `Удалена версия сценария ${version.versionNumber}`,
+  });
 
   revalidateScreenplay(projectId);
   return { success: "Версия удалена" };
@@ -777,6 +784,13 @@ export async function deleteScriptCommentAction(
   }
 
   await prisma.scriptComment.delete({ where: { id: commentId } });
+  await recordAudit(ctx, {
+    projectId,
+    entityType: AuditEntityType.scriptComment,
+    entityId: commentId,
+    action: "DELETE",
+    summary: "Удалён комментарий к сценарию",
+  });
   return { success: "Комментарий удалён" };
 }
 

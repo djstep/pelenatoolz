@@ -5,6 +5,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { approveScoutCandidate } from "@/features/preproduction/lib/approve-scout";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
+import { AuditEntityType } from "@/shared/audit/entity-types";
+import { recordAudit } from "@/shared/audit/with-audit";
 import { prisma } from "@/shared/db/prisma";
 
 export type ScoutActionState = { error?: string; success?: string };
@@ -198,8 +200,20 @@ export async function deleteScoutCandidateAction(
   const ctx = await requireProjectContext(projectId);
   if (!ctx.can("script:write")) return { error: "Недостаточно прав" };
 
+  const candidate = await prisma.scoutCandidate.findFirst({
+    where: { id: candidateId, projectId },
+    select: { title: true },
+  });
+  if (!candidate) return { error: "Кандидат не найден" };
   await prisma.scoutCandidate.deleteMany({
     where: { id: candidateId, projectId },
+  });
+  await recordAudit(ctx, {
+    projectId,
+    entityType: AuditEntityType.scoutCandidate,
+    entityId: candidateId,
+    action: "DELETE",
+    summary: `Удалён кандидат скаута «${candidate.title}»`,
   });
   revalidateScout(projectId, candidateId);
   return { success: "Кандидат удалён" };

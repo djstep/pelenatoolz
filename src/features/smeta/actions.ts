@@ -18,6 +18,8 @@ import {
   setBudgetSheetPinned,
 } from "@/features/smeta/queries";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
+import { AuditEntityType } from "@/shared/audit/entity-types";
+import { recordAudit } from "@/shared/audit/with-audit";
 
 function revalidateSmeta(projectId: string) {
   revalidatePath(`/ru/projects/${projectId}/smeta`);
@@ -142,6 +144,13 @@ export async function deleteBudgetTemplateAction(
 
   const ok = await deleteBudgetTemplate(projectId, templateId);
   if (!ok) return { error: "Шаблон не найден или его нельзя удалить" };
+  await recordAudit(ctx, {
+    projectId,
+    entityType: AuditEntityType.budgetTemplate,
+    entityId: templateId,
+    action: "DELETE",
+    summary: "Удалён шаблон сметы",
+  });
 
   revalidateSmeta(projectId);
   return { success: "Шаблон удалён" };

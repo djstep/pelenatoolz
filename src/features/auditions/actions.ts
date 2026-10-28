@@ -7,6 +7,8 @@ import {
   isNotInProjectError,
 } from "@/features/memberships/assert-in-project";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
+import { AuditEntityType } from "@/shared/audit/entity-types";
+import { recordAudit } from "@/shared/audit/with-audit";
 import { parseDateInput } from "@/features/schedule/lib/date-range";
 import { prisma } from "@/shared/db/prisma";
 
@@ -222,6 +224,13 @@ export async function deleteAuditionAction(
   if (!existing) return { error: "Проба не найдена" };
 
   await prisma.audition.delete({ where: { id: auditionId } });
+  await recordAudit(ctx, {
+    projectId,
+    entityType: AuditEntityType.audition,
+    entityId: auditionId,
+    action: "DELETE",
+    summary: "Удалена проба",
+  });
   revalidateAuditions(
     projectId,
     existing.actors.map((a) => a.personId),

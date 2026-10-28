@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
+import { AuditEntityType } from "@/shared/audit/entity-types";
+import { recordAudit } from "@/shared/audit/with-audit";
 import { parseDateKey } from "@/features/actor-availability/lib/status";
 import { prisma } from "@/shared/db/prisma";
 
@@ -176,6 +178,17 @@ export async function removeCandidateFromScheduleAction(
   if (remaining.length === 0) {
     await prisma.auditionSchedule.delete({ where: { id: scheduleId } });
   }
+  await recordAudit(ctx, {
+    projectId,
+    entityType: AuditEntityType.auditionSchedule,
+    entityId: scheduleId,
+    action: remaining.length === 0 ? "DELETE" : "UPDATE",
+    summary:
+      remaining.length === 0
+        ? `Кандидат убран из слота ${schedule.time}, пустой слот удалён`
+        : `Кандидат убран из слота ${schedule.time}`,
+    changes: { castingCandidateId },
+  });
 
   revalidateSchedule(projectId);
   return { success: "Кандидат убран из слота" };
@@ -194,6 +207,13 @@ export async function deleteAuditionScheduleAction(
   if (!schedule) return { error: "Слот не найден" };
 
   await prisma.auditionSchedule.delete({ where: { id: scheduleId } });
+  await recordAudit(ctx, {
+    projectId,
+    entityType: AuditEntityType.auditionSchedule,
+    entityId: scheduleId,
+    action: "DELETE",
+    summary: `Удалён слот проб ${schedule.time}`,
+  });
   revalidateSchedule(projectId);
   return { success: "Слот удалён" };
 }
@@ -300,6 +320,13 @@ export async function deleteAuditionScheduleBreakAction(
   if (!existing) return { error: "Перерыв не найден" };
 
   await prisma.auditionScheduleBreak.delete({ where: { id: breakId } });
+  await recordAudit(ctx, {
+    projectId,
+    entityType: AuditEntityType.auditionBreak,
+    entityId: breakId,
+    action: "DELETE",
+    summary: `Удалён перерыв «${existing.label}» ${existing.time}`,
+  });
   revalidateSchedule(projectId);
   return { success: "Перерыв удалён" };
 }
