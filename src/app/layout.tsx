@@ -3,6 +3,7 @@ import { IBM_Plex_Sans, Sora } from "next/font/google";
 import { APP_BRAND } from "@/shared/brand";
 import { ThemeProvider } from "@/shared/theme/theme-provider";
 import { ToastProvider } from "@/shared/ui/toast";
+import { ConfirmProvider } from "@/shared/ui/confirm/confirm-provider";
 import { UnsavedChangesProvider } from "@/shared/ui/unsaved/unsaved-changes-provider";
 import "./globals.css";
 
@@ -38,7 +39,9 @@ export default function RootLayout({
       <body className="min-h-full antialiased">
         <ThemeProvider>
           <ToastProvider>
-            <UnsavedChangesProvider>{children}</UnsavedChangesProvider>
+            <UnsavedChangesProvider>
+              <ConfirmProvider>{children}</ConfirmProvider>
+            </UnsavedChangesProvider>
           </ToastProvider>
         </ThemeProvider>
       </body>

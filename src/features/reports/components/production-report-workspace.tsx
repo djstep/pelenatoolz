@@ -56,7 +56,11 @@ export function ProductionReportWorkspace({
   const [state, formAction, pending] = useActionState(bound, {});
   useActionToast(state);
   // Предупреждение о несохранённых изменениях при уходе со страницы.
-  const { ref: formRef, markClean: markFormClean } = useFormGuard();
+  const { ref: formRef, markClean: markFormClean } = useFormGuard(
+    true,
+    undefined,
+    state,
+  );
   useActionSuccess(state, markFormClean);
 
   const selectedFact =

@@ -1,15 +1,9 @@
 "use client";
 
-import {
-  useEffect,
-  useId,
-  useRef,
-  useState,
-  type ChangeEvent,
-  type InputHTMLAttributes,
-} from "react";
+import { useId, useRef, useState, type ChangeEvent, type InputHTMLAttributes } from "react";
 import { cn } from "@/shared/lib/cn";
 import { PortaledMenu } from "@/shared/ui/portaled-menu";
+import { useOnChange } from "@/shared/hooks/use-on-change";
 
 const MONTHS = [
   "Январь",
@@ -117,11 +111,11 @@ export function DateInput({
     startOfMonth(selectedDate ?? new Date()),
   );
 
-  useEffect(() => {
+  useOnChange([current], () => {
     if (selectedDate) {
       setViewMonth(startOfMonth(selectedDate));
     }
-  }, [current]);
+  });
 
   function commit(next: string) {
     if (!isControlled) setInternal(next);

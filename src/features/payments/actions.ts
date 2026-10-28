@@ -235,16 +235,16 @@ export async function updateCashPaymentAction(
 export async function deleteCashPaymentAction(
   projectId: string,
   paymentId: string,
-) {
+): Promise<{ error?: string }> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("finance:write")) throw new Error("FORBIDDEN");
+  if (!ctx.can("finance:write")) return { error: "Недостаточно прав" };
 
   const existing = await prisma.cashPayment.findFirst({
     where: { id: paymentId, projectId },
     select: { id: true, isLocked: true },
   });
-  if (!existing) throw new Error("NOT_FOUND");
-  if (existing.isLocked) throw new Error("LOCKED");
+  if (!existing) return { error: "Платёж не найден" };
+  if (existing.isLocked) return { error: "Платёж зафиксирован — удалить нельзя" };
 
   await prisma.cashPayment.delete({ where: { id: paymentId } });
   await recordAudit(ctx, {
@@ -255,6 +255,7 @@ export async function deleteCashPaymentAction(
     summary: "Удалён платёж",
   });
   revalidatePayments(projectId);
+  return {};
 }
 
 export async function setCashPaymentLockedAction(

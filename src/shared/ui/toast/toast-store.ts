@@ -1,4 +1,4 @@
-import type { ToastInput, ToastRecord } from "@/shared/ui/toast/types";
+import type { ToastInput } from "@/shared/ui/toast/types";
 
 type PushToast = (input: ToastInput) => string;
 type DismissToast = (id: string) => void;

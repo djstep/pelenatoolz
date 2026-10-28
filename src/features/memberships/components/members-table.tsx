@@ -7,6 +7,7 @@ import {
   updateMemberRoleAction,
 } from "@/features/projects/actions";
 import { Button } from "@/shared/ui/button";
+import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
 import { Select } from "@/shared/ui/select";
 import { useToast } from "@/shared/ui/toast";
 
@@ -33,6 +34,7 @@ export function MembersTable({
 }) {
   const t = useTranslations("members");
   const toast = useToast();
+  const confirmDelete = useConfirm();
   const [pending, startTransition] = useTransition();
   // Меняется при отказе сервера: списки пересоздаются и снова показывают роль из базы.
   const [resetVersion, setResetVersion] = useState(0);
@@ -97,15 +99,20 @@ export function MembersTable({
               {canManage ? (
                 <td className="py-3 text-right">
                   {member.user.id !== currentUserId ? (
-                    <form
-                      action={async () => {
-                        await removeMemberAction(member.id, projectId);
-                      }}
+                    <Button
+                      type="button"
+                      variant="danger"
+                      onClick={() =>
+                        void confirmDelete({
+                          title: `Удалить участника „${member.user.name}“ из проекта?`,
+                          details: ["Доступ к проекту отключится, его данные в проекте останутся."],
+                          action: async () =>
+                            (await removeMemberAction(member.id, projectId)).error,
+                        })
+                      }
                     >
-                      <Button type="submit" variant="danger">
-                        {t("remove")}
-                      </Button>
-                    </form>
+                      {t("remove")}
+                    </Button>
                   ) : null}
                 </td>
               ) : null}

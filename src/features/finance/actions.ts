@@ -164,6 +164,18 @@ export async function deleteFinanceOpAction(projectId: string, opId: string) {
   if (!ctx.can("finance:write")) {
     throw new Error("FORBIDDEN");
   }
+  const op = await prisma.financeOperation.findFirst({
+    where: { id: opId, projectId },
+    select: { title: true },
+  });
+  if (!op) return;
   await prisma.financeOperation.deleteMany({ where: { id: opId, projectId } });
+  await recordAudit(ctx, {
+    projectId,
+    entityType: AuditEntityType.financeOp,
+    entityId: opId,
+    action: "DELETE",
+    summary: `Удалена операция «${op.title}»`,
+  });
   revalidateFinance(projectId);
 }

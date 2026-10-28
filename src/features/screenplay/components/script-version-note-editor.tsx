@@ -1,9 +1,10 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { updateScriptVersionNoteAction } from "@/features/screenplay/actions";
 import { cn } from "@/shared/lib/cn";
+import { useOnChange } from "@/shared/hooks/use-on-change";
 
 type Props = {
   projectId: string;
@@ -29,9 +30,9 @@ export function ScriptVersionNoteEditor({
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
-  useEffect(() => {
+  useOnChange([note], () => {
     setValue(note ?? "");
-  }, [note]);
+  });
 
   function startEditing() {
     if (!canWrite || pending) return;

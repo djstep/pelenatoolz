@@ -1,6 +1,5 @@
-import type { SceneStatus } from "@prisma/client";
 import type { ProjectType } from "@prisma/client";
-import { sceneKindLabels, sceneStatusLabels } from "@/shared/i18n/domain-labels";
+import { sceneStatusLabels } from "@/shared/i18n/domain-labels";
 import { formatDateShort } from "@/shared/i18n/format-date";
 import type { listScenes } from "@/features/script/queries";
 

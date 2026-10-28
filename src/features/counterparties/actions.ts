@@ -10,6 +10,13 @@ import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { prisma } from "@/shared/db/prisma";
 import { AuditEntityType } from "@/shared/audit/entity-types";
 import { recordAudit } from "@/shared/audit/with-audit";
+import { isForeignKeyError, LINKED_ERROR } from "@/shared/db/foreign-key";
+import { listCounts, type PluralForms } from "@/shared/lib/plural";
+
+const CONTRACT_FORMS: PluralForms = ["договор", "договора", "договоров"];
+const CERTIFICATE_FORMS: PluralForms = ["акт", "акта", "актов"];
+const PAYMENT_FORMS: PluralForms = ["платёж", "платежа", "платежей"];
+const ACCRUAL_FORMS: PluralForms = ["начисление", "начисления", "начислений"];
 
 export type CounterpartiesActionState = {
   error?: string;
@@ -110,17 +117,41 @@ export async function updateCompanyAction(
   return { success: "Сохранено", id: companyId, name: parsed.data.name };
 }
 
-export async function deleteCompanyAction(projectId: string, companyId: string) {
+export async function deleteCompanyAction(
+  projectId: string,
+  companyId: string,
+): Promise<{ error?: string }> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("finance:write")) throw new Error("FORBIDDEN");
+  if (!ctx.can("finance:write")) return { error: "Недостаточно прав" };
 
   const existing = await prisma.company.findFirst({
     where: { id: companyId, projectId },
     select: { id: true, name: true },
   });
-  if (!existing) throw new Error("NOT_FOUND");
+  if (!existing) return { error: "Компания не найдена" };
 
-  await prisma.company.delete({ where: { id: companyId } });
+  // Договоры, акты и платежи не дают удалить компанию (в базе — запрет), операции отвяжутся.
+  const [contracts, certificates, payments] = await Promise.all([
+    prisma.contract.count({ where: { companyId } }),
+    prisma.certificate.count({ where: { companyId } }),
+    prisma.cashPayment.count({ where: { companyId } }),
+  ]);
+  if (contracts + certificates + payments > 0) {
+    return {
+      error: `У компании ${listCounts([
+        [contracts, CONTRACT_FORMS],
+        [certificates, CERTIFICATE_FORMS],
+        [payments, PAYMENT_FORMS],
+      ])} — удалить нельзя`,
+    };
+  }
+
+  try {
+    await prisma.company.delete({ where: { id: companyId } });
+  } catch (error) {
+    if (isForeignKeyError(error)) return { error: LINKED_ERROR };
+    throw error;
+  }
   await recordAudit(ctx, {
     projectId,
     entityType: AuditEntityType.company,
@@ -129,6 +160,7 @@ export async function deleteCompanyAction(projectId: string, companyId: string) 
     summary: `Удалена компания ${existing.name}`,
   });
   revalidateCounterparties(projectId);
+  return {};
 }
 
 export async function createCounterpartyAction(
@@ -224,17 +256,41 @@ export async function updateCounterpartyAction(
 export async function deleteCounterpartyAction(
   projectId: string,
   counterpartyId: string,
-) {
+): Promise<{ error?: string }> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("finance:write")) throw new Error("FORBIDDEN");
+  if (!ctx.can("finance:write")) return { error: "Недостаточно прав" };
 
   const existing = await prisma.counterparty.findFirst({
     where: { id: counterpartyId, projectId },
     select: { id: true, name: true },
   });
-  if (!existing) throw new Error("NOT_FOUND");
+  if (!existing) return { error: "Контрагент не найден" };
 
-  await prisma.counterparty.delete({ where: { id: counterpartyId } });
+  // Договоры, акты, платежи и начисления не дают удалить (в базе — запрет);
+  // строки статей и операции отвяжутся.
+  const [contracts, certificates, payments, accruals] = await Promise.all([
+    prisma.contract.count({ where: { counterpartyId } }),
+    prisma.certificate.count({ where: { counterpartyId } }),
+    prisma.cashPayment.count({ where: { counterpartyId } }),
+    prisma.accrual.count({ where: { counterpartyId } }),
+  ]);
+  if (contracts + certificates + payments + accruals > 0) {
+    return {
+      error: `У контрагента ${listCounts([
+        [contracts, CONTRACT_FORMS],
+        [certificates, CERTIFICATE_FORMS],
+        [payments, PAYMENT_FORMS],
+        [accruals, ACCRUAL_FORMS],
+      ])} — удалить нельзя`,
+    };
+  }
+
+  try {
+    await prisma.counterparty.delete({ where: { id: counterpartyId } });
+  } catch (error) {
+    if (isForeignKeyError(error)) return { error: LINKED_ERROR };
+    throw error;
+  }
   await recordAudit(ctx, {
     projectId,
     entityType: AuditEntityType.counterparty,
@@ -243,6 +299,7 @@ export async function deleteCounterpartyAction(
     summary: `Удалён контрагент ${existing.name}`,
   });
   revalidateCounterparties(projectId);
+  return {};
 }
 
 /** Quick-create from finance forms — returns id/name for picker. */

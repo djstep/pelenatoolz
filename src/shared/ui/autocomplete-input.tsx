@@ -1,14 +1,9 @@
 "use client";
 
-import {
-  useEffect,
-  useId,
-  useRef,
-  useState,
-  type KeyboardEvent,
-} from "react";
+import { useId, useRef, useState, type KeyboardEvent } from "react";
 import { cn } from "@/shared/lib/cn";
 import { PortaledMenu } from "@/shared/ui/portaled-menu";
+import { useOnChange } from "@/shared/hooks/use-on-change";
 
 export type AutocompleteOption = {
   value: string;
@@ -66,11 +61,11 @@ export function AutocompleteInput({
     ? displayValue(currentQuery)
     : currentQuery;
 
-  useEffect(() => {
+  useOnChange([isControlled, value], () => {
     if (isControlled) {
       setSubmittedValue(value ?? "");
     }
-  }, [isControlled, value]);
+  });
 
   function updateValue(next: string) {
     setSubmittedValue(next);

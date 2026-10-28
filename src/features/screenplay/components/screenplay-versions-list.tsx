@@ -9,12 +9,13 @@ import {
   setScriptVersionCurrentAction,
   setScriptVersionLockedAction,
 } from "@/features/screenplay/actions";
-import { confirmMakeCurrent } from "@/features/screenplay/lib/confirm-make-current";
+import { makeCurrentConfirm } from "@/features/screenplay/lib/confirm-make-current";
 import type { ScriptVersionOverviewRow } from "@/features/screenplay/lib/version-types";
 import { ScriptVersionTitleEditor } from "@/features/screenplay/components/script-version-title-editor";
 import { ScriptVersionNoteEditor } from "@/features/screenplay/components/script-version-note-editor";
 import { ScriptVersionActions, type ScriptVersionActionItem } from "@/features/screenplay/components/script-version-actions";
 import { Button } from "@/shared/ui/button";
+import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
 import { cn } from "@/shared/lib/cn";
 import { useToast } from "@/shared/ui/toast";
 
@@ -40,6 +41,7 @@ export function ScreenplayVersionsList({
 }: Props) {
   const router = useRouter();
   const toast = useToast();
+  const confirmDelete = useConfirm();
   const base = `/${locale}/projects/${projectId}/screenplay`;
   const [selected, setSelected] = useState<string[]>([]);
   const [pending, startTransition] = useTransition();
@@ -63,23 +65,22 @@ export function ScreenplayVersionsList({
   }
 
   function removeVersion(version: ScriptVersionOverviewRow) {
-    const label = version.title?.trim() || `версию ${version.versionNumber}`;
-    if (
-      !window.confirm(
-        `Удалить «${label}»? Текст этой версии будет удалён безвозвратно.`,
-      )
-    ) {
-      return;
-    }
-    runAction(async () => {
-      const result = await deleteScriptVersionAction(projectId, version.id);
-      if (result.error) {
-        toast.error(result.error);
-        return;
-      }
-      toast.success(result.success ?? "Версия удалена");
-      setSelected((prev) => prev.filter((id) => id !== version.id));
-      router.refresh();
+    const title = version.title?.trim();
+    void confirmDelete({
+      title: title
+        ? `Удалить версию ${version.versionNumber} „${title}“?`
+        : `Удалить версию ${version.versionNumber}?`,
+      details: [
+        "Текст и комментарии версии удалятся.",
+        ...(version.isCurrent ? ["Текущей станет другая версия."] : []),
+      ],
+      action: async () => {
+        const result = await deleteScriptVersionAction(projectId, version.id);
+        if (result.error) return result.error;
+        toast.success(result.success ?? "Версия удалена");
+        setSelected((prev) => prev.filter((id) => id !== version.id));
+        router.refresh();
+      },
     });
   }
 
@@ -114,16 +115,14 @@ export function ScreenplayVersionsList({
   }
 
   function makeCurrent(version: ScriptVersionOverviewRow) {
-    if (!confirmMakeCurrent(version)) return;
-    runAction(async () => {
-      const result = await setScriptVersionCurrentAction(projectId, version.id);
-      if (result.error) {
-        toast.error(result.error);
-        return;
-      }
-      toast.success(result.success ?? "Версия отмечена как текущая");
-      router.refresh();
-    });
+    void confirmDelete(
+      makeCurrentConfirm(version, async () => {
+        const result = await setScriptVersionCurrentAction(projectId, version.id);
+        if (result.error) return result.error;
+        toast.success(result.success ?? "Версия отмечена как текущая");
+        router.refresh();
+      }),
+    );
   }
 
   function buildActions(version: ScriptVersionOverviewRow): ScriptVersionActionItem[] {

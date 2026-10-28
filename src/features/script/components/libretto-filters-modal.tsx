@@ -1,6 +1,6 @@
 "use client";
 
-import { DayNight, SceneKind, SceneStatus } from "@prisma/client";
+import { SceneKind, SceneStatus } from "@prisma/client";
 import {
   emptyFilters,
   type LibrettoFilters,

@@ -42,7 +42,7 @@ export function ProjectSettingsForm({ project }: { project: Project }) {
   const [state, action, pending] = useActionState(bound, initial);
   useActionToast(state);
   // Предупреждение о несохранённых изменениях при уходе со страницы.
-  const { ref: formRef, markClean } = useFormGuard();
+  const { ref: formRef, markClean } = useFormGuard(true, undefined, state);
   useActionSuccess(state, markClean);
   const [projectType, setProjectType] = useState(project.type);
   const [timingMode, setTimingMode] = useState(project.timingMode);

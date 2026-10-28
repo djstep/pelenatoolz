@@ -15,6 +15,7 @@ import type {
 } from "@/features/smeta/queries";
 import { formatDateShort } from "@/shared/i18n/format-date";
 import { Button } from "@/shared/ui/button";
+import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Modal } from "@/shared/ui/modal";
@@ -33,6 +34,7 @@ export function SmetaTemplatesWorkspace({
   canWrite: boolean;
 }) {
   const toast = useToast();
+  const confirmDelete = useConfirm();
   const router = useRouter();
   const params = useParams();
   const locale = String(params.locale ?? "ru");
@@ -198,26 +200,17 @@ export function SmetaTemplatesWorkspace({
                           type="button"
                           variant="danger"
                           disabled={pending}
-                          onClick={() => {
-                            if (
-                              !window.confirm(
-                                `Удалить шаблон «${t.name}»?`,
-                              )
-                            ) {
-                              return;
-                            }
-                            start(async () => {
-                              const res = await deleteBudgetTemplateAction(
-                                projectId,
-                                t.id,
-                              );
-                              if (res.error) toast.error(res.error);
-                              else {
+                          onClick={() =>
+                            void confirmDelete({
+                              title: `Удалить шаблон „${t.name}“?`,
+                              action: async () => {
+                                const res = await deleteBudgetTemplateAction(projectId, t.id);
+                                if (res.error) return res.error;
                                 toast.success(res.success ?? "Удалено");
-                                router.refresh();
-                              }
-                            });
-                          }}
+                                start(() => router.refresh());
+                              },
+                            })
+                          }
                         >
                           Удалить
                         </Button>

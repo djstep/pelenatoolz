@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import type { ProjectType } from "@prisma/client";
 import { manualRenumberScenesAction } from "@/features/script/actions";
 import type { LibrettoScene } from "@/features/script/lib/libretto-display";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Modal } from "@/shared/ui/modal";
+import { useOnChange } from "@/shared/hooks/use-on-change";
 
 type Row = {
   id: string;
@@ -40,7 +41,7 @@ export function LibrettoRenumberModal({
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  useOnChange([open, scenes, episodes], () => {
     if (!open) return;
     setRows(
       scenes.map((s) => ({
@@ -56,7 +57,7 @@ export function LibrettoRenumberModal({
       })),
     );
     setActiveEp(episodes[0] ?? 0);
-  }, [open, scenes, episodes]);
+  });
 
   const visible = rows.filter((r) => r.episodeNumber === activeEp);
 

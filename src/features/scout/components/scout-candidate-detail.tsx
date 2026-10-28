@@ -18,6 +18,7 @@ import { scoutStatusOptions } from "@/features/preproduction/lib/status-labels";
 import { StatusSelect } from "@/features/preproduction/components/status-select";
 import { useActionToast, useToast } from "@/shared/ui/toast";
 import { Button } from "@/shared/ui/button";
+import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
 import { Modal } from "@/shared/ui/modal";
 import { useActionSuccess } from "@/shared/ui/unsaved/use-action-success";
 
@@ -49,6 +50,7 @@ export function ScoutCandidateDetail({
   const [editOpen, setEditOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const toast = useToast();
+  const confirmDelete = useConfirm();
   const isEditable = canWrite && candidate.status !== "APPROVED";
 
   const bound = updateScoutCandidateAction.bind(null, projectId, candidate.id);
@@ -184,18 +186,23 @@ export function ScoutCandidateDetail({
       </div>
 
       {canWrite && candidate.status !== "APPROVED" ? (
-        <form
-          action={async () => {
-            if (!confirm(`Удалить «${candidate.title}»?`)) return;
-            const r = await deleteScoutCandidateAction(projectId, candidate.id);
-            if (r.error) toast.error(r.error);
-            if (r.success) toast.success(r.success);
-          }}
+        <Button
+          type="button"
+          variant="danger"
+          onClick={() =>
+            void confirmDelete({
+              title: `Удалить кандидата „${candidate.title}“?`,
+              details: ["Связи с локациями удалятся."],
+              action: async () => {
+                const r = await deleteScoutCandidateAction(projectId, candidate.id);
+                if (r.error) return r.error;
+                if (r.success) toast.success(r.success);
+              },
+            })
+          }
         >
-          <Button type="submit" variant="danger">
-            Удалить кандидата
-          </Button>
-        </form>
+          Удалить кандидата
+        </Button>
       ) : null}
 
       <Modal

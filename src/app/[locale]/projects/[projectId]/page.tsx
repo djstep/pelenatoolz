@@ -1,5 +1,10 @@
 import Link from "next/link";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
+import {
+  filterNavGroups,
+  navAccessFromContext,
+  projectNavGroups,
+} from "@/features/projects/lib/project-nav-groups";
 import { getScheduleStats } from "@/features/schedule/queries";
 import { getScriptStats } from "@/features/script/queries";
 import { Card } from "@/shared/ui/card";
@@ -17,7 +22,11 @@ export default async function ProjectOverviewPage({ params }: Props) {
     getScheduleStats(projectId),
   ]);
 
-  const canSettings = ctx.can("project:write") || ctx.can("project:archive");
+  // Кнопки разделов — по тем же условиям, что и пункты меню.
+  const nav = filterNavGroups(projectNavGroups, navAccessFromContext(ctx));
+  const navHrefs = new Set(nav.flatMap((group) => group.items.map((item) => item.href)));
+  const canOpen = (href: string) => navHrefs.has(href);
+  const canOpenPost = nav.some((group) => group.id === "post");
 
   return (
     <div className="space-y-6">
@@ -30,7 +39,7 @@ export default async function ProjectOverviewPage({ params }: Props) {
               .join(" · ")}
           </p>
         </div>
-        {canSettings ? (
+        {canOpen("/settings") ? (
           <Link href={`/${locale}/projects/${projectId}/settings`}>
             <Button variant="secondary">Настройки проекта</Button>
           </Link>
@@ -54,11 +63,13 @@ export default async function ProjectOverviewPage({ params }: Props) {
               <dd className="font-medium">{script.characters}</dd>
             </div>
           </dl>
-          <div className="mt-4">
-            <Link href={`/${locale}/projects/${projectId}/libretto`}>
-              <Button variant="secondary">Открыть либретто</Button>
-            </Link>
-          </div>
+          {canOpen("/libretto") ? (
+            <div className="mt-4">
+              <Link href={`/${locale}/projects/${projectId}/libretto`}>
+                <Button variant="secondary">Открыть либретто</Button>
+              </Link>
+            </div>
+          ) : null}
         </Card>
 
         <Card>
@@ -75,11 +86,13 @@ export default async function ProjectOverviewPage({ params }: Props) {
               </dd>
             </div>
           </dl>
-          <div className="mt-4">
-            <Link href={`/${locale}/projects/${projectId}/schedule`}>
-              <Button variant="secondary">Открыть КПП</Button>
-            </Link>
-          </div>
+          {canOpen("/schedule") ? (
+            <div className="mt-4">
+              <Link href={`/${locale}/projects/${projectId}/schedule`}>
+                <Button variant="secondary">Открыть КПП</Button>
+              </Link>
+            </div>
+          ) : null}
         </Card>
 
         <Card>
@@ -87,11 +100,13 @@ export default async function ProjectOverviewPage({ params }: Props) {
           <p className="mt-2 text-sm text-[var(--muted-fg)]">
             Приглашения, роли и доступ участников проекта.
           </p>
-          <div className="mt-4">
-            <Link href={`/${locale}/projects/${projectId}/members`}>
-              <Button variant="secondary">Участники</Button>
-            </Link>
-          </div>
+          {canOpen("/members") ? (
+            <div className="mt-4">
+              <Link href={`/${locale}/projects/${projectId}/members`}>
+                <Button variant="secondary">Участники</Button>
+              </Link>
+            </div>
+          ) : null}
         </Card>
 
         <Card>
@@ -101,15 +116,21 @@ export default async function ProjectOverviewPage({ params }: Props) {
             съёмочному дню.
           </p>
           <div className="mt-4 flex flex-wrap gap-2">
-            <Link href={`/${locale}/projects/${projectId}/call-sheets`}>
-              <Button variant="secondary">Вызывные</Button>
-            </Link>
-            <Link href={`/${locale}/projects/${projectId}/reports`}>
-              <Button variant="secondary">Отчёты</Button>
-            </Link>
-            <Link href={`/${locale}/projects/${projectId}/smeta`}>
-              <Button variant="secondary">Смета</Button>
-            </Link>
+            {canOpen("/call-sheets") ? (
+              <Link href={`/${locale}/projects/${projectId}/call-sheets`}>
+                <Button variant="secondary">Вызывные</Button>
+              </Link>
+            ) : null}
+            {canOpen("/reports") ? (
+              <Link href={`/${locale}/projects/${projectId}/reports`}>
+                <Button variant="secondary">Отчёты</Button>
+              </Link>
+            ) : null}
+            {canOpen("/smeta") ? (
+              <Link href={`/${locale}/projects/${projectId}/smeta`}>
+                <Button variant="secondary">Смета</Button>
+              </Link>
+            ) : null}
           </div>
         </Card>
 
@@ -119,12 +140,16 @@ export default async function ProjectOverviewPage({ params }: Props) {
             Движение денег по проекту и пайплайн постпродакшна.
           </p>
           <div className="mt-4 flex flex-wrap gap-2">
-            <Link href={`/${locale}/projects/${projectId}/finance`}>
-              <Button variant="secondary">Финансы</Button>
-            </Link>
-            <Link href={`/${locale}/projects/${projectId}/post`}>
-              <Button variant="secondary">Постпродакшн</Button>
-            </Link>
+            {canOpen("/finance") ? (
+              <Link href={`/${locale}/projects/${projectId}/finance`}>
+                <Button variant="secondary">Финансы</Button>
+              </Link>
+            ) : null}
+            {canOpenPost ? (
+              <Link href={`/${locale}/projects/${projectId}/post`}>
+                <Button variant="secondary">Постпродакшн</Button>
+              </Link>
+            ) : null}
           </div>
         </Card>
       </div>

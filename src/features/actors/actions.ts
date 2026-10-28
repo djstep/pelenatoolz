@@ -108,81 +108,6 @@ function actorFormData(formData: FormData) {
   };
 }
 
-export async function createActorAction(
-  projectId: string,
-  _prev: ActorActionState,
-  formData: FormData,
-): Promise<ActorActionState> {
-  const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("cast:write")) {
-    return { error: "Недостаточно прав" };
-  }
-
-  const parsed = actorSchema.safeParse(actorFormData(formData));
-  if (!parsed.success) {
-    return { error: "Проверьте данные актёра" };
-  }
-
-  if (parsed.data.characterId) {
-    try {
-      await assertInProject("Character", parsed.data.characterId, projectId);
-    } catch (error) {
-      if (isNotInProjectError(error)) return { error: "Объект не найден" };
-      throw error;
-    }
-  }
-
-  const canFin = ctx.canFinanceWrite("actors");
-  const {
-    shiftRate,
-    shiftHoursMin,
-    unpaidOvertimeMin,
-    taxPercent,
-    pickupOffsetMin,
-    overtimeMode,
-    unpaidOvertimeMode,
-    ...profile
-  } = parsed.data;
-
-  const overtime = canFin
-    ? parseOvertimeRows(formData, shiftRate ?? 0, taxPercent ?? 0)
-    : [];
-  const extras = canFin
-    ? parseExtraPayments(formData, taxPercent ?? 0)
-    : [];
-
-  const actor = await prisma.actor.create({
-    data: {
-      projectId,
-      ...profile,
-      ...(canFin
-        ? {
-            shiftRate,
-            shiftHoursMin,
-            unpaidOvertimeMin,
-            taxPercent,
-            pickupOffsetMin,
-            overtimeMode,
-            unpaidOvertimeMode,
-            overtimeRates: overtime.length ? { create: overtime } : undefined,
-            extraPayments: extras.length ? { create: extras } : undefined,
-          }
-        : {}),
-    },
-  });
-
-  await recordAudit(ctx, {
-    projectId,
-    entityType: AuditEntityType.actor,
-    entityId: actor.id,
-    action: "CREATE",
-    summary: `Добавлен актёр ${parsed.data.lastName}`,
-  });
-
-  revalidateActors(projectId, parsed.data.characterId);
-  return { success: "Актёр добавлен" };
-}
-
 export async function updateActorAction(
   projectId: string,
   actorId: string,
@@ -268,21 +193,4 @@ export async function updateActorAction(
 
   revalidateActors(projectId, existing.characterId ?? undefined);
   return { success: "Актёр сохранён" };
-}
-
-export async function deleteActorAction(projectId: string, actorId: string) {
-  const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("cast:write")) {
-    throw new Error("FORBIDDEN");
-  }
-
-  await prisma.actor.deleteMany({ where: { id: actorId, projectId } });
-  await recordAudit(ctx, {
-    projectId,
-    entityType: AuditEntityType.actor,
-    entityId: actorId,
-    action: "DELETE",
-    summary: "Удалён актёр",
-  });
-  revalidateActors(projectId);
 }

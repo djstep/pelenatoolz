@@ -13,6 +13,7 @@ import { isWorkingShootDay } from "@/features/schedule/lib/shoot-day-type";
 import { formatDateLong } from "@/shared/i18n/format-date";
 import { shootDayTypeLabels } from "@/shared/i18n/domain-labels";
 import { Button } from "@/shared/ui/button";
+import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
 import { Input } from "@/shared/ui/input";
 import { useUnsavedChanges } from "@/shared/ui/unsaved/unsaved-changes-provider";
 import { cn } from "@/shared/lib/cn";
@@ -132,6 +133,7 @@ export function DayContextMenu({
   const [comment, setComment] = useState(day.comment ?? "");
   const [prepNote, setPrepNote] = useState(day.prepNote ?? "");
   const [busy, setBusy] = useState(false);
+  const confirmAction = useConfirm();
   const unsaved = useUnsavedChanges();
 
   // Несохранённые изменения — открытая форма комментария или заметки отличается от исходной.
@@ -268,16 +270,14 @@ export function DayContextMenu({
             <MenuItem
               icon="⊘"
               disabled={busy}
-              onClick={() => {
-                if (
-                  !confirm(
-                    "Очистить день? Сцены вернутся в неспланированные.",
-                  )
-                ) {
-                  return;
-                }
-                void run(() => clearShootDayAction(projectId, day.id));
-              }}
+              onClick={() =>
+                void confirmAction({
+                  title: `Очистить день ${day.dayNumber} (${formatDateLong(day.date)})?`,
+                  details: ["Сцены дня вернутся в неспланированные."],
+                  confirmLabel: "Очистить",
+                  action: () => run(() => clearShootDayAction(projectId, day.id)),
+                })
+              }
             >
               Очистить день
             </MenuItem>
@@ -285,16 +285,16 @@ export function DayContextMenu({
               icon="✕"
               danger
               disabled={busy}
-              onClick={() => {
-                if (
-                  !confirm(
-                    "Удалить день со сдвигом? Сцены дня станут неспланированными, номера дней сдвинутся.",
-                  )
-                ) {
-                  return;
-                }
-                void run(() => deleteShootDayWithShiftAction(projectId, day.id));
-              }}
+              onClick={() =>
+                void confirmAction({
+                  title: `Удалить день ${day.dayNumber} (${formatDateLong(day.date)}) со сдвигом?`,
+                  details: [
+                    "Сцены дня станут неспланированными.",
+                    "Номера следующих дней сдвинутся.",
+                  ],
+                  action: () => run(() => deleteShootDayWithShiftAction(projectId, day.id)),
+                })
+              }
             >
               Удалить день со сдвигом
             </MenuItem>

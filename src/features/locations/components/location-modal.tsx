@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useState } from "react";
 import { LocationKind } from "@prisma/client";
 import {
   createLocationAction,
@@ -14,7 +14,7 @@ import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Modal } from "@/shared/ui/modal";
 import { useActionSuccess } from "@/shared/ui/unsaved/use-action-success";
-import { Select } from "@/shared/ui/select";
+import { useOnChange } from "@/shared/hooks/use-on-change";
 
 const initial: LocationActionState = {};
 
@@ -45,9 +45,9 @@ export function LocationModal({
 
   useActionSuccess(state, onClose);
 
-  useEffect(() => {
+  useOnChange([open, location], () => {
     if (open) setAddress(location?.address ?? "");
-  }, [open, location]);
+  });
 
   return (
     <Modal

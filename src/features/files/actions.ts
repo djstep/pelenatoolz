@@ -5,7 +5,10 @@ import {
   deleteProjectObject,
 } from "@/features/files/lib/storage";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
+import { AuditEntityType } from "@/shared/audit/entity-types";
+import { recordAudit } from "@/shared/audit/with-audit";
 import { prisma } from "@/shared/db/prisma";
+import { countOf } from "@/shared/lib/plural";
 
 export async function deleteProjectUploadedFileAction(
   projectId: string,
@@ -27,8 +30,7 @@ export async function deleteProjectUploadedFileAction(
   });
   if (linked > 0) {
     return {
-      error:
-        "Файл используется в пробах. Сначала отвяжите видео от проб или удалите пробы.",
+      error: `Файл привязан к ${countOf(linked, ["пробе", "пробам", "пробам"])} — удалить нельзя. Сначала отвяжите видео от проб или удалите пробы.`,
     };
   }
 
@@ -36,6 +38,13 @@ export async function deleteProjectUploadedFileAction(
   if (file.storageKey && file.storageKey !== "pending") {
     await deleteProjectObject(file.storageKey);
   }
+  await recordAudit(ctx, {
+    projectId,
+    entityType: AuditEntityType.projectFile,
+    entityId: fileId,
+    action: "DELETE",
+    summary: `Удалён файл «${file.originalName}»`,
+  });
 
   revalidatePath(`/ru/projects/${projectId}/files`);
   return { success: "Файл удалён" };

@@ -18,6 +18,7 @@ import { useTableLayout } from "@/shared/hooks/use-table-layout";
 import { formatDateShort } from "@/shared/i18n/format-date";
 import { Badge, statusBadgeStyle } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
+import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
 import { Input } from "@/shared/ui/input";
 import { toast } from "@/shared/ui/toast";
 import { cn } from "@/shared/lib/cn";
@@ -134,6 +135,7 @@ export function CertificatesWorkspace({
 
   const router = useRouter();
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const confirmDelete = useConfirm();
   const [search, setSearch] = useState("");
   const [statusIds, setStatusIds] = useState<Set<string>>(new Set());
   const [counterpartyId, setCounterpartyId] = useState(
@@ -247,18 +249,21 @@ export function CertificatesWorkspace({
   }
 
   function removeCertificate(row: CertificateListItem) {
-    if (!confirm(`Удалить акт № ${row.number}?`)) return;
-    setDeletingId(row.id);
-    void deleteCertificateAction(projectId, row.id)
-      .then((res) => {
-        if (res.error) {
-          toast.error(res.error);
-          return;
+    void confirmDelete({
+      title: `Удалить акт № ${row.number}?`,
+      details: ["Файлы акта удалятся."],
+      action: async () => {
+        setDeletingId(row.id);
+        try {
+          const res = await deleteCertificateAction(projectId, row.id);
+          if (res.error) return res.error;
+          toast.success(res.success ?? "Акт удалён");
+          router.refresh();
+        } finally {
+          setDeletingId(null);
         }
-        toast.success(res.success ?? "Акт удалён");
-        router.refresh();
-      })
-      .finally(() => setDeletingId(null));
+      },
+    });
   }
 
   function openCopy(row: CertificateListItem) {

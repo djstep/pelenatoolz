@@ -11,7 +11,6 @@ import {
   type ScheduleExportField,
 } from "@/features/auditions/lib/export-schedule";
 import {
-  listAuditionScheduleBreaks,
   listAuditionSchedules,
 } from "@/features/auditions/lib/schedule-queries";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
@@ -44,16 +43,15 @@ export async function exportAuditionScheduleAction(
     to = from;
   }
 
-  const [schedules, breaks, project] = await Promise.all([
+  const [schedules, project] = await Promise.all([
     listAuditionSchedules(projectId, { from, to }),
-    listAuditionScheduleBreaks(projectId, { from, to }),
     prisma.project.findUnique({
       where: { id: projectId },
       select: { name: true, fullName: true },
     }),
   ]);
 
-  if (schedules.length === 0 && breaks.length === 0) {
+  if (schedules.length === 0) {
     return { error: "Нет запланированных проб для экспорта" };
   }
 
@@ -71,7 +69,7 @@ export async function exportAuditionScheduleAction(
         ] as ScheduleExportField[]);
 
   if (payload.format === "docx") {
-    const buf = await buildScheduleDocx(projectName, schedules, fields, breaks);
+    const buf = await buildScheduleDocx(projectName, schedules, fields);
     return {
       base64: buf.toString("base64"),
       fileName: `audition-schedule.docx`,
@@ -80,7 +78,7 @@ export async function exportAuditionScheduleAction(
   }
 
   return {
-    html: buildSchedulePrintHtml(projectName, schedules, fields, breaks),
+    html: buildSchedulePrintHtml(projectName, schedules, fields),
     fileName: `audition-schedule.html`,
   };
 }

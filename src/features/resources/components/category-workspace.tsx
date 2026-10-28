@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import type { ProjectType } from "@prisma/client";
 import {
-  resourceCategoryPath,
   resourceItemPath,
   resourcesBasePath,
 } from "@/features/resources/lib/paths";
@@ -16,6 +15,7 @@ import { dec } from "@/shared/db/serialize-decimal";
 import { formatSecondsMmSs } from "@/shared/i18n/domain-labels";
 import { useToast } from "@/shared/ui/toast";
 import { Button } from "@/shared/ui/button";
+import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
 import { Input } from "@/shared/ui/input";
 
 type ItemRow = ResourceCategoryDetail["items"][number];
@@ -100,6 +100,7 @@ export function CategoryWorkspace({
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<ItemRow | null>(null);
   const toast = useToast();
+  const confirmDelete = useConfirm();
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -207,23 +208,23 @@ export function CategoryWorkspace({
                           <Button
                             type="button"
                             variant="danger"
-                            onClick={async () => {
-                              if (!confirm(`Удалить «${item.name}»?`)) return;
-                              try {
-                                await deleteResourceItemAction(
-                                  projectId,
-                                  category.id,
-                                  item.id,
-                                );
-                                toast.success("Элемент удалён");
-                              } catch (e) {
-                                const msg =
-                                  e instanceof Error && e.message === "ITEM_IN_SCENES"
-                                    ? "Элемент используется в сценах — сначала уберите из сцен"
-                                    : "Не удалось удалить";
-                                toast.error(msg);
-                              }
-                            }}
+                            onClick={() =>
+                              void confirmDelete({
+                                title: `Удалить „${item.name}“?`,
+                                details: [
+                                  "Ставки переработок, доп. выплаты и использование по дням удалятся.",
+                                ],
+                                action: async () => {
+                                  const { error } = await deleteResourceItemAction(
+                                    projectId,
+                                    category.id,
+                                    item.id,
+                                  );
+                                  if (error) return error;
+                                  toast.success("Элемент удалён");
+                                },
+                              })
+                            }
                           >
                             ×
                           </Button>

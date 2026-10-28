@@ -18,6 +18,7 @@ import {
 } from "@/features/contracts/lib/vat";
 import {
   EntityPicker,
+  mergePickerOptions,
   type PickerOption,
 } from "@/features/counterparties/components/entity-picker";
 import {
@@ -124,22 +125,40 @@ export function ContractFormModal({
       : "",
   );
 
-  useEffect(() => {
-    if (!open) return;
-    setCompanyId(defaults?.companyId ?? "");
-    setCounterpartyId(defaults?.counterpartyId ?? "");
-    setLedgerTypeId(defaults?.ledgerTypeId ?? "");
-    setStatusId(defaults?.statusId ?? defaultStatusId);
-    setAmount(String(defaults?.amount ?? ""));
-    setVatEnabled(defaults?.vatEnabled ?? true);
-    setVatRate(vatRateChoice(defaults?.vatRate));
-    setVatCustom(vatRateCustom(defaults?.vatRate));
-    setVatManual("");
-    setCompanyOptions(companies);
-    setCpOptions(counterparties);
-    setLedgerTypes(initialLedgerTypes);
-    setStatuses(initialStatuses);
-  }, [open, defaults, defaultStatusId, companies, counterparties, initialLedgerTypes, initialStatuses]);
+  // Поля сбрасываются только при открытии окна. Новые списки с сервера (после быстрого
+  // добавления компании, контрагента, типа или статуса) дополняют варианты, выбранное остаётся.
+  const [wasOpen, setWasOpen] = useState(open);
+  const [lists, setLists] = useState({ companies, counterparties, initialLedgerTypes, initialStatuses });
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (open) {
+      setCompanyId(defaults?.companyId ?? "");
+      setCounterpartyId(defaults?.counterpartyId ?? "");
+      setLedgerTypeId(defaults?.ledgerTypeId ?? "");
+      setStatusId(defaults?.statusId ?? defaultStatusId);
+      setAmount(String(defaults?.amount ?? ""));
+      setVatEnabled(defaults?.vatEnabled ?? true);
+      setVatRate(vatRateChoice(defaults?.vatRate));
+      setVatCustom(vatRateCustom(defaults?.vatRate));
+      setVatManual("");
+      setCompanyOptions(companies);
+      setCpOptions(counterparties);
+      setLedgerTypes(initialLedgerTypes);
+      setStatuses(initialStatuses);
+    }
+  }
+  if (
+    lists.companies !== companies ||
+    lists.counterparties !== counterparties ||
+    lists.initialLedgerTypes !== initialLedgerTypes ||
+    lists.initialStatuses !== initialStatuses
+  ) {
+    setLists({ companies, counterparties, initialLedgerTypes, initialStatuses });
+    setCompanyOptions((prev) => mergePickerOptions(companies, prev));
+    setCpOptions((prev) => mergePickerOptions(counterparties, prev));
+    setLedgerTypes((prev) => mergePickerOptions(initialLedgerTypes, prev));
+    setStatuses((prev) => mergePickerOptions(initialStatuses, prev));
+  }
 
   // Каждый ответ сервера обрабатываем один раз: иначе «успех» остаётся в состоянии,
   // а onClose (новая функция при каждой отрисовке у родителя) закрывает окно и обновляет

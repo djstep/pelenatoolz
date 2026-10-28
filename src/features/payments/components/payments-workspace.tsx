@@ -13,6 +13,7 @@ import { computeTaxAmounts, roundMoney } from "@/features/payments/lib/calc";
 import type { CashPaymentListRow } from "@/features/payments/queries";
 import { formatDateShort } from "@/shared/i18n/format-date";
 import { Button } from "@/shared/ui/button";
+import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Modal } from "@/shared/ui/modal";
@@ -424,6 +425,7 @@ export function PaymentsWorkspace({
   canUnlock: boolean;
 }) {
   const toast = useToast();
+  const confirmDelete = useConfirm();
   const [pending, start] = useTransition();
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<CashPaymentListRow | null>(null);
@@ -652,22 +654,21 @@ export function PaymentsWorkspace({
                             >
                               Зафиксировать
                             </Button>
-                            <form
-                              action={async () => {
-                                try {
-                                  await deleteCashPaymentAction(
-                                    projectId,
-                                    p.id,
-                                  );
-                                } catch {
-                                  toast.error("Не удалось удалить");
-                                }
-                              }}
+                            <Button
+                              type="button"
+                              variant="danger"
+                              aria-label="Удалить платёж"
+                              onClick={() =>
+                                void confirmDelete({
+                                  title: `Удалить платёж от ${formatDateShort(p.date)} — „${p.counterparty.name}“, ${money(Number(p.amountWithTax), currency)}?`,
+                                  details: ["Разбивка платежа удалится, привязанный акт отвяжется."],
+                                  action: async () =>
+                                    (await deleteCashPaymentAction(projectId, p.id)).error,
+                                })
+                              }
                             >
-                              <Button type="submit" variant="danger">
-                                ×
-                              </Button>
-                            </form>
+                              ×
+                            </Button>
                           </>
                         ) : null}
                         {p.isLocked && canUnlock ? (

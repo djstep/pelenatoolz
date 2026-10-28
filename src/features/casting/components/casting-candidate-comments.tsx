@@ -7,6 +7,7 @@ import {
 } from "@/features/casting/actions-cast-list-export";
 import { formatDateShort } from "@/shared/i18n/format-date";
 import { Button } from "@/shared/ui/button";
+import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
 import { useToast } from "@/shared/ui/toast";
 
 export type CandidateCommentView = {
@@ -29,6 +30,7 @@ export function CastingCandidateComments({
   canWrite: boolean;
 }) {
   const toast = useToast();
+  const confirmDelete = useConfirm();
   const [pending, start] = useTransition();
   const [text, setText] = useState("");
 
@@ -70,14 +72,18 @@ export function CastingCandidateComments({
                     type="button"
                     className="text-[var(--muted-fg)] hover:text-[var(--danger)]"
                     disabled={pending}
+                    aria-label="Удалить комментарий"
                     onClick={() =>
-                      start(async () => {
-                        const r = await deleteCastingCandidateCommentAction(
-                          projectId,
-                          cm.id,
-                        );
-                        if (r.error) toast.error(r.error);
-                        else toast.success(r.success ?? "Удалено");
+                      void confirmDelete({
+                        title: "Удалить комментарий?",
+                        action: async () => {
+                          const r = await deleteCastingCandidateCommentAction(
+                            projectId,
+                            cm.id,
+                          );
+                          if (r.error) return r.error;
+                          toast.success(r.success ?? "Удалено");
+                        },
                       })
                     }
                   >

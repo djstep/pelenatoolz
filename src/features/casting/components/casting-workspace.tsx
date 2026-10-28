@@ -4,9 +4,7 @@ import { useActionState, useState, useTransition } from "react";
 import type { CastingCandidateStatus } from "@prisma/client";
 import Link from "next/link";
 import {
-  addCastingApplicationAction,
   createCastingPersonAction,
-  deleteCastingPersonAction,
   updateCastingCandidateStatusAction,
   updateCastingPersonAction,
   type CastingActionState,

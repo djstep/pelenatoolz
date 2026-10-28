@@ -3,7 +3,10 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import type { ProjectType } from "@prisma/client";
-import { deleteCharacterAction } from "@/features/characters/actions";
+import {
+  deleteCharacterAction,
+  getCharacterDeleteImpactAction,
+} from "@/features/characters/actions";
 import { CharacterModal } from "@/features/characters/components/character-modal";
 import { CharactersFiltersModal } from "@/features/characters/components/characters-filters-modal";
 import {
@@ -25,6 +28,7 @@ import { formatSecondsMmSs } from "@/shared/i18n/domain-labels";
 import { useTableLayout } from "@/shared/hooks/use-table-layout";
 import { useToast } from "@/shared/ui/toast";
 import { Button } from "@/shared/ui/button";
+import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
 import { Input } from "@/shared/ui/input";
 
 const CAST_STATUS_LABELS = {
@@ -74,6 +78,7 @@ export function CharactersWorkspace({
   canWrite: boolean;
 }) {
   const toast = useToast();
+  const confirmDelete = useConfirm();
   const {
     visibleIds,
     setVisibleIds,
@@ -318,15 +323,16 @@ export function CharactersWorkspace({
                         <Button
                           type="button"
                           variant="danger"
-                          onClick={async () => {
-                            if (!confirm(`Удалить персонажа «${row.name}»?`)) return;
-                            try {
-                              await deleteCharacterAction(projectId, row.id);
-                              toast.success("Персонаж удалён");
-                            } catch {
-                              toast.error("Не удалось удалить персонажа");
-                            }
-                          }}
+                          onClick={() =>
+                            void confirmDelete({
+                              title: `Удалить персонажа „${row.name}“?`,
+                              details: () => getCharacterDeleteImpactAction(projectId, row.id),
+                              action: async () => {
+                                await deleteCharacterAction(projectId, row.id);
+                                toast.success("Персонаж удалён");
+                              },
+                            })
+                          }
                         >
                           ×
                         </Button>

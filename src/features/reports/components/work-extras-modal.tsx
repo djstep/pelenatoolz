@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { saveProductionWorkExtrasAction } from "@/features/reports/actions";
 import {
@@ -14,6 +14,7 @@ import { Input } from "@/shared/ui/input";
 import { Modal } from "@/shared/ui/modal";
 import { useToast } from "@/shared/ui/toast";
 import { cn } from "@/shared/lib/cn";
+import { useOnChange } from "@/shared/hooks/use-on-change";
 
 type ExtraDraft = {
   amount: string;
@@ -60,7 +61,7 @@ export function WorkExtrasModal({
   const [inputMode, setInputMode] = useState<"base" | "gross">("base");
   const [drafts, setDrafts] = useState<ExtraDraft[]>([emptyDraft()]);
 
-  useEffect(() => {
+  useOnChange([open, extras], () => {
     if (!open) return;
     setDrafts(
       extras.length > 0
@@ -74,7 +75,7 @@ export function WorkExtrasModal({
           }))
         : [emptyDraft()],
     );
-  }, [open, extras]);
+  });
 
   function save() {
     if (!canEdit) return;

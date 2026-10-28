@@ -4,6 +4,7 @@ import { useActionState, useState } from "react";
 import {
   createRoleAction,
   deleteRoleAction,
+  getRoleDeleteImpactAction,
   updateRoleAction,
   type RoleActionState,
 } from "@/features/roles/actions";
@@ -16,6 +17,7 @@ import {
   type PermissionMatrix,
 } from "@/features/roles/permissions-matrix";
 import { Button } from "@/shared/ui/button";
+import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Modal } from "@/shared/ui/modal";
@@ -127,6 +129,7 @@ export function RolesManager({
 }) {
   const [editing, setEditing] = useState<RoleRow | null>(null);
   const [creating, setCreating] = useState(false);
+  const confirmDelete = useConfirm();
 
   return (
     <div className="space-y-4">
@@ -167,15 +170,20 @@ export function RolesManager({
                         Изменить
                       </Button>
                       {!role.isSystem ? (
-                        <form
-                          action={async () => {
-                            await deleteRoleAction(projectId, role.id);
-                          }}
+                        <Button
+                          type="button"
+                          variant="danger"
+                          onClick={() =>
+                            void confirmDelete({
+                              title: `Удалить роль „${role.name}“?`,
+                              details: () => getRoleDeleteImpactAction(projectId, role.id),
+                              action: async () =>
+                                (await deleteRoleAction(projectId, role.id)).error,
+                            })
+                          }
                         >
-                          <Button type="submit" variant="danger">
-                            Удалить
-                          </Button>
-                        </form>
+                          Удалить
+                        </Button>
                       ) : null}
                     </div>
                   </td>

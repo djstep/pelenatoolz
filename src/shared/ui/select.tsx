@@ -1,18 +1,9 @@
 "use client";
 
-import {
-  Children,
-  isValidElement,
-  useEffect,
-  useId,
-  useRef,
-  useState,
-  type ChangeEvent,
-  type ReactNode,
-  type SelectHTMLAttributes,
-} from "react";
+import { Children, isValidElement, useId, useRef, useState, type ChangeEvent, type ReactNode, type SelectHTMLAttributes } from "react";
 import { cn } from "@/shared/lib/cn";
 import { PortaledMenu } from "@/shared/ui/portaled-menu";
+import { useOnChange } from "@/shared/hooks/use-on-change";
 
 type OptionData = {
   value: string;
@@ -112,11 +103,11 @@ export function Select({
   const currentValue = isControlled ? String(value) : internalValue;
   const selected = options.find((o) => o.value === currentValue);
 
-  useEffect(() => {
+  useOnChange([isControlled, value], () => {
     if (isControlled) {
       setInternalValue(String(value));
     }
-  }, [isControlled, value]);
+  });
 
   function handleNativeChange(event: ChangeEvent<HTMLSelectElement>) {
     if (!isControlled) {

@@ -14,6 +14,7 @@ import {
 } from "@/features/memberships/assert-in-project";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { prisma } from "@/shared/db/prisma";
+import { impactLines } from "@/shared/lib/plural";
 import { AuditEntityType } from "@/shared/audit/entity-types";
 import { recordAudit } from "@/shared/audit/with-audit";
 import { z } from "zod";
@@ -146,7 +147,19 @@ export async function deleteLocationAction(
   const gate = await assertScriptWrite(projectId);
   if ("error" in gate) throw new Error(gate.error);
 
+  const location = await prisma.location.findFirst({
+    where: { id: locationId, projectId },
+    select: { name: true },
+  });
+  if (!location) return;
   await prisma.location.deleteMany({ where: { id: locationId, projectId } });
+  await recordAudit(gate.ctx, {
+    projectId,
+    entityType: AuditEntityType.location,
+    entityId: locationId,
+    action: "DELETE",
+    summary: `Удалена локация «${location.name}»`,
+  });
   revalidateLocations(projectId);
 }
 
@@ -210,6 +223,13 @@ export async function deleteLocationPhotoAction(
 
   await prisma.locationPhoto.deleteMany({
     where: { id: photo.id, locationId, location: { projectId } },
+  });
+  await recordAudit(gate.ctx, {
+    projectId,
+    entityType: AuditEntityType.locationPhoto,
+    entityId: photo.id,
+    action: "DELETE",
+    summary: "Удалено фото локации",
   });
   revalidateLocations(projectId, locationId);
 }
@@ -390,4 +410,29 @@ export async function updateLocationFinancialAction(
 
   revalidateLocations(projectId, locationId);
   return { success: "Финансовые условия сохранены" };
+}
+
+
+/** Что произойдёт при удалении локации — для окна подтверждения. */
+export async function getLocationDeleteImpactAction(
+  projectId: string,
+  locationId: string,
+): Promise<string[]> {
+  const gate = await assertScriptWrite(projectId);
+  if ("error" in gate) return [];
+  const location = { id: locationId, projectId };
+  const [scenes, scout, photos, rates, reportRows] = await Promise.all([
+    prisma.sceneLocation.count({ where: { location } }),
+    prisma.scoutCandidateLocation.count({ where: { location } }),
+    prisma.locationPhoto.count({ where: { location } }),
+    prisma.locationOvertimeRate.count({ where: { location } }),
+    prisma.productionReportWorkRow.count({ where: { location } }),
+  ]);
+  return impactLines([
+    [scenes, "Локация уберётся из сцен"],
+    [scout, "Уберётся из кандидатов скаута"],
+    [photos, "Удалятся фото"],
+    [rates, "Удалятся ставки переработок"],
+    [reportRows, "Отвяжутся строки отчётов смены"],
+  ]);
 }

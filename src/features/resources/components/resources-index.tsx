@@ -2,15 +2,13 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import {
-  resourceCategoryPath,
-  resourcesBasePath,
-} from "@/features/resources/lib/paths";
+import { resourceCategoryPath } from "@/features/resources/lib/paths";
 import { deleteResourceCategoryAction } from "@/features/resources/actions";
 import { CategoryModal } from "@/features/resources/components/category-modal";
 import type { ResourceCategoryRow } from "@/features/resources/queries";
 import { useToast } from "@/shared/ui/toast";
 import { Button } from "@/shared/ui/button";
+import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
 import { Input } from "@/shared/ui/input";
 
 function flagsSummary(c: ResourceCategoryRow) {
@@ -37,6 +35,7 @@ export function ResourcesIndex({
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<ResourceCategoryRow | null>(null);
   const toast = useToast();
+  const confirmDelete = useConfirm();
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -115,19 +114,19 @@ export function ResourcesIndex({
                         <Button
                           type="button"
                           variant="danger"
-                          onClick={async () => {
-                            if (!confirm(`Удалить категорию «${c.name}»?`)) return;
-                            try {
-                              await deleteResourceCategoryAction(projectId, c.id);
-                              toast.success("Категория удалена");
-                            } catch (e) {
-                              const msg =
-                                e instanceof Error && e.message === "CATEGORY_HAS_ITEMS"
-                                  ? "Сначала удалите все элементы категории"
-                                  : "Не удалось удалить";
-                              toast.error(msg);
-                            }
-                          }}
+                          onClick={() =>
+                            void confirmDelete({
+                              title: `Удалить категорию „${c.name}“?`,
+                              action: async () => {
+                                const { error } = await deleteResourceCategoryAction(
+                                  projectId,
+                                  c.id,
+                                );
+                                if (error) return error;
+                                toast.success("Категория удалена");
+                              },
+                            })
+                          }
                         >
                           ×
                         </Button>

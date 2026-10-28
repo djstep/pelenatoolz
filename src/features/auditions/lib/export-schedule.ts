@@ -12,12 +12,10 @@ import {
   ImageRun,
 } from "docx";
 import type {
-  AuditionScheduleBreakRow,
   AuditionScheduleRow,
 } from "@/features/auditions/lib/schedule-shared";
 import { auditionKindLabels } from "@/features/auditions/lib/types";
-import { addMinutesToTime } from "@/features/day-docs/lib/time-utils";
-import { actorRoleTypeLabels, parseHhMmToMinutes } from "@/shared/i18n/domain-labels";
+import { actorRoleTypeLabels } from "@/shared/i18n/domain-labels";
 import { formatDateShort } from "@/shared/i18n/format-date";
 
 export type ScheduleExportField =
@@ -59,31 +57,15 @@ const thin = {
   right: { style: BorderStyle.SINGLE, size: 4, color: "999999" },
 };
 
-type TimelineItem =
-  | { kind: "slot"; time: string; slot: AuditionScheduleRow }
-  | { kind: "break"; time: string; breakRow: AuditionScheduleBreakRow };
+type TimelineItem = { kind: "slot"; time: string; slot: AuditionScheduleRow };
 
-function breakEnd(start: string, duration: string) {
-  const mins = parseHhMmToMinutes(duration);
-  if (mins == null) return duration;
-  return addMinutesToTime(start, mins);
-}
-
-function buildDayTimeline(
-  schedules: AuditionScheduleRow[],
-  breaks: AuditionScheduleBreakRow[],
-): Map<string, TimelineItem[]> {
+function buildDayTimeline(schedules: AuditionScheduleRow[]): Map<string, TimelineItem[]> {
   const byDate = new Map<string, TimelineItem[]>();
 
   for (const s of schedules) {
     const list = byDate.get(s.dateKey) ?? [];
     list.push({ kind: "slot", time: s.time, slot: s });
     byDate.set(s.dateKey, list);
-  }
-  for (const b of breaks) {
-    const list = byDate.get(b.dateKey) ?? [];
-    list.push({ kind: "break", time: b.time, breakRow: b });
-    byDate.set(b.dateKey, list);
   }
 
   for (const [, list] of byDate) {
@@ -125,7 +107,6 @@ export async function buildScheduleDocx(
   projectName: string,
   schedules: AuditionScheduleRow[],
   fields: ScheduleExportField[],
-  breaks: AuditionScheduleBreakRow[] = [],
 ): Promise<Buffer> {
   const body: (Paragraph | Table)[] = [
     new Paragraph({
@@ -141,7 +122,7 @@ export async function buildScheduleDocx(
     }),
   ];
 
-  const byDate = buildDayTimeline(schedules, breaks);
+  const byDate = buildDayTimeline(schedules);
   const bodyFields = fields.filter(
     (f) => f !== "time" && f !== "kind" && f !== "comment",
   );
@@ -161,30 +142,6 @@ export async function buildScheduleDocx(
     );
 
     for (const item of dayItems) {
-      if (item.kind === "break") {
-        const b = item.breakRow;
-        const parts: string[] = [];
-        if (fields.includes("time")) {
-          parts.push(`${b.time}–${breakEnd(b.time, b.duration)}`);
-        }
-        if (fields.includes("kind")) parts.push(b.label);
-        if (fields.includes("comment") && b.notes) parts.push(b.notes);
-        body.push(
-          new Paragraph({
-            spacing: { before: 120, after: 60 },
-            children: [
-              new TextRun({
-                text: parts.join(" · ") || b.label,
-                bold: true,
-                italics: true,
-                size: 20,
-              }),
-            ],
-          }),
-        );
-        continue;
-      }
-
       const slot = item.slot;
       const headerParts: string[] = [];
       if (fields.includes("time")) headerParts.push(slot.time);
@@ -298,9 +255,8 @@ export function buildSchedulePrintHtml(
   projectName: string,
   schedules: AuditionScheduleRow[],
   fields: ScheduleExportField[],
-  breaks: AuditionScheduleBreakRow[] = [],
 ): string {
-  const byDate = buildDayTimeline(schedules, breaks);
+  const byDate = buildDayTimeline(schedules);
   const show = (f: ScheduleExportField) => fields.includes(f);
   const bodyCols = fields.filter(
     (f) => f !== "time" && f !== "kind" && f !== "comment",
@@ -311,7 +267,6 @@ export function buildSchedulePrintHtml(
   body{font-family:system-ui,sans-serif;padding:24px;color:#111}
   h1{font-size:20px} h2{font-size:16px;margin-top:24px}
   .slot{margin:12px 0;padding:8px;border:1px solid #ccc;border-radius:8px}
-  .break{margin:12px 0;padding:8px;border:1px dashed #999;border-radius:8px;background:#f8f8f8}
   table{width:100%;border-collapse:collapse;margin-top:8px}
   th,td{border:1px solid #bbb;padding:6px;font-size:12px;vertical-align:top}
   th{background:#f3f3f3;text-align:left}
@@ -325,18 +280,6 @@ export function buildSchedulePrintHtml(
   for (const [dateKey, dayItems] of byDate) {
     html += `<h2>${escapeHtml(formatDateShort(dateKey))}</h2>`;
     for (const item of dayItems) {
-      if (item.kind === "break") {
-        const b = item.breakRow;
-        const head: string[] = [];
-        if (show("time")) {
-          head.push(`${b.time}–${breakEnd(b.time, b.duration)}`);
-        }
-        if (show("kind")) head.push(b.label);
-        if (show("comment") && b.notes) head.push(b.notes);
-        html += `<div class="break"><strong>${escapeHtml(head.join(" · ") || b.label)}</strong></div>`;
-        continue;
-      }
-
       const slot = item.slot;
       const head: string[] = [];
       if (show("time")) head.push(slot.time);

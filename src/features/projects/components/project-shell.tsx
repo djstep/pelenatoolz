@@ -1,6 +1,8 @@
 import { ProjectStatus, ProjectType } from "@prisma/client";
-import { ProjectNav } from "@/features/projects/components/project-nav";
-import { projectNavGroups } from "@/features/projects/lib/project-nav-groups";
+import {
+  ProjectNav,
+  type NavGroup,
+} from "@/features/projects/components/project-nav";
 import {
   projectStatusLabels,
   projectTypeLabels,
@@ -24,11 +26,14 @@ export function ProjectShell({
   locale,
   project,
   role,
+  navGroups,
   children,
 }: {
   locale: string;
   project: Project;
   role: Role;
+  /** Меню, уже отфильтрованное по правам пользователя (`filterNavGroups`). */
+  navGroups: NavGroup[];
   children: React.ReactNode;
 }) {
   return (
@@ -51,7 +56,7 @@ export function ProjectShell({
           <ProjectNav
             locale={locale}
             projectId={project.id}
-            groups={projectNavGroups}
+            groups={navGroups}
           />
         </div>
       </aside>

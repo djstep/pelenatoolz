@@ -10,6 +10,8 @@ import {
   ensureAvailabilityRowForCastingPerson,
 } from "@/features/actor-availability/queries";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
+import { AuditEntityType } from "@/shared/audit/entity-types";
+import { recordAudit } from "@/shared/audit/with-audit";
 import { prisma } from "@/shared/db/prisma";
 
 function revalidateAvailability(projectId: string) {
@@ -62,9 +64,18 @@ export async function removeAvailabilityRowAction(
     return { error: "Недостаточно прав" };
   }
 
-  await prisma.actorAvailabilityRow.deleteMany({
+  const { count } = await prisma.actorAvailabilityRow.deleteMany({
     where: { id: rowId, projectId },
   });
+  if (count > 0) {
+    await recordAudit(ctx, {
+      projectId,
+      entityType: AuditEntityType.availabilityRow,
+      entityId: rowId,
+      action: "DELETE",
+      summary: "Строка убрана из календаря занятости",
+    });
+  }
   revalidateAvailability(projectId);
   return { success: "Строка удалена из календаря" };
 }

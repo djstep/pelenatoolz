@@ -1,7 +1,6 @@
 import { SceneKind } from "@prisma/client";
 import {
   DayNight,
-  ElementType,
   IntExt,
   SceneResourceCategory,
   SceneStatus,
@@ -66,17 +65,6 @@ export const createLocationSchema = z.object({
   notes: z.string().trim().max(2000).optional(),
 });
 
-export const createCharacterSchema = z.object({
-  name: z.string().trim().min(1).max(200),
-  description: z.string().trim().max(2000).optional(),
-});
-
-export const createElementSchema = z.object({
-  name: z.string().trim().min(1).max(200),
-  type: z.enum(ElementType).optional(),
-  notes: z.string().trim().max(2000).optional(),
-});
-
 export const createShootDaySchema = z
   .object({
     dateFrom: z.string().min(1),
@@ -128,12 +116,6 @@ function countDaysInRange(from: string, to: string) {
   end.setHours(0, 0, 0, 0);
   return Math.floor((end.getTime() - start.getTime()) / 86_400_000) + 1;
 }
-
-export const assignSceneSchema = z.object({
-  shootDayId: z.string().cuid(),
-  sceneId: z.string().cuid(),
-  sortOrder: z.coerce.number().int().min(0).optional(),
-});
 
 export const reorderScenesSchema = z.object({
   shootDayId: z.string().cuid(),

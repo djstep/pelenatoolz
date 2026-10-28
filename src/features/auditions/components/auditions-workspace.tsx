@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { deleteAuditionAction } from "@/features/auditions/actions";
 import {
@@ -18,6 +18,7 @@ import {
 import type { AuditionRow } from "@/features/auditions/queries";
 import { formatDateShort } from "@/shared/i18n/format-date";
 import { Button } from "@/shared/ui/button";
+import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Select } from "@/shared/ui/select";
@@ -85,9 +86,9 @@ export function AuditionsWorkspace({
   initialFilters?: AuditionFilters;
 }) {
   const toast = useToast();
+  const confirmDelete = useConfirm();
   const [uploadOpen, setUploadOpen] = useState(false);
   const [playing, setPlaying] = useState<AuditionPlayerData | null>(null);
-  const [pending, startTransition] = useTransition();
   const [filters, setFilters] = useState<AuditionFilters>({
     q: initialFilters?.q ?? "",
     personId: initialFilters?.personId ?? "",
@@ -149,12 +150,16 @@ export function AuditionsWorkspace({
     return rows;
   }, [auditions, filters]);
 
-  function remove(id: string) {
-    if (!confirm("Удалить пробу?")) return;
-    startTransition(async () => {
-      const result = await deleteAuditionAction(projectId, id);
-      if (result.error) toast.error(result.error);
-      if (result.success) toast.success(result.success);
+  function remove(row: (typeof auditions)[number]) {
+    const actors = row.actorNames.length > 0 ? ` — ${row.actorNames.join(", ")}` : "";
+    void confirmDelete({
+      title: `Удалить пробу от ${formatDateShort(row.date)}${actors}?`,
+      details: ["Список актёров пробы удалится."],
+      action: async () => {
+        const result = await deleteAuditionAction(projectId, row.id);
+        if (result.error) return result.error;
+        if (result.success) toast.success(result.success);
+      },
     });
   }
 
@@ -361,8 +366,7 @@ export function AuditionsWorkspace({
                       <Button
                         type="button"
                         variant="danger"
-                        disabled={pending}
-                        onClick={() => remove(row.id)}
+                        onClick={() => remove(row)}
                       >
                         ×
                       </Button>

@@ -11,11 +11,16 @@
   --panel-elevated: #121a2e;
   --border: rgba(255, 255, 255, 0.12);
   --border-strong: rgba(255, 255, 255, 0.2);
-  --muted: rgba(226, 232, 240, 0.45);
+  /* Подсказки в полях: контраст к полю и карточке не ниже 4.5:1. */
+  --muted: rgba(226, 232, 240, 0.55);
   --muted-fg: rgba(203, 213, 225, 0.75);
   --accent: #6ea8ff;
   --accent-2: #8b5cf6;
-  --accent-fg: #ffffff;
+  /* Текст и значки на акцентном фоне: на светло-голубом — тёмные (белый был 2.4:1). */
+  --accent-fg: #070b14;
+  /* Основная кнопка: белый текст на обоих краях градиента не ниже 4.5:1 (было 2.6:1 у голубого края). */
+  --btn-primary-from: #2f6fe4;
+  --btn-primary-to: #7448e0;
   --accent-glow: rgba(110, 168, 255, 0.45);
   --danger: #fb7185;
   --glass-blur: 24px;
@@ -169,6 +174,8 @@
   --accent: #2563eb;
   --accent-2: #7c3aed;
   --accent-fg: #ffffff;
+  --btn-primary-from: #2563eb;
+  --btn-primary-to: #7c3aed;
   --accent-glow: rgba(37, 99, 235, 0.28);
   --danger: #be123c;
   --glass-blur: 20px;
@@ -306,6 +313,11 @@
   background-color: color-mix(in srgb, var(--status-color) 20%, transparent);
   border-color: color-mix(in srgb, var(--status-color) 40%, transparent);
   color: var(--status-color);
+}
+
+/* Подсказки в полях: обычный цвет Tailwind (текст на 50 %) в светлой теме даёт 3.4:1. */
+[data-theme="light"] ::placeholder {
+  color: var(--muted);
 }
 
 [data-theme="light"] .glass-badge.status-badge {
@@ -673,8 +685,8 @@ input[type="datetime-local"] {
 .glass-btn-primary {
   background: linear-gradient(
     135deg,
-    rgba(110, 168, 255, 0.95) 0%,
-    rgba(139, 92, 246, 0.85) 100%
+    var(--btn-primary-from) 0%,
+    var(--btn-primary-to) 100%
   );
   border: 1px solid rgba(255, 255, 255, 0.25);
   box-shadow: 0 4px 24px var(--accent-glow), var(--glass-inset);
@@ -995,11 +1007,6 @@ main {
 .screenplay-editor-shell {
   flex: 1;
   min-width: 0;
-}
-
-.screenplay-editor-shell--compact {
-  display: flex;
-  flex-direction: column;
 }
 
 .screenplay-action-sidebar {

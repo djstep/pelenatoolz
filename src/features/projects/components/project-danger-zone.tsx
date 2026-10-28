@@ -10,6 +10,7 @@ import {
   type ActionState,
 } from "@/features/projects/actions";
 import { Button } from "@/shared/ui/button";
+import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Modal } from "@/shared/ui/modal";
@@ -19,6 +20,7 @@ const initial: ActionState = {};
 
 function ArchiveButton({ projectId, projectName }: { projectId: string; projectName: string }) {
   const router = useRouter();
+  const confirmArchive = useConfirm();
   const [state, setState] = useState<ActionState>({});
   const [pending, setPending] = useState(false);
   useActionToast(state);
@@ -27,12 +29,17 @@ function ArchiveButton({ projectId, projectName }: { projectId: string; projectN
     if (state.success) router.refresh();
   }, [state.success, router]);
 
-  async function handleClick() {
-    if (!confirm(`Архивировать проект «${projectName}»?`)) return;
-    setPending(true);
-    const result = await archiveProjectAction(projectId);
-    setState(result);
-    setPending(false);
+  function handleClick() {
+    void confirmArchive({
+      title: `Архивировать проект „${projectName}“?`,
+      confirmLabel: "Архивировать",
+      action: async () => {
+        setPending(true);
+        const result = await archiveProjectAction(projectId);
+        setState(result);
+        setPending(false);
+      },
+    });
   }
 
   return (

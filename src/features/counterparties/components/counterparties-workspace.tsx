@@ -20,6 +20,7 @@ import type {
   CounterpartyListItem,
 } from "@/features/counterparties/queries";
 import { Button } from "@/shared/ui/button";
+import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Modal } from "@/shared/ui/modal";
@@ -238,6 +239,7 @@ export function CounterpartiesWorkspace({
   canWrite: boolean;
 }) {
   const [tab, setTab] = useState<Tab>("counterparties");
+  const confirmDelete = useConfirm();
   const [search, setSearch] = useState("");
   const [creatingCompany, setCreatingCompany] = useState(false);
   const [editingCompany, setEditingCompany] = useState<CompanyListItem | null>(
@@ -292,7 +294,7 @@ export function CounterpartiesWorkspace({
               onClick={() => setTab(id)}
             >
               {label}
-              <span className="ml-1 opacity-60">
+              <span className="ml-1">
                 (
                 {id === "companies" ? companies.length : counterparties.length}
                 )
@@ -358,15 +360,21 @@ export function CounterpartiesWorkspace({
                           >
                             Изменить
                           </Button>
-                          <form
-                            action={async () => {
-                              await deleteCompanyAction(projectId, c.id);
-                            }}
+                          <Button
+                            type="button"
+                            variant="danger"
+                            aria-label={`Удалить компанию „${c.name}“`}
+                            onClick={() =>
+                              void confirmDelete({
+                                title: `Удалить компанию „${c.name}“?`,
+                                details: ["Финансовые операции с компанией отвяжутся."],
+                                action: async () =>
+                                  (await deleteCompanyAction(projectId, c.id)).error,
+                              })
+                            }
                           >
-                            <Button type="submit" variant="danger">
-                              ×
-                            </Button>
-                          </form>
+                            ×
+                          </Button>
                         </div>
                       </td>
                     ) : null}
@@ -427,15 +435,23 @@ export function CounterpartiesWorkspace({
                         >
                           Изменить
                         </Button>
-                        <form
-                          action={async () => {
-                            await deleteCounterpartyAction(projectId, c.id);
-                          }}
+                        <Button
+                          type="button"
+                          variant="danger"
+                          aria-label={`Удалить контрагента „${c.name}“`}
+                          onClick={() =>
+                            void confirmDelete({
+                              title: `Удалить контрагента „${c.name}“?`,
+                              details: [
+                                "Строки статей и финансовые операции с контрагентом отвяжутся.",
+                              ],
+                              action: async () =>
+                                (await deleteCounterpartyAction(projectId, c.id)).error,
+                            })
+                          }
                         >
-                          <Button type="submit" variant="danger">
-                            ×
-                          </Button>
-                        </form>
+                          ×
+                        </Button>
                       </div>
                     </td>
                   ) : null}

@@ -7,6 +7,7 @@ import { ContractFileRole } from "@prisma/client";
 import {
   attachContractFileAction,
   deleteContractAction,
+  getContractDeleteImpactAction,
   detachContractFileAction,
   updateContractFileRoleAction,
 } from "@/features/contracts/actions";
@@ -21,6 +22,7 @@ import type { ContractFinanceAccess } from "@/features/contracts/lib/finance-acc
 import { formatDateShort } from "@/shared/i18n/format-date";
 import { Badge, statusBadgeStyle } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
+import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Select } from "@/shared/ui/select";
@@ -68,6 +70,7 @@ export function ContractDetailView({
   const [editOpen, setEditOpen] = useState(false);
   const [actOpen, setActOpen] = useState(false);
   const [pending, startTransition] = useTransition();
+  const confirmDelete = useConfirm();
   const [uploading, setUploading] = useState(false);
 
   const editDefaults: ContractFormDefaults = {
@@ -141,15 +144,19 @@ export function ContractDetailView({
                 type="button"
                 variant="danger"
                 disabled={pending}
-                onClick={() => {
-                  if (!confirm("Удалить договор?")) return;
-                  startTransition(async () => {
-                    await deleteContractAction(projectId, contract.id);
-                    router.push(
-                      `/${locale}/projects/${projectId}/counterparties/contracts`,
-                    );
-                  });
-                }}
+                onClick={() =>
+                  void confirmDelete({
+                    title: `Удалить договор № ${contract.number}?`,
+                    details: () => getContractDeleteImpactAction(projectId, contract.id),
+                    action: async () => {
+                      const res = await deleteContractAction(projectId, contract.id);
+                      if (res.error) return res.error;
+                      startTransition(() => {
+                        router.push(`/${locale}/projects/${projectId}/counterparties/contracts`);
+                      });
+                    },
+                  })
+                }
               >
                 Удалить
               </Button>

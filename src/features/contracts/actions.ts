@@ -17,6 +17,7 @@ import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { AuditEntityType } from "@/shared/audit/entity-types";
 import { recordAudit } from "@/shared/audit/with-audit";
 import { prisma } from "@/shared/db/prisma";
+import { impactLines } from "@/shared/lib/plural";
 
 export type ContractsActionState = {
   error?: string;
@@ -784,4 +785,27 @@ export async function detachCertificateFileAction(
     paymentId: link.certificate.paymentId,
   });
   return { success: "Файл откреплён" };
+}
+
+
+/** Что произойдёт при удалении договора — для окна подтверждения. */
+export async function getContractDeleteImpactAction(
+  projectId: string,
+  contractId: string,
+): Promise<string[]> {
+  const ctx = await requireProjectContext(projectId);
+  if (!ctx.can("contracts:write")) return [];
+  const contract = { id: contractId, projectId };
+  const [files, certificates, payments, accruals] = await Promise.all([
+    prisma.contractFile.count({ where: { contract } }),
+    prisma.certificate.count({ where: { contract } }),
+    prisma.cashPayment.count({ where: { contract } }),
+    prisma.accrual.count({ where: { contract } }),
+  ]);
+  return impactLines([
+    [files, "Удалятся файлы договора"],
+    [certificates, "Отвяжутся акты"],
+    [payments, "Отвяжутся платежи"],
+    [accruals, "Отвяжутся начисления"],
+  ]);
 }

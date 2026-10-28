@@ -6,7 +6,9 @@ import { normalizeApprovalColor } from "@/features/finance/lib/approval-statuses
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { AuditEntityType } from "@/shared/audit/entity-types";
 import { recordAudit } from "@/shared/audit/with-audit";
+import { isForeignKeyError, LINKED_ERROR } from "@/shared/db/foreign-key";
 import { prisma } from "@/shared/db/prisma";
+import { listCounts } from "@/shared/lib/plural";
 
 export type ApprovalStatusActionState = {
   error?: string;
@@ -135,7 +137,26 @@ export async function deleteApprovalStatusAction(
     return { error: "Системный статус нельзя удалить — можно только переименовать" };
   }
 
-  await prisma.projectApprovalStatus.delete({ where: { id: statusId } });
+  // Статус у договоров и актов — в базе запрет удаления.
+  const [contracts, certificates] = await Promise.all([
+    prisma.contract.count({ where: { statusId } }),
+    prisma.certificate.count({ where: { statusId } }),
+  ]);
+  if (contracts + certificates > 0) {
+    return {
+      error: `Статус стоит у ${listCounts([
+        [contracts, ["договора", "договоров", "договоров"]],
+        [certificates, ["акта", "актов", "актов"]],
+      ])} — удалить нельзя`,
+    };
+  }
+
+  try {
+    await prisma.projectApprovalStatus.delete({ where: { id: statusId } });
+  } catch (error) {
+    if (isForeignKeyError(error)) return { error: LINKED_ERROR };
+    throw error;
+  }
 
   await recordAudit(ctx, {
     projectId,

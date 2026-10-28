@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useState } from "react";
+import { useActionState, useMemo, useState } from "react";
 import { CounterpartyType, FinanceOpCategory, FinanceOpType } from "@prisma/client";
 import {
   quickCreateCompanyAction,
@@ -25,6 +25,7 @@ import {
 } from "@/shared/i18n/finance-post-labels";
 import { formatDateShort } from "@/shared/i18n/format-date";
 import { Button } from "@/shared/ui/button";
+import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Modal } from "@/shared/ui/modal";
@@ -32,6 +33,7 @@ import { useActionSuccess } from "@/shared/ui/unsaved/use-action-success";
 import { Select } from "@/shared/ui/select";
 import { cn } from "@/shared/lib/cn";
 import { useActionToast } from "@/shared/ui/toast";
+import { useOnChange } from "@/shared/hooks/use-on-change";
 
 const initial: FinanceActionState = {};
 
@@ -94,12 +96,12 @@ function OpForm({
   const [companyOpts, setCompanyOpts] = useState(companies);
   const [cpOpts, setCpOpts] = useState(counterparties);
 
-  useEffect(() => {
+  useOnChange([companies], () => {
     setCompanyOpts(companies);
-  }, [companies]);
-  useEffect(() => {
+  });
+  useOnChange([counterparties], () => {
     setCpOpts(counterparties);
-  }, [counterparties]);
+  });
 
   return (
     <div className="grid gap-3 sm:grid-cols-2">
@@ -325,6 +327,7 @@ export function FinanceWorkspace({
 }) {
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Op | null>(null);
+  const confirmDelete = useConfirm();
   const [filter, setFilter] = useState<"ALL" | FinanceOpType>("ALL");
 
   const totals = useMemo(() => {
@@ -530,15 +533,21 @@ export function FinanceWorkspace({
                         >
                           Изменить
                         </Button>
-                        <form
-                          action={async () => {
-                            await deleteFinanceOpAction(projectId, op.id);
-                          }}
+                        <Button
+                          type="button"
+                          variant="danger"
+                          aria-label="Удалить операцию"
+                          onClick={() =>
+                            void confirmDelete({
+                              title: `Удалить операцию „${op.title}“?`,
+                              action: async () => {
+                                await deleteFinanceOpAction(projectId, op.id);
+                              },
+                            })
+                          }
                         >
-                          <Button type="submit" variant="danger">
-                            ×
-                          </Button>
-                        </form>
+                          ×
+                        </Button>
                       </div>
                     </td>
                   ) : null}

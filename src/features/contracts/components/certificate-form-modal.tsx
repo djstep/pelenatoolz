@@ -18,6 +18,7 @@ import {
 } from "@/features/contracts/lib/vat";
 import {
   EntityPicker,
+  mergePickerOptions,
   type PickerOption,
 } from "@/features/counterparties/components/entity-picker";
 import {
@@ -26,11 +27,13 @@ import {
 } from "@/features/counterparties/actions";
 import { formatDateShort } from "@/shared/i18n/format-date";
 import { Button } from "@/shared/ui/button";
+import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Modal } from "@/shared/ui/modal";
 import { Select } from "@/shared/ui/select";
 import { toast, useActionToast } from "@/shared/ui/toast";
+import { useOnChange } from "@/shared/hooks/use-on-change";
 
 const initial: ContractsActionState = {};
 
@@ -126,6 +129,7 @@ export function CertificateFormModal({
   useActionToast(state);
   const router = useRouter();
   const [deleting, setDeleting] = useState(false);
+  const confirmDelete = useConfirm();
 
   const [companyOpts, setCompanyOpts] = useState(companies);
   const [cpOpts, setCpOpts] = useState(counterparties);
@@ -148,22 +152,33 @@ export function CertificateFormModal({
   const effectiveVatRate = vatRate === "custom" ? vatCustom.trim() : vatRate;
   const [pendingFile, setPendingFile] = useState<File | null>(null);
 
-  useEffect(() => {
-    if (!open) return;
-    setCompanyOpts(companies);
-    setCpOpts(counterparties);
-    setCompanyId(defaults?.companyId ?? "");
-    setCounterpartyId(defaults?.counterpartyId ?? "");
-    setContractId(defaults?.contractId ?? "");
-    setPaymentId(defaults?.paymentId ?? "");
-    setStatusId(defaults?.statusId ?? defaultStatusId);
-    setAmount(String(defaults?.amount ?? ""));
-    setVatEnabled(defaults?.vatEnabled ?? false);
-    setVatRate(vatRateChoice(defaults?.vatRate));
-    setVatCustom(vatRateCustom(defaults?.vatRate));
-    setVatManual("");
-    setPendingFile(null);
-  }, [open, defaults, companies, counterparties, defaultStatusId]);
+  // Поля сбрасываются только при открытии окна. Новые списки с сервера (после быстрого
+  // добавления компании или контрагента) дополняют варианты, выбранное остаётся.
+  const [wasOpen, setWasOpen] = useState(open);
+  const [lists, setLists] = useState({ companies, counterparties });
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (open) {
+      setCompanyOpts(companies);
+      setCpOpts(counterparties);
+      setCompanyId(defaults?.companyId ?? "");
+      setCounterpartyId(defaults?.counterpartyId ?? "");
+      setContractId(defaults?.contractId ?? "");
+      setPaymentId(defaults?.paymentId ?? "");
+      setStatusId(defaults?.statusId ?? defaultStatusId);
+      setAmount(String(defaults?.amount ?? ""));
+      setVatEnabled(defaults?.vatEnabled ?? false);
+      setVatRate(vatRateChoice(defaults?.vatRate));
+      setVatCustom(vatRateCustom(defaults?.vatRate));
+      setVatManual("");
+      setPendingFile(null);
+    }
+  }
+  if (lists.companies !== companies || lists.counterparties !== counterparties) {
+    setLists({ companies, counterparties });
+    setCompanyOpts((prev) => mergePickerOptions(companies, prev));
+    setCpOpts((prev) => mergePickerOptions(counterparties, prev));
+  }
 
   // Каждый ответ сервера обрабатываем один раз: иначе «успех» остаётся в состоянии,
   // и окно закрывается (а файл грузится) снова при каждой отрисовке родителя.
@@ -223,17 +238,17 @@ export function CertificateFormModal({
     });
   }, [payments, contractId, companyId, counterpartyId]);
 
-  useEffect(() => {
+  useOnChange([filteredPayments, paymentId, lockPayment], () => {
     if (paymentId && !filteredPayments.some((p) => p.id === paymentId)) {
       if (!lockPayment) setPaymentId("");
     }
-  }, [filteredPayments, paymentId, lockPayment]);
+  });
 
-  useEffect(() => {
+  useOnChange([filteredContracts, contractId, lockContract], () => {
     if (contractId && !filteredContracts.some((c) => c.id === contractId)) {
       if (!lockContract) setContractId("");
     }
-  }, [filteredContracts, contractId, lockContract]);
+  });
 
   const vatPreview = useMemo(() => {
     const amt = Number(amount) || 0;
@@ -276,21 +291,24 @@ export function CertificateFormModal({
               variant="danger"
               className="ml-auto"
               disabled={pending || uploading || deleting}
-              onClick={() => {
-                if (!confirm("Удалить акт?")) return;
-                setDeleting(true);
-                void deleteCertificateAction(projectId, defaults!.id!)
-                  .then((res) => {
-                    if (res.error) {
-                      toast.error(res.error);
-                      return;
+              onClick={() =>
+                void confirmDelete({
+                  title: defaults?.number ? `Удалить акт № ${defaults.number}?` : "Удалить акт?",
+                  details: ["Файлы акта удалятся."],
+                  action: async () => {
+                    setDeleting(true);
+                    try {
+                      const res = await deleteCertificateAction(projectId, defaults!.id!);
+                      if (res.error) return res.error;
+                      toast.success(res.success ?? "Акт удалён");
+                      onClose();
+                      router.refresh();
+                    } finally {
+                      setDeleting(false);
                     }
-                    toast.success(res.success ?? "Акт удалён");
-                    onClose();
-                    router.refresh();
-                  })
-                  .finally(() => setDeleting(false));
-              }}
+                  },
+                })
+              }
             >
               {deleting ? "…" : "Удалить"}
             </Button>

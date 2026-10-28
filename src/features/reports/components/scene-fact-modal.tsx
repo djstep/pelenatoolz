@@ -1,7 +1,7 @@
 "use client";
 
 import { ProductionSceneFactStatus } from "@prisma/client";
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { saveProductionSceneFactAction } from "@/features/reports/actions";
 import {
@@ -17,6 +17,7 @@ import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Modal } from "@/shared/ui/modal";
 import { useToast } from "@/shared/ui/toast";
+import { useOnChange } from "@/shared/hooks/use-on-change";
 
 type SceneFact = ProductionReportBundle["report"]["sceneFacts"][number];
 
@@ -80,7 +81,7 @@ export function SceneFactModal({
   const [notes, setNotes] = useState("");
   const [montageRows, setMontageRows] = useState<MontageRowState[]>([]);
 
-  useEffect(() => {
+  useOnChange([fact, open, cameraCount], () => {
     if (!fact || !open) return;
     setStatus(fact.status);
     setFactChrono(
@@ -108,7 +109,7 @@ export function SceneFactModal({
           }))
         : [],
     );
-  }, [fact, open, cameraCount]);
+  });
 
   const title = useMemo(() => {
     if (!fact) return "Факт по сцене";

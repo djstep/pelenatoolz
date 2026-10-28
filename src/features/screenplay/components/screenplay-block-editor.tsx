@@ -36,6 +36,7 @@ import { useBlockHistory } from "@/features/screenplay/lib/use-block-history";
 import { parseSlugline } from "@/features/screenplay/lib/slugline";
 import { cn } from "@/shared/lib/cn";
 import { useActionToast } from "@/shared/ui/toast";
+import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
 import { useUnsavedChanges } from "@/shared/ui/unsaved/unsaved-changes-provider";
 
 type Option = { id: string; name: string };
@@ -50,14 +51,12 @@ type Props = {
   timingMode: TimingMode;
   pageToMinuteRatio: number;
   sceneTimings?: SceneTimingRef[];
-  sceneId?: string | null;
   scrollToSceneId?: string | null;
   canWrite: boolean;
   timingSaving?: boolean;
   onTimingModeChange?: (mode: TimingMode) => void;
   onPageToMinuteRatioChange?: (ratio: number) => void;
   onPageToMinuteRatioBlur?: () => void;
-  compact?: boolean;
   isFullscreen?: boolean;
   onCreateCharacter?: (name: string) => Promise<Option | null>;
   onCreateLocation?: (name: string) => Promise<Option | null>;
@@ -76,19 +75,6 @@ type Props = {
 
 function normalizeBlocks(blocks: ScreenplayBlock[]) {
   return blocks.map((block, index) => ({ ...block, sortOrder: index }));
-}
-
-function filterSceneBlocks(blocks: ScreenplayBlock[], sceneId: string) {
-  const start = blocks.findIndex(
-    (block) => block.sceneId === sceneId && block.type === "SLUGLINE",
-  );
-  if (start < 0) return blocks.filter((block) => block.sceneId === sceneId);
-
-  const nextSlug = blocks.findIndex(
-    (block, index) => index > start && block.type === "SLUGLINE",
-  );
-  const end = nextSlug < 0 ? blocks.length : nextSlug;
-  return blocks.slice(start, end);
 }
 
 type PendingSelection = {
@@ -140,14 +126,12 @@ export function ScreenplayBlockEditor({
   timingMode,
   pageToMinuteRatio,
   sceneTimings = [],
-  sceneId = null,
   scrollToSceneId = null,
   canWrite,
   timingSaving = false,
   onTimingModeChange,
   onPageToMinuteRatioChange,
   onPageToMinuteRatioBlur,
-  compact = false,
   isFullscreen = false,
   onCreateCharacter,
   onCreateLocation,
@@ -156,13 +140,7 @@ export function ScreenplayBlockEditor({
   onToggleFullscreen,
   sidebarExports,
 }: Props) {
-  const baselineBlocks = useMemo(
-    () =>
-      normalizeBlocks(
-        sceneId ? filterSceneBlocks(initialBlocks, sceneId) : initialBlocks,
-      ),
-    [initialBlocks, sceneId],
-  );
+  const baselineBlocks = useMemo(() => normalizeBlocks(initialBlocks), [initialBlocks]);
 
   const {
     blocks,
@@ -177,6 +155,7 @@ export function ScreenplayBlockEditor({
   const [activeIndex, setActiveIndex] = useState(0);
   const [search, setSearch] = useState("");
   const [message, setMessage] = useState<ScreenplayActionState>({});
+  const confirmDelete = useConfirm();
   useActionToast(message);
   const [pending, startTransition] = useTransition();
   const [comments, setComments] = useState(initialComments);
@@ -215,12 +194,35 @@ export function ScreenplayBlockEditor({
   }, [scrollToSceneId, blocks]);
 
   // Несохранённый текст — в общем механизме: переход по меню и закрытие вкладки спросят.
+  // «Сохранить» в вопросе о переходе пишет в эту же версию; ошибка — сообщением редактора.
+  // Только при canWrite: страница версии даёт его при праве на сценарий и незаблокированной
+  // версии (isLocked), — у заблокированной в вопросе лишь «Остаться» / «Не сохранять».
   const unsaved = useUnsavedChanges();
   const dirtyRef = useRef(isDirty);
+  const saveOnLeaveRef = useRef<() => Promise<boolean>>(async () => false);
   useEffect(() => {
     dirtyRef.current = isDirty;
   }, [isDirty]);
-  useEffect(() => unsaved.register(() => dirtyRef.current), [unsaved]);
+  useEffect(() => {
+    saveOnLeaveRef.current = async () => {
+      const result = await saveScreenplayVersionAction(
+        projectId,
+        versionId,
+        "same",
+        JSON.stringify({ blocks }),
+      );
+      setMessage(result);
+      return !result.error;
+    };
+  });
+  useEffect(
+    () =>
+      unsaved.register(
+        () => dirtyRef.current,
+        canWrite ? () => saveOnLeaveRef.current() : undefined,
+      ),
+    [unsaved, canWrite],
+  );
 
   const visibleBlocks = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -287,7 +289,7 @@ export function ScreenplayBlockEditor({
 
   const insertBlock = useCallback(
     (index: number, type: ScriptBlockType) => {
-      const scene = blocks[index]?.sceneId ?? sceneId;
+      const scene = blocks[index]?.sceneId ?? null;
       setBlocks((prev) => {
         const next = [...prev];
         next.splice(index + 1, 0, createEmptyBlock(type, index + 1, scene));
@@ -296,7 +298,7 @@ export function ScreenplayBlockEditor({
       setActiveIndex(index + 1);
       window.setTimeout(() => activeEditorRef.current?.focus(), 0);
     },
-    [blocks, sceneId, setBlocks],
+    [blocks, setBlocks],
   );
 
   const removeBlock = useCallback(
@@ -309,20 +311,7 @@ export function ScreenplayBlockEditor({
   );
 
   const handleSave = () => {
-    const payload = sceneId
-      ? (() => {
-          const all = [...initialBlocks];
-          const filtered = filterSceneBlocks(all, sceneId);
-          const start = all.findIndex((block) => block.id === filtered[0]?.id);
-          const next = [...all];
-          if (start >= 0) {
-            next.splice(start, filtered.length, ...blocks);
-          } else {
-            next.push(...blocks);
-          }
-          return normalizeBlocks(next);
-        })()
-      : blocks;
+    const payload = blocks;
 
     if (onRequestSave) {
       onRequestSave(payload);
@@ -427,7 +416,6 @@ export function ScreenplayBlockEditor({
       className={cn(
         "screenplay-editor-shell",
         isFullscreen && "screenplay-editor-shell--fullscreen",
-        compact && "screenplay-editor-shell--compact",
       )}
     >
       <div className="screenplay-editor-main">
@@ -435,8 +423,7 @@ export function ScreenplayBlockEditor({
           <div
             className={cn(
               "screenplay-editor-document",
-              !compact &&
-                (commentThreads.length > 0 || isComposing) &&
+              (commentThreads.length > 0 || isComposing) &&
                 "screenplay-editor-document--with-comments",
             )}
           >
@@ -444,30 +431,28 @@ export function ScreenplayBlockEditor({
               ref={setPaperColumnEl}
               className="screenplay-editor-paper-column"
             >
-              {!compact ? (
-                <div className="screenplay-format-toolbar-sticky">
-                  <ScreenplayFormatToolbar
-                    activeType={blocks[activeIndex]?.type ?? "ACTION"}
-                    canWrite={canWrite}
-                    canUndo={canUndo}
-                    canRedo={canRedo}
-                    isFullscreen={isFullscreen}
-                    onTypeChange={(type) => {
-                      if (activeIndex >= 0) updateBlock(activeIndex, { type });
-                    }}
-                    onFormat={applyFormat}
-                    onUndo={undo}
-                    onRedo={redo}
-                    onReformat={handleReformat}
-                    onToggleFullscreen={() => onToggleFullscreen?.()}
-                  />
-                </div>
-              ) : null}
+              <div className="screenplay-format-toolbar-sticky">
+                <ScreenplayFormatToolbar
+                  activeType={blocks[activeIndex]?.type ?? "ACTION"}
+                  canWrite={canWrite}
+                  canUndo={canUndo}
+                  canRedo={canRedo}
+                  isFullscreen={isFullscreen}
+                  onTypeChange={(type) => {
+                    if (activeIndex >= 0) updateBlock(activeIndex, { type });
+                  }}
+                  onFormat={applyFormat}
+                  onUndo={undo}
+                  onRedo={redo}
+                  onReformat={handleReformat}
+                  onToggleFullscreen={() => onToggleFullscreen?.()}
+                />
+              </div>
 
               <div
                 className={cn(
                   "screenplay-editor-paper rounded-xl border border-[var(--border)] bg-[var(--surface-3)] p-6",
-                  !compact && "screenplay-editor-paper--paged",
+                  "screenplay-editor-paper--paged",
                 )}
               >
             {visibleBlocks.length === 0 ? (
@@ -513,7 +498,7 @@ export function ScreenplayBlockEditor({
             )}
               </div>
 
-              {!compact && canWrite ? (
+              {canWrite ? (
                 <ScreenplayBlockCommentAnchor
                   blockId={anchorBlockId}
                   containerEl={paperColumnEl}
@@ -540,32 +525,39 @@ export function ScreenplayBlockEditor({
                 />
               ) : null}
 
-              {!compact ? (
-                <ScreenplayCommentsMargin
-                  threads={commentThreads}
-                  canWrite={canWrite}
-                  onReply={(parentId, content) => {
-                    void replyScriptCommentAction(
-                      projectId,
-                      versionId,
-                      parentId,
-                      content,
-                    ).then(() => void refreshComments());
-                  }}
-                  onResolve={(commentId, resolved) => {
-                    void resolveScriptCommentAction(
-                      projectId,
-                      commentId,
-                      resolved,
-                    ).then(() => void refreshComments());
-                  }}
-                  onDelete={(commentId) => {
-                    void deleteScriptCommentAction(projectId, commentId).then(
-                      () => void refreshComments(),
-                    );
-                  }}
-                />
-              ) : null}
+              <ScreenplayCommentsMargin
+                threads={commentThreads}
+                canWrite={canWrite}
+                onReply={(parentId, content) => {
+                  void replyScriptCommentAction(
+                    projectId,
+                    versionId,
+                    parentId,
+                    content,
+                  ).then(() => void refreshComments());
+                }}
+                onResolve={(commentId, resolved) => {
+                  void resolveScriptCommentAction(
+                    projectId,
+                    commentId,
+                    resolved,
+                  ).then(() => void refreshComments());
+                }}
+                onDelete={(commentId) => {
+                  const replies = comments.filter(
+                    (c) => c.parentCommentId === commentId,
+                  ).length;
+                  void confirmDelete({
+                    title: "Удалить комментарий?",
+                    details: replies > 0 ? [`Удалятся ответы: ${replies}`] : [],
+                    action: async () => {
+                      const result = await deleteScriptCommentAction(projectId, commentId);
+                      if (result.error) return result.error;
+                      void refreshComments();
+                    },
+                  });
+                }}
+              />
             </div>
           </div>
         </div>
@@ -573,28 +565,8 @@ export function ScreenplayBlockEditor({
     </div>
   );
 
-  if (compact || !sidebarExports) {
-    return (
-      <div className={cn("flex flex-col gap-3", compact ? "" : "min-h-[70vh]")}>
-        {compact ? (
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="text-xs text-[var(--muted-fg)]">
-              Хронометраж: {timing.label} ({timingHint})
-            </div>
-            {canWrite ? (
-              <button
-                type="button"
-                className="text-xs text-[var(--accent)]"
-                onClick={handleSave}
-              >
-                Сохранить
-              </button>
-            ) : null}
-          </div>
-        ) : null}
-        {editorContent}
-      </div>
-    );
+  if (!sidebarExports) {
+    return <div className="flex min-h-[70vh] flex-col gap-3">{editorContent}</div>;
   }
 
   return (

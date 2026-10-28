@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import {
   deleteAuditionScheduleAction,
   updateAuditionScheduleAction,
@@ -11,11 +11,13 @@ import type {
 } from "@/features/auditions/lib/schedule-shared";
 import { SCHEDULE_TIME_SLOTS } from "@/features/auditions/lib/schedule-shared";
 import { Button } from "@/shared/ui/button";
+import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Modal } from "@/shared/ui/modal";
 import { Select } from "@/shared/ui/select";
 import { useToast } from "@/shared/ui/toast";
+import { useOnChange } from "@/shared/hooks/use-on-change";
 
 export function ScheduleSlotEditModal({
   projectId,
@@ -31,6 +33,7 @@ export function ScheduleSlotEditModal({
   onClose: () => void;
 }) {
   const toast = useToast();
+  const confirmDelete = useConfirm();
   const [pending, start] = useTransition();
   const [date, setDate] = useState("");
   const [time, setTime] = useState("10:00");
@@ -38,14 +41,14 @@ export function ScheduleSlotEditModal({
   const [selected, setSelected] = useState<string[]>([]);
   const [addId, setAddId] = useState("");
 
-  useEffect(() => {
+  useOnChange([schedule], () => {
     if (!schedule) return;
     setDate(schedule.dateKey);
     setTime(schedule.time);
     setComment(schedule.comment ?? "");
     setSelected(schedule.candidates.map((c) => c.castingCandidateId));
     setAddId("");
-  }, [schedule]);
+  });
 
   if (!schedule) return null;
 
@@ -73,15 +76,18 @@ export function ScheduleSlotEditModal({
   }
 
   function remove() {
-    if (!confirm("Удалить этот слот расписания?")) return;
-    start(async () => {
-      const r = await deleteAuditionScheduleAction(projectId, schedule!.id);
-      if (r.error) {
-        toast.error(r.error);
-        return;
-      }
-      toast.success(r.success ?? "Удалено");
-      onClose();
+    void confirmDelete({
+      title: `Удалить слот расписания ${schedule!.time}?`,
+      details:
+        schedule!.candidates.length > 0
+          ? [`Кандидаты слота уберутся из расписания: ${schedule!.candidates.length}`]
+          : [],
+      action: async () => {
+        const r = await deleteAuditionScheduleAction(projectId, schedule!.id);
+        if (r.error) return r.error;
+        toast.success(r.success ?? "Удалено");
+        onClose();
+      },
     });
   }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   createInviteAction,
@@ -10,6 +10,7 @@ import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Select } from "@/shared/ui/select";
+import { useOnChange } from "@/shared/hooks/use-on-change";
 
 const initial: ActionState = {};
 
@@ -28,9 +29,9 @@ export function InviteForm({
   const [copied, setCopied] = useState(false);
   const defaultRoleId = roles.find((r) => r.name === "Наблюдатель")?.id ?? roles[0]?.id;
 
-  useEffect(() => {
+  useOnChange([state.inviteUrl], () => {
     setCopied(false);
-  }, [state.inviteUrl]);
+  });
 
   async function copyLink() {
     if (!state.inviteUrl) return;

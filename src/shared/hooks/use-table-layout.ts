@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useOnChange } from "@/shared/hooks/use-on-change";
 
 export type ColumnDef = {
   id: string;
@@ -47,7 +48,7 @@ export function useTableLayout(tableKey: string, columns: ColumnDef[]) {
   const [colorMode, setColorMode] = useState(true);
   const [loaded, setLoaded] = useState(false);
 
-  useEffect(() => {
+  useOnChange([columns], () => {
     setColumnOrder((prev) => mergeColumnOrder(prev, columns));
     setWidths((prev) => {
       const next = { ...prev };
@@ -56,7 +57,7 @@ export function useTableLayout(tableKey: string, columns: ColumnDef[]) {
       }
       return next;
     });
-  }, [columns]);
+  });
 
   useEffect(() => {
     try {

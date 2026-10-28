@@ -289,7 +289,19 @@ export async function deleteCastingPersonAction(
   const ctx = await requireProjectContext(projectId);
   if (!ctx.can("cast:write")) return { error: "Недостаточно прав" };
 
+  const person = await prisma.castingPerson.findFirst({
+    where: { id: personId, projectId },
+    select: { lastName: true, firstName: true },
+  });
+  if (!person) return { error: "Кандидат не найден" };
   await prisma.castingPerson.deleteMany({ where: { id: personId, projectId } });
+  await recordAudit(ctx, {
+    projectId,
+    entityType: AuditEntityType.castingPerson,
+    entityId: personId,
+    action: "DELETE",
+    summary: `Удалён кандидат ${[person.lastName, person.firstName].filter(Boolean).join(" ")}`,
+  });
   revalidateCasting(projectId);
   return { success: "Кандидат удалён" };
 }
