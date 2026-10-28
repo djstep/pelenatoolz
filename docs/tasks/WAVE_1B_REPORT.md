@@ -225,7 +225,7 @@
   `category-workspace`, `resources-index`, `create-project-form`, `locations/page`, `screenplay/actions`,
   `libretto-filters-modal`, `libretto-display`, `toast-store`. В `scene-modal.tsx` неиспользуемых импортов на
   начало задачи не было.
-- `set-state-in-effect`: 32 эффекта, которые только переносили свойства в состояние или сбрасывали поля при
+- `set-state-in-effect`: 31 эффект, которые только переносили свойства в состояние или сбрасывали поля при
   открытии окна, переведены на `useOnChange` (`shared/hooks/use-on-change.ts`). Тот же код выполняется при
   отрисовке, когда меняются те же значения, и при первой отрисовке — как эффект при монтировании. Значения
   те же, только применяются до показа. `eslint-disable` не добавлял.
