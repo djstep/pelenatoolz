@@ -231,6 +231,8 @@ export function ScreenplayBlockEditor({
 
   // Несохранённый текст — в общем механизме: переход по меню и закрытие вкладки спросят.
   // «Сохранить» в вопросе о переходе пишет в эту же версию; ошибка — сообщением редактора.
+  // Только при canWrite: страница версии даёт его при праве на сценарий и незаблокированной
+  // версии (isLocked), — у заблокированной в вопросе лишь «Остаться» / «Не сохранять».
   const unsaved = useUnsavedChanges();
   const dirtyRef = useRef(isDirty);
   const saveOnLeaveRef = useRef<() => Promise<boolean>>(async () => false);
