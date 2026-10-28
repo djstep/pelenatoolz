@@ -10,8 +10,6 @@ import {
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { manualRenumberSchema } from "@/features/locations/schemas";
 import {
-  createCharacterSchema,
-  createElementSchema,
   createSceneSchema,
 } from "@/features/script/schemas";
 import { prisma } from "@/shared/db/prisma";
@@ -663,32 +661,6 @@ export async function renumberScenesAction(projectId: string) {
   revalidateScript(projectId);
 }
 
-export async function deleteSceneAction(
-  projectId: string,
-  sceneId: string,
-): Promise<{ error?: string }> {
-  const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:write")) {
-    return { error: "Недостаточно прав" };
-  }
-
-  const refusal = await shotScenesRefusal(projectId, ctx.project.type, [sceneId]);
-  if (refusal) return { error: refusal };
-
-  await prisma.scene.deleteMany({ where: { id: sceneId, projectId } });
-
-  await recordAudit(ctx, {
-    projectId,
-    entityType: AuditEntityType.scene,
-    entityId: sceneId,
-    action: "DELETE",
-    summary: "Удалена сцена",
-  });
-
-  revalidateScript(projectId);
-  return {};
-}
-
 /**
  * Сцены с историей съёмок (факт сохраняли в отчёте смены) не удаляются: вместе со сценой
  * пропали бы история и факт отчётов. Возвращает текст отказа или null.
@@ -786,55 +758,6 @@ export async function manualRenumberScenesAction(
 
   revalidateScript(projectId);
   return { success: "Нумерация обновлена" };
-}
-
-export async function createCharacterAction(
-  projectId: string,
-  _prev: ActionState,
-  formData: FormData,
-): Promise<ActionState> {
-  const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:write")) {
-    return { error: "Недостаточно прав" };
-  }
-
-  const parsed = createCharacterSchema.safeParse({
-    name: formData.get("name"),
-    description: formData.get("description") || undefined,
-  });
-
-  if (!parsed.success) {
-    return { error: "Укажите имя персонажа" };
-  }
-
-  await prisma.character.create({ data: { projectId, ...parsed.data } });
-  revalidateScript(projectId);
-  return { success: "Персонаж добавлен" };
-}
-
-export async function createElementAction(
-  projectId: string,
-  _prev: ActionState,
-  formData: FormData,
-): Promise<ActionState> {
-  const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:write")) {
-    return { error: "Недостаточно прав" };
-  }
-
-  const parsed = createElementSchema.safeParse({
-    name: formData.get("name"),
-    type: formData.get("type") || undefined,
-    notes: formData.get("notes") || undefined,
-  });
-
-  if (!parsed.success) {
-    return { error: "Укажите название" };
-  }
-
-  await prisma.element.create({ data: { projectId, ...parsed.data } });
-  revalidateScript(projectId);
-  return { success: "Добавлено" };
 }
 
 export async function quickCreateCharacterAction(

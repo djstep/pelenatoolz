@@ -997,11 +997,6 @@ main {
   min-width: 0;
 }
 
-.screenplay-editor-shell--compact {
-  display: flex;
-  flex-direction: column;
-}
-
 .screenplay-action-sidebar {
   position: sticky;
   top: 1rem;

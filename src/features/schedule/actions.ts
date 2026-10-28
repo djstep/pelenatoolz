@@ -3,7 +3,6 @@
 import { revalidatePath } from "next/cache";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import {
-  assignSceneSchema,
   createShootDaySchema,
   reorderScenesSchema,
   updateShootDaySchema,
@@ -98,74 +97,6 @@ export async function createShootDayAction(
         ? "Съёмочный день добавлен"
         : `Добавлено ${dates.length} съёмочных дней`,
   };
-}
-
-export async function deleteShootDayAction(projectId: string, shootDayId: string) {
-  const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("schedule:write")) {
-    throw new Error("FORBIDDEN");
-  }
-
-  await prisma.shootDay.deleteMany({ where: { id: shootDayId, projectId } });
-  revalidateSchedule(projectId);
-}
-
-export async function assignSceneToDayAction(
-  projectId: string,
-  _prev: ActionState,
-  formData: FormData,
-): Promise<ActionState> {
-  const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("schedule:write")) {
-    return { error: "Недостаточно прав" };
-  }
-
-  const parsed = assignSceneSchema.safeParse({
-    shootDayId: formData.get("shootDayId"),
-    sceneId: formData.get("sceneId"),
-  });
-
-  if (!parsed.success) {
-    return { error: "Некорректные данные" };
-  }
-
-  const shootDay = await prisma.shootDay.findFirst({
-    where: { id: parsed.data.shootDayId, projectId },
-  });
-  const scene = await prisma.scene.findFirst({
-    where: { id: parsed.data.sceneId, projectId },
-  });
-
-  if (!shootDay || !scene) {
-    return { error: "Сцена или день не найдены" };
-  }
-
-  if (!isWorkingShootDay(shootDay.dayType)) {
-    return { error: "Сцены можно добавлять только в рабочие дни" };
-  }
-
-  const maxOrder = await prisma.shootDayScene.aggregate({
-    where: { shootDayId: parsed.data.shootDayId },
-    _max: { sortOrder: true },
-  });
-
-  try {
-    await prisma.shootDayScene.create({
-      data: {
-        shootDayId: parsed.data.shootDayId,
-        sceneId: parsed.data.sceneId,
-        sortOrder: (maxOrder._max.sortOrder ?? 0) + 1,
-        estimatedPages: scene.pageCount,
-      },
-    });
-  } catch {
-    return { error: "Сцена уже в этом дне" };
-  }
-
-  await syncShootDayResourceUsages(parsed.data.shootDayId);
-
-  revalidateSchedule(projectId);
-  return { success: "Сцена добавлена в день" };
 }
 
 export async function assignSceneToDayByDnDAction(
@@ -269,77 +200,6 @@ export async function updateShootDayAction(
     summary: "Обновлён съёмочный день",
     changes: parsed.data as Record<string, unknown>,
   });
-
-  revalidateSchedule(projectId);
-}
-
-export async function removeSceneFromDayAction(
-  projectId: string,
-  shootDaySceneId: string,
-) {
-  const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("schedule:write")) {
-    throw new Error("FORBIDDEN");
-  }
-
-  const row = await prisma.shootDayScene.findFirst({
-    where: {
-      id: shootDaySceneId,
-      shootDay: { projectId },
-    },
-    select: { shootDayId: true },
-  });
-
-  await prisma.shootDayScene.deleteMany({
-    where: {
-      id: shootDaySceneId,
-      shootDay: { projectId },
-    },
-  });
-
-  if (row) {
-    await syncShootDayResourceUsages(row.shootDayId);
-  }
-
-  revalidateSchedule(projectId);
-}
-
-export async function moveSceneInDayAction(
-  projectId: string,
-  shootDaySceneId: string,
-  direction: "up" | "down",
-) {
-  const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("schedule:write")) {
-    throw new Error("FORBIDDEN");
-  }
-
-  const current = await prisma.shootDayScene.findFirst({
-    where: { id: shootDaySceneId, shootDay: { projectId } },
-  });
-
-  if (!current) return;
-
-  const siblings = await prisma.shootDayScene.findMany({
-    where: { shootDayId: current.shootDayId },
-    orderBy: { sortOrder: "asc" },
-  });
-
-  const index = siblings.findIndex((s) => s.id === current.id);
-  const swapIndex = direction === "up" ? index - 1 : index + 1;
-  if (swapIndex < 0 || swapIndex >= siblings.length) return;
-
-  const other = siblings[swapIndex];
-  await prisma.$transaction([
-    prisma.shootDayScene.update({
-      where: { id: current.id },
-      data: { sortOrder: other.sortOrder },
-    }),
-    prisma.shootDayScene.update({
-      where: { id: other.id },
-      data: { sortOrder: current.sortOrder },
-    }),
-  ]);
 
   revalidateSchedule(projectId);
 }

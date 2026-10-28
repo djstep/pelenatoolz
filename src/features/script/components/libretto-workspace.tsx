@@ -20,7 +20,6 @@ import {
   bulkDeleteScenesAction,
   getScenesDeleteImpactAction,
   bulkUpdateSceneStatusAction,
-  deleteSceneAction,
 } from "@/features/script/actions";
 import { LibrettoExportModal } from "@/features/script/components/libretto-export-modal";
 import { LibrettoFiltersModal } from "@/features/script/components/libretto-filters-modal";

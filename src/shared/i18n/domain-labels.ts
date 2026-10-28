@@ -1,9 +1,6 @@
 import {
   ActorRoleType,
-  ContractorType,
   DayNight,
-  ElementType,
-  Gender,
   IntExt,
   LocationKind,
   ProductionSceneFactStatus,
@@ -107,16 +104,6 @@ export const dayNightLabels: Record<DayNight, string> = {
   DUSK: "Закат",
 };
 
-export const elementTypeLabels: Record<ElementType, string> = {
-  PROP: "Реквизит",
-  VEHICLE: "Транспорт",
-  WARDROBE: "Костюм",
-  SFX: "SFX",
-  MAKEUP: "Грим",
-  COSTUME: "Костюм",
-  OTHER: "Другое",
-};
-
 export const shootDayStatusLabels: Record<ShootDayStatus, string> = {
   PLANNED: "План",
   CONFIRMED: "Подтверждён",
@@ -135,19 +122,6 @@ export const actorRoleTypeLabels: Record<ActorRoleType, string> = {
   LEAD: "Главная",
   SUPPORTING: "Второго плана",
   EPISODIC: "Эпизодическая",
-};
-
-export const contractorTypeLabels: Record<ContractorType, string> = {
-  IP: "ИП",
-  INDIVIDUAL: "Физ. лицо",
-  SELF_EMPLOYED: "Самозанятый",
-  UNKNOWN: "Неизвестно",
-};
-
-export const genderLabels: Record<Gender, string> = {
-  MALE: "Мужской",
-  FEMALE: "Женский",
-  OTHER: "Другое",
 };
 
 export function formatSecondsMmSs(seconds: number | null | undefined): string {
