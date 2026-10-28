@@ -35,6 +35,6 @@ SaaS для управления кинопроизводством: сцена�
 - Аудит изменений — через существующий `recordAudit` / `auditMutation`.
 
 ## Документы
-- `docs/audit/AUDIT_REPORT.md` — полный аудит, нумерация пунктов.
+- `docs/audit/tasks/AUDIT_REPORT.md` — полный аудит, нумерация пунктов.
 - `docs/audit/FIX_REPORT_*.md` — отчёты по выполненным пакетам.
 - `docs/audit/tasks/` — ТЗ пакетов.
