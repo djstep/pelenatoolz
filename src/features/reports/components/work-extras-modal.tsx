@@ -116,6 +116,7 @@ export function WorkExtrasModal({
 
   return (
     <Modal
+      guardUnsaved
       open={open}
       onClose={onClose}
       title={`Доп. выплаты · ${displayName}`}
@@ -123,7 +124,7 @@ export function WorkExtrasModal({
       footer={
         canEdit ? (
           <>
-            <Button type="button" variant="ghost" onClick={onClose}>
+            <Button type="button" variant="ghost" onClick={onClose} data-modal-cancel>
               Отмена
             </Button>
             <Button type="button" disabled={pending} onClick={save}>
@@ -131,7 +132,7 @@ export function WorkExtrasModal({
             </Button>
           </>
         ) : (
-          <Button type="button" variant="ghost" onClick={onClose}>
+          <Button type="button" variant="ghost" onClick={onClose} data-modal-cancel>
             Закрыть
           </Button>
         )

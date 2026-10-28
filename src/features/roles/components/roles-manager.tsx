@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useState } from "react";
 import {
   createRoleAction,
   deleteRoleAction,
@@ -20,6 +20,7 @@ import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Modal } from "@/shared/ui/modal";
 import { useActionToast } from "@/shared/ui/toast";
+import { useActionSuccess } from "@/shared/ui/unsaved/use-action-success";
 
 const initial: RoleActionState = {};
 
@@ -50,9 +51,7 @@ function RoleEditorModal({
     : createRoleAction.bind(null, projectId);
   const [state, action, pending] = useActionState(bound, initial);
   useActionToast(state);
-  useEffect(() => {
-    if (state.success) onClose();
-  }, [state, onClose]);
+  useActionSuccess(state, onClose);
   const matrix: PermissionMatrix = role
     ? parsePermissionMatrix(role.permissions)
     : buildEmptyMatrix();
@@ -62,6 +61,7 @@ function RoleEditorModal({
 
   return (
     <Modal
+      guardUnsaved
       open={open}
       onClose={onClose}
       title={isEdit ? `Редактирование: ${role?.name}` : "Новая роль"}
@@ -71,7 +71,12 @@ function RoleEditorModal({
           <Button type="submit" form="role-form" disabled={pending}>
             {pending ? "…" : "Сохранить"}
           </Button>
-          <Button type="button" variant="secondary" onClick={onClose}>
+          <Button
+            type="button"
+            variant="secondary"
+            data-modal-cancel
+            onClick={onClose}
+          >
             Отмена
           </Button>
         </div>

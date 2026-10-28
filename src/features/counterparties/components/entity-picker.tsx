@@ -130,7 +130,11 @@ export function EntityPicker({
       </div>
 
       {open ? (
-        <div className="glass-dropdown absolute z-[80] mt-1.5 w-full p-2 shadow-xl">
+        // Поиск и быстрое добавление — не данные формы.
+        <div
+          className="glass-dropdown absolute z-[80] mt-1.5 w-full p-2 shadow-xl"
+          data-unsaved-ignore
+        >
           {mode === "list" ? (
             <>
               <input

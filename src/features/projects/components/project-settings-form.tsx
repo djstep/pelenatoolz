@@ -27,6 +27,8 @@ import { SegmentControl } from "@/shared/ui/segment-control";
 import { Select } from "@/shared/ui/select";
 import { cn } from "@/shared/lib/cn";
 import { useActionToast } from "@/shared/ui/toast";
+import { useActionSuccess } from "@/shared/ui/unsaved/use-action-success";
+import { useFormGuard } from "@/shared/ui/unsaved/use-form-guard";
 
 const initial: ActionState = {};
 
@@ -39,6 +41,9 @@ export function ProjectSettingsForm({ project }: { project: Project }) {
   const bound = updateProjectAction.bind(null, project.id);
   const [state, action, pending] = useActionState(bound, initial);
   useActionToast(state);
+  // Предупреждение о несохранённых изменениях при уходе со страницы.
+  const { ref: formRef, markClean } = useFormGuard();
+  useActionSuccess(state, markClean);
   const [projectType, setProjectType] = useState(project.type);
   const [timingMode, setTimingMode] = useState(project.timingMode);
   const [shootOnFilm, setShootOnFilm] = useState(project.shootOnFilm);
@@ -53,7 +58,7 @@ export function ProjectSettingsForm({ project }: { project: Project }) {
   const isArchived = project.status === ProjectStatus.ARCHIVED;
 
   return (
-    <form action={action} className="space-y-6">
+    <form ref={formRef} action={action} className="space-y-6">
       {isArchived ? (
         <div className="rounded-md border border-yellow-500/30 bg-yellow-500/10 p-3 text-sm">
           Проект в архиве. Для редактирования сначала восстановите его.

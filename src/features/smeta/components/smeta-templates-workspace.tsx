@@ -232,6 +232,7 @@ export function SmetaTemplatesWorkspace({
       </section>
 
       <Modal
+        guardUnsaved
         open={renaming != null}
         onClose={() => setRenaming(null)}
         title="Переименование шаблона"
@@ -263,6 +264,7 @@ export function SmetaTemplatesWorkspace({
             <Button
               type="button"
               variant="secondary"
+              data-modal-cancel
               onClick={() => setRenaming(null)}
             >
               Отмена
@@ -281,6 +283,7 @@ export function SmetaTemplatesWorkspace({
       </Modal>
 
       <Modal
+        guardUnsaved
         open={savingFrom}
         onClose={() => setSavingFrom(false)}
         title="Сохранить смету как шаблон"
@@ -313,6 +316,7 @@ export function SmetaTemplatesWorkspace({
             <Button
               type="button"
               variant="secondary"
+              data-modal-cancel
               onClick={() => setSavingFrom(false)}
             >
               Отмена

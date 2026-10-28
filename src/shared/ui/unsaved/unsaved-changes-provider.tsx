@@ -28,6 +28,8 @@ type UnsavedChangesApi = {
   confirm: (opts?: { canSave?: boolean }) => Promise<UnsavedChoice>;
   /** Идёт ли сейчас вопрос (чтобы окна не реагировали на Esc под ним). */
   isPrompting: () => boolean;
+  /** Есть ли где-то несохранённые изменения (например, перед скрытием редактора). */
+  hasUnsaved: () => boolean;
 };
 
 const UnsavedChangesContext = createContext<UnsavedChangesApi | null>(null);
@@ -86,8 +88,9 @@ export function UnsavedChangesProvider({ children }: { children: ReactNode }) {
       },
       confirm,
       isPrompting: () => promptRef.current !== null,
+      hasUnsaved: anyDirty,
     }),
-    [confirm],
+    [confirm, anyDirty],
   );
 
   // Закрытие и перезагрузка вкладки — штатное предупреждение браузера.

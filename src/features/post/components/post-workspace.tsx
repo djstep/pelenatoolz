@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useState } from "react";
+import { useActionState, useMemo, useState } from "react";
 import { PostStage, PostTaskStatus } from "@prisma/client";
 import {
   createPostTaskAction,
@@ -19,6 +19,7 @@ import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Modal } from "@/shared/ui/modal";
+import { useActionSuccess } from "@/shared/ui/unsaved/use-action-success";
 import { Select } from "@/shared/ui/select";
 import { cn } from "@/shared/lib/cn";
 
@@ -131,12 +132,11 @@ function TaskModal({
     : createPostTaskAction.bind(null, projectId);
   const [state, action, pending] = useActionState(bound, initial);
 
-  useEffect(() => {
-    if (state.success) onClose();
-  }, [state.success, onClose]);
+  useActionSuccess(state, onClose);
 
   return (
     <Modal
+      guardUnsaved
       open={open}
       onClose={onClose}
       title={task ? "Редактирование задачи" : "Новая задача поста"}
@@ -145,7 +145,12 @@ function TaskModal({
           <Button type="submit" form="post-task-form" disabled={pending}>
             {pending ? "…" : "Сохранить"}
           </Button>
-          <Button type="button" variant="secondary" onClick={onClose}>
+          <Button
+            type="button"
+            variant="secondary"
+            data-modal-cancel
+            onClick={onClose}
+          >
             Отмена
           </Button>
           {state.error ? (

@@ -87,6 +87,7 @@ export function ScheduleSlotEditModal({
 
   return (
     <Modal
+      guardUnsaved
       open
       onClose={onClose}
       title="Редактирование пробы"
@@ -100,7 +101,7 @@ export function ScheduleSlotEditModal({
             <span />
           )}
           <div className="flex gap-2">
-            <Button type="button" variant="ghost" onClick={onClose}>
+            <Button type="button" variant="ghost" onClick={onClose} data-modal-cancel>
               Отмена
             </Button>
             {canWrite ? (

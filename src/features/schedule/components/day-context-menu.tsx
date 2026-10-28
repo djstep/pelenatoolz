@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import {
   clearShootDayAction,
@@ -14,6 +14,7 @@ import { formatDateLong } from "@/shared/i18n/format-date";
 import { shootDayTypeLabels } from "@/shared/i18n/domain-labels";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
+import { useUnsavedChanges } from "@/shared/ui/unsaved/unsaved-changes-provider";
 import { cn } from "@/shared/lib/cn";
 
 export type MenuAnchor = {
@@ -131,6 +132,28 @@ export function DayContextMenu({
   const [comment, setComment] = useState(day.comment ?? "");
   const [prepNote, setPrepNote] = useState(day.prepNote ?? "");
   const [busy, setBusy] = useState(false);
+  const unsaved = useUnsavedChanges();
+
+  // Несохранённые изменения — открытая форма комментария или заметки отличается от исходной.
+  const isDirty =
+    (mode === "comment" && comment !== (day.comment ?? "")) ||
+    (mode === "prep" && prepNote !== (day.prepNote ?? ""));
+  const dirtyRef = useRef(isDirty);
+  useEffect(() => {
+    dirtyRef.current = isDirty;
+  }, [isDirty]);
+  useEffect(() => unsaved.register(() => dirtyRef.current), [unsaved]);
+
+  function requestClose() {
+    if (unsaved.isPrompting()) return;
+    if (!dirtyRef.current) {
+      onClose();
+      return;
+    }
+    void unsaved.confirm().then((choice) => {
+      if (choice === "discard") onClose();
+    });
+  }
 
   useLayoutEffect(() => {
     const el = panelRef.current;
@@ -155,7 +178,7 @@ export function DayContextMenu({
         type="button"
         className="absolute inset-0 cursor-default bg-transparent"
         aria-label="Закрыть"
-        onClick={onClose}
+        onClick={requestClose}
       />
       <div
         ref={panelRef}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState, useTransition, type ReactNode } from "react";
+import { useActionState, useState, useTransition, type ReactNode } from "react";
 import type { CastingCandidateStatus } from "@prisma/client";
 import Link from "next/link";
 import {
@@ -22,6 +22,9 @@ import { useActionToast, useToast } from "@/shared/ui/toast";
 import { Button } from "@/shared/ui/button";
 import { Label } from "@/shared/ui/label";
 import { Select } from "@/shared/ui/select";
+import { useActionSuccess } from "@/shared/ui/unsaved/use-action-success";
+import { useFormGuard } from "@/shared/ui/unsaved/use-form-guard";
+import { useUnsavedChanges } from "@/shared/ui/unsaved/unsaved-changes-provider";
 import { PersonFormFields } from "./casting-person-form-fields";
 
 const initial: CastingActionState = {};
@@ -61,9 +64,19 @@ export function CastingPersonDetail({
   const [state, action, formPending] = useActionState(bound, initial);
   useActionToast(state);
 
-  useEffect(() => {
-    if (state.success) setEditOpen(false);
-  }, [state.success]);
+  const { ref: formRef } = useFormGuard(editOpen);
+  const unsaved = useUnsavedChanges();
+  // «Отмена» прячет форму — несохранённое в ней пропало бы.
+  function cancelEdit() {
+    if (!unsaved.hasUnsaved()) {
+      setEditOpen(false);
+      return;
+    }
+    void unsaved.confirm().then((choice) => {
+      if (choice === "discard") setEditOpen(false);
+    });
+  }
+  useActionSuccess(state, () => setEditOpen(false));
 
   const physical =
     person.physicalParams && typeof person.physicalParams === "object"
@@ -266,13 +279,13 @@ export function CastingPersonDetail({
       {editOpen ? (
         <div className="glass-card space-y-4 p-5">
           <h2 className="font-semibold">Редактирование</h2>
-          <form action={action} className="space-y-4">
+          <form ref={formRef} action={action} className="space-y-4">
             <PersonFormFields projectId={projectId} person={person} />
             <div className="flex gap-3">
               <Button type="submit" disabled={formPending}>
                 {formPending ? "…" : "Сохранить"}
               </Button>
-              <Button type="button" variant="secondary" onClick={() => setEditOpen(false)}>
+              <Button type="button" variant="secondary" onClick={cancelEdit}>
                 Отмена
               </Button>
             </div>

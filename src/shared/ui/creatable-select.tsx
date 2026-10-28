@@ -71,7 +71,7 @@ export function CreatableSelect({
         </Button>
       </div>
       {open ? (
-        <div className="glass-dropdown absolute z-50 mt-1.5 w-full p-2 shadow-xl">
+        <div className="glass-dropdown absolute z-50 mt-1.5 w-full p-2 shadow-xl" data-unsaved-ignore>
           <input
             autoFocus
             className="glass-input mb-2 w-full rounded-lg px-2 py-1.5 text-sm"
@@ -169,6 +169,7 @@ export function CreatableMultiSelect({
         <input
           className="glass-input flex-1 px-3 py-2 text-sm"
           placeholder={placeholder}
+          data-unsaved-ignore
           value={query}
           onFocus={() => setOpen(true)}
           onChange={(e) => {
@@ -195,7 +196,7 @@ export function CreatableMultiSelect({
         </div>
       ) : null}
       {open ? (
-        <div className="glass-dropdown absolute z-50 w-full p-2 shadow-xl">
+        <div className="glass-dropdown absolute z-50 w-full p-2 shadow-xl" data-unsaved-ignore>
           <ul className="max-h-48 overflow-y-auto text-sm">
             {canCreate ? (
               <li>

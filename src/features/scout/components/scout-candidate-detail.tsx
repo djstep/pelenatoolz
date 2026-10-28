@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState, useTransition } from "react";
+import { useActionState, useState, useTransition } from "react";
 import type { ScoutCandidateStatus } from "@prisma/client";
 import Link from "next/link";
 import {
@@ -19,6 +19,7 @@ import { StatusSelect } from "@/features/preproduction/components/status-select"
 import { useActionToast, useToast } from "@/shared/ui/toast";
 import { Button } from "@/shared/ui/button";
 import { Modal } from "@/shared/ui/modal";
+import { useActionSuccess } from "@/shared/ui/unsaved/use-action-success";
 
 const initial: ScoutActionState = {};
 
@@ -54,9 +55,7 @@ export function ScoutCandidateDetail({
   const [state, action, formPending] = useActionState(bound, initial);
   useActionToast(state);
 
-  useEffect(() => {
-    if (state.success) setEditOpen(false);
-  }, [state.success]);
+  useActionSuccess(state, () => setEditOpen(false));
 
   const locationLinks = formatScoutLocations(candidate.locationLinks, locale, projectId);
   const photos = mediaUrls(candidate.photos);
@@ -200,6 +199,7 @@ export function ScoutCandidateDetail({
       ) : null}
 
       <Modal
+        guardUnsaved
         open={editOpen}
         onClose={() => setEditOpen(false)}
         title="Редактирование кандидата"
@@ -209,7 +209,12 @@ export function ScoutCandidateDetail({
             <Button type="submit" form="scout-edit-form" disabled={formPending}>
               {formPending ? "…" : "Сохранить"}
             </Button>
-            <Button type="button" variant="secondary" onClick={() => setEditOpen(false)}>
+            <Button
+              type="button"
+              variant="secondary"
+              data-modal-cancel
+              onClick={() => setEditOpen(false)}
+            >
               Отмена
             </Button>
           </div>

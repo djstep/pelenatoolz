@@ -24,6 +24,8 @@ import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { useActionToast } from "@/shared/ui/toast";
 import { cn } from "@/shared/lib/cn";
+import { useActionSuccess } from "@/shared/ui/unsaved/use-action-success";
+import { useFormGuard } from "@/shared/ui/unsaved/use-form-guard";
 
 export function ProductionReportWorkspace({
   locale,
@@ -53,6 +55,9 @@ export function ProductionReportWorkspace({
   const bound = updateProductionDayMetricsAction.bind(null, projectId, day.id);
   const [state, formAction, pending] = useActionState(bound, {});
   useActionToast(state);
+  // Предупреждение о несохранённых изменениях при уходе со страницы.
+  const { ref: formRef, markClean: markFormClean } = useFormGuard();
+  useActionSuccess(state, markFormClean);
 
   const selectedFact =
     report.sceneFacts.find((f) => f.id === selectedFactId) ?? null;
@@ -111,7 +116,7 @@ export function ProductionReportWorkspace({
 
       <section className="rounded-2xl border border-[var(--border)] bg-[var(--panel-solid)] p-5">
         <h3 className="mb-3 font-semibold">Общие показатели дня</h3>
-        <form action={formAction} className="space-y-4">
+        <form ref={formRef} action={formAction} className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <label className="space-y-1 text-xs">
               <span className="text-[var(--muted-fg)]">Факт · начало смены</span>

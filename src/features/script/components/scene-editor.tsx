@@ -17,6 +17,8 @@ import { ScenePlanningHistory } from "@/features/script/components/scene-plannin
 import type { SceneCategoryOption } from "@/features/script/components/scene-category-resource-block";
 import { formatSceneNumber } from "@/features/script/lib/libretto-display";
 import { Button } from "@/shared/ui/button";
+import { useActionSuccess } from "@/shared/ui/unsaved/use-action-success";
+import { useFormGuard } from "@/shared/ui/unsaved/use-form-guard";
 
 const initial: ActionState = {};
 
@@ -69,6 +71,9 @@ export function SceneEditor({
     () => scene.characters.map((c) => c.characterId) ?? [],
   );
   const [formKey, setFormKey] = useState(0);
+  // Предупреждение о несохранённых изменениях при уходе со страницы.
+  const { ref: formRef, markClean: markFormClean } = useFormGuard(canWrite, formKey);
+  useActionSuccess(state, markFormClean);
 
   useEffect(() => {
     setLocations(initialLocations);
@@ -176,6 +181,7 @@ export function SceneEditor({
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_280px]">
         <form
+          ref={formRef}
           key={formKey}
           id="scene-editor-form"
           action={canWrite ? action : undefined}

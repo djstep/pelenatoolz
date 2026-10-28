@@ -1,8 +1,9 @@
 /**
- * Снимок значений формы внутри элемента: то, что ушло бы на сервер при сохранении.
- * Берутся поля с name (включая скрытые — в них лежат выбранные компания, тип и т.п.)
- * и выбранные файлы. Служебные поля Next.js ($ACTION_…) и всё внутри
- * [data-unsaved-ignore] (настройки окна, а не данные) пропускаются.
+ * Снимок значений полей внутри элемента: всё, что человек может изменить.
+ * Поля с name (включая скрытые — в них лежат выбранные компания, тип и т.п.)
+ * и поля без name (формы, которые сохраняют обработчиком) — по порядку, а также
+ * выбранные файлы. Служебные поля Next.js ($ACTION_…) и всё внутри
+ * [data-unsaved-ignore] (поиск в выпадающих списках, настройки окна) пропускаются.
  * Два снимка равны — значит, изменений нет (в том числе если вернули как было).
  */
 export function snapshotFields(root: Element): string {
@@ -11,7 +12,7 @@ export function snapshotFields(root: Element): string {
     .querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>(
       "input, select, textarea",
     )
-    .forEach((el) => {
+    .forEach((el, index) => {
       if (el.closest("[data-unsaved-ignore]")) return;
       if (el instanceof HTMLInputElement) {
         if (["submit", "button", "reset", "image"].includes(el.type)) return;
@@ -21,21 +22,23 @@ export function snapshotFields(root: Element): string {
           return;
         }
       }
-      if (!el.name || el.name.startsWith("$ACTION")) return;
+      if (el.name.startsWith("$ACTION")) return;
+      if (!el.name && el.type === "hidden") return;
+      const key = el.name || `#${index}`;
       if (el instanceof HTMLInputElement && (el.type === "checkbox" || el.type === "radio")) {
-        values.push([el.name, el.checked ? `on:${el.value}` : "off"]);
+        values.push([key, el.checked ? `on:${el.value}` : "off"]);
         return;
       }
       if (el instanceof HTMLSelectElement && el.multiple) {
         values.push([
-          el.name,
+          key,
           Array.from(el.selectedOptions)
             .map((o) => o.value)
             .join("|"),
         ]);
         return;
       }
-      values.push([el.name, el.value]);
+      values.push([key, el.value]);
     });
   return JSON.stringify(values);
 }

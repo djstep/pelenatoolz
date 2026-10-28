@@ -26,6 +26,8 @@ import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { AvailabilityMiniPreview } from "@/features/actor-availability/components/availability-mini-preview";
 import { useActionToast, useToast } from "@/shared/ui/toast";
+import { useActionSuccess } from "@/shared/ui/unsaved/use-action-success";
+import { useFormGuard } from "@/shared/ui/unsaved/use-form-guard";
 import { CharacterScriptButton } from "@/features/screenplay/components/character-script-button";
 import { CastListExportButton } from "@/features/casting/components/cast-list-export-button";
 import { CastingCandidateComments } from "@/features/casting/components/casting-candidate-comments";
@@ -76,6 +78,8 @@ export function CharacterDetailView({
   );
   const [reqState, reqAction, reqPending] = useActionState(reqBound, initial);
   useActionToast(reqState);
+  const { ref: reqFormRef, markClean: markReqClean } = useFormGuard();
+  useActionSuccess(reqState, markReqClean);
 
   const snapBound = updateCharacterCastSnapshotAction.bind(
     null,
@@ -84,6 +88,8 @@ export function CharacterDetailView({
   );
   const [snapState, snapAction, snapPending] = useActionState(snapBound, initial);
   useActionToast(snapState);
+  const { ref: snapFormRef, markClean: markSnapClean } = useFormGuard();
+  useActionSuccess(snapState, markSnapClean);
 
   const actor = character.actors[0];
   const snapshot = character.snapshot;
@@ -146,7 +152,7 @@ export function CharacterDetailView({
 
       <section className="glass-card space-y-4 p-5">
         <h2 className="font-semibold">Требования к роли</h2>
-        <form action={reqAction} className="space-y-3">
+        <form ref={reqFormRef} action={reqAction} className="space-y-3">
           <div>
             <Label htmlFor="description">Описание персонажа</Label>
             <textarea
@@ -253,7 +259,7 @@ export function CharacterDetailView({
             Данные скопированы при утверждении. Редактирование здесь не меняет карточку
             в Кастинге.
           </p>
-          <form action={snapAction} className="space-y-4">
+          <form ref={snapFormRef} action={snapAction} className="space-y-4">
             <div className="grid gap-3 md:grid-cols-2 text-sm">
               <div>
                 <span className="text-[var(--muted-fg)]">ФИО</span>
@@ -375,12 +381,14 @@ function CharacterPayrollSection({
   const bound = updateActorAction.bind(null, projectId, actor.id);
   const [state, action, pending] = useActionState(bound, actorInitial);
   useActionToast(state);
+  const { ref: feeFormRef, markClean: markFeeClean } = useFormGuard();
+  useActionSuccess(state, markFeeClean);
 
   return (
     <div className="space-y-4 border-t border-[var(--border)] pt-4">
       {canFinanceRead ? (
         canFinanceWrite ? (
-          <form action={action}>
+          <form ref={feeFormRef} action={action}>
             <input type="hidden" name="lastName" value={actor.lastName} />
             <input type="hidden" name="firstName" value={actor.firstName ?? ""} />
             <input type="hidden" name="middleName" value={actor.middleName ?? ""} />

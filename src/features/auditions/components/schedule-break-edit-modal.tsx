@@ -87,6 +87,7 @@ export function ScheduleBreakEditModal({
 
   return (
     <Modal
+      guardUnsaved
       open
       onClose={onClose}
       title="Технический перерыв"
@@ -106,7 +107,7 @@ export function ScheduleBreakEditModal({
             <span />
           )}
           <div className="flex gap-2">
-            <Button type="button" variant="ghost" onClick={onClose}>
+            <Button type="button" variant="ghost" onClick={onClose} data-modal-cancel>
               Закрыть
             </Button>
             {canWrite ? (

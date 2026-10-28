@@ -231,6 +231,7 @@ function AttendanceSheetSettingsModal({
 
   return (
     <Modal
+      guardUnsaved
       open={open}
       onClose={onClose}
       title="Настройка явочного листа"
@@ -239,7 +240,12 @@ function AttendanceSheetSettingsModal({
           <Button type="button" disabled={pending || loading} onClick={save}>
             {pending ? "…" : "Сохранить"}
           </Button>
-          <Button type="button" variant="secondary" onClick={onClose}>
+          <Button
+            type="button"
+            variant="secondary"
+            data-modal-cancel
+            onClick={onClose}
+          >
             Отмена
           </Button>
         </div>

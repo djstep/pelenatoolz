@@ -29,6 +29,8 @@ import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Card } from "@/shared/ui/card";
+import { useActionSuccess } from "@/shared/ui/unsaved/use-action-success";
+import { useFormGuard } from "@/shared/ui/unsaved/use-form-guard";
 
 const initial: LocationActionState = {};
 
@@ -56,14 +58,20 @@ export function LocationDetailView({
   const reqBound = updateLocationRequirementsAction.bind(null, projectId, location.id);
   const [reqState, reqAction, reqPending] = useActionState(reqBound, initial);
   useActionToast(reqState);
+  const { ref: reqFormRef, markClean: markReqClean } = useFormGuard();
+  useActionSuccess(reqState, markReqClean);
 
   const snapBound = updateLocationScoutSnapshotAction.bind(null, projectId, location.id);
   const [snapState, snapAction, snapPending] = useActionState(snapBound, initial);
   useActionToast(snapState);
+  const { ref: snapFormRef, markClean: markSnapClean } = useFormGuard();
+  useActionSuccess(snapState, markSnapClean);
 
   const finBound = updateLocationFinancialAction.bind(null, projectId, location.id);
   const [finState, finAction, finPending] = useActionState(finBound, initial);
   useActionToast(finState);
+  const { ref: finFormRef, markClean: markFinClean } = useFormGuard();
+  useActionSuccess(finState, markFinClean);
 
   const scoutSnapshot = location.scoutSnapshot;
 
@@ -137,7 +145,7 @@ export function LocationDetailView({
             Открыть скаут →
           </Link>
         </div>
-        <form action={reqAction} className="space-y-3">
+        <form ref={reqFormRef} action={reqAction} className="space-y-3">
           <div>
             <Label htmlFor="requirementNotes">Что нужно найти</Label>
             <textarea
@@ -197,7 +205,7 @@ export function LocationDetailView({
           <p className="text-xs text-[var(--muted-fg)]">
             Скопировано при утверждении. Изменения здесь не затрагивают карточку в Скауте.
           </p>
-          <form action={snapAction} className="grid gap-3 md:grid-cols-2">
+          <form ref={snapFormRef} action={snapAction} className="grid gap-3 md:grid-cols-2">
             <div>
               <Label htmlFor="snapAddress">Адрес</Label>
               <Input
@@ -281,7 +289,7 @@ export function LocationDetailView({
         <Card className="space-y-4 p-5">
           <h3 className="font-semibold">Финансовые условия</h3>
           {canFinanceWrite ? (
-            <form action={finAction} className="space-y-4">
+            <form ref={finFormRef} action={finAction} className="space-y-4">
               <FinancialTermsBlock
                 shiftRate={location.shiftRate ? Number(location.shiftRate) : 0}
                 taxPercent={location.taxPercent ? Number(location.taxPercent) : 0}

@@ -31,6 +31,7 @@ import { useToast } from "@/shared/ui/toast";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
+import { Modal } from "@/shared/ui/modal";
 import { Select } from "@/shared/ui/select";
 
 type ActorOpt = {
@@ -429,14 +430,32 @@ export function AvailabilityCalendar({
       )}
 
       {editor ? (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4">
-          <div className="glass-card w-full max-w-md space-y-4 p-5">
-            <div>
-              <h3 className="font-semibold">Занятость</h3>
-              <p className="mt-1 text-sm text-[var(--muted-fg)]">
-                {editor.rowLabel} · {formatDateShort(parseDateKey(editor.dateKey), { utc: true })}
-              </p>
+        // Общее окно: крестик, Esc, клик мимо и вопрос о несохранённых изменениях.
+        <Modal
+          open
+          guardUnsaved
+          onClose={() => setEditor(null)}
+          title="Занятость"
+          footer={
+            <div className="flex gap-2">
+              <Button type="button" onClick={saveEditor} disabled={pending}>
+                {pending ? "…" : "Сохранить"}
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                data-modal-cancel
+                onClick={() => setEditor(null)}
+              >
+                Отмена
+              </Button>
             </div>
+          }
+        >
+          <div className="space-y-4">
+            <p className="text-sm text-[var(--muted-fg)]">
+              {editor.rowLabel} · {formatDateShort(parseDateKey(editor.dateKey), { utc: true })}
+            </p>
 
             {editor.kppLocked ? (
               <p className="rounded-lg border border-violet-400/40 bg-violet-500/15 px-3 py-2 text-sm text-[var(--tone-violet)]">
@@ -486,17 +505,8 @@ export function AvailabilityCalendar({
                 placeholder="Например: занят до 15:00"
               />
             </div>
-
-            <div className="flex gap-2">
-              <Button type="button" onClick={saveEditor} disabled={pending}>
-                {pending ? "…" : "Сохранить"}
-              </Button>
-              <Button type="button" variant="secondary" onClick={() => setEditor(null)}>
-                Отмена
-              </Button>
-            </div>
           </div>
-        </div>
+        </Modal>
       ) : null}
     </div>
   );
