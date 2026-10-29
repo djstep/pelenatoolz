@@ -890,7 +890,8 @@ export function SmetaSpreadsheetEditor({
           {mode === "draft" ? (
             <span
               className={cn(
-                "text-xs",
+                // Постоянная ширина: смена «Сохранение…» / «Сохранено …» не переносит кнопки.
+                "inline-block w-40 truncate text-xs",
                 status === "error"
                   ? "text-[var(--danger)]"
                   : "text-[var(--foreground)]/70",
