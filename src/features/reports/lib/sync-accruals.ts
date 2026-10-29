@@ -6,7 +6,10 @@ import {
   type CounterpartyHints,
 } from "@/features/accruals/lib/counterparty-hint";
 import { sumExtrasPay } from "@/features/payroll/lib/parse-extra-payments";
-import { computeWorkPay } from "@/features/reports/lib/compute-work-pay";
+import {
+  computeWorkPay,
+  overtimeRatesFromJson,
+} from "@/features/reports/lib/compute-work-pay";
 import { AuditEntityType } from "@/shared/audit/entity-types";
 import { recordAudit, type AuditContext } from "@/shared/audit/with-audit";
 import { prisma } from "@/shared/db/prisma";
@@ -36,7 +39,6 @@ const rowInclude = {
       middleName: true,
       defaultBudgetItemId: true,
       overtimeBudgetItemId: true,
-      overtimeRates: true,
     },
   },
   item: {
@@ -46,7 +48,6 @@ const rowInclude = {
       defaultBudgetItemId: true,
       overtimeBudgetItemId: true,
       mileageBudgetItemId: true,
-      overtimeRates: true,
     },
   },
   location: {
@@ -55,7 +56,6 @@ const rowInclude = {
       name: true,
       defaultBudgetItemId: true,
       overtimeBudgetItemId: true,
-      overtimeRates: true,
     },
   },
 } satisfies Prisma.ProductionReportWorkRowInclude;
@@ -91,8 +91,6 @@ function amounts(net: number, gross: number, quantity: number | null): PartAmoun
 
 /** Суммы частей оплаты строки — тем же расчётом, что и в самом отчёте. */
 function partsOf(row: WorkRowWithSources): Map<AccrualReportPart, PartAmounts> {
-  const sourceRates =
-    row.actor?.overtimeRates ?? row.item?.overtimeRates ?? row.location?.overtimeRates ?? [];
   const pay = computeWorkPay({
     factStart: row.factStart,
     factEnd: row.factEnd,
@@ -103,12 +101,7 @@ function partsOf(row: WorkRowWithSources): Map<AccrualReportPart, PartAmounts> {
     taxPercent: dec(row.taxPercent),
     overtimeMode: row.overtimeMode,
     unpaidOvertimeMode: row.unpaidOvertimeMode,
-    overtimeRates: sourceRates.map((r) => ({
-      hourNumber: r.hourNumber,
-      percentRate: dec(r.percentRate),
-      amount: dec(r.amount),
-      taxPercent: dec(r.taxPercent),
-    })),
+    overtimeRates: overtimeRatesFromJson(row.overtimeRates),
     extrasTotal: sumExtrasPay(row.extras),
     factKm: row.factKm != null ? Number(row.factKm) : null,
     kmRate: row.kmRate != null ? Number(row.kmRate) : null,

@@ -4,6 +4,7 @@ import { prisma } from "@/shared/db/prisma";
 import {
   computeWorkPay,
   OVERTIME_MODE_LABELS,
+  overtimeRatesFromJson,
   UNPAID_OT_MODE_LABELS,
 } from "@/features/reports/lib/compute-work-pay";
 import {
@@ -321,15 +322,13 @@ async function loadCandidates(projectId: string, shootDayId: string) {
 }
 
 type ExistingRow = Prisma.ProductionReportWorkRowGetPayload<{
-  include: {
-    extras: true;
-    actor: { include: { overtimeRates: true } };
-    item: { include: { overtimeRates: true } };
-    location: { include: { overtimeRates: true } };
-  };
+  include: { extras: true };
 }>;
 
-/** Ставки, налог и режимы строки — меняются при обновлении только с галочкой. */
+/**
+ * Ставки, налог, режимы и почасовые ставки переработки строки — снимок с карточки.
+ * При обновлении из КПП меняются только с галочкой «Обновить ставки из карточек».
+ */
 type RateFields = {
   shiftRate: number | null;
   taxPercent: number | null;
@@ -339,9 +338,10 @@ type RateFields = {
   unpaidOvertimeMode: SeedCandidate["unpaidOvertimeMode"];
   tracksMileage: boolean;
   kmRate: number | null;
+  overtimeRates: RateRow[];
 };
 
-function candidateRates(c: SeedCandidate, prev?: ExistingRow): RateFields {
+function candidateRates(c: SeedCandidate, overtimeRates: RateRow[], prev?: ExistingRow): RateFields {
   return {
     shiftRate: c.shiftRate ?? null,
     taxPercent: c.taxPercent ?? null,
@@ -351,6 +351,7 @@ function candidateRates(c: SeedCandidate, prev?: ExistingRow): RateFields {
     unpaidOvertimeMode: c.unpaidOvertimeMode ?? null,
     tracksMileage: Boolean(c.tracksMileage) || c.kind === "TRANSPORT",
     kmRate: c.kmRate ?? (prev?.kmRate != null ? Number(prev.kmRate) : null),
+    overtimeRates: [...overtimeRates].sort((a, b) => a.hourNumber - b.hourNumber),
   };
 }
 
@@ -364,14 +365,41 @@ function rowRates(row: ExistingRow): RateFields {
     unpaidOvertimeMode: row.unpaidOvertimeMode,
     tracksMileage: row.tracksMileage,
     kmRate: dec(row.kmRate),
+    overtimeRates: overtimeRatesFromJson(row.overtimeRates),
   };
+}
+
+/** Поля для записи в строку (почасовые ставки — JSON). */
+function rateData(rates: RateFields) {
+  return { ...rates, overtimeRates: rates.overtimeRates as Prisma.InputJsonValue };
 }
 
 function money(n: number | null) {
   return n == null ? "—" : n.toLocaleString("ru-RU", { maximumFractionDigits: 2 });
 }
 
-const RATE_LABELS: { key: keyof RateFields; label: string; show: (v: RateFields) => string }[] = [
+/** «1 ч: 150%, 2 ч: 7 500 (13%)» — для таблицы «было → стало». */
+function showOvertimeRates(rates: RateRow[]) {
+  const filled = rates.filter((r) => r.percentRate != null || r.amount != null);
+  if (filled.length === 0) return "нет";
+  return filled
+    .map((r) => {
+      const value = r.percentRate != null ? `${money(r.percentRate)}%` : money(r.amount);
+      const tax = r.taxPercent != null ? ` (налог ${money(r.taxPercent)}%)` : "";
+      return `${r.hourNumber} ч: ${value}${tax}`;
+    })
+    .join(", ");
+}
+
+function sameOvertimeRates(a: RateRow[], b: RateRow[]) {
+  return showOvertimeRates(a) === showOvertimeRates(b);
+}
+
+const RATE_LABELS: {
+  key: keyof RateFields;
+  label: string;
+  show: (v: RateFields) => string;
+}[] = [
   { key: "shiftRate", label: "Ставка смены", show: (v) => money(v.shiftRate) },
   { key: "taxPercent", label: "Налог, %", show: (v) => money(v.taxPercent) },
   {
@@ -396,17 +424,22 @@ const RATE_LABELS: { key: keyof RateFields; label: string; show: (v: RateFields)
   },
   { key: "tracksMileage", label: "Учёт км", show: (v) => (v.tracksMileage ? "да" : "нет") },
   { key: "kmRate", label: "Ставка за км", show: (v) => money(v.kmRate) },
+  {
+    key: "overtimeRates",
+    label: "Ставки переработки по часам",
+    show: (v) => showOvertimeRates(v.overtimeRates),
+  },
 ];
 
 function sameValue(a: unknown, b: unknown) {
   if (typeof a === "number" && typeof b === "number") return Math.abs(a - b) < 0.005;
+  if (Array.isArray(a) && Array.isArray(b)) return sameOvertimeRates(a, b);
   return a === b;
 }
 
 function payOf(
   row: Pick<ExistingRow, "factStart" | "factEnd" | "lunchSkipped" | "factKm" | "extras">,
   rates: RateFields,
-  overtimeRates: RateRow[],
 ) {
   return computeWorkPay({
     factStart: row.factStart,
@@ -418,17 +451,11 @@ function payOf(
     taxPercent: rates.taxPercent,
     overtimeMode: rates.overtimeMode,
     unpaidOvertimeMode: rates.unpaidOvertimeMode,
-    overtimeRates,
+    overtimeRates: rates.overtimeRates,
     extrasTotal: sumExtrasPay(row.extras),
     factKm: row.factKm != null ? Number(row.factKm) : null,
     kmRate: rates.kmRate,
   });
-}
-
-function overtimeRatesOf(row: ExistingRow): RateRow[] {
-  return mapRates(
-    row.actor?.overtimeRates ?? row.item?.overtimeRates ?? row.location?.overtimeRates ?? [],
-  );
 }
 
 export type WorkRowRateChange = {
@@ -466,12 +493,7 @@ async function loadPlan(
     reportId
       ? prisma.productionReportWorkRow.findMany({
           where: { reportId },
-          include: {
-            extras: true,
-            actor: { include: { overtimeRates: true } },
-            item: { include: { overtimeRates: true } },
-            location: { include: { overtimeRates: true } },
-          },
+          include: { extras: true },
         })
       : Promise.resolve([] as ExistingRow[]),
   ]);
@@ -487,7 +509,7 @@ async function loadPlan(
     if (!prev) continue;
 
     const before = rowRates(prev);
-    const after = candidateRates(c, prev);
+    const after = candidateRates(c, ratesFor(c), prev);
     const fields = RATE_LABELS.filter((f) => !sameValue(before[f.key], after[f.key])).map(
       (f) => ({ label: f.label, before: f.show(before), after: f.show(after) }),
     );
@@ -500,12 +522,12 @@ async function loadPlan(
         fields,
         pay: {
           before: money(dec(prev.totalPay)),
-          after: money(payOf(row, after, overtimeRatesOf(prev)).totalPay),
+          after: money(payOf(row, after).totalPay),
         },
       });
     }
 
-    const payKeepingRates = payOf(row, before, overtimeRatesOf(prev)).totalPay;
+    const payKeepingRates = payOf(row, before).totalPay;
     if (
       prev.displayName !== c.displayName ||
       prev.categoryLabel !== c.categoryLabel ||
@@ -580,8 +602,8 @@ export async function applyWorkRowSync(
     const prev = existingByKey.get(c.sourceKey);
     if (prev) {
       const times = timesAfterRefresh(prev, c);
-      const rates = options.updateRates ? candidateRates(c, prev) : rowRates(prev);
-      const pay = payOf({ ...prev, ...times }, rates, overtimeRatesOf(prev));
+      const rates = options.updateRates ? candidateRates(c, ratesFor(c), prev) : rowRates(prev);
+      const pay = payOf({ ...prev, ...times }, rates);
       await prisma.productionReportWorkRow.update({
         where: { id: prev.id },
         data: {
@@ -592,7 +614,7 @@ export async function applyWorkRowSync(
           locationId: c.locationId ?? null,
           ...times,
           sortOrder: c.sortOrder,
-          ...(options.updateRates ? rates : {}),
+          ...(options.updateRates ? rateData(rates) : {}),
           workedMin: pay.workedMin,
           factOvertimeMin: pay.factOvertimeMin,
           payableOvertimeMin: pay.payableOvertimeMin,
@@ -606,12 +628,11 @@ export async function applyWorkRowSync(
       continue;
     }
 
-    const rates = candidateRates(c);
+    const rates = candidateRates(c, ratesFor(c));
     const times = { factStart: c.factStart || null, factEnd: c.factEnd || null };
     const pay = payOf(
       { ...times, lunchSkipped: false, factKm: null, extras: [] },
       rates,
-      ratesFor(c),
     );
     const data: Prisma.ProductionReportWorkRowUncheckedCreateInput = {
       reportId,
@@ -624,7 +645,7 @@ export async function applyWorkRowSync(
       locationId: c.locationId ?? null,
       ...times,
       lunchSkipped: false,
-      ...rates,
+      ...rateData(rates),
       workedMin: pay.workedMin,
       factOvertimeMin: pay.factOvertimeMin,
       payableOvertimeMin: pay.payableOvertimeMin,

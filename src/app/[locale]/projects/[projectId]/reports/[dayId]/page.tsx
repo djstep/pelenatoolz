@@ -4,6 +4,7 @@ import { DayDocsExportMenu } from "@/features/day-docs/components/day-docs-expor
 import { ProductionReportWorkspace } from "@/features/reports/components/production-report-workspace";
 import {
   ReportCreatePanel,
+  ReportRatesNotice,
   ReportStalePanel,
 } from "@/features/reports/components/report-refresh-panel";
 import {
@@ -62,6 +63,13 @@ export default async function ProductionReportDayPage({ params }: Props) {
     <div className="space-y-6">
       {staleness?.stale ? (
         <ReportStalePanel
+          projectId={projectId}
+          shootDayId={dayId}
+          staleness={staleness}
+          canEdit={canEdit}
+        />
+      ) : staleness?.ratesDiffer ? (
+        <ReportRatesNotice
           projectId={projectId}
           shootDayId={dayId}
           staleness={staleness}

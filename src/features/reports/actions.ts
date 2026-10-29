@@ -352,29 +352,17 @@ export async function saveProductionSceneFactAction(
 async function recomputeWorkRowPay(workRowId: string) {
   const row = await prisma.productionReportWorkRow.findUnique({
     where: { id: workRowId },
-    include: {
-      extras: true,
-      actor: { include: { overtimeRates: true } },
-      item: { include: { overtimeRates: true } },
-      location: { include: { overtimeRates: true } },
-    },
+    include: { extras: true },
   });
   if (!row) return null;
 
-  const { computeWorkPay } = await import("@/features/reports/lib/compute-work-pay");
+  const { computeWorkPay, overtimeRatesFromJson } = await import(
+    "@/features/reports/lib/compute-work-pay"
+  );
   const { dec } = await import("@/shared/db/serialize-decimal");
   const extrasTotal = sumExtrasPay(row.extras);
-  const sourceRates =
-    row.actor?.overtimeRates ??
-    row.item?.overtimeRates ??
-    row.location?.overtimeRates ??
-    [];
-  const rates = sourceRates.map((r) => ({
-    hourNumber: r.hourNumber,
-    percentRate: dec(r.percentRate),
-    amount: dec(r.amount),
-    taxPercent: dec(r.taxPercent),
-  }));
+  // Почасовые ставки — снимок в строке, как остальные ставки (не из карточки).
+  const rates = overtimeRatesFromJson(row.overtimeRates);
 
   const pay = computeWorkPay({
     factStart: row.factStart,

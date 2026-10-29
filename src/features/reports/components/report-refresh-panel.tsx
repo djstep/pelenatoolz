@@ -71,9 +71,129 @@ export function ReportCreatePanel({
   );
 }
 
+/** Кнопка «Обновить из КПП» (только у редактора) или подсказка для остальных. */
+function RefreshButton({
+  projectId,
+  shootDayId,
+  canEdit,
+  updateRates,
+}: {
+  projectId: string;
+  shootDayId: string;
+  canEdit: boolean;
+  updateRates: boolean;
+}) {
+  const router = useRouter();
+  const toast = useToast();
+  const [pending, start] = useTransition();
+
+  if (!canEdit) {
+    return (
+      <p className="mt-3 text-sm text-[var(--muted-fg)]">
+        Обновить отчёт может тот, кто ведёт производственные отчёты.
+      </p>
+    );
+  }
+  return (
+    <Button
+      type="button"
+      className="mt-4"
+      disabled={pending}
+      onClick={() =>
+        start(async () => {
+          const res = await refreshProductionReportAction(projectId, shootDayId, {
+            create: false,
+            updateRates,
+          });
+          if (res.error) {
+            toast.error(res.error);
+            return;
+          }
+          toast.success(res.success ?? "Отчёт обновлён");
+          router.refresh();
+        })
+      }
+    >
+      {pending ? "Обновление…" : "Обновить из КПП"}
+    </Button>
+  );
+}
+
+/** Ставки в карточках против строк: галочка и таблица «было → стало» с оплатой. */
+function RateChanges({
+  staleness,
+  canEdit,
+  updateRates,
+  onUpdateRates,
+}: {
+  staleness: ReportStaleness;
+  canEdit: boolean;
+  updateRates: boolean;
+  onUpdateRates: (value: boolean) => void;
+}) {
+  const changes = staleness.rows.rateChanges;
+  return (
+    <div className="mt-4 space-y-2">
+      {canEdit ? (
+        <label className="flex items-center gap-2 text-sm font-medium">
+          <input
+            type="checkbox"
+            checked={updateRates}
+            onChange={(e) => onUpdateRates(e.target.checked)}
+            className="h-4 w-4 accent-[var(--accent)]"
+          />
+          Обновить ставки из карточек
+        </label>
+      ) : (
+        <p className="text-sm font-medium">Ставки в карточках отличаются от отчёта</p>
+      )}
+      <p className="text-xs text-[var(--muted-fg)]">
+        Без галочки существующие строки остаются со своими ставками, налогом, режимами и ставками
+        переработки.
+      </p>
+      <div className="overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--panel-solid)]">
+        <table className="w-full text-left text-sm">
+          <thead>
+            <tr className="border-b border-[var(--border)] text-[var(--muted-fg)]">
+              <th className="px-3 py-2">Строка</th>
+              <th className="px-3 py-2">Что</th>
+              <th className="px-3 py-2">Было</th>
+              <th className="px-3 py-2">Станет</th>
+            </tr>
+          </thead>
+          <tbody>
+            {changes.flatMap((change) => [
+              ...change.fields.map((field, index) => (
+                <tr
+                  key={`${change.rowId}-${field.label}`}
+                  className="border-b border-[var(--border)]/60"
+                >
+                  <td className="px-3 py-2 font-medium">{index === 0 ? change.name : ""}</td>
+                  <td className="px-3 py-2">{field.label}</td>
+                  <td className="px-3 py-2">{field.before}</td>
+                  <td className="px-3 py-2">{field.after}</td>
+                </tr>
+              )),
+              <tr
+                key={`${change.rowId}-pay`}
+                className="border-b border-[var(--border)]/60 text-[var(--muted-fg)]"
+              >
+                <td className="px-3 py-2" />
+                <td className="px-3 py-2">Оплата с налогом</td>
+                <td className="px-3 py-2">{change.pay.before}</td>
+                <td className="px-3 py-2">{change.pay.after}</td>
+              </tr>,
+            ])}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 /**
- * «Отчёт устарел, обновить?» — что изменит «Обновить из КПП». Строки добавляются и убираются
- * всегда; ставки, налог и режимы существующих строк — только с галочкой.
+ * «Отчёт устарел, обновить?» — изменились сцены, строки или начисления. Строки добавляются и
+ * убираются всегда; ставки существующих строк — только с галочкой (если ставки тоже расходятся).
  */
 export function ReportStalePanel({
   projectId,
@@ -86,9 +206,6 @@ export function ReportStalePanel({
   staleness: ReportStaleness;
   canEdit: boolean;
 }) {
-  const router = useRouter();
-  const toast = useToast();
-  const [pending, start] = useTransition();
   const [updateRates, setUpdateRates] = useState(false);
   const { rows, accruals } = staleness;
 
@@ -131,93 +248,69 @@ export function ReportStalePanel({
           ))}
         </ul>
       ) : null}
+      {staleness.ratesDiffer ? (
+        <RateChanges
+          staleness={staleness}
+          canEdit={canEdit}
+          updateRates={updateRates}
+          onUpdateRates={setUpdateRates}
+        />
+      ) : null}
+      <RefreshButton
+        projectId={projectId}
+        shootDayId={shootDayId}
+        canEdit={canEdit}
+        updateRates={updateRates}
+      />
+    </section>
+  );
+}
 
-      {rows.rateChanges.length ? (
-        <div className="mt-4 space-y-2">
-          {canEdit ? (
-            <label className="flex items-center gap-2 text-sm font-medium">
-              <input
-                type="checkbox"
-                checked={updateRates}
-                onChange={(e) => setUpdateRates(e.target.checked)}
-                className="h-4 w-4 accent-[var(--accent)]"
-              />
-              Обновить ставки из карточек
-            </label>
-          ) : (
-            <p className="text-sm font-medium">Ставки в карточках отличаются от отчёта</p>
-          )}
-          <p className="text-xs text-[var(--muted-fg)]">
-            Без галочки существующие строки остаются со своими ставками, налогом и режимами.
-          </p>
-          <div className="overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--panel-solid)]">
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="border-b border-[var(--border)] text-[var(--muted-fg)]">
-                  <th className="px-3 py-2">Строка</th>
-                  <th className="px-3 py-2">Что</th>
-                  <th className="px-3 py-2">Было</th>
-                  <th className="px-3 py-2">Станет</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.rateChanges.flatMap((change) => [
-                  ...change.fields.map((field, index) => (
-                    <tr
-                      key={`${change.rowId}-${field.label}`}
-                      className="border-b border-[var(--border)]/60"
-                    >
-                      <td className="px-3 py-2 font-medium">
-                        {index === 0 ? change.name : ""}
-                      </td>
-                      <td className="px-3 py-2">{field.label}</td>
-                      <td className="px-3 py-2">{field.before}</td>
-                      <td className="px-3 py-2">{field.after}</td>
-                    </tr>
-                  )),
-                  <tr
-                    key={`${change.rowId}-pay`}
-                    className="border-b border-[var(--border)]/60 text-[var(--muted-fg)]"
-                  >
-                    <td className="px-3 py-2" />
-                    <td className="px-3 py-2">Оплата с налогом</td>
-                    <td className="px-3 py-2">{change.pay.before}</td>
-                    <td className="px-3 py-2">{change.pay.after}</td>
-                  </tr>,
-                ])}
-              </tbody>
-            </table>
-          </div>
+/**
+ * Тихая строка «Ставки в карточках отличаются (N)»: сцены и строки совпадают с КПП, расходятся
+ * только ставки. По клику — таблица «было → стало», галочка и кнопка.
+ */
+export function ReportRatesNotice({
+  projectId,
+  shootDayId,
+  staleness,
+  canEdit,
+}: {
+  projectId: string;
+  shootDayId: string;
+  staleness: ReportStaleness;
+  canEdit: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [updateRates, setUpdateRates] = useState(false);
+  const count = staleness.rows.rateChanges.length;
+
+  return (
+    <div className="print:hidden">
+      <button
+        type="button"
+        aria-expanded={open}
+        className="text-sm text-[var(--muted-fg)] underline-offset-2 hover:underline"
+        onClick={() => setOpen((v) => !v)}
+      >
+        Ставки в карточках отличаются ({count}) {open ? "▴" : "▾"}
+      </button>
+      {open ? (
+        <div className="mt-2 rounded-2xl border border-[var(--border)] bg-[var(--panel-solid)] p-4">
+          <RateChanges
+            staleness={staleness}
+            canEdit={canEdit}
+            updateRates={updateRates}
+            onUpdateRates={setUpdateRates}
+          />
+          <RefreshButton
+            projectId={projectId}
+            shootDayId={shootDayId}
+            canEdit={canEdit}
+            updateRates={updateRates}
+          />
         </div>
       ) : null}
-
-      {canEdit ? (
-        <Button
-          type="button"
-          className="mt-4"
-          disabled={pending}
-          onClick={() =>
-            start(async () => {
-              const res = await refreshProductionReportAction(projectId, shootDayId, {
-                create: false,
-                updateRates,
-              });
-              if (res.error) {
-                toast.error(res.error);
-                return;
-              }
-              toast.success(res.success ?? "Отчёт обновлён");
-              router.refresh();
-            })
-          }
-        >
-          {pending ? "Обновление…" : "Обновить из КПП"}
-        </Button>
-      ) : (
-        <p className="mt-3 text-sm text-[var(--muted-fg)]">
-          Обновить отчёт может тот, кто ведёт производственные отчёты.
-        </p>
-      )}
-    </section>
+    </div>
   );
 }

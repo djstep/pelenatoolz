@@ -14,6 +14,27 @@ export type OvertimeRateInput = {
   taxPercent: number | null;
 };
 
+function numOrNull(v: unknown): number | null {
+  if (v === null || v === undefined || v === "") return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Снимок почасовых ставок из строки отчёта (`ProductionReportWorkRow.overtimeRates`). */
+export function overtimeRatesFromJson(raw: unknown): OvertimeRateInput[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((r): r is Record<string, unknown> => typeof r === "object" && r !== null)
+    .map((r) => ({
+      hourNumber: Number(r.hourNumber),
+      percentRate: numOrNull(r.percentRate),
+      amount: numOrNull(r.amount),
+      taxPercent: numOrNull(r.taxPercent),
+    }))
+    .filter((r) => Number.isInteger(r.hourNumber) && r.hourNumber > 0)
+    .sort((a, b) => a.hourNumber - b.hourNumber);
+}
+
 export type WorkPayInput = {
   factStart: string | null | undefined;
   factEnd: string | null | undefined;

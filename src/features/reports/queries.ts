@@ -193,12 +193,16 @@ export type ReportStaleness = {
   scenesChanged: number;
   rows: WorkRowSyncPlan;
   accruals: AccrualSyncCounts;
+  /** Сцены, строки или начисления отличаются — плашка «Отчёт устарел, обновить?» */
   stale: boolean;
+  /** Ставки в карточках отличаются от строк — тихая строка (сама по себе не плашка) */
+  ratesDiffer: boolean;
 };
 
 /**
  * Что изменит «Обновить из КПП»: сцены, строки работы, ставки (только с галочкой),
- * начисления. Ничего не пишет — для плашки «Отчёт устарел, обновить?».
+ * начисления. Ничего не пишет. Расхождение ставок (и вызванная им разница в оплате)
+ * плашку не включает — для него тихая строка.
  */
 export async function getReportStaleness(
   projectId: string,
@@ -220,8 +224,7 @@ export async function getReportStaleness(
 
   const stale =
     scenes.toCreate.length + scenes.toUpdate.length > 0 ||
-    rows.added.length + rows.removed.length + rows.rateChanges.length + rows.otherChanged.length >
-      0 ||
+    rows.added.length + rows.removed.length + rows.otherChanged.length > 0 ||
     accruals.created + accruals.updated + accruals.zeroed > 0;
   return {
     scenesAdded: scenes.toCreate.map((row) => formatSceneLabel(row.scene)),
@@ -229,6 +232,7 @@ export async function getReportStaleness(
     rows,
     accruals,
     stale,
+    ratesDiffer: rows.rateChanges.length > 0,
   };
 }
 

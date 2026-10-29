@@ -1228,6 +1228,9 @@ model ProductionReportWorkRow {
   kmRate             Decimal?           @db.Decimal(12, 2)
   mileagePay         Decimal?           @db.Decimal(14, 2)
   totalPay           Decimal?           @db.Decimal(14, 2)
+  /// Снимок почасовых ставок переработки с карточки: [{ hourNumber, percentRate, amount,
+  /// taxPercent }]. Меняется только при «Обновить из КПП» с галочкой «Обновить ставки».
+  overtimeRates      Json               @default("[]")
   sortOrder          Int                @default(0)
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
