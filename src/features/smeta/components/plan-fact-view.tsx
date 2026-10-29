@@ -65,10 +65,10 @@ function NumberCells({ n, bold }: { n: PlanFactNumbers; bold?: boolean }) {
         className={cn(
           "px-3 py-1.5 text-right whitespace-nowrap",
           bold && "font-semibold",
-          n.overrun && n.remaining < -0.005 && over,
+          n.overrun && n.remaining !== null && n.remaining < -0.005 && over,
         )}
       >
-        {formatRub(n.remaining)}
+        {n.remaining === null ? "—" : formatRub(n.remaining)}
       </td>
       <td className={cn("px-3 py-1.5 text-right whitespace-nowrap", bold && "font-semibold")}>
         {percent(n.percent)}

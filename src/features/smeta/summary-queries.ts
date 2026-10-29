@@ -1,6 +1,7 @@
 import "server-only";
 
 import { listDepartmentsForSmeta } from "@/features/departments/queries";
+import { EXCEL_EMPTY } from "@/features/smeta/lib/export-summary-xlsx";
 import { freezeSheetFormulas } from "@/features/smeta/lib/version-snapshot";
 import {
   assembleWorkbookFromSheets,
@@ -20,6 +21,7 @@ const STYLE_HEADER = "svodHeader";
 const STYLE_MONEY = "svodMoney";
 const STYLE_TOTAL = "svodTotal";
 const STYLE_TOTAL_MONEY = "svodTotalMoney";
+const STYLE_DASH = "svodDash";
 const MONEY_PATTERN = "#,##0.00";
 
 const SUMMARY_STYLES = {
@@ -27,6 +29,7 @@ const SUMMARY_STYLES = {
   [STYLE_MONEY]: { n: { pattern: MONEY_PATTERN } },
   [STYLE_TOTAL]: { bl: 1 },
   [STYLE_TOTAL_MONEY]: { bl: 1, n: { pattern: MONEY_PATTERN } },
+  [STYLE_DASH]: { ht: 3 },
 };
 
 export type SummaryRow = {
@@ -128,8 +131,12 @@ function summarySheet(
       2: { v: n.plan, t: 2, s: money },
       3: { v: n.accrued, t: 2, s: money },
       4: { v: n.paid, t: 2, s: money },
-      5: { v: n.remaining, t: 2, s: money },
     };
+    // У «Без статьи» остатка нет: на экране прочерк, в Excel ячейка пустая.
+    line[5] =
+      n.remaining === null
+        ? { v: "—", t: 1, s: STYLE_DASH, custom: { [EXCEL_EMPTY]: true } }
+        : { v: n.remaining, t: 2, s: money };
     if (drafts && draft !== null) line[6] = { v: draft, t: 2, s: money };
     cells[r] = line;
   };

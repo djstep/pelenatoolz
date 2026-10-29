@@ -21,8 +21,8 @@ export type PlanFactNumbers = {
   plan: number;
   accrued: number;
   paid: number;
-  /** План − начислено. */
-  remaining: number;
+  /** План − начислено. Пусто у «Без статьи» — плана там нет. */
+  remaining: number | null;
   /** Начислено / план, %. Пусто, если плана нет. */
   percent: number | null;
   /** Начислено или оплачено больше плана. */
@@ -86,6 +86,14 @@ export function planFactPeriodLabel(dateFrom: string | null, dateTo: string | nu
   return "весь период";
 }
 
+/**
+ * Пометка статьи, которой нет в последней утверждённой версии: была хоть в одной версии —
+ * «вне плана», не было ни в одной — «без плана».
+ */
+export function unplannedKind(inAnyVersion: boolean): Exclude<PlanFactKind, "plan"> {
+  return inAnyVersion ? "out_of_plan" : "no_plan";
+}
+
 function round2(n: number) {
   return Math.round((n + Number.EPSILON) * 100) / 100;
 }
@@ -102,6 +110,11 @@ export function planFactNumbers(plan: number, accrued: number, paid: number): Pl
     percent: plan > EPS ? round2((accrued / plan) * 100) : null,
     overrun: accrued > plan + EPS || paid > plan + EPS,
   };
+}
+
+/** «Без статьи»: плана нет — остаток, % исполнения и перерасход не считаются. */
+export function unassignedNumbers(accrued: number, paid: number): PlanFactNumbers {
+  return { ...planFactNumbers(0, accrued, paid), remaining: null, percent: null, overrun: false };
 }
 
 function sumNumbers(list: readonly PlanFactNumbers[]): PlanFactNumbers {
@@ -146,7 +159,7 @@ export function buildPlanFact(input: PlanFactInput): PlanFactReport {
         itemId,
         code: item.code,
         name: item.name,
-        kind: item.inAnyVersion ? "out_of_plan" : "no_plan",
+        kind: unplannedKind(item.inAnyVersion),
         removedFromDraft: false,
         ...planFactNumbers(0, fact.accrued, fact.paid),
       });
@@ -166,7 +179,7 @@ export function buildPlanFact(input: PlanFactInput): PlanFactReport {
   });
 
   const unassigned = input.unassigned
-    ? { ...planFactNumbers(0, input.unassigned.accrued, input.unassigned.paid), overrun: false }
+    ? unassignedNumbers(input.unassigned.accrued, input.unassigned.paid)
     : null;
   const project = sumNumbers([
     ...departments.map((d) => d.totals),

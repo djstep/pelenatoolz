@@ -9,6 +9,7 @@ import {
 } from "@/features/smeta/lib/workbook-model";
 import { createDepartmentWorkbookSnapshot } from "@/features/smeta/lib/templates";
 import { loadFacts } from "@/features/smeta/facts";
+import { PLAN_FACT_KIND_LABELS, unplannedKind } from "@/features/smeta/lib/plan-fact";
 import {
   analyzeMainSheet,
   type MainSheetLike,
@@ -243,7 +244,15 @@ async function codesOfOtherDepartments(
   return new Map(rows.map((r) => [r.code, r.department.name]));
 }
 
-type ItemFact = { code: string; name: string; archived: boolean; accrued: number; paid: number };
+type ItemFact = {
+  code: string;
+  name: string;
+  archived: boolean;
+  /** Статья была хоть в одной утверждённой версии. */
+  inAnyVersion: boolean;
+  accrued: number;
+  paid: number;
+};
 
 /**
  * Статьи цеха (действующие и архивные), по которым есть начисления или платежи.
@@ -260,12 +269,24 @@ async function departmentFacts(
 
   const items = await db.budgetItem.findMany({
     where: { id: { in: [...byItem.keys()] } },
-    select: { id: true, code: true, name: true, archivedAt: true },
+    select: {
+      id: true,
+      code: true,
+      name: true,
+      archivedAt: true,
+      versionLines: { select: { id: true }, take: 1 },
+    },
   });
   return new Map(
     items.map((i) => [
       i.code,
-      { code: i.code, name: i.name, archived: i.archivedAt !== null, ...byItem.get(i.id)! },
+      {
+        code: i.code,
+        name: i.name,
+        archived: i.archivedAt !== null,
+        inAnyVersion: i.versionLines.length > 0,
+        ...byItem.get(i.id)!,
+      },
     ]),
   );
 }
@@ -319,7 +340,8 @@ export async function analyzeWithProject(
       checks.push({
         kind: "gone_with_fact",
         row: 0,
-        message: `Код ${fact.code} («${fact.name}») нет на основном листе, а по нему ${factText(fact)} — в плане/факте он будет «вне плана».`,
+        // После утверждения сметы без этой строки — та же пометка, что в плане/факте.
+        message: `Код ${fact.code} («${fact.name}») нет на основном листе, а по нему ${factText(fact)} — в плане/факте он будет «${PLAN_FACT_KIND_LABELS[unplannedKind(fact.inAnyVersion)]}».`,
       });
     } else if (fact.archived) {
       checks.push({

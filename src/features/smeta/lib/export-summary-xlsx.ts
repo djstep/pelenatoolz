@@ -2,6 +2,9 @@ import ExcelJS from "exceljs";
 import type { UniverWorkbookData } from "@/features/smeta/lib/workbook-model";
 import { excelSafe } from "@/shared/lib/excel-safe";
 
+/** Метка ячейки (`custom`): на экране что-то показано (прочерк), в Excel — пусто. */
+export const EXCEL_EMPTY = "smetaExcelEmpty";
+
 type Cell = Record<string, unknown>;
 type CellData = Record<string, Record<string, Cell | null | undefined> | undefined>;
 type Style = { bl?: unknown; n?: { pattern?: unknown } };
@@ -15,6 +18,7 @@ function richText(p: unknown): string | null {
 
 /** Значение ячейки: сохранённое (у формул — вычисленное в книге), сами формулы не выгружаются. */
 function cellValue(cell: Cell): ExcelJS.CellValue {
+  if ((cell.custom as Record<string, unknown> | undefined)?.[EXCEL_EMPTY]) return null;
   const v = cell.v;
   if (typeof v === "number") return Number.isFinite(v) ? v : null;
   if (typeof v === "boolean") return v;
