@@ -7,6 +7,8 @@ const nextConfig: NextConfig = {
   // Next.js 16.3 + standalone breaks Vercel onBuildComplete; keep standalone for Docker.
   output: process.env.VERCEL ? undefined : "standalone",
   serverExternalPackages: ["sql.js"],
+  // Только для `next dev`: второй аккаунт открывается на 127.0.0.1 (отдельные куки входа).
+  allowedDevOrigins: ["127.0.0.1"],
   transpilePackages: [
     "@univerjs/presets",
     "@univerjs/preset-sheets-core",
