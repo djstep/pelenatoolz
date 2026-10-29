@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import type { SceneStatus } from "@prisma/client";
+import { Prisma, type SceneStatus } from "@prisma/client";
 import { sumExtrasPay } from "@/features/payroll/lib/parse-extra-payments";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { syncShootDayResourceUsages } from "@/features/schedule/lib/sync-shoot-day-resources";
@@ -42,6 +42,71 @@ async function assertReportWrite(projectId: string, shootDayId: string) {
   });
   if (!day) return { error: "Съёмочный день не найден" } as const;
   return { ctx, dayId: day.id, shootDate: day.date } as const;
+}
+
+/**
+ * «Создать из КПП» (`create`) и «Обновить из КПП». Открытие отчёта ничего не пишет — сцены,
+ * строки работы и начисления пересобираются только здесь, у того, кто может править отчёт.
+ * Ставки, налог и режимы существующих строк — только при `updateRates` (галочка).
+ */
+export async function refreshProductionReportAction(
+  projectId: string,
+  shootDayId: string,
+  payload: unknown,
+): Promise<ReportActionState> {
+  const gate = await assertReportWrite(projectId, shootDayId);
+  if ("error" in gate) return gate;
+
+  const options = (payload ?? {}) as { create?: unknown; updateRates?: unknown };
+  const create = options.create === true;
+  const updateRates = options.updateRates === true;
+
+  const { refreshProductionReport } = await import("@/features/reports/queries");
+  let result: Awaited<ReturnType<typeof refreshProductionReport>>;
+  try {
+    result = await refreshProductionReport(gate.ctx, projectId, shootDayId, {
+      create,
+      updateRates,
+    });
+  } catch (error) {
+    // Два обновления одновременно: строку или начисление уже добавил другой запрос.
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return { error: "Отчёт сейчас обновляет кто-то ещё — обновите страницу и повторите" };
+    }
+    throw error;
+  }
+  if ("error" in result) return { error: result.error };
+
+  const rows = result.rows;
+  const parts = [
+    result.scenesAdded ? `сцен +${result.scenesAdded}` : "",
+    rows?.added.length ? `строк +${rows.added.length}` : "",
+    rows?.removed.length ? `строк −${rows.removed.length}` : "",
+    updateRates && rows?.rateChanges.length
+      ? `ставки обновлены у ${rows.rateChanges.length}`
+      : "",
+  ].filter(Boolean);
+  await recordAudit(gate.ctx, {
+    projectId,
+    entityType: AuditEntityType.productionReport,
+    entityId: shootDayId,
+    action: result.created ? "CREATE" : "UPDATE",
+    summary: `${result.created ? "Отчёт создан из КПП" : "Отчёт обновлён из КПП"}${
+      parts.length ? `: ${parts.join(", ")}` : ""
+    }${!updateRates && rows?.rateChanges.length ? " (ставки строк не менялись)" : ""}`,
+    changes: rows
+      ? {
+          added: rows.added,
+          removed: rows.removed,
+          rateChanges: updateRates ? rows.rateChanges : [],
+        }
+      : undefined,
+  });
+
+  revalidateReports(projectId, shootDayId);
+  revalidatePath(`/ru/projects/${projectId}/accruals`);
+  revalidatePath(`/ru/projects/${projectId}/finance`);
+  return { success: result.created ? "Отчёт создан" : "Отчёт обновлён из КПП" };
 }
 
 function mapFactStatusToSceneStatus(

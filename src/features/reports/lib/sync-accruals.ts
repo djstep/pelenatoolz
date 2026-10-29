@@ -170,15 +170,19 @@ function sameMoney(a: Prisma.Decimal | null, b: number | null) {
 
 /**
  * Привести начисления строк отчёта дня к оплате в отчёте. `rowIds` — только эти строки
- * (после правки одной строки), иначе все строки отчёта. `audit` — кто открыл или правит
- * отчёт; null — без записи в журнал (скрипт пересчёта).
+ * (после правки одной строки), иначе все строки отчёта. `audit` — кто правит отчёт;
+ * null — без записи в журнал (скрипт пересчёта). `dryRun` — только посчитать, что
+ * изменилось бы (для плашки «Отчёт устарел»), ничего не писать.
  */
 export async function syncReportAccruals(
   audit: AuditContext | null,
   projectId: string,
   shootDayId: string,
   rowIds?: readonly string[],
-) {
+  options: { dryRun?: boolean } = {},
+): Promise<AccrualSyncCounts> {
+  const counts: AccrualSyncCounts = { created: 0, updated: 0, zeroed: 0 };
+  const write = !options.dryRun;
   const day = await prisma.shootDay.findFirst({
     where: { id: shootDayId, projectId },
     select: {
@@ -189,7 +193,7 @@ export async function syncReportAccruals(
       productionReport: { select: { id: true } },
     },
   });
-  if (!day?.productionReport) return;
+  if (!day?.productionReport) return counts;
 
   const rows = await prisma.productionReportWorkRow.findMany({
     where: {
@@ -198,7 +202,7 @@ export async function syncReportAccruals(
     },
     include: rowInclude,
   });
-  if (rows.length === 0) return;
+  if (rows.length === 0) return counts;
 
   const existing = await prisma.accrual.findMany({
     where: { projectId, workRowId: { in: rows.map((r) => r.id) } },
@@ -211,10 +215,6 @@ export async function syncReportAccruals(
     return pickCounterparty(entityOf(row), hints);
   };
 
-  let created = 0;
-  let updated = 0;
-  let zeroed = 0;
-
   for (const row of rows) {
     const parts = partsOf(row);
     for (const part of PARTS) {
@@ -223,34 +223,38 @@ export async function syncReportAccruals(
 
       if (!sums) {
         if (accrual && !accrual.amountWithTax.isZero()) {
-          await prisma.accrual.update({
-            where: { id: accrual.id },
-            data: { amount: 0, taxAmount: 0, amountWithTax: 0, reportZeroedAt: new Date() },
-          });
-          zeroed += 1;
+          if (write) {
+            await prisma.accrual.update({
+              where: { id: accrual.id },
+              data: { amount: 0, taxAmount: 0, amountWithTax: 0, reportZeroedAt: new Date() },
+            });
+          }
+          counts.zeroed += 1;
         }
         continue;
       }
 
       const budgetItemId = budgetItemFor(row, part);
       if (!accrual) {
-        await prisma.accrual.create({
-          data: {
-            projectId,
-            budgetItemId,
-            counterpartyId: await counterpartyFor(row),
-            ...sums,
-            date: day.date,
-            groupUnit: day.unit,
-            type: AccrualType.PER_SHIFT,
-            shootDayId: day.id,
-            workRowId: row.id,
-            reportPart: part,
-            comment: `День ${day.dayNumber} · ${row.displayName}`,
-            createdById: audit?.user.id ?? null,
-          },
-        });
-        created += 1;
+        if (write) {
+          await prisma.accrual.create({
+            data: {
+              projectId,
+              budgetItemId,
+              counterpartyId: await counterpartyFor(row),
+              ...sums,
+              date: day.date,
+              groupUnit: day.unit,
+              type: AccrualType.PER_SHIFT,
+              shootDayId: day.id,
+              workRowId: row.id,
+              reportPart: part,
+              comment: `День ${day.dayNumber} · ${row.displayName}`,
+              createdById: audit?.user.id ?? null,
+            },
+          });
+        }
+        counts.created += 1;
         continue;
       }
 
@@ -273,13 +277,14 @@ export async function syncReportAccruals(
         }
       }
       if (Object.keys(data).length > 0) {
-        await prisma.accrual.update({ where: { id: accrual.id }, data });
-        updated += 1;
+        if (write) await prisma.accrual.update({ where: { id: accrual.id }, data });
+        counts.updated += 1;
       }
     }
   }
 
-  if (audit && created + updated + zeroed > 0) {
+  const { created, updated, zeroed } = counts;
+  if (write && audit && created + updated + zeroed > 0) {
     const parts = [
       created ? `создано ${created}` : "",
       updated ? `обновлено ${updated}` : "",
@@ -293,7 +298,10 @@ export async function syncReportAccruals(
       summary: `Начисления из отчёта смены (день ${day.dayNumber}): ${parts.join(", ")}`,
     });
   }
+  return counts;
 }
+
+export type AccrualSyncCounts = { created: number; updated: number; zeroed: number };
 
 /**
  * Строки отчёта сейчас удалят (строку убрали из дня, удалили день): их начисления не
