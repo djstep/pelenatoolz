@@ -18,6 +18,7 @@ import {
   setBudgetSheetPinned,
 } from "@/features/smeta/queries";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
+import { canUseLegacySmeta } from "@/features/smeta/lib/smeta-access";
 import { AuditEntityType } from "@/shared/audit/entity-types";
 import { recordAudit } from "@/shared/audit/with-audit";
 
@@ -33,7 +34,7 @@ export async function createBlankBudgetAction(
   payload?: unknown,
 ) {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("budget:write")) return { error: "Недостаточно прав" };
+  if (!canUseLegacySmeta(ctx)) return { error: "Недостаточно прав" };
 
   const schema = z.object({
     name: z.string().trim().min(1).max(200).optional(),
@@ -59,7 +60,7 @@ export async function createBudgetFromTemplateAction(
   payload: unknown,
 ) {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("budget:write")) return { error: "Недостаточно прав" };
+  if (!canUseLegacySmeta(ctx)) return { error: "Недостаточно прав" };
 
   const schema = z.object({
     templateId: z.string().min(1),
@@ -90,7 +91,7 @@ export async function saveBudgetAsTemplateAction(
   payload: unknown,
 ) {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("budget:write")) return { error: "Недостаточно прав" };
+  if (!canUseLegacySmeta(ctx)) return { error: "Недостаточно прав" };
 
   const schema = z.object({
     name: z.string().trim().min(1).max(200),
@@ -116,7 +117,7 @@ export async function renameBudgetTemplateAction(
   payload: unknown,
 ) {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("budget:write")) return { error: "Недостаточно прав" };
+  if (!canUseLegacySmeta(ctx)) return { error: "Недостаточно прав" };
 
   const schema = z.object({
     name: z.string().trim().min(1).max(200),
@@ -140,7 +141,7 @@ export async function deleteBudgetTemplateAction(
   templateId: string,
 ) {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("budget:write")) return { error: "Недостаточно прав" };
+  if (!canUseLegacySmeta(ctx)) return { error: "Недостаточно прав" };
 
   const ok = await deleteBudgetTemplate(projectId, templateId);
   if (!ok) return { error: "Шаблон не найден или его нельзя удалить" };
@@ -162,7 +163,7 @@ export async function saveBudgetWorkbookAction(
   payload: unknown,
 ) {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("budget:write")) return { error: "Недостаточно прав" };
+  if (!canUseLegacySmeta(ctx)) return { error: "Недостаточно прав" };
 
   const schema = z.object({
     data: z.record(z.string(), z.unknown()),
@@ -189,7 +190,7 @@ export async function renameBudgetAction(
   payload: unknown,
 ) {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("budget:write")) return { error: "Недостаточно прав" };
+  if (!canUseLegacySmeta(ctx)) return { error: "Недостаточно прав" };
 
   const schema = z.object({
     name: z.string().trim().min(1).max(200),
@@ -210,7 +211,7 @@ export async function toggleBudgetSheetPinnedAction(
   payload: unknown,
 ) {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("budget:write")) return { error: "Недостаточно прав" };
+  if (!canUseLegacySmeta(ctx)) return { error: "Недостаточно прав" };
 
   const schema = z.object({
     sheetId: z.string().min(1),
@@ -255,7 +256,7 @@ export async function importBudgetWorkbookFileAction(
   payload: unknown,
 ): Promise<ImportBudgetResult> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("budget:write")) return { error: "Недостаточно прав" };
+  if (!canUseLegacySmeta(ctx)) return { error: "Недостаточно прав" };
 
   const schema = z.object({
     fileName: z.string().min(1).max(260),

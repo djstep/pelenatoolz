@@ -1,6 +1,7 @@
 import { SmetaTemplatesWorkspace } from "@/features/smeta/components/smeta-templates-workspace";
 import { listBudgets, listBudgetTemplates } from "@/features/smeta/queries";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
+import { canUseLegacySmeta } from "@/features/smeta/lib/smeta-access";
 import Link from "next/link";
 
 type Props = {
@@ -11,7 +12,8 @@ export default async function SmetaTemplatesPage({ params }: Props) {
   const { locale, projectId } = await params;
   const ctx = await requireProjectContext(projectId);
 
-  if (!ctx.can("budget:read")) {
+  // Шаблоны старых смет — до шага 2 только продюсер.
+  if (!canUseLegacySmeta(ctx)) {
     return <p className="text-sm text-[var(--danger)]">Нет доступа к смете</p>;
   }
 
@@ -43,7 +45,7 @@ export default async function SmetaTemplatesPage({ params }: Props) {
         projectId={projectId}
         templates={templates}
         budgets={budgets}
-        canWrite={ctx.can("budget:write")}
+        canWrite
       />
     </div>
   );

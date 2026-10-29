@@ -50,7 +50,10 @@ export async function getProjectForUser(projectId: string, userId: string) {
       memberships: {
         where: { userId, status: MembershipStatus.ACTIVE },
         take: 1,
-        include: { role: true },
+        include: {
+          role: true,
+          departmentHeads: { select: { departmentId: true } },
+        },
       },
     },
   });

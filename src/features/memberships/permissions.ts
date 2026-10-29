@@ -20,6 +20,7 @@ export const PERMISSIONS = [
   "cast:write",
   "budget:read",
   "budget:write",
+  "smeta:read_all",
   "report:read",
   "report:write",
   "finance:read",
@@ -62,6 +63,8 @@ const PERMISSION_TO_SECTION: Record<
   /** Смета: фин. просмотр / фин. редактирование в матрице раздела «Смета» */
   "budget:read": { section: "budget", action: "finance" },
   "budget:write": { section: "budget", action: "financeWrite" },
+  /** Сметы цехов: просмотр всех (без правки и утверждения). Продюсер видит их и без флага. */
+  "smeta:read_all": { section: "smeta_all", action: "read" },
   "report:read": { section: "reports", action: "read" },
   "report:write": { section: "reports", action: "write" },
   "finance:read": { section: "finance", action: "finance" },

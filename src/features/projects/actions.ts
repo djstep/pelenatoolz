@@ -565,9 +565,22 @@ export async function removeMemberAction(
     return { error: "Это единственный продюсер проекта — удалить нельзя" };
   }
 
-  await prisma.projectMembership.update({
-    where: { id: membershipId, projectId },
-    data: { status: MembershipStatus.REMOVED },
+  // Удалённый участник перестаёт быть главой цехов: при повторном приглашении главу назначают заново.
+  const removedHeads = await prisma.$transaction(async (tx) => {
+    const heads = await tx.departmentHead.findMany({
+      where: { membershipId, department: { projectId } },
+      select: { department: { select: { id: true, name: true } } },
+    });
+    if (heads.length > 0) {
+      await tx.departmentHead.deleteMany({
+        where: { membershipId, department: { projectId } },
+      });
+    }
+    await tx.projectMembership.update({
+      where: { id: membershipId, projectId },
+      data: { status: MembershipStatus.REMOVED },
+    });
+    return heads.map((h) => h.department);
   });
 
   await recordAudit({ user: { id: user.id! } }, {
@@ -575,11 +588,21 @@ export async function removeMemberAction(
     entityType: AuditEntityType.membership,
     entityId: target.id,
     action: "DELETE",
-    summary: `Участник с ролью «${target.role.name}» удалён из проекта`,
-    changes: { userId: target.userId, roleId: target.roleId },
+    summary:
+      removedHeads.length > 0
+        ? `Участник с ролью «${target.role.name}» удалён из проекта и снят с глав цехов: ${removedHeads.map((d) => `«${d.name}»`).join(", ")}`
+        : `Участник с ролью «${target.role.name}» удалён из проекта`,
+    changes: {
+      userId: target.userId,
+      roleId: target.roleId,
+      ...(removedHeads.length > 0 ? { removedFromDepartmentHeads: removedHeads } : {}),
+    },
   });
 
   revalidatePath(`/ru/projects/${projectId}/members`);
+  if (removedHeads.length > 0) {
+    revalidatePath(`/ru/projects/${projectId}/settings/departments`);
+  }
   return {};
 }
 

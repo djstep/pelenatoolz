@@ -8,6 +8,7 @@ import {
   buildPermissionsDocument,
   type CategoryFinancePermissions,
   type PermissionMatrix,
+  isSectionFlagAllowed,
   PERMISSION_FLAGS,
   PERMISSION_SECTIONS,
 } from "@/features/roles/permissions-matrix";
@@ -43,6 +44,7 @@ function matrixFromFormData(formData: FormData): PermissionMatrix {
   const matrix = buildEmptyMatrix();
   for (const section of PERMISSION_SECTIONS) {
     for (const flag of PERMISSION_FLAGS) {
+      if (!isSectionFlagAllowed(section.id, flag)) continue;
       const key = `perm_${section.id}_${flag}`;
       matrix[section.id][flag] = formData.get(key) === "on";
     }

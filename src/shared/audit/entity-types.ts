@@ -42,6 +42,7 @@ export const AuditEntityType = {
   locationPhoto: "location_photo",
   scriptComment: "script_comment",
   budgetTemplate: "budget_template",
+  department: "department",
 } as const;
 
 export type AuditEntityTypeValue =
@@ -100,6 +101,7 @@ export const auditEntityLabels: Record<string, string> = {
   [AuditEntityType.locationPhoto]: "Фото локации",
   [AuditEntityType.scriptComment]: "Комментарий к сценарию",
   [AuditEntityType.budgetTemplate]: "Шаблон сметы",
+  [AuditEntityType.department]: "Цех",
   ShootDay: "Вызывной (устар.)",
 };
 

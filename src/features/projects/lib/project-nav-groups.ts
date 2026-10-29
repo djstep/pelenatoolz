@@ -12,6 +12,8 @@ export type NavAccess = {
   can: (permission: Permission) => boolean;
   matrix: PermissionMatrix;
   isProducer: boolean;
+  /** Цеха, где пользователь — глава (`requireProjectContext` → `headDepartmentIds`). */
+  headDepartmentIds: readonly string[];
 };
 
 /** Доступ для фильтра меню из контекста проекта (`requireProjectContext`). */
@@ -19,11 +21,13 @@ export function navAccessFromContext(ctx: {
   can: NavAccess["can"];
   matrix: PermissionMatrix;
   role: { isSystem: boolean; name: string };
+  headDepartmentIds: readonly string[];
 }): NavAccess {
   return {
     can: ctx.can,
     matrix: ctx.matrix,
     isProducer: isProducerRole(ctx.role),
+    headDepartmentIds: ctx.headDepartmentIds,
   };
 }
 
@@ -106,7 +110,13 @@ export const projectNavGroups: NavGroupDef[] = [
     title: "Финансы",
     defaultOpen: true,
     items: [
-      { href: "/smeta", label: "Смета", visible: anyOf("budget:read") },
+      {
+        href: "/smeta",
+        label: "Сметы",
+        // Как canOpenSmeta (features/smeta/lib/smeta-access.ts).
+        visible: (a) =>
+          a.isProducer || a.can("smeta:read_all") || a.headDepartmentIds.length > 0,
+      },
       { href: "/budget", label: "Статьи", visible: anyOf("budget:read") },
       { href: "/accruals", label: "Начисления", visible: anyOf("finance:read") },
       {
@@ -149,6 +159,12 @@ export const projectNavGroups: NavGroupDef[] = [
         visible: anyOf("project:write", "project:archive"),
       },
       { href: "/settings/resources", label: "Ресурсы", visible: anyOf("script:read") },
+      {
+        href: "/settings/departments",
+        label: "Цеха",
+        // Как canManageDepartments (features/smeta/lib/smeta-access.ts).
+        visible: (a) => a.isProducer || a.can("members:manage"),
+      },
       {
         href: "/audit",
         label: "Журнал изменений",

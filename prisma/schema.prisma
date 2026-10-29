@@ -312,6 +312,7 @@ model Project {
   resourceCategories ResourceCategory[]
   actorAvailabilityRows ActorAvailabilityRow[]
   payments Payment[]
+  departments Department[]
 
   @@index([createdById])
   @@index([status])
@@ -348,10 +349,44 @@ model ProjectMembership {
   project Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
   user    User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
   role    ProjectRoleDefinition @relation(fields: [roleId], references: [id])
+  departmentHeads DepartmentHead[]
 
   @@unique([projectId, userId])
   @@index([userId])
   @@index([projectId, status])
+}
+
+/// Цех проекта (художники, операторский, звук…). У цеха своя смета и главы.
+model Department {
+  id         String   @id @default(cuid())
+  projectId  String
+  name       String
+  /// Префикс кодов статей сметы цеха: 2–6 заглавных букв/цифр, первая — буква.
+  codePrefix String
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  project Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  heads   DepartmentHead[]
+
+  @@unique([projectId, name])
+  @@unique([projectId, codePrefix])
+  @@index([projectId, sortOrder])
+}
+
+/// Глава цеха — участник проекта (не пользователь). Доступ даёт только активное участие.
+model DepartmentHead {
+  id           String   @id @default(cuid())
+  departmentId String
+  membershipId String
+  createdAt    DateTime @default(now())
+
+  department Department        @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  membership ProjectMembership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+
+  @@unique([departmentId, membershipId])
+  @@index([membershipId])
 }
 
 model ProjectInvite {
