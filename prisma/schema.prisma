@@ -233,7 +233,6 @@ model User {
   scriptComments  ScriptComment[]
   castingCandidateComments CastingCandidateComment[]
   createdBudgets Budget[] @relation("BudgetCreator")
-  createdBudgetTemplates BudgetTemplate[] @relation("BudgetTemplateCreator")
   createdAccruals Accrual[] @relation("AccrualCreator")
   createdCashPayments CashPayment[] @relation("CashPaymentCreator")
   lockedCashPayments CashPayment[] @relation("CashPaymentLocker")
@@ -294,7 +293,7 @@ model Project {
   auditLogs   AuditLog[]
   budgetLines BudgetLine[]
   budgets     Budget[]
-  budgetTemplates BudgetTemplate[]
+  budgetItems BudgetItem[]
   accruals    Accrual[]
   cashPayments CashPayment[]
   financeOps  FinanceOperation[]
@@ -367,8 +366,10 @@ model Department {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  project Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  heads   DepartmentHead[]
+  project     Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  heads       DepartmentHead[]
+  budget      Budget?
+  budgetItems BudgetItem[]
 
   @@unique([projectId, name])
   @@unique([projectId, codePrefix])
@@ -1648,23 +1649,6 @@ model CashPaymentBreakdown {
   @@index([budgetLineId])
 }
 
-/// Сохранённый шаблон табличной сметы (Univer snapshot) для проекта.
-model BudgetTemplate {
-  id          String   @id @default(cuid())
-  projectId   String
-  name        String
-  /// Полный снимок Univer workbook
-  snapshot    Json
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  createdById String?
-
-  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  createdBy User?   @relation("BudgetTemplateCreator", fields: [createdById], references: [id], onDelete: SetNull)
-
-  @@index([projectId, name])
-}
-
 /// Именованные переменные для финансовых расчётов (СМЕНЫ, СЕРИИ, кастомные).
 model ProjectFinanceVariable {
   id        String   @id @default(cuid())
@@ -1840,20 +1824,27 @@ model CertificateFile {
   @@index([fileId])
 }
 
-/// Табличная смета проекта (Excel-like). Не путать со статьями BudgetLine.
+/// Смета цеха — книга Univer. Одна книга на цех. Не путать со статьями BudgetLine.
 model Budget {
-  id          String   @id @default(cuid())
-  projectId   String
-  name        String   @default("Смета")
+  id           String   @id @default(cuid())
+  projectId    String
+  departmentId String   @unique
+  /// Основной лист: по нему разбираются статьи, удалить нельзя.
+  mainSheetId  String?  @unique
+  /// Растёт при каждом сохранении книги.
+  revision     Int      @default(0)
+  name         String   @default("Смета")
   /// Общая карта стилей Univer (workbook-level), на листы ссылаются по id
-  styles      Json     @default("{}")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  createdById String?
+  styles       Json     @default("{}")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  createdById  String?
 
-  project   Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  createdBy User?        @relation("BudgetCreator", fields: [createdById], references: [id], onDelete: SetNull)
-  sheets    BudgetSheet[]
+  project    Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  department Department    @relation(fields: [departmentId], references: [id], onDelete: NoAction)
+  createdBy  User?         @relation("BudgetCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  mainSheet  BudgetSheet?  @relation("BudgetMainSheet", fields: [mainSheetId], references: [id], onDelete: NoAction)
+  sheets     BudgetSheet[]
 
   @@index([projectId])
 }
@@ -1861,14 +1852,18 @@ model Budget {
 model BudgetSheet {
   id        String  @id @default(cuid())
   budgetId  String
+  /// Id листа в Univer. Уникален только внутри книги: сервер ищет лист по паре книга + ключ.
+  sheetKey  String
   name      String
   sortOrder Int     @default(0)
   /// Избранный / закреплённый в начале бокового навигатора
   pinned    Boolean @default(false)
 
   budget Budget           @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  mainOf Budget?          @relation("BudgetMainSheet")
   data   BudgetSheetData?
 
+  @@unique([budgetId, sheetKey])
   @@index([budgetId, sortOrder])
 }
 
@@ -1878,6 +1873,36 @@ model BudgetSheetData {
   data    Json
 
   sheet BudgetSheet @relation(fields: [sheetId], references: [id], onDelete: Cascade)
+}
+
+/// Статья сметы цеха — строка основного листа с кодом. Код уникален в проекте и не переходит к другой статье.
+/// Значения — текущий черновик; Сумма, Налог, Итого посчитаны сервером.
+model BudgetItem {
+  id           String    @id @default(cuid())
+  projectId    String
+  departmentId String
+  code         String
+  name         String
+  unit         String?
+  quantity     Decimal?  @db.Decimal(18, 4)
+  rate         Decimal?  @db.Decimal(18, 2)
+  days         Decimal?  @db.Decimal(18, 4)
+  amount       Decimal   @db.Decimal(18, 2)
+  taxPercent   Decimal?  @db.Decimal(9, 4)
+  tax          Decimal   @db.Decimal(18, 2)
+  total        Decimal   @db.Decimal(18, 2)
+  /// Номер строки на основном листе (с 1)
+  sortOrder    Int       @default(0)
+  /// Код пропал с основного листа — статья в архиве, связи остаются.
+  archivedAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  project    Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  department Department @relation(fields: [departmentId], references: [id], onDelete: NoAction)
+
+  @@unique([projectId, code])
+  @@index([departmentId, archivedAt])
 }
 
 enum FinanceOpType {

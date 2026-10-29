@@ -1,31 +1,59 @@
 "use client";
 
-import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
+import { useParams } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import {
-  importBudgetWorkbookFileAction,
-  renameBudgetAction,
-  saveBudgetAsTemplateAction,
-  saveBudgetWorkbookAction,
+  saveDepartmentBudgetAction,
   toggleBudgetSheetPinnedAction,
 } from "@/features/smeta/actions";
-import type {
-  BudgetClient,
-  BudgetListItem,
-} from "@/features/smeta/queries";
-import type { ImportWarning } from "@/features/smeta/lib/import-workbook";
+import type { BudgetClient } from "@/features/smeta/queries";
+import {
+  HEADER_ROW,
+  MAIN_HEADERS,
+  NO_AUTO_CODE_KEY,
+  findMainColumns,
+  nextCode,
+  normalizeCode,
+  rowFormulas,
+  type MainColumns,
+  type SmetaCheck,
+} from "@/features/smeta/lib/main-sheet";
 import {
   SmetaSheetNavigator,
   type NavSheetItem,
 } from "@/features/smeta/components/smeta-sheet-nav";
+import { SmetaChecksPanel } from "@/features/smeta/components/smeta-checks-panel";
 import { formatDateShort } from "@/shared/i18n/format-date";
 import { cn } from "@/shared/lib/cn";
 import { Button } from "@/shared/ui/button";
-import { Input } from "@/shared/ui/input";
-import { Select } from "@/shared/ui/select";
 import { useToast } from "@/shared/ui/toast";
 
 type SaveStatus = "idle" | "dirty" | "saving" | "saved" | "error";
+
+type IRange = {
+  startRow: number;
+  endRow: number;
+  startColumn: number;
+  endColumn: number;
+};
+
+type FRange = {
+  getSheetId?: () => string;
+  getRange: () => IRange;
+  getValue: () => unknown;
+  getValues: () => unknown[][];
+  getFormula: () => string;
+  setValue: (value: unknown) => FRange;
+  setFormula: (formula: string) => FRange;
+  activate?: () => FRange;
+  highlight?: (style?: Record<string, unknown>) => { dispose: () => void };
+  getRangePermission?: () => {
+    protect: (options?: { name?: string }) => Promise<{
+      setPoint: (point: string, value: boolean) => Promise<void>;
+    }>;
+  };
+};
 
 type FWorksheet = {
   getSheetId: () => string;
@@ -41,14 +69,23 @@ type FWorksheet = {
     getColumn?: () => number;
     getRange?: () => { startRow: number; startColumn: number };
   } | null;
+  getRange: (row: number, column: number, numRows?: number, numColumns?: number) => FRange;
+  getMaxColumns: () => number;
+  getLastRow: () => number;
+  getRowCustomMetadata?: (index: number) => Record<string, unknown> | undefined;
+  setRowCustomMetadata?: (index: number, custom: Record<string, unknown> | undefined) => void;
+  getSheet?: () => { getRowManager: () => { getRowOrCreate: (index: number) => unknown } };
+  scrollToCell?: (row: number, column: number) => void;
 };
 
 type FWorkbook = {
   save: () => Record<string, unknown>;
   getId?: () => string;
   getSheets?: () => FWorksheet[];
+  getSheetBySheetId?: (id: string) => FWorksheet | null;
   getActiveSheet?: () => FWorksheet | null;
   setActiveSheet?: (sheet: FWorksheet | string) => void;
+  setEditable?: (value: boolean) => void;
 };
 
 type UniverAPI = {
@@ -64,23 +101,19 @@ type UniverAPI = {
     ActiveSheetChanged?: unknown;
     SheetCreated?: unknown;
     SheetDeleted?: unknown;
+    BeforeSheetDelete?: unknown;
+    SheetValueChanged?: unknown;
   };
+  Enum?: { RangePermissionPoint?: Record<string, string> };
 };
 
 const AUTOSAVE_MS = 2500;
 
-function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = String(reader.result ?? "");
-      const comma = result.indexOf(",");
-      resolve(comma >= 0 ? result.slice(comma + 1) : result);
-    };
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
-}
+const HIGHLIGHT_STYLE = {
+  strokeWidth: 1,
+  stroke: "#d97706",
+  fill: "rgba(245, 158, 11, 0.14)",
+};
 
 function sheetsFromWorkbook(
   workbook: BudgetClient["workbook"],
@@ -98,36 +131,59 @@ function sheetsFromWorkbook(
   });
 }
 
+function isEmpty(value: unknown) {
+  return value == null || String(value).trim() === "";
+}
+
+/** Колонки основного листа по живой строке заголовков. */
+function liveColumns(sheet: FWorksheet) {
+  const width = Math.max(1, sheet.getMaxColumns());
+  const values = sheet.getRange(HEADER_ROW, 0, 1, width).getValues()[0] ?? [];
+  const header: Record<number, { v: unknown }> = {};
+  values.forEach((v, i) => {
+    if (!isEmpty(v)) header[i] = { v };
+  });
+  return { ...findMainColumns({ cellData: { [HEADER_ROW]: header } }), width: values.length };
+}
+
 export function SmetaSpreadsheetEditor({
   projectId,
+  department,
   budget,
-  budgets,
   canWrite,
+  initialChecks,
+  usedCodes,
+  listHref,
 }: {
   projectId: string;
+  department: { id: string; name: string; codePrefix: string };
   budget: BudgetClient;
-  budgets: BudgetListItem[];
   canWrite: boolean;
+  initialChecks: SmetaCheck[];
+  usedCodes: string[];
+  listHref: string;
 }) {
   const toast = useToast();
-  const router = useRouter();
   const params = useParams();
   const locale = String(params.locale ?? "ru");
-  const smetaBase = `/${locale}/projects/${projectId}/smeta`;
   const containerRef = useRef<HTMLDivElement>(null);
   const univerRef = useRef<{ dispose: () => void } | null>(null);
   const apiRef = useRef<UniverAPI | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [status, setStatus] = useState<SaveStatus>("idle");
   const [savedAt, setSavedAt] = useState(budget.updatedAt);
-  const [title, setTitle] = useState(budget.name);
-  const [importWarnings, setImportWarnings] = useState<ImportWarning[]>([]);
+  const [checks, setChecks] = useState<SmetaCheck[]>(initialChecks);
+  const [missingHeaders, setMissingHeaders] = useState<string[]>([]);
   const [pending, start] = useTransition();
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const canWriteRef = useRef(canWrite);
   canWriteRef.current = canWrite;
-  const budgetIdRef = useRef(budget.id);
-  budgetIdRef.current = budget.id;
+  const usedCodesRef = useRef(new Set(usedCodes.map(normalizeCode)));
+  const checksRef = useRef(checks);
+  checksRef.current = checks;
+  const highlightsRef = useRef<{ dispose: () => void }[]>([]);
+  /** Пока редактор сам пишет в ячейки или ставит защиту — это не правка главы. */
+  const applyingRef = useRef(false);
+  const mainKey = budget.mainSheetKey;
 
   const initialPinned = new Map(
     budget.sheetsMeta.map((s) => [s.id, s.pinned] as const),
@@ -166,6 +222,11 @@ export function SmetaSpreadsheetEditor({
     });
   }
 
+  function mainSheet(): FWorksheet | null {
+    if (!mainKey) return null;
+    return apiRef.current?.getActiveWorkbook?.()?.getSheetBySheetId?.(mainKey) ?? null;
+  }
+
   function syncSheetsFromApi() {
     const wb = apiRef.current?.getActiveWorkbook?.();
     if (!wb?.getSheets) return;
@@ -194,8 +255,43 @@ export function SmetaSpreadsheetEditor({
     }
   }
 
+  /** Подсветка строк с проверками на основном листе. В книгу не пишется. */
+  function applyHighlights(list: SmetaCheck[] = checksRef.current) {
+    for (const h of highlightsRef.current) {
+      try {
+        h.dispose();
+      } catch {
+        /* ignore */
+      }
+    }
+    highlightsRef.current = [];
+    const sheet = mainSheet();
+    const wb = apiRef.current?.getActiveWorkbook?.();
+    if (!sheet || wb?.getActiveSheet?.()?.getSheetId() !== mainKey) return;
+    const width = Math.max(MAIN_HEADERS.length, liveColumns(sheet).width);
+    const rows = new Set(list.filter((c) => c.kind !== "headers").map((c) => c.row));
+    for (const row of rows) {
+      try {
+        const handle = sheet.getRange(row, 0, 1, width).highlight?.(HIGHLIGHT_STYLE);
+        if (handle) highlightsRef.current.push(handle);
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
+  function refreshMissingHeaders() {
+    const sheet = mainSheet();
+    if (!sheet) return;
+    try {
+      setMissingHeaders(liveColumns(sheet).missing);
+    } catch {
+      /* ignore */
+    }
+  }
+
   function scheduleSave() {
-    if (!canWriteRef.current) return;
+    if (!canWriteRef.current || applyingRef.current) return;
     setStatus("dirty");
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
@@ -215,19 +311,138 @@ export function SmetaSpreadsheetEditor({
       return;
     }
     setStatus("saving");
-    const result = await saveBudgetWorkbookAction(
-      projectId,
-      budgetIdRef.current,
-      { data: snapshot },
-    );
-    if (result.error) {
+    const result = await saveDepartmentBudgetAction(projectId, department.id, {
+      data: snapshot,
+    });
+    if (result.error !== undefined) {
       setStatus("error");
       toast.error(result.error);
       return;
     }
-    if (result.updatedAt) setSavedAt(result.updatedAt);
+    setSavedAt(result.updatedAt);
+    setChecks(result.checks);
+    usedCodesRef.current = new Set(result.usedCodes.map(normalizeCode));
     setStatus("saved");
     syncSheetsFromApi();
+    refreshMissingHeaders();
+    applyHighlights(result.checks);
+  }
+
+  /**
+   * Автокод: в строке основного листа появилась Ставка (значение или формула), кода нет
+   * и глава его не стирал. Тогда ставим следующий код и формулы Сумма, Налог, Итого
+   * (только в пустые ячейки). Стёр код сам — строка помечается, автокод больше не ставится.
+   */
+  function onMainValuesChanged(ranges: FRange[]) {
+    if (!canWriteRef.current || applyingRef.current || !mainKey) return;
+    const sheet = mainSheet();
+    if (!sheet) return;
+    const found = liveColumns(sheet);
+    if (found.missing.length > 0) return;
+    const cols = found.columns as MainColumns;
+
+    const touched = new Map<number, { code: boolean; rate: boolean }>();
+    for (const range of ranges) {
+      if (range.getSheetId?.() !== mainKey) continue;
+      const r = range.getRange();
+      const hits = (c: number) => r.startColumn <= c && c <= r.endColumn;
+      for (let row = Math.max(r.startRow, HEADER_ROW + 1); row <= r.endRow; row++) {
+        const prev = touched.get(row) ?? { code: false, rate: false };
+        touched.set(row, {
+          code: prev.code || hits(cols.code),
+          rate: prev.rate || hits(cols.rate) || hits(cols.quantity),
+        });
+      }
+    }
+    if (touched.size === 0) return;
+
+    applyingRef.current = true;
+    try {
+      const lastRow = Math.max(sheet.getLastRow(), HEADER_ROW + 1);
+      const codeColumn = sheet
+        .getRange(HEADER_ROW + 1, cols.code, lastRow - HEADER_ROW, 1)
+        .getValues()
+        .map((r) => (isEmpty(r[0]) ? "" : String(r[0]).trim()));
+      const known = new Set([...usedCodesRef.current, ...codeColumn.filter(Boolean).map(normalizeCode)]);
+
+      for (const row of [...touched.keys()].sort((a, b) => a - b)) {
+        const { code: touchedCode, rate: touchedRate } = touched.get(row)!;
+        const codeEmpty = isEmpty(sheet.getRange(row, cols.code).getValue());
+        if (!codeEmpty) continue;
+        const meta = sheet.getRowCustomMetadata?.(row) ?? {};
+
+        if (touchedCode && !touchedRate) {
+          // Глава стёр код в этой строке — не ставить его снова.
+          if (!meta[NO_AUTO_CODE_KEY]) {
+            // Univer пишет метку только в существующую запись строки — создать её.
+            sheet.getSheet?.().getRowManager().getRowOrCreate(row);
+            sheet.setRowCustomMetadata?.(row, { ...meta, [NO_AUTO_CODE_KEY]: true });
+          }
+          continue;
+        }
+        if (!touchedRate || meta[NO_AUTO_CODE_KEY]) continue;
+
+        const rateCell = sheet.getRange(row, cols.rate);
+        if (isEmpty(rateCell.getValue()) && isEmpty(rateCell.getFormula())) continue;
+
+        const above = codeColumn.slice(0, row - HEADER_ROW - 1).filter(Boolean);
+        const code = nextCode(department.codePrefix, above, known);
+        known.add(code);
+        codeColumn[row - HEADER_ROW - 1] = code;
+        sheet.getRange(row, cols.code).setValue(code);
+
+        const formulas = rowFormulas(cols, row);
+        for (const [key, formula] of [
+          ["amount", formulas.amount],
+          ["tax", formulas.tax],
+          ["total", formulas.total],
+        ] as const) {
+          const cell = sheet.getRange(row, cols[key]);
+          if (isEmpty(cell.getValue()) && isEmpty(cell.getFormula())) cell.setFormula(formula);
+        }
+      }
+    } catch (err) {
+      console.error("[smeta autocode]", err);
+    } finally {
+      applyingRef.current = false;
+    }
+    scheduleSave();
+  }
+
+  /** Дописать недостающие заголовки в первые свободные колонки справа. */
+  function restoreHeaders() {
+    const sheet = mainSheet();
+    if (!sheet || !canWriteRef.current) return;
+    try {
+      const found = liveColumns(sheet);
+      const values = sheet.getRange(HEADER_ROW, 0, 1, found.width).getValues()[0] ?? [];
+      let col = values.length;
+      while (col > 0 && isEmpty(values[col - 1])) col--;
+      for (const title of found.missing) {
+        sheet.getRange(HEADER_ROW, col++).setValue(title);
+      }
+      toast.success("Заголовки восстановлены");
+      refreshMissingHeaders();
+      scheduleSave();
+    } catch (err) {
+      console.error("[smeta restore headers]", err);
+      toast.error("Не удалось восстановить заголовки");
+    }
+  }
+
+  function goToRow(row: number) {
+    const wb = apiRef.current?.getActiveWorkbook?.();
+    const sheet = mainSheet();
+    if (!wb || !sheet) return;
+    try {
+      wb.setActiveSheet?.(sheet);
+      setActiveSheetId(mainKey);
+      sheet.getRange(row, 0).activate?.();
+      sheet.scrollToCell?.(Math.max(0, row - 3), 0);
+      requestAnimationFrame(() => applyHighlights());
+    } catch (err) {
+      console.error("[smeta go to row]", err);
+    }
   }
 
   useEffect(() => {
@@ -321,6 +536,40 @@ export function SmetaSpreadsheetEditor({
           return;
         }
 
+        const workbook = api.getActiveWorkbook();
+        if (!canWriteRef.current) {
+          // Продюсер и «просмотр всех» — только чтение (сервер их правки тоже не примет).
+          workbook?.setEditable?.(false);
+        } else {
+          // Заголовки основного листа: не переименовать, не удалить, не сдвинуть.
+          const sheet = mainSheet();
+          const found = sheet ? liveColumns(sheet) : null;
+          const present = found
+            ? Object.values(found.columns).filter((c): c is number => typeof c === "number")
+            : [];
+          if (sheet && present.length > 0) {
+            applyingRef.current = true;
+            try {
+              const from = Math.min(...present);
+              const to = Math.max(...present);
+              const rule = await sheet
+                .getRange(HEADER_ROW, from, 1, to - from + 1)
+                .getRangePermission?.()
+                .protect({ name: "Заголовки сметы" });
+              const point = api.Enum?.RangePermissionPoint;
+              if (rule && point) {
+                await rule.setPoint(point.Edit ?? "RangeEdit", false);
+                await rule.setPoint(point.Delete ?? "RangeDeleteProtection", false);
+                await rule.setPoint(point.ManageCollaborator ?? "RangeManageCollaborator", false);
+              }
+            } catch (err) {
+              console.error("[smeta protect headers]", err);
+            } finally {
+              applyingRef.current = false;
+            }
+          }
+        }
+
         const kickResize = () => {
           window.dispatchEvent(new Event("resize"));
         };
@@ -341,7 +590,10 @@ export function SmetaSpreadsheetEditor({
         }
 
         queueMicrotask(() => {
-          if (!disposed) syncSheetsFromApi();
+          if (disposed) return;
+          syncSheetsFromApi();
+          refreshMissingHeaders();
+          applyHighlights();
         });
 
         const listen = (key: unknown, cb: (...args: unknown[]) => void) => {
@@ -357,6 +609,17 @@ export function SmetaSpreadsheetEditor({
           scheduleSave();
           syncSheetsFromApi();
         });
+        listen(api.Event?.SheetValueChanged, (params) => {
+          const p = params as { effectedRanges?: FRange[] };
+          onMainValuesChanged(p.effectedRanges ?? []);
+        });
+        listen(api.Event?.BeforeSheetDelete, (params) => {
+          const p = params as { worksheet?: FWorksheet; cancel?: boolean };
+          if (p.worksheet?.getSheetId() === mainKey) {
+            p.cancel = true;
+            toast.error("Основной лист удалить нельзя");
+          }
+        });
         listen(api.Event?.ActiveSheetChanged, (params) => {
           const p = params as { activeSheet?: FWorksheet };
           if (p.activeSheet) {
@@ -365,6 +628,7 @@ export function SmetaSpreadsheetEditor({
           } else {
             syncSheetsFromApi();
           }
+          requestAnimationFrame(() => applyHighlights());
         });
         listen(api.Event?.SheetCreated, () => syncSheetsFromApi());
         listen(api.Event?.SheetDeleted, () => syncSheetsFromApi());
@@ -386,6 +650,7 @@ export function SmetaSpreadsheetEditor({
           /* ignore */
         }
       }
+      highlightsRef.current = [];
       // Univer unmounts its own React root; must not run inside React's render/cleanup.
       const instance = univerRef.current;
       univerRef.current = null;
@@ -429,7 +694,7 @@ export function SmetaSpreadsheetEditor({
     start(async () => {
       const result = await toggleBudgetSheetPinnedAction(
         projectId,
-        budget.id,
+        department.id,
         { sheetId, pinned },
       );
       if (result.error) {
@@ -492,65 +757,6 @@ export function SmetaSpreadsheetEditor({
     applyFreeze(0, 0);
   }
 
-  function onSelectBudget(nextId: string) {
-    if (nextId === budget.id) return;
-    router.push(`${smetaBase}?budgetId=${nextId}`);
-  }
-
-  function onRenameBlur() {
-    if (!canWrite) return;
-    const next = title.trim();
-    if (!next || next === budget.name) {
-      setTitle(budget.name);
-      return;
-    }
-    start(async () => {
-      const result = await renameBudgetAction(projectId, budget.id, {
-        name: next,
-      });
-      if (result.error) {
-        toast.error(result.error);
-        setTitle(budget.name);
-        return;
-      }
-      if (result.name) setTitle(result.name);
-      toast.success(result.success ?? "Сохранено");
-      router.refresh();
-    });
-  }
-
-  function onImportFile(file: File) {
-    if (!canWrite) return;
-    const defaultName =
-      file.name.replace(/\.(xlsx|xls|xlsm|csv)$/i, "").trim() || "Смета";
-    start(async () => {
-      try {
-        const base64 = await fileToBase64(file);
-        const result = await importBudgetWorkbookFileAction(projectId, {
-          fileName: file.name,
-          base64,
-          name: defaultName,
-        });
-        if (!result.success || !result.budgetId) {
-          toast.error(result.error ?? "Не удалось импортировать файл");
-          return;
-        }
-
-        setImportWarnings(result.warnings ?? []);
-        toast.success(
-          `${result.success}${
-            result.sheetCount ? ` · ${result.sheetCount} лист(ов)` : ""
-          }`,
-        );
-        router.push(`${smetaBase}?budgetId=${result.budgetId}`);
-        router.refresh();
-      } catch (err) {
-        console.error("[smeta import]", err);
-        toast.error("Не удалось импортировать файл");
-      }
-    });
-  }
-
   const statusLabel =
     status === "saving" || pending
       ? "Сохранение…"
@@ -603,34 +809,19 @@ export function SmetaSpreadsheetEditor({
       )}
     >
       <header className="flex shrink-0 flex-wrap items-center gap-2 border-b border-[var(--border)] bg-[var(--panel-solid)] px-3 py-2 sm:gap-3 sm:px-4">
-        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-          <Input
-            value={title}
-            disabled={!canWrite || pending}
-            onChange={(e) => setTitle(e.target.value)}
-            onBlur={onRenameBlur}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.currentTarget.blur();
-              }
-            }}
-            className="font-display h-9 max-w-md min-w-[10rem] flex-1 text-base font-semibold"
-            aria-label="Название сметы"
-          />
-          {budgets.length > 0 ? (
-            <Select
-              value={budget.id}
-              onChange={(e) => onSelectBudget(e.target.value)}
-              className="h-9 max-w-[14rem]"
-              id="smeta-budget-switcher"
-            >
-              {budgets.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name}
-                </option>
-              ))}
-            </Select>
-          ) : null}
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
+          <Link
+            href={listHref}
+            className="text-sm text-[var(--muted-fg)] hover:underline"
+          >
+            ← Все сметы
+          </Link>
+          <h2 className="font-display truncate text-base font-semibold">
+            Смета — {department.name}
+          </h2>
+          <span className="font-mono text-xs text-[var(--muted-fg)]">
+            {department.codePrefix}
+          </span>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -645,83 +836,15 @@ export function SmetaSpreadsheetEditor({
             {statusLabel}
           </span>
           {canWrite ? (
-            <>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".xlsx,.xls,.xlsm,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
-                className="hidden"
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  e.target.value = "";
-                  if (f) onImportFile(f);
-                }}
-              />
-              <Button
-                type="button"
-                variant="secondary"
-                className="h-9"
-                disabled={pending}
-                onClick={() =>
-                  router.push(`${smetaBase}?create=1`)
-                }
-              >
-                Новая смета
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                className="h-9"
-                onClick={() => router.push(`${smetaBase}/templates`)}
-              >
-                Шаблоны
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                className="h-9"
-                disabled={pending}
-                onClick={() => {
-                  const name = window.prompt(
-                    "Название шаблона",
-                    `${budget.name} (шаблон)`,
-                  );
-                  if (!name?.trim()) return;
-                  start(async () => {
-                    const result = await saveBudgetAsTemplateAction(
-                      projectId,
-                      budget.id,
-                      { name: name.trim() },
-                    );
-                    if (result.error) {
-                      toast.error(result.error);
-                      return;
-                    }
-                    toast.success(result.success ?? "Шаблон сохранён");
-                  });
-                }}
-              >
-                В шаблон
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                className="h-9"
-                disabled={pending}
-                onClick={() => fileInputRef.current?.click()}
-              >
-                Импорт Excel/CSV
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                className="h-9"
-                disabled={pending || status === "saving"}
-                onClick={() => void flushSave()}
-              >
-                Сохранить
-              </Button>
-            </>
+            <Button
+              type="button"
+              variant="secondary"
+              className="h-9"
+              disabled={pending || status === "saving"}
+              onClick={() => void flushSave()}
+            >
+              Сохранить
+            </Button>
           ) : (
             <span className="text-xs text-[var(--foreground)]/70">
               Только просмотр
@@ -740,34 +863,19 @@ export function SmetaSpreadsheetEditor({
         </div>
       </header>
 
-      {importWarnings.length > 0 ? (
-        <div
-          className="shrink-0 border-b border-amber-500/40 bg-amber-500/10 px-4 py-2.5 text-sm"
-          role="status"
-        >
-          <p className="font-medium text-[var(--tone-warning-soft)]">
-            Импорт выполнен с ограничениями — что не перенесено полностью:
-          </p>
-          <ul className="mt-1 list-disc space-y-0.5 pl-5 text-[var(--foreground)]">
-            {importWarnings.map((w) => (
-              <li key={w.code + w.message}>{w.message}</li>
-            ))}
-          </ul>
-          <button
-            type="button"
-            className="mt-1 text-xs text-[var(--foreground)]/70 underline hover:text-[var(--foreground)]"
-            onClick={() => setImportWarnings([])}
-          >
-            Скрыть
-          </button>
-        </div>
-      ) : null}
+      <SmetaChecksPanel
+        checks={checks}
+        canRestoreHeaders={canWrite && missingHeaders.length > 0}
+        onSelectRow={goToRow}
+        onRestoreHeaders={restoreHeaders}
+      />
 
       <div className="relative min-h-0 flex-1 overflow-hidden">
         <div className="absolute inset-0 flex min-h-0 overflow-hidden">
           <SmetaSheetNavigator
             sheets={sheets}
             activeSheetId={activeSheetId}
+            mainSheetId={mainKey}
             collapsed={navCollapsed}
             canWrite={canWrite}
             onToggleCollapsed={toggleNavCollapsed}

@@ -1,10 +1,8 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import type {
-  BudgetClient,
-  BudgetListItem,
-} from "@/features/smeta/queries";
+import type { SmetaCheck } from "@/features/smeta/lib/main-sheet";
+import type { BudgetClient } from "@/features/smeta/queries";
 
 const SmetaSpreadsheetEditor = dynamic(
   () =>
@@ -23,23 +21,32 @@ const SmetaSpreadsheetEditor = dynamic(
 
 export function SmetaWorkspace({
   projectId,
+  department,
   budget,
-  budgets,
   canWrite,
+  initialChecks,
+  usedCodes,
+  listHref,
 }: {
   projectId: string;
+  department: { id: string; name: string; codePrefix: string };
   budget: BudgetClient;
-  budgets: BudgetListItem[];
   canWrite: boolean;
+  initialChecks: SmetaCheck[];
+  usedCodes: string[];
+  listHref: string;
 }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <SmetaSpreadsheetEditor
         key={budget.id}
         projectId={projectId}
+        department={department}
         budget={budget}
-        budgets={budgets}
         canWrite={canWrite}
+        initialChecks={initialChecks}
+        usedCodes={usedCodes}
+        listHref={listHref}
       />
     </div>
   );

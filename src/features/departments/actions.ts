@@ -320,16 +320,21 @@ export async function deleteDepartmentAction(
     throw error;
   }
 
-  // Со шага 2: цех со сметой или утверждёнными версиями удалить нельзя.
+  // Цех со сметой или статьями удалить нельзя (в базе то же ограничение).
   const department = await prisma.department.findFirst({
     where: { id: departmentId, projectId },
     select: {
       name: true,
       codePrefix: true,
       heads: { select: { membershipId: true } },
+      budget: { select: { id: true } },
+      _count: { select: { budgetItems: true } },
     },
   });
   if (!department) return { error: NOT_FOUND };
+  if (department.budget || department._count.budgetItems > 0) {
+    return { error: "У цеха есть смета — удалить цех нельзя" };
+  }
 
   const headIds = department.heads.map((h) => h.membershipId);
   const heads = await headLabels(projectId, headIds);

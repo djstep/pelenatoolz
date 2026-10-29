@@ -3,308 +3,167 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import {
-  csvTextToUniverWorkbook,
-  excelBufferToUniverWorkbook,
-} from "@/features/smeta/lib/import-workbook";
-import {
-  createBlankBudget,
-  createBudgetFromSnapshot,
-  createBudgetFromTemplate,
-  deleteBudgetTemplate,
-  persistBudgetSnapshot,
-  renameBudget,
-  renameBudgetTemplate,
-  saveBudgetAsTemplate,
+  createDepartmentBudget,
+  listDepartmentCodes,
+  persistDepartmentBudget,
   setBudgetSheetPinned,
+  type ItemChanges,
 } from "@/features/smeta/queries";
+import type { SmetaCheck } from "@/features/smeta/lib/main-sheet";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
-import { canUseLegacySmeta } from "@/features/smeta/lib/smeta-access";
+import { canEditDepartmentSmeta } from "@/features/smeta/lib/smeta-access";
+import {
+  assertInProject,
+  isNotInProjectError,
+} from "@/features/memberships/assert-in-project";
+import { prisma } from "@/shared/db/prisma";
 import { AuditEntityType } from "@/shared/audit/entity-types";
 import { recordAudit } from "@/shared/audit/with-audit";
 
-function revalidateSmeta(projectId: string) {
+const NO_RIGHTS = "Недостаточно прав";
+const NOT_FOUND = "Смета не найдена";
+
+function revalidateSmeta(projectId: string, departmentId: string) {
   revalidatePath(`/ru/projects/${projectId}/smeta`);
-  revalidatePath(`/ru/projects/${projectId}/smeta/templates`);
-  revalidatePath(`/ru/projects/${projectId}/budget`);
-  revalidatePath(`/ru/projects/${projectId}/finance`);
+  revalidatePath(`/ru/projects/${projectId}/smeta/${departmentId}`);
 }
 
-export async function createBlankBudgetAction(
-  projectId: string,
-  payload?: unknown,
-) {
+/** Вход, цех из этого проекта и право править его смету (только глава цеха). */
+async function requireDepartmentEditor(projectId: string, departmentId: unknown) {
   const ctx = await requireProjectContext(projectId);
-  if (!canUseLegacySmeta(ctx)) return { error: "Недостаточно прав" };
+  if (typeof departmentId !== "string" || !departmentId) {
+    return { ok: false, error: NOT_FOUND } as const;
+  }
+  try {
+    await assertInProject("Department", departmentId, projectId);
+  } catch (error) {
+    if (isNotInProjectError(error)) return { ok: false, error: NOT_FOUND } as const;
+    throw error;
+  }
+  if (!canEditDepartmentSmeta(ctx, departmentId)) return { ok: false, error: NO_RIGHTS } as const;
+  return { ok: true, ctx } as const;
+}
 
-  const schema = z.object({
-    name: z.string().trim().min(1).max(200).optional(),
+export async function createDepartmentBudgetAction(
+  projectId: string,
+  departmentId: string,
+): Promise<{ error?: string; success?: string }> {
+  const access = await requireDepartmentEditor(projectId, departmentId);
+  if (!access.ok) return { error: access.error };
+  const { ctx } = access;
+
+  const department = await prisma.department.findFirst({
+    where: { id: departmentId, projectId },
+    select: { name: true },
   });
-  const parsed = schema.safeParse(payload ?? {});
-  if (!parsed.success) return { error: "Некорректные данные" };
+  if (!department) return { error: NOT_FOUND };
 
-  const created = await createBlankBudget(
+  const result = await createDepartmentBudget(
     projectId,
-    ctx.user.id,
-    parsed.data.name ?? "Смета",
+    departmentId,
+    `Смета — ${department.name}`,
+    ctx.user.id!,
   );
-  revalidateSmeta(projectId);
-  return {
-    success: "Смета создана",
-    budgetId: created.id,
-    name: created.name,
-  };
+  if (result.created) {
+    await recordAudit(ctx, {
+      projectId,
+      entityType: AuditEntityType.budget,
+      entityId: result.id,
+      action: "CREATE",
+      summary: `Создана смета цеха «${department.name}»`,
+      changes: { departmentId },
+    });
+  }
+  revalidateSmeta(projectId, departmentId);
+  return { success: "Смета создана" };
 }
 
-export async function createBudgetFromTemplateAction(
+function changesSummary(departmentName: string, c: ItemChanges) {
+  const parts = [
+    c.added.length ? `добавлено ${c.added.length}` : "",
+    c.changed.length ? `изменено ${c.changed.length}` : "",
+    c.archived.length ? `в архив ${c.archived.length}` : "",
+    c.restored.length ? `восстановлено ${c.restored.length}` : "",
+  ].filter(Boolean);
+  return `Смета цеха «${departmentName}»: статьи — ${parts.join(", ")}`;
+}
+
+export type SaveBudgetResult =
+  | { error: string }
+  | {
+      error?: undefined;
+      success: string;
+      updatedAt: string;
+      revision: number;
+      checks: SmetaCheck[];
+      usedCodes: string[];
+    };
+
+/** Автосохранение книги цеха. Разбор основного листа в статьи — здесь, на сервере. */
+export async function saveDepartmentBudgetAction(
   projectId: string,
+  departmentId: string,
   payload: unknown,
-) {
-  const ctx = await requireProjectContext(projectId);
-  if (!canUseLegacySmeta(ctx)) return { error: "Недостаточно прав" };
+): Promise<SaveBudgetResult> {
+  const access = await requireDepartmentEditor(projectId, departmentId);
+  if (!access.ok) return { error: access.error };
+  const { ctx } = access;
 
-  const schema = z.object({
-    templateId: z.string().min(1),
-    name: z.string().trim().min(1).max(200).optional(),
-  });
-  const parsed = schema.safeParse(payload);
-  if (!parsed.success) return { error: "Выберите шаблон" };
-
-  const created = await createBudgetFromTemplate(
-    projectId,
-    parsed.data.templateId,
-    ctx.user.id,
-    parsed.data.name,
-  );
-  if (!created) return { error: "Шаблон не найден" };
-
-  revalidateSmeta(projectId);
-  return {
-    success: "Смета создана из шаблона",
-    budgetId: created.id,
-    name: created.name,
-  };
-}
-
-export async function saveBudgetAsTemplateAction(
-  projectId: string,
-  budgetId: string,
-  payload: unknown,
-) {
-  const ctx = await requireProjectContext(projectId);
-  if (!canUseLegacySmeta(ctx)) return { error: "Недостаточно прав" };
-
-  const schema = z.object({
-    name: z.string().trim().min(1).max(200),
-  });
-  const parsed = schema.safeParse(payload);
-  if (!parsed.success) return { error: "Укажите название шаблона" };
-
-  const saved = await saveBudgetAsTemplate(
-    projectId,
-    budgetId,
-    parsed.data.name,
-    ctx.user.id,
-  );
-  if (!saved) return { error: "Смета не найдена" };
-
-  revalidateSmeta(projectId);
-  return { success: "Шаблон сохранён", templateId: saved.id };
-}
-
-export async function renameBudgetTemplateAction(
-  projectId: string,
-  templateId: string,
-  payload: unknown,
-) {
-  const ctx = await requireProjectContext(projectId);
-  if (!canUseLegacySmeta(ctx)) return { error: "Недостаточно прав" };
-
-  const schema = z.object({
-    name: z.string().trim().min(1).max(200),
-  });
-  const parsed = schema.safeParse(payload);
-  if (!parsed.success) return { error: "Укажите название" };
-
-  const saved = await renameBudgetTemplate(
-    projectId,
-    templateId,
-    parsed.data.name,
-  );
-  if (!saved) return { error: "Шаблон не найден или его нельзя переименовать" };
-
-  revalidateSmeta(projectId);
-  return { success: "Название сохранено", name: saved.name };
-}
-
-export async function deleteBudgetTemplateAction(
-  projectId: string,
-  templateId: string,
-) {
-  const ctx = await requireProjectContext(projectId);
-  if (!canUseLegacySmeta(ctx)) return { error: "Недостаточно прав" };
-
-  const ok = await deleteBudgetTemplate(projectId, templateId);
-  if (!ok) return { error: "Шаблон не найден или его нельзя удалить" };
-  await recordAudit(ctx, {
-    projectId,
-    entityType: AuditEntityType.budgetTemplate,
-    entityId: templateId,
-    action: "DELETE",
-    summary: "Удалён шаблон сметы",
-  });
-
-  revalidateSmeta(projectId);
-  return { success: "Шаблон удалён" };
-}
-
-export async function saveBudgetWorkbookAction(
-  projectId: string,
-  budgetId: string,
-  payload: unknown,
-) {
-  const ctx = await requireProjectContext(projectId);
-  if (!canUseLegacySmeta(ctx)) return { error: "Недостаточно прав" };
-
-  const schema = z.object({
-    data: z.record(z.string(), z.unknown()),
-  });
-  const parsed = schema.safeParse(payload);
+  const parsed = z
+    .object({ data: z.record(z.string(), z.unknown()) })
+    .safeParse(payload);
   if (!parsed.success) return { error: "Некорректные данные книги" };
 
-  const saved = await persistBudgetSnapshot(
-    projectId,
-    budgetId,
-    parsed.data.data,
-  );
-  if (!saved) return { error: "Смета не найдена" };
+  const saved = await persistDepartmentBudget(projectId, departmentId, parsed.data.data);
+  if (saved.error !== undefined) {
+    return { error: saved.error === "not_found" ? NOT_FOUND : "Некорректные листы книги" };
+  }
+
+  if (saved.changes) {
+    const department = await prisma.department.findFirst({
+      where: { id: departmentId, projectId },
+      select: { name: true },
+    });
+    await recordAudit(ctx, {
+      projectId,
+      entityType: AuditEntityType.budget,
+      entityId: saved.budgetId,
+      action: "UPDATE",
+      summary: changesSummary(department?.name ?? "", saved.changes),
+      changes: { ...saved.changes, changed: saved.changes.changed.slice(0, 50) },
+    });
+  }
 
   return {
     success: "Сохранено",
     updatedAt: saved.updatedAt,
+    revision: saved.revision,
+    checks: saved.checks,
+    usedCodes: await listDepartmentCodes(projectId, departmentId),
   };
-}
-
-export async function renameBudgetAction(
-  projectId: string,
-  budgetId: string,
-  payload: unknown,
-) {
-  const ctx = await requireProjectContext(projectId);
-  if (!canUseLegacySmeta(ctx)) return { error: "Недостаточно прав" };
-
-  const schema = z.object({
-    name: z.string().trim().min(1).max(200),
-  });
-  const parsed = schema.safeParse(payload);
-  if (!parsed.success) return { error: "Укажите название" };
-
-  const saved = await renameBudget(projectId, budgetId, parsed.data.name);
-  if (!saved) return { error: "Смета не найдена" };
-
-  revalidateSmeta(projectId);
-  return { success: "Название сохранено", name: saved.name };
 }
 
 export async function toggleBudgetSheetPinnedAction(
   projectId: string,
-  budgetId: string,
+  departmentId: string,
   payload: unknown,
 ) {
-  const ctx = await requireProjectContext(projectId);
-  if (!canUseLegacySmeta(ctx)) return { error: "Недостаточно прав" };
+  const access = await requireDepartmentEditor(projectId, departmentId);
+  if (!access.ok) return { error: access.error };
 
-  const schema = z.object({
-    sheetId: z.string().min(1),
-    pinned: z.boolean(),
-  });
-  const parsed = schema.safeParse(payload);
+  const parsed = z
+    .object({ sheetId: z.string().min(1).max(64), pinned: z.boolean() })
+    .safeParse(payload);
   if (!parsed.success) return { error: "Некорректные данные" };
 
   const saved = await setBudgetSheetPinned(
     projectId,
-    budgetId,
+    departmentId,
     parsed.data.sheetId,
     parsed.data.pinned,
   );
   if (!saved) return { error: "Лист не найден" };
 
-  revalidateSmeta(projectId);
-  return { success: true as const, sheetId: saved.sheetId, pinned: saved.pinned };
-}
-
-export type ImportBudgetResult =
-  | {
-      error: string;
-      success?: undefined;
-      budgetId?: undefined;
-      warnings?: undefined;
-      sheetCount?: undefined;
-    }
-  | {
-      error?: undefined;
-      success: string;
-      budgetId: string;
-      name: string;
-      updatedAt: string;
-      warnings: { code: string; message: string }[];
-      sheetCount: number;
-    };
-
-/** Import Excel/CSV as a brand-new Budget (one BudgetSheet per workbook sheet). */
-export async function importBudgetWorkbookFileAction(
-  projectId: string,
-  payload: unknown,
-): Promise<ImportBudgetResult> {
-  const ctx = await requireProjectContext(projectId);
-  if (!canUseLegacySmeta(ctx)) return { error: "Недостаточно прав" };
-
-  const schema = z.object({
-    fileName: z.string().min(1).max(260),
-    base64: z.string().min(1),
-    name: z.string().trim().min(1).max(200).optional(),
-  });
-  const parsed = schema.safeParse(payload);
-  if (!parsed.success) return { error: "Некорректный файл" };
-
-  const nameFromFile =
-    parsed.data.fileName.replace(/\.(xlsx|xls|xlsm|csv)$/i, "").trim() ||
-    "Смета";
-  const budgetName = parsed.data.name?.trim() || nameFromFile;
-
-  try {
-    let result: ReturnType<typeof excelBufferToUniverWorkbook>;
-    if (/\.csv$/i.test(parsed.data.fileName)) {
-      const text = Buffer.from(parsed.data.base64, "base64").toString("utf8");
-      result = csvTextToUniverWorkbook(text, budgetName);
-    } else {
-      const buf = Buffer.from(parsed.data.base64, "base64");
-      result = excelBufferToUniverWorkbook(buf, budgetName);
-    }
-
-    const created = await createBudgetFromSnapshot(
-      projectId,
-      result.workbook,
-      ctx.user.id,
-      budgetName,
-    );
-
-    const sheets = result.workbook.sheets;
-    const sheetCount =
-      sheets && typeof sheets === "object"
-        ? Object.keys(sheets as Record<string, unknown>).length
-        : 0;
-
-    revalidateSmeta(projectId);
-    return {
-      success: "Смета импортирована как новая",
-      budgetId: created.id,
-      name: created.name,
-      updatedAt: created.updatedAt,
-      warnings: result.warnings,
-      sheetCount,
-    };
-  } catch (err) {
-    console.error("[importBudgetWorkbook]", err);
-    return { error: "Не удалось разобрать файл" };
-  }
+  revalidateSmeta(projectId, departmentId);
+  return { success: true as const, sheetId: saved.sheetKey, pinned: saved.pinned };
 }

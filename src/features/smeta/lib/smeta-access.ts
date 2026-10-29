@@ -48,11 +48,3 @@ export function canApproveSmeta(ctx: SmetaAccessContext): boolean {
 export function canManageDepartments(ctx: SmetaAccessContext): boolean {
   return isProducerRole(ctx.role) || ctx.can("members:manage");
 }
-
-/**
- * Старые книги смет без цеха, редактор и шаблоны — до шага 2 только продюсер.
- * После шага 2 старые книги удаляются миграцией.
- */
-export function canUseLegacySmeta(ctx: SmetaAccessContext): boolean {
-  return isProducerRole(ctx.role);
-}
