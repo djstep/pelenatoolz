@@ -10,8 +10,8 @@ export type FactDb = Pick<Tx, "accrual" | "cashPayment">;
 export type FactSums = { accrued: number; paid: number };
 
 export type FactScope = {
-  /** Цеха, чьи статьи считать: "all" — все. */
-  departments: "all" | readonly string[];
+  /** Цеха, чьи статьи считать. */
+  departments: readonly string[];
   /** Период по дате начисления / платежа (включительно). */
   dateRange?: { gte?: Date; lte?: Date };
   /** Считать ли начисления и строки платежей без статьи. */
@@ -27,24 +27,15 @@ export async function loadFacts(
   projectId: string,
   scope: FactScope,
 ): Promise<{ byItem: Map<string, FactSums>; unassigned: FactSums }> {
-  const departmentFilter: Prisma.BudgetItemWhereInput | undefined =
-    scope.departments === "all" ? undefined : { departmentId: { in: [...scope.departments] } };
-  const accrualItem: Prisma.AccrualWhereInput =
-    scope.departments === "all"
-      ? scope.withUnassigned
-        ? {}
-        : { budgetItemId: { not: null } }
-      : scope.withUnassigned
-        ? { OR: [{ budgetItem: departmentFilter }, { budgetItemId: null }] }
-        : { budgetItem: departmentFilter };
-  const breakdownItem: Prisma.CashPaymentBreakdownWhereInput =
-    scope.departments === "all"
-      ? scope.withUnassigned
-        ? {}
-        : { budgetItemId: { not: null } }
-      : scope.withUnassigned
-        ? { OR: [{ budgetItem: departmentFilter }, { budgetItemId: null }] }
-        : { budgetItem: departmentFilter };
+  const departmentFilter: Prisma.BudgetItemWhereInput = {
+    departmentId: { in: [...scope.departments] },
+  };
+  const accrualItem: Prisma.AccrualWhereInput = scope.withUnassigned
+    ? { OR: [{ budgetItem: departmentFilter }, { budgetItemId: null }] }
+    : { budgetItem: departmentFilter };
+  const breakdownItem: Prisma.CashPaymentBreakdownWhereInput = scope.withUnassigned
+    ? { OR: [{ budgetItem: departmentFilter }, { budgetItemId: null }] }
+    : { budgetItem: departmentFilter };
 
   const [accrued, payments] = await Promise.all([
     db.accrual.groupBy({
@@ -87,8 +78,7 @@ export async function loadFacts(
     else unassigned.accrued += value;
   }
 
-  const inScope = (departmentId: string) =>
-    scope.departments === "all" || scope.departments.includes(departmentId);
+  const inScope = (departmentId: string) => scope.departments.includes(departmentId);
   for (const p of payments) {
     const shares = shareTaxOverBreakdown(
       { amount: Number(p.amount), amountWithTax: Number(p.amountWithTax) },

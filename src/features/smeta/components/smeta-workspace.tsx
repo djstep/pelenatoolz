@@ -40,7 +40,7 @@ export function SmetaWorkspace({
   usedCodes: string[];
   listHref: string;
   approval?: SmetaApprovalProps;
-  mode?: "draft" | "version";
+  mode?: "draft" | "version" | "summary";
   title?: string;
 }) {
   return (

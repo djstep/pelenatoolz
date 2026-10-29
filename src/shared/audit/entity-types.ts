@@ -45,6 +45,7 @@ export const AuditEntityType = {
   department: "department",
   budget: "budget",
   budgetVersion: "budget_version",
+  smetaExport: "smeta_export",
 } as const;
 
 export type AuditEntityTypeValue =
@@ -106,6 +107,7 @@ export const auditEntityLabels: Record<string, string> = {
   [AuditEntityType.department]: "Цех",
   [AuditEntityType.budget]: "Смета цеха",
   [AuditEntityType.budgetVersion]: "Версия сметы",
+  [AuditEntityType.smetaExport]: "Выгрузка смет",
   ShootDay: "Вызывной (устар.)",
 };
 

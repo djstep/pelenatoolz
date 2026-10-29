@@ -180,10 +180,10 @@ export function SmetaSpreadsheetEditor({
   /** Статус утверждения черновика и ссылки на сравнение и версии. */
   approval?: SmetaApprovalProps;
   /** «version» — просмотр утверждённой версии: только чтение, без сохранения и проверок. */
-  mode?: "draft" | "version";
+  mode?: "draft" | "version" | "summary";
   title?: string;
 }) {
-  const canWrite = mode === "version" ? false : canWriteProp;
+  const canWrite = mode === "draft" ? canWriteProp : false;
   const [approvalInfo, setApprovalInfo] = useState(approval?.info);
   const [approvalProp, setApprovalProp] = useState(approval?.info);
   if (approval?.info !== approvalProp) {
@@ -912,7 +912,11 @@ export function SmetaSpreadsheetEditor({
             </Button>
           ) : (
             <span className="text-xs text-[var(--foreground)]/70">
-              {mode === "version" ? "Утверждённая версия — только чтение" : "Только просмотр"}
+              {mode === "version"
+                ? "Утверждённая версия — только чтение"
+                : mode === "summary"
+                  ? "Сводная книга — только чтение"
+                  : "Только просмотр"}
             </span>
           )}
           {!isFullscreen ? (

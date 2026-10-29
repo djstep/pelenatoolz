@@ -46,7 +46,25 @@ export default async function SmetaPage({ params }: Props) {
 
   return (
     <div className="space-y-6">
-      <h2 className="font-display text-2xl font-semibold">Сметы</h2>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="font-display text-2xl font-semibold">Сметы</h2>
+        <div className="flex flex-wrap gap-2 text-sm">
+          <Link
+            href={`${base}/plan-fact`}
+            className="rounded-md border border-[var(--border)] px-3 py-1 hover:bg-[var(--nav-hover-bg)]"
+          >
+            План/факт
+          </Link>
+          {canReadAllSmeta(ctx) ? (
+            <Link
+              href={`${base}/summary`}
+              className="rounded-md border border-[var(--border)] px-3 py-1 hover:bg-[var(--nav-hover-bg)]"
+            >
+              Сводная книга
+            </Link>
+          ) : null}
+        </div>
+      </div>
       {pending.length > 0 ? (
         <Card>
           <h3 className="font-display text-lg font-semibold">На утверждении</h3>
