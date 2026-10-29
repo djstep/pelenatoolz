@@ -14,7 +14,11 @@ import {
   assembleWorkbookFromSheets,
   type UniverWorksheetData,
 } from "@/features/smeta/lib/workbook-model";
-import type { MainSheetLike } from "@/features/smeta/lib/main-sheet";
+import {
+  findMainColumns,
+  type MainSheetLike,
+  type SmetaCheck,
+} from "@/features/smeta/lib/main-sheet";
 
 /**
  * Утверждение смет цехов: отправка главой, утверждение и возврат продюсером, версии.
@@ -270,7 +274,17 @@ export async function approveBudget(input: {
           total,
           itemCount: items.length,
           sheetName: budget.mainSheet.name,
-          sheetData: freezeSheetFormulas(sheetData) as Prisma.InputJsonValue,
+          // Картинка версии совпадает со строками: Сумма/Налог/Итого — серверный расчёт.
+          sheetData: freezeSheetFormulas(
+            sheetData,
+            findMainColumns(sheetData).columns,
+            items.map((i) => ({
+              row: i.sortOrder,
+              amount: Number(i.amount),
+              tax: Number(i.tax),
+              total: Number(i.total),
+            })),
+          ) as Prisma.InputJsonValue,
           styles: (budget.styles ?? {}) as Prisma.InputJsonValue,
           lines: {
             create: items.map(({ id, ...line }) => ({ budgetItemId: id, ...line })),
@@ -423,17 +437,31 @@ export async function getBudgetReview(projectId: string, departmentId: string) {
     async (tx) => {
       const budget = await tx.budget.findFirst({
         where: { projectId, departmentId },
-        select: approvalSelect,
+        select: {
+          ...approvalSelect,
+          mainSheet: { select: { data: { select: { data: true } } } },
+        },
       });
       if (!budget) return null;
       const { version, diff } = await draftAndLastVersion(tx, projectId, departmentId);
+      // «Вручную X, по расчёту Y»: в план идёт расчёт, продюсер должен это видеть.
+      const analysis = await analyzeWithProject(
+        tx,
+        projectId,
+        departmentId,
+        (budget.mainSheet?.data?.data as MainSheetLike | undefined) ?? null,
+      );
+      const sheetDiffers: SmetaCheck[] = analysis.checks.filter(
+        (c) => c.kind === "sheet_differs",
+      );
       return {
         info: toApprovalInfo(budget, version),
         diff,
         nextNumber: (version?.number ?? 0) + 1,
+        sheetDiffers,
       };
     },
-    { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
+    { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead, timeout: 20_000 },
   );
 }
 

@@ -31,7 +31,7 @@ export default async function BudgetReviewPage({ params }: Props) {
   const review = await getBudgetReview(projectId, department.id);
   if (!review) notFound();
 
-  const { info, diff, nextNumber } = review;
+  const { info, diff, nextNumber, sheetDiffers } = review;
   const departmentHref = `/${locale}/projects/${projectId}/smeta/${department.id}`;
   const changedAfterSubmit = info.changedAfterSubmitAt !== null;
   const canApprove = canApproveSmeta(ctx);
@@ -102,6 +102,20 @@ export default async function BudgetReviewPage({ params }: Props) {
             {info.returnedAt ? `, ${formatDateTimeShort(info.returnedAt)}` : ""}:{" "}
             <span className="whitespace-pre-wrap">«{info.returnComment}»</span>
           </p>
+        ) : null}
+
+        {sheetDiffers.length > 0 ? (
+          <div className="rounded-md bg-[var(--row-warning)] px-3 py-2">
+            <p className="font-medium">
+              В листе есть суммы, не совпадающие с расчётом ({sheetDiffers.length}). В план и в
+              версию пойдёт расчёт по Кол-ву, Ставке, Дням и Налогу %:
+            </p>
+            <ul className="mt-1 list-disc space-y-0.5 pl-5">
+              {sheetDiffers.map((check, index) => (
+                <li key={`${check.row}-${index}`}>{check.message}</li>
+              ))}
+            </ul>
+          </div>
         ) : null}
 
         {canApproveNow || canReturn ? (
