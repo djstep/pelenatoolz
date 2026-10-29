@@ -1,6 +1,6 @@
 import "server-only";
 
-import { Prisma } from "@prisma/client";
+import { BudgetStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/shared/db/prisma";
 import {
   assembleWorkbookFromSheets,
@@ -33,6 +33,7 @@ type TransactionCallback = Extract<
 type Tx = TransactionCallback extends (client: infer T) => Promise<unknown> ? T : never;
 /** Клиент базы или транзакция — для чтения статей. */
 type Db = Pick<Tx, "budgetItem">;
+export type { Tx };
 
 function toClientBudget(row: {
   id: string;
@@ -98,6 +99,12 @@ export type DepartmentBudgetSummary = {
   updatedAt: string;
   itemCount: number;
   total: number;
+  status: BudgetStatus;
+  /** Глава правил смету после отправки — она в списке продюсера с пометкой. */
+  changedAfterSubmit: boolean;
+  submittedAt: string | null;
+  returnComment: string | null;
+  lastVersionNumber: number | null;
 };
 
 /** Есть ли смета у цехов, сколько в ней статей и итог по ним. */
@@ -106,10 +113,18 @@ export async function listDepartmentBudgetSummaries(
   departmentIds: readonly string[],
 ): Promise<Map<string, DepartmentBudgetSummary>> {
   if (departmentIds.length === 0) return new Map();
-  const [budgets, totals] = await Promise.all([
+  const [budgets, totals, versions] = await Promise.all([
     prisma.budget.findMany({
       where: { projectId, departmentId: { in: [...departmentIds] } },
-      select: { departmentId: true, revision: true, updatedAt: true },
+      select: {
+        departmentId: true,
+        revision: true,
+        updatedAt: true,
+        status: true,
+        changedAfterSubmitAt: true,
+        submittedAt: true,
+        returnComment: true,
+      },
     }),
     prisma.budgetItem.groupBy({
       by: ["departmentId"],
@@ -117,8 +132,14 @@ export async function listDepartmentBudgetSummaries(
       _count: { _all: true },
       _sum: { total: true },
     }),
+    prisma.budgetVersion.groupBy({
+      by: ["departmentId"],
+      where: { projectId, departmentId: { in: [...departmentIds] } },
+      _max: { number: true },
+    }),
   ]);
   const totalsById = new Map(totals.map((t) => [t.departmentId, t]));
+  const lastVersionById = new Map(versions.map((v) => [v.departmentId, v._max.number]));
   return new Map(
     budgets.map((b) => {
       const t = totalsById.get(b.departmentId);
@@ -129,6 +150,11 @@ export async function listDepartmentBudgetSummaries(
           updatedAt: b.updatedAt.toISOString(),
           itemCount: t?._count._all ?? 0,
           total: t?._sum.total ? Number(t._sum.total) : 0,
+          status: b.status,
+          changedAfterSubmit: b.changedAfterSubmitAt !== null,
+          submittedAt: b.submittedAt?.toISOString() ?? null,
+          returnComment: b.returnComment,
+          lastVersionNumber: lastVersionById.get(b.departmentId) ?? null,
         },
       ];
     }),
@@ -217,7 +243,7 @@ async function codesOfOtherDepartments(
 }
 
 /** Разбор основного листа + проверка дублей по проекту. Ничего не пишет. */
-async function analyzeWithProject(
+export async function analyzeWithProject(
   db: Db,
   projectId: string,
   departmentId: string,
@@ -350,8 +376,54 @@ async function syncItems(
   return changes;
 }
 
+/** Заблокировать строку сметы до конца транзакции: сохранение, отправка, утверждение и
+ * возврат одной сметы идут строго по очереди. */
+export async function lockBudget(tx: Tx, budgetId: string) {
+  await tx.$queryRaw`SELECT "id" FROM "Budget" WHERE "id" = ${budgetId} FOR UPDATE`;
+}
+
+/** JSON с ключами по алфавиту: база (jsonb) порядок ключей не хранит. */
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter(([, v]) => v !== undefined)
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+    return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${stableJson(v)}`).join(",")}}`;
+  }
+  return JSON.stringify(value ?? null);
+}
+
+/** Пришедшая книга совпадает с сохранённой: те же листы, порядок, данные и стили. */
+function sameWorkbook(
+  stored: {
+    styles: unknown;
+    sheets: { sheetKey: string; name: string; sortOrder: number; data: { data: unknown } | null }[];
+  },
+  incoming: ReturnType<typeof splitWorkbookToSheets>,
+) {
+  if (stored.sheets.length !== incoming.sheets.length) return false;
+  if (stableJson(stored.styles) !== stableJson(incoming.styles)) return false;
+  const byKey = new Map(stored.sheets.map((s) => [s.sheetKey, s]));
+  return incoming.sheets.every((sheet) => {
+    const old = byKey.get(sheet.id);
+    return (
+      !!old &&
+      old.name === sheet.name &&
+      old.sortOrder === sheet.sortOrder &&
+      stableJson(old.data?.data ?? null) === stableJson(sheet.data)
+    );
+  });
+}
+
+/**
+ * Что сохранение сделало со статусом: правка во время утверждения возвращает смету в
+ * «черновик» (и она остаётся в списке продюсера), правка утверждённой — тоже в «черновик».
+ */
+export type SaveStatusChange = "changed_after_submit" | "draft_after_approve" | null;
+
 export type PersistResult =
-  | { error: "not_found" | "bad_sheets" }
+  | { error: "not_found" | "bad_sheets" | "not_draft" }
   | {
       error?: undefined;
       updatedAt: string;
@@ -359,27 +431,28 @@ export type PersistResult =
       checks: SmetaCheck[];
       changes: ItemChanges | null;
       budgetId: string;
+      status: BudgetStatus;
+      statusChange: SaveStatusChange;
     };
 
 /**
  * Сохранить книгу цеха и разобрать основной лист в статьи.
  * Листы ищутся только по паре «эта книга + ключ листа»: лист другой книги так не найти,
  * чужой ключ просто станет новым листом этой книги. Основной лист не удаляется никогда.
+ * Книга не изменилась (холостое автосохранение) — ничего не пишется, ревизия и статус те же.
+ * Сохраняется только черновик: книга с другим id (например, просмотр версии) — отказ.
  */
 export async function persistDepartmentBudget(
   projectId: string,
   departmentId: string,
   snapshot: Record<string, unknown>,
 ): Promise<PersistResult> {
-  const budget = await prisma.budget.findFirst({
+  const found = await prisma.budget.findFirst({
     where: { projectId, departmentId },
-    select: {
-      id: true,
-      mainSheetId: true,
-      sheets: { select: { id: true, sheetKey: true } },
-    },
+    select: { id: true },
   });
-  if (!budget) return { error: "not_found" };
+  if (!found) return { error: "not_found" };
+  if (snapshot.id !== found.id) return { error: "not_draft" };
 
   const split = splitWorkbookToSheets(snapshot);
   const keys = split.sheets.map((s) => s.id);
@@ -392,16 +465,57 @@ export async function persistDepartmentBudget(
     return { error: "bad_sheets" };
   }
 
-  const existingByKey = new Map(budget.sheets.map((s) => [s.sheetKey, s.id]));
-  const mainKey = budget.sheets.find((s) => s.id === budget.mainSheetId)?.sheetKey ?? null;
-  const incoming = new Set(keys);
-  const obsoleteIds = budget.sheets
-    .filter((s) => !incoming.has(s.sheetKey) && s.id !== budget.mainSheetId)
-    .map((s) => s.id);
-  const mainSheet = mainKey ? split.sheets.find((s) => s.id === mainKey) : undefined;
-
   return prisma.$transaction(
     async (tx) => {
+      await lockBudget(tx, found.id);
+      const budget = await tx.budget.findUniqueOrThrow({
+        where: { id: found.id },
+        select: {
+          id: true,
+          mainSheetId: true,
+          status: true,
+          revision: true,
+          updatedAt: true,
+          styles: true,
+          sheets: {
+            select: {
+              id: true,
+              sheetKey: true,
+              name: true,
+              sortOrder: true,
+              data: { select: { data: true } },
+            },
+          },
+        },
+      });
+
+      const existingByKey = new Map(budget.sheets.map((s) => [s.sheetKey, s.id]));
+      const mainKey = budget.sheets.find((s) => s.id === budget.mainSheetId)?.sheetKey ?? null;
+      const incoming = new Set(keys);
+      const obsoleteIds = budget.sheets
+        .filter((s) => !incoming.has(s.sheetKey) && s.id !== budget.mainSheetId)
+        .map((s) => s.id);
+      const mainSheet = mainKey ? split.sheets.find((s) => s.id === mainKey) : undefined;
+
+      const analysis = await analyzeWithProject(
+        tx,
+        projectId,
+        departmentId,
+        mainSheet?.data ?? null,
+      );
+
+      if (sameWorkbook(budget, split)) {
+        return {
+          budgetId: budget.id,
+          updatedAt: budget.updatedAt.toISOString(),
+          revision: budget.revision,
+          checks: analysis.checks,
+          changes: null,
+          status: budget.status,
+          statusChange: null,
+        };
+      }
+
       if (obsoleteIds.length) {
         await tx.budgetSheet.deleteMany({
           where: { budgetId: budget.id, id: { in: obsoleteIds } },
@@ -433,24 +547,30 @@ export async function persistDepartmentBudget(
         }
       }
 
-      const analysis = await analyzeWithProject(
-        tx,
-        projectId,
-        departmentId,
-        mainSheet?.data ?? null,
-      );
       // Сломанные заголовки или нет основного листа — статьи остаются как были.
       const changes = analysis.broken
         ? null
         : await syncItems(tx, projectId, departmentId, analysis.items);
+
+      const statusChange: SaveStatusChange =
+        budget.status === BudgetStatus.SUBMITTED
+          ? "changed_after_submit"
+          : budget.status === BudgetStatus.APPROVED
+            ? "draft_after_approve"
+            : null;
 
       const saved = await tx.budget.update({
         where: { id: budget.id },
         data: {
           styles: split.styles as Prisma.InputJsonValue,
           revision: { increment: 1 },
+          ...(statusChange === "changed_after_submit"
+            ? { status: BudgetStatus.DRAFT, changedAfterSubmitAt: new Date() }
+            : statusChange === "draft_after_approve"
+              ? { status: BudgetStatus.DRAFT }
+              : {}),
         },
-        select: { updatedAt: true, revision: true },
+        select: { updatedAt: true, revision: true, status: true },
       });
 
       return {
@@ -459,6 +579,8 @@ export async function persistDepartmentBudget(
         revision: saved.revision,
         checks: analysis.checks,
         changes: changes && hasChanges(changes) ? changes : null,
+        status: saved.status,
+        statusChange,
       };
     },
     { timeout: 20_000 },

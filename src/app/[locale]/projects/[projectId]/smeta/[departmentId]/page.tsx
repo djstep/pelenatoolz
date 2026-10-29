@@ -7,8 +7,10 @@ import {
   getDepartmentBudget,
   listDepartmentCodes,
 } from "@/features/smeta/queries";
+import { getBudgetApprovalInfo } from "@/features/smeta/approval-queries";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import {
+  canApproveSmeta,
   canEditDepartmentSmeta,
   canReadDepartmentSmeta,
 } from "@/features/smeta/lib/smeta-access";
@@ -58,10 +60,12 @@ export default async function DepartmentSmetaPage({ params }: Props) {
     );
   }
 
-  const [checks, usedCodes] = await Promise.all([
+  const [checks, usedCodes, approvalInfo] = await Promise.all([
     checkDepartmentBudget(projectId, budget),
     canWrite ? listDepartmentCodes(projectId, department.id) : Promise.resolve([]),
+    getBudgetApprovalInfo(projectId, department.id),
   ]);
+  const departmentHref = `${listHref}/${department.id}`;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-6">
@@ -73,6 +77,16 @@ export default async function DepartmentSmetaPage({ params }: Props) {
         initialChecks={checks}
         usedCodes={usedCodes}
         listHref={listHref}
+        approval={
+          approvalInfo
+            ? {
+                info: approvalInfo,
+                canApprove: canApproveSmeta(ctx),
+                reviewHref: `${departmentHref}/review`,
+                versionsHref: `${departmentHref}/versions`,
+              }
+            : undefined
+        }
       />
     </div>
   );

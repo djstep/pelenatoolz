@@ -24,6 +24,18 @@ import {
   type NavSheetItem,
 } from "@/features/smeta/components/smeta-sheet-nav";
 import { SmetaChecksPanel } from "@/features/smeta/components/smeta-checks-panel";
+import {
+  SmetaApprovalBanner,
+  SmetaApprovalControls,
+} from "@/features/smeta/components/smeta-approval-controls";
+import type { BudgetApprovalInfo } from "@/features/smeta/approval-queries";
+
+export type SmetaApprovalProps = {
+  info: BudgetApprovalInfo;
+  canApprove: boolean;
+  reviewHref: string;
+  versionsHref: string;
+};
 import { formatDateShort } from "@/shared/i18n/format-date";
 import { cn } from "@/shared/lib/cn";
 import { Button } from "@/shared/ui/button";
@@ -150,10 +162,13 @@ export function SmetaSpreadsheetEditor({
   projectId,
   department,
   budget,
-  canWrite,
+  canWrite: canWriteProp,
   initialChecks,
   usedCodes,
   listHref,
+  approval,
+  mode = "draft",
+  title,
 }: {
   projectId: string;
   department: { id: string; name: string; codePrefix: string };
@@ -162,7 +177,20 @@ export function SmetaSpreadsheetEditor({
   initialChecks: SmetaCheck[];
   usedCodes: string[];
   listHref: string;
+  /** Статус утверждения черновика и ссылки на сравнение и версии. */
+  approval?: SmetaApprovalProps;
+  /** «version» — просмотр утверждённой версии: только чтение, без сохранения и проверок. */
+  mode?: "draft" | "version";
+  title?: string;
 }) {
+  const canWrite = mode === "version" ? false : canWriteProp;
+  const [approvalInfo, setApprovalInfo] = useState(approval?.info);
+  const [approvalProp, setApprovalProp] = useState(approval?.info);
+  if (approval?.info !== approvalProp) {
+    // Страницу обновили с сервера (после отправки) — берём свежий статус.
+    setApprovalProp(approval?.info);
+    setApprovalInfo(approval?.info);
+  }
   const toast = useToast();
   const params = useParams();
   const locale = String(params.locale ?? "ru");
@@ -299,16 +327,21 @@ export function SmetaSpreadsheetEditor({
     }, AUTOSAVE_MS);
   }
 
-  async function flushSave() {
-    if (!canWriteRef.current) return;
+  /** Сохранить книгу. Возвращает ревизию после сохранения или null, если не сохранилось. */
+  async function flushSave(): Promise<number | null> {
+    if (!canWriteRef.current) return null;
+    if (saveTimer.current) {
+      clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+    }
     const api = apiRef.current;
     const active = api?.getActiveWorkbook?.();
-    if (!active) return;
+    if (!active) return null;
     let snapshot: Record<string, unknown>;
     try {
       snapshot = active.save();
     } catch {
-      return;
+      return null;
     }
     setStatus("saving");
     const result = await saveDepartmentBudgetAction(projectId, department.id, {
@@ -317,8 +350,19 @@ export function SmetaSpreadsheetEditor({
     if (result.error !== undefined) {
       setStatus("error");
       toast.error(result.error);
-      return;
+      return null;
     }
+    // Правка во время утверждения или после него — смета снова черновик (решает сервер).
+    setApprovalInfo((prev) =>
+      prev && prev.status !== result.status
+        ? {
+            ...prev,
+            status: result.status,
+            changedAfterSubmitAt:
+              prev.status === "SUBMITTED" ? new Date().toISOString() : prev.changedAfterSubmitAt,
+          }
+        : prev,
+    );
     setSavedAt(result.updatedAt);
     setChecks(result.checks);
     usedCodesRef.current = new Set(result.usedCodes.map(normalizeCode));
@@ -326,6 +370,7 @@ export function SmetaSpreadsheetEditor({
     syncSheetsFromApi();
     refreshMissingHeaders();
     applyHighlights(result.checks);
+    return result.revision;
   }
 
   /**
@@ -814,15 +859,15 @@ export function SmetaSpreadsheetEditor({
       )}
     >
       <header className="flex shrink-0 flex-wrap items-center gap-2 border-b border-[var(--border)] bg-[var(--panel-solid)] px-3 py-2 sm:gap-3 sm:px-4">
-        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
+        <div className="flex min-w-[16rem] flex-1 flex-wrap items-center gap-3">
           <Link
             href={listHref}
             className="text-sm text-[var(--muted-fg)] hover:underline"
           >
-            ← Все сметы
+            {mode === "version" ? "← Версии" : "← Все сметы"}
           </Link>
           <h2 className="font-display truncate text-base font-semibold">
-            Смета — {department.name}
+            {title ?? `Смета — ${department.name}`}
           </h2>
           <span className="font-mono text-xs text-[var(--muted-fg)]">
             {department.codePrefix}
@@ -830,16 +875,30 @@ export function SmetaSpreadsheetEditor({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <span
-            className={cn(
-              "text-xs",
-              status === "error"
-                ? "text-[var(--danger)]"
-                : "text-[var(--foreground)]/70",
-            )}
-          >
-            {statusLabel}
-          </span>
+          {approval && approvalInfo ? (
+            <SmetaApprovalControls
+              projectId={projectId}
+              departmentId={department.id}
+              info={approvalInfo}
+              canWrite={canWrite}
+              canApprove={approval.canApprove}
+              reviewHref={approval.reviewHref}
+              versionsHref={approval.versionsHref}
+              flushSave={flushSave}
+            />
+          ) : null}
+          {mode === "draft" ? (
+            <span
+              className={cn(
+                "text-xs",
+                status === "error"
+                  ? "text-[var(--danger)]"
+                  : "text-[var(--foreground)]/70",
+              )}
+            >
+              {statusLabel}
+            </span>
+          ) : null}
           {canWrite ? (
             <Button
               type="button"
@@ -852,7 +911,7 @@ export function SmetaSpreadsheetEditor({
             </Button>
           ) : (
             <span className="text-xs text-[var(--foreground)]/70">
-              Только просмотр
+              {mode === "version" ? "Утверждённая версия — только чтение" : "Только просмотр"}
             </span>
           )}
           {!isFullscreen ? (
@@ -868,12 +927,16 @@ export function SmetaSpreadsheetEditor({
         </div>
       </header>
 
-      <SmetaChecksPanel
-        checks={checks}
-        canRestoreHeaders={canWrite && missingHeaders.length > 0}
-        onSelectRow={goToRow}
-        onRestoreHeaders={restoreHeaders}
-      />
+      {approvalInfo ? <SmetaApprovalBanner info={approvalInfo} /> : null}
+
+      {mode === "draft" ? (
+        <SmetaChecksPanel
+          checks={checks}
+          canRestoreHeaders={canWrite && missingHeaders.length > 0}
+          onSelectRow={goToRow}
+          onRestoreHeaders={restoreHeaders}
+        />
+      ) : null}
 
       <div className="relative min-h-0 flex-1 overflow-hidden">
         <div className="absolute inset-0 flex min-h-0 overflow-hidden">

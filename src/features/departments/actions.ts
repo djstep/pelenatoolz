@@ -17,6 +17,7 @@ import { canManageDepartments } from "@/features/smeta/lib/smeta-access";
 import { AuditEntityType } from "@/shared/audit/entity-types";
 import { recordAudit } from "@/shared/audit/with-audit";
 import { prisma } from "@/shared/db/prisma";
+import { countOf } from "@/shared/lib/plural";
 
 /** Что ввёл человек — вернуть в окно при ошибке (React сбрасывает форму после отправки). */
 export type DepartmentFormValues = {
@@ -328,10 +329,16 @@ export async function deleteDepartmentAction(
       codePrefix: true,
       heads: { select: { membershipId: true } },
       budget: { select: { id: true } },
-      _count: { select: { budgetItems: true } },
+      _count: { select: { budgetItems: true, budgetVersions: true } },
     },
   });
   if (!department) return { error: NOT_FOUND };
+  const versions = department._count.budgetVersions;
+  if (versions > 0) {
+    return {
+      error: `У цеха есть смета и ${countOf(versions, ["утверждённая версия", "утверждённые версии", "утверждённых версий"])} — удалить цех нельзя`,
+    };
+  }
   if (department.budget || department._count.budgetItems > 0) {
     return { error: "У цеха есть смета — удалить цех нельзя" };
   }

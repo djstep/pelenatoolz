@@ -264,7 +264,8 @@ function money(n: number) {
 /**
  * Разбор основного листа. Раздел (только наименование) и подытог (СУММ/SUM по диапазону
  * в Сумме или Итого без кода) — не статьи и без проверок. Кол-во, Ставка, Дни, Налог %
- * берутся вычисленными значениями ячеек; Сумма, Налог, Итого считаются заново.
+ * берутся вычисленными значениями ячеек; Сумма, Налог, Итого считаются заново, расхождение
+ * с листом — в проверки.
  */
 export function analyzeMainSheet(sheet: MainSheetLike): MainSheetAnalysis {
   const { columns, missing, duplicated } = findMainColumns(sheet);
@@ -306,6 +307,7 @@ export function analyzeMainSheet(sheet: MainSheetLike): MainSheetAnalysis {
       taxPercent: parseNumber(at(col.taxPercent)?.v),
     };
     const sheetAmount = parseNumber(at(col.amount)?.v);
+    const sheetTax = parseNumber(at(col.tax)?.v);
     const sheetTotal = parseNumber(at(col.total)?.v);
 
     if (!code) {
@@ -374,6 +376,7 @@ export function analyzeMainSheet(sheet: MainSheetLike): MainSheetAnalysis {
 
     for (const [title, cell, value, expected] of [
       ["Сумма", at(col.amount), sheetAmount, amount],
+      ["Налог", at(col.tax), sheetTax, tax],
       ["Итого", at(col.total), sheetTotal, total],
     ] as const) {
       if (typeof value !== "number" || Number.isNaN(value)) continue;

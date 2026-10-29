@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import type { SmetaCheck } from "@/features/smeta/lib/main-sheet";
 import type { BudgetClient } from "@/features/smeta/queries";
+import type { SmetaApprovalProps } from "@/features/smeta/components/smeta-spreadsheet-editor";
 
 const SmetaSpreadsheetEditor = dynamic(
   () =>
@@ -27,6 +28,9 @@ export function SmetaWorkspace({
   initialChecks,
   usedCodes,
   listHref,
+  approval,
+  mode,
+  title,
 }: {
   projectId: string;
   department: { id: string; name: string; codePrefix: string };
@@ -35,6 +39,9 @@ export function SmetaWorkspace({
   initialChecks: SmetaCheck[];
   usedCodes: string[];
   listHref: string;
+  approval?: SmetaApprovalProps;
+  mode?: "draft" | "version";
+  title?: string;
 }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -47,6 +54,9 @@ export function SmetaWorkspace({
         initialChecks={initialChecks}
         usedCodes={usedCodes}
         listHref={listHref}
+        approval={approval}
+        mode={mode}
+        title={title}
       />
     </div>
   );

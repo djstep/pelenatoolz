@@ -44,6 +44,7 @@ export const AuditEntityType = {
   budgetTemplate: "budget_template",
   department: "department",
   budget: "budget",
+  budgetVersion: "budget_version",
 } as const;
 
 export type AuditEntityTypeValue =
@@ -104,6 +105,7 @@ export const auditEntityLabels: Record<string, string> = {
   [AuditEntityType.budgetTemplate]: "Шаблон сметы",
   [AuditEntityType.department]: "Цех",
   [AuditEntityType.budget]: "Смета цеха",
+  [AuditEntityType.budgetVersion]: "Версия сметы",
   ShootDay: "Вызывной (устар.)",
 };
 
