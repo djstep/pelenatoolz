@@ -381,10 +381,10 @@ export async function updateProductionWorkRowAction(
 
   await recomputeWorkRowPay(row.id);
 
-  const { syncPaymentFromWorkRow } = await import(
-    "@/features/reports/lib/sync-payment"
+  const { syncReportAccruals } = await import(
+    "@/features/reports/lib/sync-accruals"
   );
-  await syncPaymentFromWorkRow(projectId, shootDayId, row.id);
+  await syncReportAccruals(gate.ctx, projectId, shootDayId, [row.id]);
 
   await recordAudit(gate.ctx, {
     projectId,
@@ -463,10 +463,10 @@ export async function saveProductionWorkExtrasAction(
   });
 
   await recomputeWorkRowPay(row.id);
-  const { syncPaymentFromWorkRow } = await import(
-    "@/features/reports/lib/sync-payment"
+  const { syncReportAccruals } = await import(
+    "@/features/reports/lib/sync-accruals"
   );
-  await syncPaymentFromWorkRow(projectId, shootDayId, row.id);
+  await syncReportAccruals(gate.ctx, projectId, shootDayId, [row.id]);
 
   await recordAudit(gate.ctx, {
     projectId,

@@ -117,7 +117,6 @@ export const projectNavGroups: NavGroupDef[] = [
         visible: (a) =>
           a.isProducer || a.can("smeta:read_all") || a.headDepartmentIds.length > 0,
       },
-      { href: "/budget", label: "Статьи", visible: anyOf("budget:read") },
       { href: "/accruals", label: "Начисления", visible: anyOf("finance:read") },
       {
         href: "/resource-usage",

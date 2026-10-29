@@ -1,14 +1,8 @@
 "use client";
 
 import { useTransition } from "react";
-import {
-  exportCashFlowReportAction,
-  exportPlanFactReportAction,
-} from "@/features/finance/actions-reports";
-import type {
-  CashFlowReport,
-  PlanFactReport,
-} from "@/features/finance/queries-reports";
+import { exportCashFlowReportAction } from "@/features/finance/actions-reports";
+import type { CashFlowReport } from "@/features/finance/queries-reports";
 import { formatDateShort } from "@/shared/i18n/format-date";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
@@ -47,14 +41,14 @@ function ReportSubTabs({
 }: {
   locale: string;
   projectId: string;
-  active: "plan-fact" | "cash-flow";
+  active: "cash-flow";
 }) {
   const base = `/${locale}/projects/${projectId}/finance/reports`;
+  // План/факт по статьям смет — отдельный экран (волна 2, шаг 5).
   const tabs = [
-    { id: "plan-fact" as const, href: base, label: "План-факт по статьям" },
     {
       id: "cash-flow" as const,
-      href: `${base}?view=cash-flow`,
+      href: base,
       label: "Движение денег",
     },
   ];
@@ -74,179 +68,6 @@ function ReportSubTabs({
           {t.label}
         </Link>
       ))}
-    </div>
-  );
-}
-
-export function PlanFactReportView({
-  locale,
-  projectId,
-  currency,
-  report,
-  filters,
-}: {
-  locale: string;
-  projectId: string;
-  currency: string;
-  report: PlanFactReport;
-  filters: { dateFrom: string; dateTo: string };
-}) {
-  const toast = useToast();
-  const [pending, start] = useTransition();
-
-  return (
-    <div className="space-y-6">
-      <ReportSubTabs locale={locale} projectId={projectId} active="plan-fact" />
-
-      <form
-        method="get"
-        className="flex flex-wrap items-end gap-3 rounded-2xl border border-[var(--border)] bg-[var(--panel-solid)] p-4"
-      >
-        <div>
-          <Label htmlFor="dateFrom">Период с</Label>
-          <Input
-            id="dateFrom"
-            name="dateFrom"
-            type="date"
-            defaultValue={filters.dateFrom}
-          />
-        </div>
-        <div>
-          <Label htmlFor="dateTo">по</Label>
-          <Input
-            id="dateTo"
-            name="dateTo"
-            type="date"
-            defaultValue={filters.dateTo}
-          />
-        </div>
-        <input type="hidden" name="view" value="plan-fact" />
-        <Button type="submit" variant="secondary">
-          Применить
-        </Button>
-        <Button
-          type="button"
-          disabled={pending}
-          onClick={() => {
-            start(async () => {
-              const res = await exportPlanFactReportAction(projectId, {
-                dateFrom: filters.dateFrom || undefined,
-                dateTo: filters.dateTo || undefined,
-              });
-              if (res.error || !res.base64 || !res.fileName) {
-                toast.error(res.error ?? "Не удалось экспортировать");
-                return;
-              }
-              downloadBase64Xlsx(res.base64, res.fileName);
-              toast.success(res.success ?? "Excel скачан");
-            });
-          }}
-        >
-          {pending ? "…" : "Экспорт Excel"}
-        </Button>
-      </form>
-
-      <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        {(
-          [
-            ["План", report.totals.planned],
-            ["Начисления", report.totals.accrued],
-            ["Оплачено", report.totals.paid],
-            ["План − начисл.", report.totals.variancePlan],
-            ["Не оплачено", report.totals.unpaid],
-          ] as const
-        ).map(([label, value]) => (
-          <div
-            key={label}
-            className="rounded-xl border border-[var(--border)] bg-[var(--panel-solid)] p-4"
-          >
-            <div className="text-xs uppercase tracking-wide text-[var(--muted-fg)]">
-              {label}
-            </div>
-            <div
-              className={cn(
-                "mt-1 text-lg font-semibold",
-                label === "Не оплачено" && value > 0
-                  ? "text-[var(--tone-warning)]/90"
-                  : undefined,
-              )}
-            >
-              {money(value, currency)}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {report.rows.length === 0 ? (
-        <p className="text-sm text-[var(--muted-fg)]">Статей сметы пока нет.</p>
-      ) : (
-        <div className="overflow-x-auto rounded-2xl border border-[var(--border)] bg-[var(--panel-solid)]">
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="border-b border-[var(--border)] text-[var(--muted-fg)]">
-                <th className="px-4 py-3">Категория</th>
-                <th className="px-4 py-3">Статья</th>
-                <th className="px-4 py-3">План</th>
-                <th className="px-4 py-3">Начисления</th>
-                <th className="px-4 py-3">Оплачено</th>
-                <th className="px-4 py-3">План − начисл.</th>
-                <th className="px-4 py-3">Не оплачено</th>
-              </tr>
-            </thead>
-            <tbody>
-              {report.rows.map((r) => (
-                <tr key={r.budgetLineId} className="border-b border-[var(--border)]/60">
-                  <td className="px-4 py-3 text-[var(--muted-fg)]">
-                    {r.categoryLabel}
-                  </td>
-                  <td className="px-4 py-3 font-medium">{r.title}</td>
-                  <td className="px-4 py-3">{money(r.planned, currency)}</td>
-                  <td className="px-4 py-3">{money(r.accrued, currency)}</td>
-                  <td className="px-4 py-3">{money(r.paid, currency)}</td>
-                  <td
-                    className={cn(
-                      "px-4 py-3",
-                      r.variancePlan < 0 ? "text-[var(--tone-danger)]" : undefined,
-                    )}
-                  >
-                    {money(r.variancePlan, currency)}
-                  </td>
-                  <td
-                    className={cn(
-                      "px-4 py-3",
-                      r.unpaid > 0 ? "text-[var(--tone-warning)]/90" : undefined,
-                    )}
-                  >
-                    {money(r.unpaid, currency)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-            <tfoot>
-              <tr className="border-t border-[var(--border)] font-semibold">
-                <td className="px-4 py-3" colSpan={2}>
-                  Итого
-                </td>
-                <td className="px-4 py-3">
-                  {money(report.totals.planned, currency)}
-                </td>
-                <td className="px-4 py-3">
-                  {money(report.totals.accrued, currency)}
-                </td>
-                <td className="px-4 py-3">
-                  {money(report.totals.paid, currency)}
-                </td>
-                <td className="px-4 py-3">
-                  {money(report.totals.variancePlan, currency)}
-                </td>
-                <td className="px-4 py-3">
-                  {money(report.totals.unpaid, currency)}
-                </td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      )}
     </div>
   );
 }

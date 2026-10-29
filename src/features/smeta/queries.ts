@@ -31,8 +31,8 @@ type TransactionCallback = Extract<
   (client: never) => Promise<unknown>
 >;
 type Tx = TransactionCallback extends (client: infer T) => Promise<unknown> ? T : never;
-/** Клиент базы или транзакция — для чтения статей. */
-type Db = Pick<Tx, "budgetItem">;
+/** Клиент базы или транзакция — для чтения статей и факта по ним. */
+type Db = Pick<Tx, "budgetItem" | "accrual" | "cashPaymentBreakdown">;
 export type { Tx };
 
 function toClientBudget(row: {
@@ -242,7 +242,58 @@ async function codesOfOtherDepartments(
   return new Map(rows.map((r) => [r.code, r.department.name]));
 }
 
-/** Разбор основного листа + проверка дублей по проекту. Ничего не пишет. */
+type ItemFact = { code: string; name: string; archived: boolean; accrued: number; paid: number };
+
+/** Статьи цеха (действующие и архивные), по которым есть начисления или платежи. */
+async function departmentFacts(
+  db: Db,
+  projectId: string,
+  departmentId: string,
+): Promise<Map<string, ItemFact>> {
+  const accrued = await db.accrual.groupBy({
+    by: ["budgetItemId"],
+    where: { projectId, budgetItem: { departmentId } },
+    _sum: { amountWithTax: true },
+  });
+  const paid = await db.cashPaymentBreakdown.groupBy({
+    by: ["budgetItemId"],
+    where: { budgetItem: { projectId, departmentId } },
+    _sum: { amount: true },
+  });
+  const sums = new Map<string, { accrued: number; paid: number }>();
+  for (const a of accrued) {
+    if (!a.budgetItemId) continue;
+    sums.set(a.budgetItemId, { accrued: Number(a._sum.amountWithTax ?? 0), paid: 0 });
+  }
+  for (const p of paid) {
+    if (!p.budgetItemId) continue;
+    const s = sums.get(p.budgetItemId) ?? { accrued: 0, paid: 0 };
+    s.paid = Number(p._sum.amount ?? 0);
+    sums.set(p.budgetItemId, s);
+  }
+  for (const [id, s] of sums) if (s.accrued === 0 && s.paid === 0) sums.delete(id);
+  if (sums.size === 0) return new Map();
+
+  const items = await db.budgetItem.findMany({
+    where: { id: { in: [...sums.keys()] } },
+    select: { id: true, code: true, name: true, archivedAt: true },
+  });
+  return new Map(
+    items.map((i) => [
+      i.code,
+      { code: i.code, name: i.name, archived: i.archivedAt !== null, ...sums.get(i.id)! },
+    ]),
+  );
+}
+
+function factText(f: ItemFact) {
+  const rub = (n: number) => `${n.toLocaleString("ru-RU", { maximumFractionDigits: 2 })} ₽`;
+  return [f.accrued ? `начислено ${rub(f.accrued)}` : "", f.paid ? `оплачено ${rub(f.paid)}` : ""]
+    .filter(Boolean)
+    .join(", ");
+}
+
+/** Разбор основного листа + проверка дублей по проекту и факта по статьям. Ничего не пишет. */
 export async function analyzeWithProject(
   db: Db,
   projectId: string,
@@ -253,7 +304,7 @@ export async function analyzeWithProject(
     const checks: SmetaCheck[] = [
       { kind: "headers", row: 0, message: "Основной лист не найден. Статьи не обновляются." },
     ];
-    return { broken: true, items: [] as ParsedRow[], checks };
+    return { broken: true, items: [] as ParsedRow[], checks, factCodes: new Set<string>() };
   }
   const analysis = analyzeMainSheet(mainSheet);
   const taken = await codesOfOtherDepartments(
@@ -273,8 +324,30 @@ export async function analyzeWithProject(
     });
     return false;
   });
+
+  const facts = analysis.broken
+    ? new Map<string, ItemFact>()
+    : await departmentFacts(db, projectId, departmentId);
+  const rowByCode = new Map(items.map((i) => [i.code, i.row]));
+  for (const fact of facts.values()) {
+    const row = rowByCode.get(fact.code);
+    if (row === undefined) {
+      checks.push({
+        kind: "gone_with_fact",
+        row: 0,
+        message: `Код ${fact.code} («${fact.name}») нет на основном листе, а по нему ${factText(fact)} — в плане/факте он будет «вне плана».`,
+      });
+    } else if (fact.archived) {
+      checks.push({
+        kind: "restored_with_fact",
+        row,
+        message: `Строка ${row + 1}: код ${fact.code} возвращается из архива — по нему уже ${factText(fact)}.`,
+      });
+    }
+  }
+
   checks.sort((a, b) => a.row - b.row);
-  return { broken: analysis.broken, items, checks };
+  return { broken: analysis.broken, items, checks, factCodes: new Set(facts.keys()) };
 }
 
 /** Проверки сохранённой сметы — для показа при открытии страницы. */
@@ -297,6 +370,8 @@ export type ItemChanges = {
   added: string[];
   archived: string[];
   restored: string[];
+  /** Из `restored` — те, по которым уже есть начисления или платежи */
+  restoredWithFact: string[];
   changed: { code: string; name?: [string, string]; total?: [string, string] }[];
 };
 
@@ -310,10 +385,17 @@ async function syncItems(
   projectId: string,
   departmentId: string,
   rows: ParsedRow[],
+  factCodes: ReadonlySet<string>,
 ): Promise<ItemChanges> {
   const existing = await tx.budgetItem.findMany({ where: { projectId, departmentId } });
   const byCode = new Map(existing.map((i) => [i.code, i]));
-  const changes: ItemChanges = { added: [], archived: [], restored: [], changed: [] };
+  const changes: ItemChanges = {
+    added: [],
+    archived: [],
+    restored: [],
+    restoredWithFact: [],
+    changed: [],
+  };
   const seen = new Set<string>();
 
   for (const row of rows) {
@@ -355,6 +437,7 @@ async function syncItems(
     await tx.budgetItem.update({ where: { id: item.id }, data: values });
     if (item.archivedAt !== null) {
       changes.restored.push(row.code);
+      if (factCodes.has(row.code)) changes.restoredWithFact.push(row.code);
     } else if (!sameValues) {
       const entry: ItemChanges["changed"][number] = { code: row.code };
       if (item.name !== row.name) entry.name = [item.name, row.name];
@@ -550,7 +633,7 @@ export async function persistDepartmentBudget(
       // Сломанные заголовки или нет основного листа — статьи остаются как были.
       const changes = analysis.broken
         ? null
-        : await syncItems(tx, projectId, departmentId, analysis.items);
+        : await syncItems(tx, projectId, departmentId, analysis.items, analysis.factCodes);
 
       const statusChange: SaveStatusChange =
         budget.status === BudgetStatus.SUBMITTED

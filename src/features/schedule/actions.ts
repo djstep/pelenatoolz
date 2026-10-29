@@ -10,6 +10,7 @@ import {
 import { prisma } from "@/shared/db/prisma";
 import { AuditEntityType } from "@/shared/audit/entity-types";
 import { recordAudit } from "@/shared/audit/with-audit";
+import { zeroAccrualsOfWorkRows } from "@/features/reports/lib/sync-accruals";
 import { eachCalendarDay, parseDateInput } from "@/features/schedule/lib/date-range";
 import { isWorkingShootDay } from "@/features/schedule/lib/shoot-day-type";
 import { syncShootDayResourceUsages } from "@/features/schedule/lib/sync-shoot-day-resources";
@@ -388,6 +389,17 @@ export async function deleteShootDayWithShiftAction(
   });
   if (!target) return;
 
+  // Начисления из отчёта этого дня остаются: сумма 0 и пометка «обнулено в отчёте».
+  const workRows = await prisma.productionReportWorkRow.findMany({
+    where: { report: { shootDayId } },
+    select: { id: true },
+  });
+  await zeroAccrualsOfWorkRows(
+    ctx,
+    projectId,
+    workRows.map((r) => r.id),
+  );
+
   await prisma.$transaction(async (tx) => {
     await tx.shootDay.delete({ where: { id: shootDayId } });
     const later = await tx.shootDay.findMany({
@@ -429,6 +441,17 @@ export async function clearScheduleCalendarAction(
   if (dayCount === 0) {
     return { success: "Календарь уже пуст" };
   }
+
+  // Начисления из отчётов остаются: сумма 0 и пометка «обнулено в отчёте».
+  const workRows = await prisma.productionReportWorkRow.findMany({
+    where: { report: { shootDay: { projectId } } },
+    select: { id: true },
+  });
+  await zeroAccrualsOfWorkRows(
+    ctx,
+    projectId,
+    workRows.map((r) => r.id),
+  );
 
   await prisma.shootDay.deleteMany({ where: { projectId } });
 

@@ -36,6 +36,9 @@ export type WorkPayResult = {
   payableOvertimeMin: number | null;
   shiftPay: number | null;
   overtimePay: number | null;
+  /** То же без налога (для начислений): смена и переработка. Километраж без налога. */
+  shiftNet: number | null;
+  overtimeNet: number | null;
   extrasPay: number;
   mileagePay: number;
   totalPay: number | null;
@@ -154,9 +157,9 @@ function computeOvertimePayAmount(input: {
   taxPct: number;
   mode: OvertimeCalcMode;
   rates: OvertimeRateInput[];
-}): number {
+}): { gross: number; net: number } {
   const { payableMin, shiftRate, taxPct, mode, rates } = input;
-  if (payableMin <= 0 || shiftRate <= 0) return 0;
+  if (payableMin <= 0 || shiftRate <= 0) return { gross: 0, net: 0 };
 
   if (mode === "HALF_HOUR") {
     const units = payableMin / 30;
@@ -164,7 +167,7 @@ function computeOvertimePayAmount(input: {
     const amount = resolveRateAmount(unitRate, shiftRate);
     const rowTax =
       unitRate?.taxPercent != null ? Number(unitRate.taxPercent) : taxPct;
-    return withTax(amount * units, rowTax);
+    return { gross: withTax(amount * units, rowTax), net: amount * units };
   }
 
   const hours = payableMin / 60;
@@ -174,18 +177,20 @@ function computeOvertimePayAmount(input: {
     const rate = rateForHour(rates, hourCount);
     const amount = resolveRateAmount(rate, shiftRate);
     const rowTax = rate?.taxPercent != null ? Number(rate.taxPercent) : taxPct;
-    return withTax(amount, rowTax);
+    return { gross: withTax(amount, rowTax), net: amount };
   }
 
-  let sum = 0;
+  let gross = 0;
+  let net = 0;
   const hourCount = Math.max(1, Math.round(hours));
   for (let h = 1; h <= hourCount; h++) {
     const rate = rateForHour(rates, h);
     const amount = resolveRateAmount(rate, shiftRate);
     const rowTax = rate?.taxPercent != null ? Number(rate.taxPercent) : taxPct;
-    sum += withTax(amount, rowTax);
+    gross += withTax(amount, rowTax);
+    net += amount;
   }
-  return sum;
+  return { gross, net };
 }
 
 export function computeMileagePay(
@@ -218,6 +223,7 @@ export function computeWorkPay(input: WorkPayInput): WorkPayResult {
 
   const shiftPay =
     shiftRate != null && shiftRate > 0 ? withTax(shiftRate, taxPct) : null;
+  const shiftNet = shiftPay != null ? shiftRate : null;
 
   const start = input.factStart?.trim() || "";
   const end = input.factEnd?.trim() || "";
@@ -234,6 +240,8 @@ export function computeWorkPay(input: WorkPayInput): WorkPayResult {
       payableOvertimeMin: null,
       shiftPay,
       overtimePay: null,
+      shiftNet,
+      overtimeNet: null,
       extrasPay,
       mileagePay,
       totalPay: total,
@@ -250,23 +258,28 @@ export function computeWorkPay(input: WorkPayInput): WorkPayResult {
   const payableOvertimeMin = ceilToInterval(afterBuffer, intervalMin);
 
   let overtimePay: number | null = null;
+  let overtimeNet: number | null = null;
   if (payableOvertimeMin > 0 && shiftRate != null && shiftRate > 0) {
     const rates = input.overtimeRates ?? [];
     if (rates.length > 0) {
-      overtimePay = computeOvertimePayAmount({
+      const ot = computeOvertimePayAmount({
         payableMin: payableOvertimeMin,
         shiftRate,
         taxPct,
         mode: overtimeMode,
         rates,
       });
+      overtimePay = ot.gross;
+      overtimeNet = ot.net;
     } else {
       const hours = payableOvertimeMin / 60;
       const hourly = shiftRate / (shiftHoursMin / 60);
       overtimePay = withTax(hourly * hours, taxPct);
+      overtimeNet = hourly * hours;
     }
   } else if (payableOvertimeMin === 0) {
     overtimePay = 0;
+    overtimeNet = 0;
   }
 
   const totalPay =
@@ -278,6 +291,8 @@ export function computeWorkPay(input: WorkPayInput): WorkPayResult {
     payableOvertimeMin,
     shiftPay,
     overtimePay,
+    shiftNet,
+    overtimeNet,
     extrasPay,
     mileagePay,
     totalPay:

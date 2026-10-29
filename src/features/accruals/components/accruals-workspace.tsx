@@ -1,16 +1,25 @@
 "use client";
 
-import { useActionState, useMemo, useState, useTransition } from "react";
+import { useActionState, useState } from "react";
 import { AccrualType } from "@prisma/client";
 import {
   createAccrualAction,
   deleteAccrualAction,
-  suggestAccrualDefaultsAction,
   updateAccrualAction,
   type AccrualActionState,
 } from "@/features/accruals/actions";
-import { accrualTypeLabels, computeTaxAmounts } from "@/features/accruals/lib/labels";
+import {
+  accrualReportPartLabels,
+  accrualTypeLabels,
+  computeTaxAmounts,
+} from "@/features/accruals/lib/labels";
 import type { AccrualListRow } from "@/features/accruals/queries";
+import { BudgetItemSelect } from "@/features/smeta/components/budget-item-select";
+import {
+  budgetItemLabel,
+  type BudgetItemOption,
+} from "@/features/smeta/lib/budget-item-option";
+import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
 import { Input } from "@/shared/ui/input";
@@ -22,15 +31,6 @@ import { useActionToast } from "@/shared/ui/toast";
 import { formatDateShort } from "@/shared/i18n/format-date";
 
 const initial: AccrualActionState = {};
-
-type LineOpt = {
-  id: string;
-  title: string;
-  unitCost: { toString(): string } | number;
-  unitsCount: { toString(): string } | number;
-  taxPercent: { toString(): string } | number | null;
-  plannedCounterpartyId: string | null;
-};
 
 type CpOpt = { id: string; name: string };
 type DayOpt = {
@@ -52,36 +52,97 @@ function toDateInput(d: Date | string) {
   return x.toISOString().slice(0, 10);
 }
 
-function AccrualFormFields({
-  projectId,
+/** Начисление из отчёта смены: сумма, дата и день — из отчёта; руками только статья и контрагент. */
+function ReportAccrualFields({
   accrual,
-  lines,
+  items,
+  itemLabels,
+  counterparties,
+  currency,
+}: {
+  accrual: AccrualListRow;
+  items: BudgetItemOption[];
+  itemLabels: Record<string, BudgetItemOption>;
+  counterparties: CpOpt[];
+  currency: string;
+}) {
+  const [budgetItemId, setBudgetItemId] = useState(accrual.budgetItemId ?? "");
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      <div className="rounded-xl border border-[var(--border)] p-3 text-sm sm:col-span-2">
+        <div className="font-medium">
+          Из отчёта смены
+          {accrual.reportPart ? ` · ${accrualReportPartLabels[accrual.reportPart]}` : ""}
+          {accrual.shootDay ? ` · день ${accrual.shootDay.dayNumber}` : ""}
+          {" · "}
+          {formatDateShort(accrual.date)}
+        </div>
+        <div className="mt-1 text-[var(--muted-fg)]">
+          {money(Number(accrual.amount), currency)} без налога ·{" "}
+          {money(Number(accrual.amountWithTax), currency)} с налогом
+        </div>
+        <div className="mt-1 text-xs text-[var(--muted-fg)]">
+          Сумма, дата и день меняются только в отчёте. Статья и контрагент, выбранные здесь,
+          отчёт больше не перезаписывает.
+        </div>
+      </div>
+      <div className="sm:col-span-2">
+        <Label htmlFor="budgetItemId">Статья сметы</Label>
+        <BudgetItemSelect
+          id="budgetItemId"
+          name="budgetItemId"
+          value={budgetItemId}
+          onChange={setBudgetItemId}
+          options={items}
+          current={accrual.budgetItemId ? itemLabels[accrual.budgetItemId] : null}
+        />
+      </div>
+      <div className="sm:col-span-2">
+        <Label htmlFor="counterpartyId">Контрагент</Label>
+        <Select
+          id="counterpartyId"
+          name="counterpartyId"
+          defaultValue={accrual.counterpartyId ?? ""}
+        >
+          <option value="">— не указан —</option>
+          {counterparties.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </Select>
+      </div>
+      <div className="sm:col-span-2">
+        <Label htmlFor="comment">Примечание</Label>
+        <Input id="comment" name="comment" defaultValue={accrual.comment ?? ""} />
+      </div>
+    </div>
+  );
+}
+
+function AccrualFormFields({
+  accrual,
+  items,
+  itemLabels,
   counterparties,
   shootDays,
   groupUnits,
   defaultType,
-  defaultBudgetLineId,
   defaultDate,
 }: {
-  projectId: string;
   accrual?: AccrualListRow;
-  lines: LineOpt[];
+  items: BudgetItemOption[];
+  itemLabels: Record<string, BudgetItemOption>;
   counterparties: CpOpt[];
   shootDays: DayOpt[];
   groupUnits: string[];
   defaultType?: AccrualType;
-  defaultBudgetLineId?: string;
   defaultDate?: string;
 }) {
   const [type, setType] = useState<AccrualType>(
     accrual?.type ?? defaultType ?? AccrualType.ONE_TIME,
   );
-  const [budgetLineId, setBudgetLineId] = useState(
-    accrual?.budgetLineId ?? defaultBudgetLineId ?? "",
-  );
-  const [counterpartyId, setCounterpartyId] = useState(
-    accrual?.counterpartyId ?? "",
-  );
+  const [budgetItemId, setBudgetItemId] = useState(accrual?.budgetItemId ?? "");
   const [amount, setAmount] = useState(
     accrual ? Number(accrual.amount) : 0,
   );
@@ -97,50 +158,10 @@ function AccrualFormFields({
       : defaultDate ?? new Date().toISOString().slice(0, 10),
   );
   const [shootDayId, setShootDayId] = useState(accrual?.shootDayId ?? "");
-  const [pendingSuggest, startSuggest] = useTransition();
 
   const taxNum =
     taxPercent === "" ? null : Number(taxPercent);
   const withTax = computeTaxAmounts(amount, taxNum).amountWithTax;
-
-  function applyLineDefaults(lineId: string) {
-    startSuggest(async () => {
-      const res = await suggestAccrualDefaultsAction(projectId, {
-        budgetLineId: lineId,
-        shootDayId: shootDayId || null,
-      });
-      if ("defaults" in res && res.defaults) {
-        const d = res.defaults;
-        if (d.counterpartyId) setCounterpartyId(d.counterpartyId);
-        if (d.taxPercent != null) setTaxPercent(d.taxPercent);
-        if (d.amount != null) setAmount(d.amount);
-        if (d.quantity != null) setQuantity(d.quantity);
-      } else {
-        const line = lines.find((l) => l.id === lineId);
-        if (line) {
-          if (line.plannedCounterpartyId) {
-            setCounterpartyId(line.plannedCounterpartyId);
-          }
-          if (line.taxPercent != null) {
-            setTaxPercent(Number(line.taxPercent));
-          }
-          setAmount(Number(line.unitCost) * Number(line.unitsCount));
-        }
-      }
-    });
-  }
-
-  function applyCounterpartyDefaults(cpId: string) {
-    startSuggest(async () => {
-      const res = await suggestAccrualDefaultsAction(projectId, {
-        counterpartyId: cpId,
-      });
-      if ("budgetLineId" in res && res.budgetLineId) {
-        setBudgetLineId(res.budgetLineId);
-        applyLineDefaults(res.budgetLineId);
-      }
-    });
-  }
 
   return (
     <div className="grid gap-3 sm:grid-cols-2">
@@ -171,40 +192,23 @@ function AccrualFormFields({
         />
       </div>
       <div className="sm:col-span-2">
-        <Label htmlFor="budgetLineId">Статья *</Label>
-        <Select
-          id="budgetLineId"
-          name="budgetLineId"
-          required
-          value={budgetLineId}
-          onChange={(e) => {
-            const id = e.target.value;
-            setBudgetLineId(id);
-            if (id) applyLineDefaults(id);
-          }}
-        >
-          <option value="">— выберите —</option>
-          {lines.map((l) => (
-            <option key={l.id} value={l.id}>
-              {l.title}
-            </option>
-          ))}
-        </Select>
+        <Label htmlFor="budgetItemId">Статья сметы</Label>
+        <BudgetItemSelect
+          id="budgetItemId"
+          name="budgetItemId"
+          value={budgetItemId}
+          onChange={setBudgetItemId}
+          options={items}
+          current={accrual?.budgetItemId ? itemLabels[accrual.budgetItemId] : null}
+        />
       </div>
       <div className="sm:col-span-2">
-        <Label htmlFor="counterpartyId">
-          Контрагент *{pendingSuggest ? " …" : ""}
-        </Label>
+        <Label htmlFor="counterpartyId">Контрагент *</Label>
         <Select
           id="counterpartyId"
           name="counterpartyId"
           required
-          value={counterpartyId}
-          onChange={(e) => {
-            const id = e.target.value;
-            setCounterpartyId(id);
-            if (id && !budgetLineId) applyCounterpartyDefaults(id);
-          }}
+          defaultValue={accrual?.counterpartyId ?? ""}
         >
           <option value="">— выберите —</option>
           {counterparties.map((c) => (
@@ -317,27 +321,29 @@ function AccrualFormFields({
 
 function AccrualModal({
   projectId,
+  currency,
   accrual,
-  lines,
+  items,
+  itemLabels,
   counterparties,
   shootDays,
   groupUnits,
   open,
   onClose,
   defaultType,
-  defaultBudgetLineId,
   defaultDate,
 }: {
   projectId: string;
+  currency: string;
   accrual?: AccrualListRow;
-  lines: LineOpt[];
+  items: BudgetItemOption[];
+  itemLabels: Record<string, BudgetItemOption>;
   counterparties: CpOpt[];
   shootDays: DayOpt[];
   groupUnits: string[];
   open: boolean;
   onClose: () => void;
   defaultType?: AccrualType;
-  defaultBudgetLineId?: string;
   defaultDate?: string;
 }) {
   const bound = accrual
@@ -376,19 +382,46 @@ function AccrualModal({
       }
     >
       <form id="accrual-form" action={action} key={accrual?.id ?? "new"}>
-        <AccrualFormFields
-          projectId={projectId}
-          accrual={accrual}
-          lines={lines}
-          counterparties={counterparties}
-          shootDays={shootDays}
-          groupUnits={groupUnits}
-          defaultType={defaultType}
-          defaultBudgetLineId={defaultBudgetLineId}
-          defaultDate={defaultDate}
-        />
+        {accrual?.reportPart ? (
+          <ReportAccrualFields
+            accrual={accrual}
+            items={items}
+            itemLabels={itemLabels}
+            counterparties={counterparties}
+            currency={currency}
+          />
+        ) : (
+          <AccrualFormFields
+            accrual={accrual}
+            items={items}
+            itemLabels={itemLabels}
+            counterparties={counterparties}
+            shootDays={shootDays}
+            groupUnits={groupUnits}
+            defaultType={defaultType}
+            defaultDate={defaultDate}
+          />
+        )}
       </form>
     </Modal>
+  );
+}
+
+/** Пометки начисления: «из отчёта смены», «обнулено в отчёте», «контрагент не указан». */
+function AccrualMarks({ accrual }: { accrual: AccrualListRow }) {
+  if (!accrual.reportPart && accrual.counterpartyId) return null;
+  return (
+    <div className="mt-1 flex flex-wrap gap-1">
+      {accrual.reportPart ? (
+        <Badge>Отчёт смены · {accrualReportPartLabels[accrual.reportPart]}</Badge>
+      ) : null}
+      {accrual.reportZeroedAt ? (
+        <Badge className="text-[var(--danger)]">Обнулено в отчёте</Badge>
+      ) : null}
+      {!accrual.counterpartyId ? (
+        <Badge className="text-[var(--danger)]">Контрагент не указан</Badge>
+      ) : null}
+    </div>
   );
 }
 
@@ -396,7 +429,8 @@ export function AccrualsWorkspace({
   projectId,
   currency,
   accruals,
-  lines,
+  items,
+  itemLabels,
   counterparties,
   shootDays,
   groupUnits,
@@ -404,12 +438,12 @@ export function AccrualsWorkspace({
   totals,
   canWrite,
   initialCreate,
-  initialBudgetLineId,
 }: {
   projectId: string;
   currency: string;
   accruals: AccrualListRow[];
-  lines: LineOpt[];
+  items: BudgetItemOption[];
+  itemLabels: Record<string, BudgetItemOption>;
   counterparties: CpOpt[];
   shootDays: DayOpt[];
   groupUnits: string[];
@@ -417,14 +451,13 @@ export function AccrualsWorkspace({
     q: string;
     dateFrom: string;
     dateTo: string;
-    budgetLineId: string;
+    budgetItemId: string;
     counterpartyId: string;
     groupUnit: string;
   };
   totals: { count: number; amount: number; withTax: number };
   canWrite: boolean;
   initialCreate?: "PER_SHIFT" | "ONE_TIME" | null;
-  initialBudgetLineId?: string;
 }) {
   const [creating, setCreating] = useState<AccrualType | null>(
     initialCreate === "PER_SHIFT"
@@ -436,10 +469,17 @@ export function AccrualsWorkspace({
   const [editing, setEditing] = useState<AccrualListRow | null>(null);
   const confirmDelete = useConfirm();
 
-  const lineMap = useMemo(
-    () => new Map(lines.map((l) => [l.id, l.title])),
-    [lines],
-  );
+  const itemLabel = (id: string | null) =>
+    budgetItemLabel(id ? itemLabels[id] : null);
+  // В фильтре — видимые статьи и выбранная, даже если её нет среди видимых.
+  const filterItem =
+    filters.budgetItemId && filters.budgetItemId !== "none"
+      ? itemLabels[filters.budgetItemId]
+      : undefined;
+  const filterOptions =
+    filterItem && !items.some((i) => i.id === filterItem.id)
+      ? [filterItem, ...items]
+      : items;
 
   return (
     <div className="space-y-6">
@@ -478,7 +518,7 @@ export function AccrualsWorkspace({
             id="q"
             name="q"
             defaultValue={filters.q}
-            placeholder="Статья, контрагент, примечание…"
+            placeholder="Код или наименование статьи, контрагент, примечание…"
           />
         </div>
         <div>
@@ -500,16 +540,17 @@ export function AccrualsWorkspace({
           />
         </div>
         <div>
-          <Label htmlFor="budgetLineId">Статья</Label>
+          <Label htmlFor="budgetItemId">Статья</Label>
           <Select
-            id="budgetLineId"
-            name="budgetLineId"
-            defaultValue={filters.budgetLineId}
+            id="budgetItemId"
+            name="budgetItemId"
+            defaultValue={filters.budgetItemId}
           >
             <option value="">Все</option>
-            {lines.map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.title}
+            <option value="none">Без статьи</option>
+            {filterOptions.map((i) => (
+              <option key={i.id} value={i.id}>
+                {budgetItemLabel(i)}
               </option>
             ))}
           </Select>
@@ -600,16 +641,21 @@ export function AccrualsWorkspace({
                     ) : null}
                   </td>
                   <td className="px-4 py-3">
-                    <div className="font-medium">
-                      {a.budgetLine?.title ?? lineMap.get(a.budgetLineId)}
+                    <div
+                      className={
+                        a.budgetItemId ? "font-medium" : "text-[var(--muted-fg)]"
+                      }
+                    >
+                      {itemLabel(a.budgetItemId)}
                     </div>
                     {a.comment ? (
                       <div className="text-xs text-[var(--muted-fg)]">
                         {a.comment}
                       </div>
                     ) : null}
+                    <AccrualMarks accrual={a} />
                   </td>
-                  <td className="px-4 py-3">{a.counterparty?.name}</td>
+                  <td className="px-4 py-3">{a.counterparty?.name ?? "—"}</td>
                   <td className="px-4 py-3 text-[var(--muted-fg)]">
                     {accrualTypeLabels[a.type]}
                   </td>
@@ -635,10 +681,8 @@ export function AccrualsWorkspace({
                           aria-label="Удалить начисление"
                           onClick={() =>
                             void confirmDelete({
-                              title: `Удалить начисление „${a.budgetLine?.title ?? lineMap.get(a.budgetLineId) ?? "без статьи"}“ от ${formatDateShort(a.date)}, ${money(Number(a.amountWithTax), currency)}?`,
-                              action: async () => {
-                                await deleteAccrualAction(projectId, a.id);
-                              },
+                              title: `Удалить начисление „${itemLabel(a.budgetItemId)}“ от ${formatDateShort(a.date)}, ${money(Number(a.amountWithTax), currency)}?`,
+                              action: () => deleteAccrualAction(projectId, a.id),
                             })
                           }
                         >
@@ -656,19 +700,22 @@ export function AccrualsWorkspace({
 
       <AccrualModal
         projectId={projectId}
-        lines={lines}
+        currency={currency}
+        items={items}
+        itemLabels={itemLabels}
         counterparties={counterparties}
         shootDays={shootDays}
         groupUnits={groupUnits}
         open={creating != null}
         defaultType={creating ?? undefined}
-        defaultBudgetLineId={initialBudgetLineId}
         onClose={() => setCreating(null)}
       />
       <AccrualModal
         projectId={projectId}
+        currency={currency}
         accrual={editing ?? undefined}
-        lines={lines}
+        items={items}
+        itemLabels={itemLabels}
         counterparties={counterparties}
         shootDays={shootDays}
         groupUnits={groupUnits}

@@ -225,7 +225,11 @@ export type CheckKind =
   | "code_without_name"
   | "sheet_differs"
   | "not_a_number"
-  | "code_too_long";
+  | "code_too_long"
+  /** Кода нет на основном листе, а по статье есть начисления или платежи */
+  | "gone_with_fact"
+  /** Код возвращается из архива, а по статье уже есть начисления или платежи */
+  | "restored_with_fact";
 
 export type SmetaCheck = {
   kind: CheckKind;
@@ -359,12 +363,14 @@ export function analyzeMainSheet(sheet: MainSheetLike): MainSheetAnalysis {
       numbers[key] = null;
     }
 
+    // Статья — только с кодом и наименованием: без наименования строка лишь подсвечивается.
     if (!name) {
       checks.push({
         kind: "code_without_name",
         row,
-        message: `${rowLabel(row)}: код ${code} без наименования.`,
+        message: `${rowLabel(row)}: код ${code} без наименования — статья не учитывается.`,
       });
+      continue;
     }
 
     const amount =

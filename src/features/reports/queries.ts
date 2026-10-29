@@ -3,6 +3,7 @@ import { serializeForClient } from "@/shared/db/serialize-decimal";
 import { formatFactDuration } from "@/features/reports/types";
 import type { ProductionReportBundle } from "@/features/reports/types";
 import { syncProductionWorkRows } from "@/features/reports/lib/sync-work-rows";
+import type { AuditContext } from "@/shared/audit/with-audit";
 
 export type { ProductionReportBundle };
 export { formatFactDuration, factSecondsLabel } from "@/features/reports/types";
@@ -54,8 +55,15 @@ export async function listProductionReports(projectId: string) {
   }));
 }
 
-/** Гарантирует отчёт и подтягивает факты для сцен, ещё стоящих в дне. */
-export async function ensureProductionReport(projectId: string, shootDayId: string) {
+/**
+ * Гарантирует отчёт и подтягивает факты для сцен, ещё стоящих в дне.
+ * `audit` — кто открыл отчёт: от его имени в журнал пишутся изменения начислений.
+ */
+export async function ensureProductionReport(
+  audit: AuditContext,
+  projectId: string,
+  shootDayId: string,
+) {
   const day = await prisma.shootDay.findFirst({
     where: { id: shootDayId, projectId },
     include: {
@@ -142,7 +150,7 @@ export async function ensureProductionReport(projectId: string, shootDayId: stri
     });
   }
 
-  await syncProductionWorkRows(projectId, shootDayId, report.id);
+  await syncProductionWorkRows(audit, projectId, shootDayId, report.id);
 
   const full = await prisma.productionReport.findUnique({
     where: { id: report.id },

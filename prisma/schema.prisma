@@ -293,7 +293,6 @@ model Project {
   projectFiles  ProjectFile[]
   scoutCandidates ScoutCandidate[]
   auditLogs   AuditLog[]
-  budgetLines BudgetLine[]
   budgets     Budget[]
   budgetItems BudgetItem[]
   budgetVersions BudgetVersion[]
@@ -313,7 +312,6 @@ model Project {
   scriptBlocks ScriptBlock[]
   resourceCategories ResourceCategory[]
   actorAvailabilityRows ActorAvailabilityRow[]
-  payments Payment[]
   departments Department[]
 
   @@index([createdById])
@@ -480,10 +478,15 @@ model Location {
   taxPercent        Decimal? @db.Decimal(6, 2)
   overtimeMode      OvertimeCalcMode   @default(HOURLY_CUMULATIVE)
   unpaidOvertimeMode UnpaidOvertimeMode @default(FIRST_HOUR)
+  /// Статьи сметы для начислений из отчёта смены: основная оплата и переработка (пусто — основная).
+  defaultBudgetItemId  String?
+  overtimeBudgetItemId String?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
   project Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  defaultBudgetItem  BudgetItem? @relation("LocationDefaultBudgetItem", fields: [defaultBudgetItemId], references: [id], onDelete: SetNull)
+  overtimeBudgetItem BudgetItem? @relation("LocationOvertimeBudgetItem", fields: [overtimeBudgetItemId], references: [id], onDelete: SetNull)
   scenes  SceneLocation[]
   photos  LocationPhoto[]
   scoutCandidateLinks ScoutCandidateLocation[]
@@ -863,10 +866,18 @@ model ResourceItem {
   unpaidOvertimeMode UnpaidOvertimeMode @default(FIRST_HOUR)
   /// Ставка за километр (для транспорта)
   kmRate            Decimal? @db.Decimal(12, 2)
+  /// Статьи сметы для начислений из отчёта смены: основная оплата (смена, доплаты),
+  /// переработка и км. Пустые переработка и км — берётся основная.
+  defaultBudgetItemId  String?
+  overtimeBudgetItemId String?
+  mileageBudgetItemId  String?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
   category      ResourceCategory        @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  defaultBudgetItem  BudgetItem? @relation("ResourceItemDefaultBudgetItem", fields: [defaultBudgetItemId], references: [id], onDelete: SetNull)
+  overtimeBudgetItem BudgetItem? @relation("ResourceItemOvertimeBudgetItem", fields: [overtimeBudgetItemId], references: [id], onDelete: SetNull)
+  mileageBudgetItem  BudgetItem? @relation("ResourceItemMileageBudgetItem", fields: [mileageBudgetItemId], references: [id], onDelete: SetNull)
   sceneLinks    SceneResourceItem[]
   shiftUsages   ShootDayResourceUsage[]
   workRows      ProductionReportWorkRow[]
@@ -974,7 +985,6 @@ model ShootDay {
   resourceUsages   ShootDayResourceUsage[]
   productionReport ProductionReport?
   shootAttempts    SceneShootAttempt[]
-  payments         Payment[]
   accruals         Accrual[]
 
   @@unique([projectId, dayNumber])
@@ -1227,7 +1237,7 @@ model ProductionReportWorkRow {
   item    ResourceItem?               @relation(fields: [resourceItemId], references: [id], onDelete: SetNull)
   location Location?                  @relation(fields: [locationId], references: [id], onDelete: SetNull)
   extras  ProductionReportWorkExtra[]
-  payment Payment?
+  accruals Accrual[]
 
   @@unique([reportId, sourceKey])
   @@index([reportId, sortOrder])
@@ -1249,33 +1259,6 @@ model ProductionReportWorkExtra {
   workRow ProductionReportWorkRow @relation(fields: [workRowId], references: [id], onDelete: Cascade)
 
   @@index([workRowId])
-}
-
-/// Выплата, рассчитанная из факта смены (источник для гонораров / actuals).
-/// Не путать с кассовым CashPayment («Платежи»).
-model Payment {
-  id             String            @id @default(cuid())
-  projectId      String
-  shootDayId     String?
-  workRowId      String?           @unique
-  actorId        String?
-  resourceItemId String?
-  category       FinanceOpCategory @default(OTHER)
-  title          String
-  amount         Decimal           @db.Decimal(14, 2)
-  paymentDate    DateTime
-  notes          String?
-  createdAt      DateTime          @default(now())
-  updatedAt      DateTime          @updatedAt
-
-  project  Project                 @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  shootDay ShootDay?               @relation(fields: [shootDayId], references: [id], onDelete: SetNull)
-  workRow  ProductionReportWorkRow? @relation(fields: [workRowId], references: [id], onDelete: SetNull)
-  actor    Actor?                  @relation(fields: [actorId], references: [id], onDelete: SetNull)
-
-  @@index([projectId, paymentDate])
-  @@index([shootDayId])
-  @@index([actorId])
 }
 
 model Actor {
@@ -1305,18 +1288,23 @@ model Actor {
   taxPercent       Decimal?          @db.Decimal(6, 2)
   overtimeMode      OvertimeCalcMode   @default(HOURLY_CUMULATIVE)
   unpaidOvertimeMode UnpaidOvertimeMode @default(FIRST_HOUR)
+  /// Статьи сметы для начислений из отчёта смены: основная оплата (смена, доплаты) и
+  /// переработка (пусто — основная).
+  defaultBudgetItemId  String?
+  overtimeBudgetItemId String?
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
 
   project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
   character Character? @relation(fields: [characterId], references: [id])
+  defaultBudgetItem  BudgetItem? @relation("ActorDefaultBudgetItem", fields: [defaultBudgetItemId], references: [id], onDelete: SetNull)
+  overtimeBudgetItem BudgetItem? @relation("ActorOvertimeBudgetItem", fields: [overtimeBudgetItemId], references: [id], onDelete: SetNull)
   overtimeRates ActorOvertimeRate[]
   extraPayments ActorExtraPayment[]
   financeOps    FinanceOperation[]
   shootDayCalls ShootDayActorCall[]
   availabilityRows ActorAvailabilityRow[]
   workRows      ProductionReportWorkRow[]
-  payments      Payment[]
 
   @@index([projectId])
 }
@@ -1487,74 +1475,12 @@ model ScriptImportJob {
   @@index([scriptVersionId])
 }
 
-enum BudgetCategory {
-  CAST
-  CREW
-  EQUIPMENT
-  LOCATIONS
-  TRANSPORT
-  CATERING
-  POST
-  OTHER
-}
-
-enum BudgetLineType {
-  /// Посменная: ставка × ед. × смены (смены по умолчанию из СМЕНЫ)
-  PER_SHIFT
-  /// Разовая фиксированная сумма
-  ONE_TIME
-  /// Расходы за месяц
-  MONTHLY
-  /// Расходы за день
-  DAILY
-}
-
-model BudgetLine {
-  id                   String         @id @default(cuid())
-  projectId            String
-  category             BudgetCategory @default(OTHER)
-  /// Тип статьи для авторасчёта количества / суммы
-  lineType             BudgetLineType @default(ONE_TIME)
-  title                String
-  description          String?
-  /// Кол-во человек/единиц (для PER_SHIFT); иначе обычно 1
-  unitsCount           Decimal        @default(1) @db.Decimal(12, 2)
-  /// Периоды / смены / дни / месяцы (или 1 для разовой)
-  quantity             Decimal        @default(1) @db.Decimal(12, 2)
-  /// Ключ переменной проекта (SMENY / SERII / custom) — источник quantity
-  quantityVariableKey  String?
-  /// Корректировка к значению переменной (+/-), итог quantity = var + adjustment
-  quantityAdjustment   Decimal        @default(0) @db.Decimal(12, 2)
-  /// Ставка: за смену / за месяц / за день / фикс. сумма
-  unitCost             Decimal        @default(0) @db.Decimal(14, 2)
-  planned              Decimal        @default(0) @db.Decimal(14, 2)
-  actual               Decimal        @default(0) @db.Decimal(14, 2)
-  /// Плановый контрагент (для начислений по статье)
-  plannedCounterpartyId String?
-  /// Ставка налога %, для подтягивания в начисления
-  taxPercent           Decimal?       @db.Decimal(5, 2)
-  /// Связь статьи с актёром/ресурсом (для ввода посменных расходов)
-  linkedResourceType   BudgetLinkedResourceType?
-  linkedResourceId     String?
-  sortOrder            Int            @default(0)
-  createdAt            DateTime       @default(now())
-  updatedAt            DateTime       @updatedAt
-
-  project             Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  plannedCounterparty Counterparty? @relation(fields: [plannedCounterpartyId], references: [id], onDelete: SetNull)
-  accruals            Accrual[]
-  paymentBreakdowns   CashPaymentBreakdown[]
-
-  @@index([projectId, category])
-  @@index([projectId, sortOrder])
-  @@index([projectId, lineType])
-  @@index([plannedCounterpartyId])
-  @@index([projectId, linkedResourceType, linkedResourceId])
-}
-
-enum BudgetLinkedResourceType {
-  ACTOR
-  RESOURCE_ITEM
+/// Часть оплаты строки отчёта смены, из которой создано начисление.
+enum AccrualReportPart {
+  SHIFT
+  OVERTIME
+  EXTRAS
+  MILEAGE
 }
 
 enum AccrualType {
@@ -1568,10 +1494,12 @@ enum AccrualType {
 model Accrual {
   id             String      @id @default(cuid())
   projectId      String
-  budgetLineId   String
+  /// Статья сметы цеха. Пусто — «без статьи».
+  budgetItemId   String?
   amount         Decimal     @db.Decimal(14, 2)
   quantity       Decimal?    @db.Decimal(12, 2)
-  counterpartyId String
+  /// Пусто только у начислений из отчёта смены — «контрагент не указан».
+  counterpartyId String?
   taxPercent     Decimal?    @db.Decimal(5, 2)
   taxAmount      Decimal?    @db.Decimal(14, 2)
   amountWithTax  Decimal     @db.Decimal(14, 2)
@@ -1585,16 +1513,26 @@ model Accrual {
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
   contractId     String?
+  /// Начисление из отчёта смены: строка отчёта и часть её оплаты. Удалили строку —
+  /// ссылка пустеет, часть остаётся.
+  workRowId      String?
+  reportPart     AccrualReportPart?
+  /// Строку отчёта обнулили или удалили: сумма стала 0, начисление не удаляется само.
+  reportZeroedAt DateTime?
+  /// Статью или контрагента меняли руками — отчёт их больше не перезаписывает.
+  editedManually Boolean     @default(false)
 
-  project      Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  budgetLine   BudgetLine   @relation(fields: [budgetLineId], references: [id], onDelete: Restrict)
-  counterparty Counterparty @relation(fields: [counterpartyId], references: [id], onDelete: Restrict)
-  shootDay     ShootDay?    @relation(fields: [shootDayId], references: [id], onDelete: SetNull)
-  contract     Contract?    @relation(fields: [contractId], references: [id], onDelete: SetNull)
-  createdBy    User?        @relation("AccrualCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  project      Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  budgetItem   BudgetItem?   @relation(fields: [budgetItemId], references: [id], onDelete: SetNull)
+  counterparty Counterparty? @relation(fields: [counterpartyId], references: [id], onDelete: Restrict)
+  shootDay     ShootDay?     @relation(fields: [shootDayId], references: [id], onDelete: SetNull)
+  contract     Contract?     @relation(fields: [contractId], references: [id], onDelete: SetNull)
+  createdBy    User?         @relation("AccrualCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  workRow      ProductionReportWorkRow? @relation(fields: [workRowId], references: [id], onDelete: SetNull)
 
+  @@unique([workRowId, reportPart])
   @@index([projectId, date])
-  @@index([projectId, budgetLineId])
+  @@index([projectId, budgetItemId])
   @@index([projectId, counterpartyId])
   @@index([projectId, groupUnit])
   @@index([shootDayId])
@@ -1637,20 +1575,21 @@ model CashPayment {
   @@index([contractId])
 }
 
-/// Управленческая разбивка кассового платежа по статьям сметы.
+/// Управленческая разбивка кассового платежа по статьям сметы. Сумма строк = сумма платежа.
 model CashPaymentBreakdown {
   id            String  @id @default(cuid())
   paymentId     String
-  budgetLineId  String
+  /// Статья сметы цеха. Пусто — «без статьи».
+  budgetItemId  String?
   amount        Decimal @db.Decimal(14, 2)
   comment       String?
   sortOrder     Int     @default(0)
 
   payment    CashPayment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
-  budgetLine BudgetLine  @relation(fields: [budgetLineId], references: [id], onDelete: Restrict)
+  budgetItem BudgetItem? @relation(fields: [budgetItemId], references: [id], onDelete: SetNull)
 
   @@index([paymentId, sortOrder])
-  @@index([budgetLineId])
+  @@index([budgetItemId])
 }
 
 /// Именованные переменные для финансовых расчётов (СМЕНЫ, СЕРИИ, кастомные).
@@ -1921,6 +1860,15 @@ model BudgetItem {
   project    Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
   department Department @relation(fields: [departmentId], references: [id], onDelete: NoAction)
   versionLines BudgetVersionLine[]
+  accruals          Accrual[]
+  paymentBreakdowns CashPaymentBreakdown[]
+  actorsDefault     Actor[]        @relation("ActorDefaultBudgetItem")
+  actorsOvertime    Actor[]        @relation("ActorOvertimeBudgetItem")
+  resourcesDefault  ResourceItem[] @relation("ResourceItemDefaultBudgetItem")
+  resourcesOvertime ResourceItem[] @relation("ResourceItemOvertimeBudgetItem")
+  resourcesMileage  ResourceItem[] @relation("ResourceItemMileageBudgetItem")
+  locationsDefault  Location[]     @relation("LocationDefaultBudgetItem")
+  locationsOvertime Location[]     @relation("LocationOvertimeBudgetItem")
 
   @@unique([projectId, code])
   @@index([departmentId, archivedAt])
@@ -2055,7 +2003,6 @@ model Counterparty {
 
   project     Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
   financeOps  FinanceOperation[]
-  budgetLines BudgetLine[]
   accruals    Accrual[]
   cashPayments CashPayment[]
   contracts   Contract[]

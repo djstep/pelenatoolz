@@ -1,14 +1,18 @@
 import { PaymentsWorkspace } from "@/features/payments/components/payments-workspace";
 import {
-  getCashPaymentTotals,
+  cashPaymentTotals,
   listCashPayments,
 } from "@/features/payments/queries";
-import { listBudgetLinesForAccrual } from "@/features/accruals/queries";
 import {
   listCompanyOptions,
   listCounterpartyOptions,
 } from "@/features/counterparties/queries";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
+import {
+  describeBudgetItems,
+  listVisibleBudgetItems,
+  visibleDepartments,
+} from "@/features/smeta/budget-item-access";
 
 type Props = {
   params: Promise<{ locale: string; projectId: string }>;
@@ -16,7 +20,7 @@ type Props = {
     q?: string;
     dateFrom?: string;
     dateTo?: string;
-    budgetLineId?: string;
+    budgetItemId?: string;
     counterpartyId?: string;
     companyId?: string;
     locked?: string;
@@ -38,7 +42,7 @@ export default async function PaymentsPage({ params, searchParams }: Props) {
     q: sp.q ?? "",
     dateFrom: sp.dateFrom ?? "",
     dateTo: sp.dateTo ?? "",
-    budgetLineId: sp.budgetLineId ?? "",
+    budgetItemId: sp.budgetItemId ?? "",
     counterpartyId: sp.counterpartyId ?? "",
     companyId: sp.companyId ?? "",
     locked: sp.locked ?? "",
@@ -48,7 +52,7 @@ export default async function PaymentsPage({ params, searchParams }: Props) {
     q: filters.q || undefined,
     dateFrom: filters.dateFrom || undefined,
     dateTo: filters.dateTo || undefined,
-    budgetLineId: filters.budgetLineId || undefined,
+    budgetItemId: filters.budgetItemId || undefined,
     counterpartyId: filters.counterpartyId || undefined,
     companyId: filters.companyId || undefined,
     locked:
@@ -57,14 +61,16 @@ export default async function PaymentsPage({ params, searchParams }: Props) {
         : undefined,
   };
 
-  const [payments, totals, lines, counterparties, companies] =
-    await Promise.all([
-      listCashPayments(projectId, queryFilters),
-      getCashPaymentTotals(projectId, queryFilters),
-      listBudgetLinesForAccrual(projectId),
-      listCounterpartyOptions(projectId),
-      listCompanyOptions(projectId),
-    ]);
+  const [payments, items, counterparties, companies] = await Promise.all([
+    listCashPayments(projectId, visibleDepartments(ctx), queryFilters),
+    listVisibleBudgetItems(projectId, ctx),
+    listCounterpartyOptions(projectId),
+    listCompanyOptions(projectId),
+  ]);
+  const itemLabels = await describeBudgetItems(projectId, ctx, [
+    ...payments.flatMap((p) => p.breakdown.map((b) => b.budgetItemId)),
+    filters.budgetItemId,
+  ]);
 
   return (
     <div className="space-y-6">
@@ -81,11 +87,12 @@ export default async function PaymentsPage({ params, searchParams }: Props) {
         locale={locale}
         currency={ctx.project.currency}
         payments={payments}
-        lines={lines}
+        items={items}
+        itemLabels={itemLabels}
         counterparties={counterparties}
         companies={companies}
         filters={filters}
-        totals={totals}
+        totals={cashPaymentTotals(payments)}
         canWrite={ctx.can("finance:write")}
         canUnlock={ctx.can("finance:unlock")}
       />

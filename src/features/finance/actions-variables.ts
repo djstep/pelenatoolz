@@ -20,7 +20,6 @@ export type FinanceVariableActionState = {
 function revalidate(projectId: string) {
   revalidatePath(`/ru/projects/${projectId}/finance`);
   revalidatePath(`/ru/projects/${projectId}/finance/settings`);
-  revalidatePath(`/ru/projects/${projectId}/budget`);
 }
 
 const valueSchema = z.coerce.number().min(0).max(1_000_000_000);
@@ -219,11 +218,6 @@ export async function deleteCustomFinanceVariableAction(
     where: { id: variableId, projectId, isSystem: false },
   });
   if (!existing) return { error: "Переменная не найдена" };
-
-  await prisma.budgetLine.updateMany({
-    where: { projectId, quantityVariableKey: existing.key },
-    data: { quantityVariableKey: null },
-  });
 
   await prisma.projectFinanceVariable.delete({ where: { id: variableId } });
 

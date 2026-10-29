@@ -1,8 +1,16 @@
-import { AccrualType } from "@prisma/client";
+import { AccrualReportPart, AccrualType } from "@prisma/client";
 
 export const accrualTypeLabels: Record<AccrualType, string> = {
   PER_SHIFT: "Посменное",
   ONE_TIME: "Разовое",
+};
+
+/** Часть оплаты строки отчёта смены, из которой создано начисление. */
+export const accrualReportPartLabels: Record<AccrualReportPart, string> = {
+  SHIFT: "смена",
+  OVERTIME: "переработка",
+  EXTRAS: "доплаты",
+  MILEAGE: "км",
 };
 
 export function computeTaxAmounts(amount: number, taxPercent: number | null) {

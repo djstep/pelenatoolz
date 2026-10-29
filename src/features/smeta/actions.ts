@@ -102,7 +102,10 @@ function changesSummary(departmentName: string, c: ItemChanges) {
     c.archived.length ? `в архив ${c.archived.length}` : "",
     c.restored.length ? `восстановлено ${c.restored.length}` : "",
   ].filter(Boolean);
-  return `Смета цеха «${departmentName}»: статьи — ${parts.join(", ")}`;
+  const withFact = c.restoredWithFact.length
+    ? `; из архива возвращены статьи с фактом: ${c.restoredWithFact.join(", ")}`
+    : "";
+  return `Смета цеха «${departmentName}»: статьи — ${parts.join(", ")}${withFact}`;
 }
 
 export type SaveBudgetResult =

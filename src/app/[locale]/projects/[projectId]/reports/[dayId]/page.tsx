@@ -18,7 +18,7 @@ export default async function ProductionReportDayPage({ params }: Props) {
   }
 
   const [bundle, resourceCategories] = await Promise.all([
-    ensureProductionReport(projectId, dayId),
+    ensureProductionReport(ctx, projectId, dayId),
     listResourceCategories(projectId),
   ]);
   if (!bundle) notFound();

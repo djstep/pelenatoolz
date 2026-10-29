@@ -1,5 +1,7 @@
-import { BudgetCategory, Prisma } from "@prisma/client";
-import { budgetCategoryLabels } from "@/features/budget/labels";
+import { Prisma } from "@prisma/client";
+import { describeBudgetItems } from "@/features/smeta/budget-item-access";
+import { budgetItemLabel } from "@/features/smeta/lib/budget-item-option";
+import type { SmetaAccessContext } from "@/features/smeta/lib/smeta-access";
 import { prisma } from "@/shared/db/prisma";
 import { serializeForClient } from "@/shared/db/serialize-decimal";
 
@@ -14,109 +16,6 @@ function dateRange(filters: ReportDateFilters): Prisma.DateTimeFilter | undefine
   if (filters.dateFrom) range.gte = new Date(`${filters.dateFrom}T00:00:00.000Z`);
   if (filters.dateTo) range.lte = new Date(`${filters.dateTo}T23:59:59.999Z`);
   return range;
-}
-
-export type PlanFactRow = {
-  budgetLineId: string;
-  category: BudgetCategory;
-  categoryLabel: string;
-  title: string;
-  planned: number;
-  accrued: number;
-  paid: number;
-  /** план − начисления */
-  variancePlan: number;
-  /** начисления − оплачено */
-  unpaid: number;
-};
-
-export type PlanFactReport = {
-  rows: PlanFactRow[];
-  totals: {
-    planned: number;
-    accrued: number;
-    paid: number;
-    variancePlan: number;
-    unpaid: number;
-  };
-};
-
-/** План (статья) vs начисления vs оплаченное по разбивке платежей. */
-export async function getPlanFactReport(
-  projectId: string,
-  filters: ReportDateFilters = {},
-): Promise<PlanFactReport> {
-  const range = dateRange(filters);
-
-  const [lines, accruals, paidGroups] = await Promise.all([
-    prisma.budgetLine.findMany({
-      where: { projectId },
-      select: {
-        id: true,
-        title: true,
-        category: true,
-        planned: true,
-        sortOrder: true,
-      },
-      orderBy: [{ category: "asc" }, { sortOrder: "asc" }, { title: "asc" }],
-    }),
-    prisma.accrual.groupBy({
-      by: ["budgetLineId"],
-      where: {
-        projectId,
-        ...(range ? { date: range } : {}),
-      },
-      _sum: { amount: true, amountWithTax: true },
-    }),
-    prisma.cashPaymentBreakdown.groupBy({
-      by: ["budgetLineId"],
-      where: {
-        payment: {
-          projectId,
-          ...(range ? { date: range } : {}),
-        },
-      },
-      _sum: { amount: true },
-    }),
-  ]);
-
-  const accruedMap = new Map(
-    accruals.map((a) => [a.budgetLineId, Number(a._sum.amount ?? 0)]),
-  );
-  const paidMap = new Map(
-    paidGroups.map((p) => [p.budgetLineId, Number(p._sum.amount ?? 0)]),
-  );
-
-  const rows: PlanFactRow[] = lines.map((line) => {
-    const planned = Number(line.planned);
-    const accrued = accruedMap.get(line.id) ?? 0;
-    const paid = paidMap.get(line.id) ?? 0;
-    return {
-      budgetLineId: line.id,
-      category: line.category,
-      categoryLabel: budgetCategoryLabels[line.category],
-      title: line.title,
-      planned,
-      accrued,
-      paid,
-      variancePlan: planned - accrued,
-      unpaid: accrued - paid,
-    };
-  });
-
-  const totals = rows.reduce(
-    (acc, r) => {
-      acc.planned += r.planned;
-      acc.accrued += r.accrued;
-      acc.paid += r.paid;
-      acc.variancePlan += r.variancePlan;
-      acc.unpaid += r.unpaid;
-      return acc;
-    },
-    { planned: 0, accrued: 0, paid: 0, variancePlan: 0, unpaid: 0 },
-  );
-
-  return serializeForClient({ rows, totals }) as PlanFactReport;
 }
 
 export type CashFlowFilters = ReportDateFilters & {
@@ -144,9 +43,13 @@ export type CashFlowReport = {
   totals: { amount: number; taxAmount: number; amountWithTax: number; count: number };
 };
 
-/** Движение денег — кассовые платежи за период. */
+/**
+ * Движение денег — кассовые платежи за период. Статьи разбивки подписаны кодом и
+ * наименованием, если пользователь видит смету цеха (иначе «Статья другого цеха»).
+ */
 export async function getCashFlowReport(
   projectId: string,
+  access: SmetaAccessContext,
   filters: CashFlowFilters = {},
 ): Promise<CashFlowReport> {
   const range = dateRange(filters);
@@ -163,13 +66,15 @@ export async function getCashFlowReport(
     include: {
       company: { select: { id: true, name: true } },
       counterparty: { select: { id: true, name: true } },
-      breakdown: {
-        include: { budgetLine: { select: { title: true } } },
-        orderBy: { sortOrder: "asc" },
-      },
+      breakdown: { orderBy: { sortOrder: "asc" } },
     },
     orderBy: [{ date: "asc" }, { createdAt: "asc" }],
   });
+  const items = await describeBudgetItems(
+    projectId,
+    access,
+    payments.flatMap((p) => p.breakdown.map((b) => b.budgetItemId)),
+  );
 
   const rows: CashFlowRow[] = payments.map((p) => ({
     id: p.id,
@@ -184,7 +89,7 @@ export async function getCashFlowReport(
     comment: p.comment,
     isLocked: p.isLocked,
     breakdown: p.breakdown.map((b) => ({
-      title: b.budgetLine.title,
+      title: budgetItemLabel(b.budgetItemId ? items[b.budgetItemId] : null),
       amount: Number(b.amount),
     })),
   }));

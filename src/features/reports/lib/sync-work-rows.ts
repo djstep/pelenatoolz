@@ -2,6 +2,11 @@ import type { Prisma } from "@prisma/client";
 import { sumExtrasPay } from "@/features/payroll/lib/parse-extra-payments";
 import { prisma } from "@/shared/db/prisma";
 import { computeWorkPay } from "@/features/reports/lib/compute-work-pay";
+import {
+  syncReportAccruals,
+  zeroAccrualsOfWorkRows,
+} from "@/features/reports/lib/sync-accruals";
+import type { AuditContext } from "@/shared/audit/with-audit";
 import { dec } from "@/shared/db/serialize-decimal";
 
 type SeedCandidate = {
@@ -56,8 +61,12 @@ function mapRates(
   }));
 }
 
-/** Сидирует строки факта работы из актёров/ресурсов/транспорта/локаций дня. */
+/**
+ * Сидирует строки факта работы из актёров/ресурсов/транспорта/локаций дня.
+ * `audit` — кто открыл отчёт: от его имени в журнал пишутся изменения начислений.
+ */
 export async function syncProductionWorkRows(
+  audit: AuditContext | null,
   projectId: string,
   shootDayId: string,
   reportId: string,
@@ -306,10 +315,14 @@ export async function syncProductionWorkRows(
   const existingByKey = new Map(existing.map((r) => [r.sourceKey, r]));
   const keepKeys = new Set(candidates.map((c) => c.sourceKey));
 
-  for (const row of existing) {
-    if (!keepKeys.has(row.sourceKey)) {
-      await prisma.productionReportWorkRow.delete({ where: { id: row.id } });
-    }
+  const removed = existing.filter((row) => !keepKeys.has(row.sourceKey));
+  await zeroAccrualsOfWorkRows(
+    audit,
+    projectId,
+    removed.map((row) => row.id),
+  );
+  for (const row of removed) {
+    await prisma.productionReportWorkRow.delete({ where: { id: row.id } });
   }
 
   for (const c of candidates) {
@@ -409,9 +422,6 @@ export async function syncProductionWorkRows(
     }
   }
 
-  const { syncPaymentFromWorkRow } = await import(
-    "@/features/reports/lib/sync-payment"
-  );
   const rows = await prisma.productionReportWorkRow.findMany({
     where: { reportId },
     include: {
@@ -458,6 +468,7 @@ export async function syncProductionWorkRows(
         totalPay: pay.totalPay,
       },
     });
-    await syncPaymentFromWorkRow(projectId, shootDayId, row.id);
   }
+
+  await syncReportAccruals(audit, projectId, shootDayId);
 }

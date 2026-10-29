@@ -7,7 +7,6 @@ export const PERMISSION_SECTIONS = [
   { id: "characters", label: "Персонажи" },
   { id: "locations", label: "Объекты и места" },
   { id: "elements", label: "Прочие ресурсы (новые категории)" },
-  { id: "budget", label: "Смета" },
   { id: "smeta_all", label: "Сметы — просмотр всех" },
   { id: "reports", label: "Производственные отчёты" },
   { id: "finance", label: "Финансы" },
@@ -141,7 +140,7 @@ export function buildViewerMatrix(): PermissionMatrix {
       ...emptySectionPermissions(),
       access: true,
       read: true,
-      financeRead: ["budget", "finance", "actors"].includes(section.id),
+      financeRead: ["finance", "actors"].includes(section.id),
     };
   }
   return matrix;

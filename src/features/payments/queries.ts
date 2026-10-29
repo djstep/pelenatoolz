@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import type { VisibleDepartments } from "@/features/accruals/queries";
 import { prisma } from "@/shared/db/prisma";
 import { serializeForClient } from "@/shared/db/serialize-decimal";
 
@@ -6,7 +7,8 @@ export type CashPaymentFilters = {
   q?: string;
   dateFrom?: string;
   dateTo?: string;
-  budgetLineId?: string;
+  /** id статьи или "none" — есть строка разбивки без статьи */
+  budgetItemId?: string;
   counterpartyId?: string;
   companyId?: string;
   locked?: "yes" | "no";
@@ -19,15 +21,13 @@ const paymentInclude = {
   createdBy: { select: { id: true, name: true } },
   lockedBy: { select: { id: true, name: true } },
   breakdown: {
-    include: {
-      budgetLine: { select: { id: true, title: true } },
-    },
     orderBy: { sortOrder: "asc" as const },
   },
 } as const;
 
 export async function listCashPayments(
   projectId: string,
+  visible: VisibleDepartments,
   filters: CashPaymentFilters = {},
 ) {
   const where: Prisma.CashPaymentWhereInput = { projectId };
@@ -45,11 +45,21 @@ export async function listCashPayments(
   if (filters.companyId) where.companyId = filters.companyId;
   if (filters.locked === "yes") where.isLocked = true;
   if (filters.locked === "no") where.isLocked = false;
-  if (filters.budgetLineId) {
-    where.breakdown = { some: { budgetLineId: filters.budgetLineId } };
+  if (filters.budgetItemId === "none") {
+    where.breakdown = { some: { budgetItemId: null } };
+  } else if (filters.budgetItemId) {
+    where.breakdown = { some: { budgetItemId: filters.budgetItemId } };
   }
   if (filters.q?.trim()) {
     const q = filters.q.trim();
+    // По коду и наименованию ищем только среди статей смет, которые пользователь видит.
+    const itemMatch: Prisma.BudgetItemWhereInput = {
+      OR: [
+        { code: { contains: q, mode: "insensitive" } },
+        { name: { contains: q, mode: "insensitive" } },
+      ],
+      ...(visible === "all" ? {} : { departmentId: { in: [...visible] } }),
+    };
     where.OR = [
       { comment: { contains: q, mode: "insensitive" } },
       { counterparty: { name: { contains: q, mode: "insensitive" } } },
@@ -59,7 +69,7 @@ export async function listCashPayments(
           some: {
             OR: [
               { comment: { contains: q, mode: "insensitive" } },
-              { budgetLine: { title: { contains: q, mode: "insensitive" } } },
+              { budgetItem: itemMatch },
             ],
           },
         },
@@ -76,11 +86,9 @@ export async function listCashPayments(
   return serializeForClient(rows) as typeof rows;
 }
 
-export async function getCashPaymentTotals(
-  projectId: string,
-  filters: CashPaymentFilters = {},
+export function cashPaymentTotals(
+  rows: { amount: unknown; amountWithTax: unknown }[],
 ) {
-  const rows = await listCashPayments(projectId, filters);
   let amount = 0;
   let withTax = 0;
   for (const r of rows) {
