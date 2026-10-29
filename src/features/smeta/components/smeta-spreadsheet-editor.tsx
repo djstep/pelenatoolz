@@ -85,7 +85,7 @@ type FWorkbook = {
   getSheetBySheetId?: (id: string) => FWorksheet | null;
   getActiveSheet?: () => FWorksheet | null;
   setActiveSheet?: (sheet: FWorksheet | string) => void;
-  setEditable?: (value: boolean) => void;
+  getWorkbookPermission?: () => { setReadOnly: () => Promise<void> };
 };
 
 type UniverAPI = {
@@ -539,7 +539,12 @@ export function SmetaSpreadsheetEditor({
         const workbook = api.getActiveWorkbook();
         if (!canWriteRef.current) {
           // Продюсер и «просмотр всех» — только чтение (сервер их правки тоже не примет).
-          workbook?.setEditable?.(false);
+          // setEditable(false) Univer перезаписывает при загрузке — нужен режим «просмотр».
+          try {
+            await workbook?.getWorkbookPermission?.().setReadOnly();
+          } catch (err) {
+            console.error("[smeta read-only]", err);
+          }
         } else {
           // Заголовки основного листа: не переименовать, не удалить, не сдвинуть.
           const sheet = mainSheet();
