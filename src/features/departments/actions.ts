@@ -52,7 +52,8 @@ function isUniqueError(error: unknown): boolean {
 
 function parseForm(formData: FormData) {
   return departmentFormSchema.safeParse({
-    name: formData.get("name"),
+    // Нет поля в запросе — та же понятная ошибка, что и для пустого.
+    name: formData.get("name") ?? "",
     codePrefix: formData.get("codePrefix") ?? "",
     headMembershipIds: [
       ...new Set(formData.getAll("headMembershipIds").map((v) => String(v))),
