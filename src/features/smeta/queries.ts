@@ -8,6 +8,7 @@ import {
   type UniverWorkbookData,
 } from "@/features/smeta/lib/workbook-model";
 import { createDepartmentWorkbookSnapshot } from "@/features/smeta/lib/templates";
+import { loadFacts } from "@/features/smeta/facts";
 import {
   analyzeMainSheet,
   type MainSheetLike,
@@ -32,7 +33,7 @@ type TransactionCallback = Extract<
 >;
 type Tx = TransactionCallback extends (client: infer T) => Promise<unknown> ? T : never;
 /** Клиент базы или транзакция — для чтения статей и факта по ним. */
-type Db = Pick<Tx, "budgetItem" | "accrual" | "cashPaymentBreakdown">;
+type Db = Pick<Tx, "budgetItem" | "accrual" | "cashPayment">;
 export type { Tx };
 
 function toClientBudget(row: {
@@ -244,44 +245,27 @@ async function codesOfOtherDepartments(
 
 type ItemFact = { code: string; name: string; archived: boolean; accrued: number; paid: number };
 
-/** Статьи цеха (действующие и архивные), по которым есть начисления или платежи. */
+/**
+ * Статьи цеха (действующие и архивные), по которым есть начисления или платежи.
+ * Всё с налогом, как в плане/факте: оплачено — строка платежа с её долей налога.
+ */
 async function departmentFacts(
   db: Db,
   projectId: string,
   departmentId: string,
 ): Promise<Map<string, ItemFact>> {
-  const accrued = await db.accrual.groupBy({
-    by: ["budgetItemId"],
-    where: { projectId, budgetItem: { departmentId } },
-    _sum: { amountWithTax: true },
-  });
-  const paid = await db.cashPaymentBreakdown.groupBy({
-    by: ["budgetItemId"],
-    where: { budgetItem: { projectId, departmentId } },
-    _sum: { amount: true },
-  });
-  const sums = new Map<string, { accrued: number; paid: number }>();
-  for (const a of accrued) {
-    if (!a.budgetItemId) continue;
-    sums.set(a.budgetItemId, { accrued: Number(a._sum.amountWithTax ?? 0), paid: 0 });
-  }
-  for (const p of paid) {
-    if (!p.budgetItemId) continue;
-    const s = sums.get(p.budgetItemId) ?? { accrued: 0, paid: 0 };
-    s.paid = Number(p._sum.amount ?? 0);
-    sums.set(p.budgetItemId, s);
-  }
-  for (const [id, s] of sums) if (s.accrued === 0 && s.paid === 0) sums.delete(id);
-  if (sums.size === 0) return new Map();
+  const { byItem } = await loadFacts(db, projectId, { departments: [departmentId] });
+  for (const [id, s] of byItem) if (s.accrued === 0 && s.paid === 0) byItem.delete(id);
+  if (byItem.size === 0) return new Map();
 
   const items = await db.budgetItem.findMany({
-    where: { id: { in: [...sums.keys()] } },
+    where: { id: { in: [...byItem.keys()] } },
     select: { id: true, code: true, name: true, archivedAt: true },
   });
   return new Map(
     items.map((i) => [
       i.code,
-      { code: i.code, name: i.name, archived: i.archivedAt !== null, ...sums.get(i.id)! },
+      { code: i.code, name: i.name, archived: i.archivedAt !== null, ...byItem.get(i.id)! },
     ]),
   );
 }
