@@ -42,6 +42,7 @@ export default async function ScreenplayVersionPage({ params, searchParams }: Pr
   const sceneTimings = scenes.map((scene) => ({
     sceneId: scene.id,
     planSeconds: scene.planSeconds,
+    cut: scene.cutAt !== null,
   }));
 
   return (

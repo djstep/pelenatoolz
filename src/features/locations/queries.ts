@@ -8,6 +8,7 @@ const sceneBriefSelect = {
   postfix: true,
   status: true,
   planSeconds: true,
+  cutAt: true,
   scriptDay: true,
   characters: {
     include: { character: { select: { id: true, name: true } } },

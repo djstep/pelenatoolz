@@ -104,7 +104,7 @@ export async function assignSceneToDayByDnDAction(
   projectId: string,
   shootDayId: string,
   sceneId: string,
-) {
+): Promise<{ error?: string } | undefined> {
   const ctx = await requireProjectContext(projectId);
   if (!ctx.can("schedule:write")) {
     throw new Error("FORBIDDEN");
@@ -124,9 +124,14 @@ export async function assignSceneToDayByDnDAction(
   const existing = await prisma.shootDayScene.findFirst({
     where: { sceneId },
   });
+  if (existing?.shootDayId === shootDayId) return;
+  // Вырезанную сцену нельзя поставить в день — ни из списка «без дня», ни переносом из другого дня.
+  if (scene.cutAt) {
+    return { error: `Сцена ${scene.number}${scene.postfix} вырезана — в день не добавить` };
+  }
+
   let previousDayId: string | null = null;
   if (existing) {
-    if (existing.shootDayId === shootDayId) return;
     previousDayId = existing.shootDayId;
     await prisma.shootDayScene.delete({ where: { id: existing.id } });
   }

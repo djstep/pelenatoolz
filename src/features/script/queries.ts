@@ -78,9 +78,10 @@ export async function getSceneForEdit(projectId: string, sceneId: string) {
   });
 }
 
+/** Соседние сцены для стрелок — без вырезанных (кроме самой открытой сцены). */
 export async function getSceneNeighbors(projectId: string, sceneId: string) {
   const scenes = await prisma.scene.findMany({
-    where: { projectId },
+    where: { projectId, OR: [{ cutAt: null }, { id: sceneId }] },
     select: {
       id: true,
       episodeNumber: true,
@@ -120,7 +121,7 @@ export async function listElements(projectId: string) {
 
 export async function getScriptStats(projectId: string) {
   const [scenes, locations, characters, elements] = await Promise.all([
-    prisma.scene.count({ where: { projectId } }),
+    prisma.scene.count({ where: { projectId, cutAt: null } }),
     prisma.location.count({ where: { projectId } }),
     prisma.character.count({ where: { projectId } }),
     prisma.element.count({ where: { projectId } }),

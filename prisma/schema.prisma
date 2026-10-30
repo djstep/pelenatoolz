@@ -439,6 +439,8 @@ model Scene {
   dayNight        DayNight?
   status          SceneStatus @default(PLANNING)
   statusDate      DateTime?
+  /// Сцена вырезана (пусто — нет). Кто вырезал — в журнале аудита.
+  cutAt           DateTime?
   sortOrder       Int         @default(0)
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
@@ -1402,6 +1404,8 @@ model ScriptVersion {
   isLocked        Boolean                 @default(false)
   sourceType      ScriptVersionSourceType @default(MANUAL)
   sourceVersionId String?
+  /// Титульная страница из импорта: JSON из текстовых полей.
+  titlePage       Json?
   createdById     String
   createdAt       DateTime                @default(now())
 

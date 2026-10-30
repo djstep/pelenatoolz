@@ -45,6 +45,7 @@ import {
 import { Badge } from "@/shared/ui/badge";
 import { Input } from "@/shared/ui/input";
 import { Select } from "@/shared/ui/select";
+import { useToast } from "@/shared/ui/toast";
 import {
   computePlanningHint,
   resolveRowIdByActor,
@@ -170,6 +171,7 @@ function SortableDayScene({
         sceneCardClass(isDragging),
         "border-l-[3px] border-l-sky-400/70",
         isDragging && "opacity-50",
+        row.scene.cutAt && !isDragging && "opacity-60",
         canWrite && "cursor-grab touch-none active:cursor-grabbing",
       )}
       onClick={() => {
@@ -235,7 +237,14 @@ function SceneCardBody({ scene }: { scene: SceneCard }) {
   const chars = scene.characters.map((c) => c.character.name).join(", ");
   return (
     <>
-      <div className="font-semibold leading-snug">{formatSceneBrief(scene)}</div>
+      {scene.cutAt ? (
+        <div className="mb-1">
+          <Badge>вырезана</Badge>
+        </div>
+      ) : null}
+      <div className={cn("font-semibold leading-snug", scene.cutAt && "line-through")}>
+        {formatSceneBrief(scene)}
+      </div>
       {chars ? (
         <div className="mt-1 line-clamp-2 text-[var(--muted-fg)]">{chars}</div>
       ) : null}
@@ -461,6 +470,7 @@ export function ScheduleDnDBoard({
   canWrite: boolean;
   availability?: ScheduleAvailabilityBundle;
 }) {
+  const toast = useToast();
   const [activeScene, setActiveScene] = useState<SceneCard | null>(null);
   const [menuState, setMenuState] = useState<{
     dayId: string;
@@ -559,7 +569,8 @@ export function ScheduleDnDBoard({
       ) {
         return;
       }
-      await assignSceneToDayByDnDAction(projectId, shootDayId, sceneId);
+      const result = await assignSceneToDayByDnDAction(projectId, shootDayId, sceneId);
+      if (result?.error) toast.error(result.error);
       return;
     }
 

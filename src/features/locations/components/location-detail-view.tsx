@@ -93,7 +93,8 @@ export function LocationDetailView({
   const shiftIds = new Set<string>();
   let totalSeconds = 0;
   for (const link of location.scenes) {
-    if (link.scene.planSeconds) totalSeconds += link.scene.planSeconds;
+    // Хронометраж — без вырезанных сцен
+    if (link.scene.planSeconds && !link.scene.cutAt) totalSeconds += link.scene.planSeconds;
     for (const d of link.scene.shootDayScenes) {
       shiftIds.add(d.shootDay.id);
     }

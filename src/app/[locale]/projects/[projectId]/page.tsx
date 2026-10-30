@@ -82,7 +82,7 @@ export default async function ProjectOverviewPage({ params }: Props) {
             <div className="flex justify-between">
               <dt className="text-[var(--muted-fg)]">Сцены в плане</dt>
               <dd className="font-medium">
-                {schedule.assigned} / {schedule.totalScenes}
+                {schedule.plannedScenes} / {schedule.totalScenes}
               </dd>
             </div>
           </dl>

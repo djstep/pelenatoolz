@@ -26,6 +26,8 @@ export type LibrettoFilters = {
   actorQuery: string;
   actorMode: TextMatchMode;
   resourceQuery: string;
+  /** Показывать вырезанные сцены (по умолчанию скрыты). */
+  showCut: boolean;
 };
 
 export const emptyFilters = (): LibrettoFilters => ({
@@ -51,6 +53,7 @@ export const emptyFilters = (): LibrettoFilters => ({
   actorQuery: "",
   actorMode: "one_of",
   resourceQuery: "",
+  showCut: false,
 });
 
 function parseNum(s: string) {
@@ -104,6 +107,7 @@ export function applyLibrettoFilters(
   formatNumber: (s: LibrettoScene) => string,
 ): LibrettoScene[] {
   return scenes.filter((scene) => {
+    if (scene.cutAt && !filters.showCut) return false;
     if (filters.search.trim()) {
       const q = filters.search.trim().toLowerCase();
       const blob = [

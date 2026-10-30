@@ -13,6 +13,7 @@ const sceneDetailSelect = {
   intExt: true,
   dayNight: true,
   status: true,
+  cutAt: true,
   scriptDay: true,
   locations: { include: { location: true } },
   characters: { include: { character: true } },
@@ -39,6 +40,7 @@ export async function listUnscheduledScenes(projectId: string) {
       projectId,
       shootDayScenes: { none: {} },
       status: { not: "OFF_PLAN" },
+      cutAt: null,
     },
     select: sceneDetailSelect,
     orderBy: [{ sortOrder: "asc" }, { number: "asc" }],
@@ -46,12 +48,16 @@ export async function listUnscheduledScenes(projectId: string) {
 }
 
 export async function getScheduleStats(projectId: string) {
-  const [days, assigned, totalScenes] = await Promise.all([
+  const [days, assigned, plannedScenes, totalScenes] = await Promise.all([
     prisma.shootDay.count({ where: { projectId } }),
     prisma.shootDayScene.count({
       where: { shootDay: { projectId } },
     }),
-    prisma.scene.count({ where: { projectId } }),
+    // «Обзор»: сцены в плане и всего — без вырезанных
+    prisma.shootDayScene.count({
+      where: { shootDay: { projectId }, scene: { cutAt: null } },
+    }),
+    prisma.scene.count({ where: { projectId, cutAt: null } }),
   ]);
-  return { days, assigned, totalScenes };
+  return { days, assigned, plannedScenes, totalScenes };
 }

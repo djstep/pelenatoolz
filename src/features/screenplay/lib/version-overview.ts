@@ -1,5 +1,5 @@
 import type { ScreenplayBlock } from "@/features/screenplay/lib/block-types";
-import { estimateScreenplayTiming } from "@/features/screenplay/lib/timing";
+import { estimateScreenplayTiming, type SceneTimingRef } from "@/features/screenplay/lib/timing";
 import type { ScriptVersionOverviewRow } from "@/features/screenplay/lib/version-types";
 import { listScriptVersions } from "@/features/screenplay/lib/versions";
 import { prisma } from "@/shared/db/prisma";
@@ -9,7 +9,7 @@ export async function listScriptVersionsOverview(
   projectId: string,
   timingMode: TimingMode,
   pageToMinuteRatio: number,
-  sceneTimings: { sceneId: string; planSeconds: number | null }[],
+  sceneTimings: SceneTimingRef[],
 ): Promise<ScriptVersionOverviewRow[]> {
   const versions = await listScriptVersions(projectId);
   if (versions.length === 0) return [];

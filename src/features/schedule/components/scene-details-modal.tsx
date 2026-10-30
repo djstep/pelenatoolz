@@ -27,6 +27,8 @@ export type SceneDetails = {
   dayNight: keyof typeof dayNightLabels | null;
   status: keyof typeof sceneStatusLabels | string;
   scriptDay: number | null;
+  /** Сцена вырезана (пусто — нет). */
+  cutAt?: Date | string | null;
   locations: { location: { name: string } }[];
   characters: { character: { id: string; name: string } }[];
 };
@@ -54,6 +56,11 @@ export function SceneDetailsModal({
       wide
     >
       <div className="space-y-4 text-sm">
+        {scene.cutAt ? (
+          <p className="rounded-xl border border-[var(--border)] px-3 py-2 text-[var(--muted-fg)]">
+            Сцена вырезана. Из дня сама не убирается — решение за вами.
+          </p>
+        ) : null}
         <div className="flex flex-wrap gap-2">
           <Badge>{statusLabel}</Badge>
           {scene.intExt ? <Badge>{intExtLabels[scene.intExt]}</Badge> : null}

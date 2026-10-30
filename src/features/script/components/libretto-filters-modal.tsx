@@ -92,6 +92,7 @@ export function LibrettoFiltersModal({
             actorQuery: String(fd.get("actorQuery") ?? ""),
             actorMode: (fd.get("actorMode") as TextMatchMode) ?? "one_of",
             resourceQuery: String(fd.get("resourceQuery") ?? ""),
+            showCut: filters.showCut,
           });
           onClose();
         }}

@@ -46,6 +46,7 @@ export default async function ScenePage({ params }: Props) {
       projectType={ctx.project.type}
       shootOnFilm={ctx.project.shootOnFilm ?? false}
       scene={serializeForClient(scene)}
+      isCut={scene.cutAt !== null}
       prev={neighbors.prev}
       next={neighbors.next}
       locations={locationOptions}

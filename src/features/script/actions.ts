@@ -710,6 +710,76 @@ export async function getScenesDeleteImpactAction(
   ]);
 }
 
+/** Где используется сцена — для окна «Вырезать сцену?». Только чтение. */
+export async function getSceneCutImpactAction(
+  projectId: string,
+  sceneId: string,
+): Promise<string[]> {
+  const ctx = await requireProjectContext(projectId);
+  if (!ctx.can("script:write")) return [];
+  const scene = { id: sceneId, projectId };
+  const [dayLinks, reportRows, attempts] = await Promise.all([
+    prisma.shootDayScene.findMany({
+      where: { scene },
+      select: { shootDay: { select: { dayNumber: true } } },
+      orderBy: { shootDay: { dayNumber: "asc" } },
+    }),
+    prisma.productionReportSceneFact.count({ where: { scene } }),
+    prisma.sceneShootAttempt.count({ where: { scene } }),
+  ]);
+  const lines: string[] = [];
+  if (dayLinks.length > 0) {
+    const days = dayLinks.map((link) => `№ ${link.shootDay.dayNumber}`).join(", ");
+    lines.push(`Стоит в днях КПП: ${days} — останется там с пометкой «вырезана»`);
+  }
+  lines.push(
+    ...impactLines([
+      [reportRows, "Строки отчётов смены (не меняются)"],
+      [attempts, "Попытки съёмки (не меняются)"],
+    ]),
+  );
+  lines.push("В новые дни КПП сцену будет не добавить. Вернуть можно в любой момент");
+  return lines;
+}
+
+/** Вырезать сцену (`cut`) или вернуть (`restore`). Сцена и её связи не удаляются. */
+export async function setSceneCutAction(
+  projectId: string,
+  sceneId: string,
+  mode: "cut" | "restore",
+): Promise<{ error?: string }> {
+  const ctx = await requireProjectContext(projectId);
+  if (!ctx.can("script:write")) {
+    return { error: "Недостаточно прав" };
+  }
+  if (mode !== "cut" && mode !== "restore") return { error: "Некорректные данные" };
+
+  const scene = await prisma.scene.findFirst({
+    where: { id: sceneId, projectId },
+    select: { id: true, number: true, postfix: true, episodeNumber: true, cutAt: true },
+  });
+  if (!scene) return { error: "Сцена не найдена" };
+
+  const cut = mode === "cut";
+  if (cut === (scene.cutAt !== null)) return {};
+
+  await prisma.scene.update({
+    where: { id: scene.id },
+    data: { cutAt: cut ? new Date() : null },
+  });
+
+  await recordAudit(ctx, {
+    projectId,
+    entityType: AuditEntityType.scene,
+    entityId: scene.id,
+    action: "UPDATE",
+    summary: `Сцена ${formatSceneNumber(scene, ctx.project.type)} ${cut ? "вырезана" : "возвращена"}`,
+  });
+
+  revalidateScript(projectId, scene.id);
+  return {};
+}
+
 export async function manualRenumberScenesAction(
   projectId: string,
   rowsJson: string,

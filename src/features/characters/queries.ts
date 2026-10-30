@@ -8,6 +8,7 @@ const sceneBriefSelect = {
   postfix: true,
   episodeNumber: true,
   planSeconds: true,
+  cutAt: true,
   summary: true,
   status: true,
   scriptDay: true,
@@ -59,8 +60,9 @@ export async function listCharactersWithCasting(projectId: string) {
 
   return characters.map((c) => {
     const snapshot = parseCastSnapshot(c.castSnapshot);
+    // Хронометраж — без вырезанных сцен
     const planSeconds = c.scenes.reduce(
-      (sum, sc) => sum + (sc.scene.planSeconds ?? 0),
+      (sum, sc) => sum + (sc.scene.cutAt ? 0 : (sc.scene.planSeconds ?? 0)),
       0,
     );
     const approvedCandidate = c.castingCandidates.find(
@@ -137,8 +139,9 @@ export async function getCharacterDetail(projectId: string, characterId: string)
   if (!character) return null;
 
   const snapshot = parseCastSnapshot(character.castSnapshot);
+  // Хронометраж — без вырезанных сцен
   const planSeconds = character.scenes.reduce(
-    (sum, sc) => sum + (sc.scene.planSeconds ?? 0),
+    (sum, sc) => sum + (sc.scene.cutAt ? 0 : (sc.scene.planSeconds ?? 0)),
     0,
   );
 

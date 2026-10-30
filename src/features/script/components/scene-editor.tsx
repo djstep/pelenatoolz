@@ -6,6 +6,8 @@ import { useActionState, useState, useTransition } from "react";
 import type { ProjectType } from "@prisma/client";
 import {
   duplicateSceneAction,
+  getSceneCutImpactAction,
+  setSceneCutAction,
   updateSceneAction,
   type ActionState,
 } from "@/features/script/actions";
@@ -17,6 +19,7 @@ import { ScenePlanningHistory } from "@/features/script/components/scene-plannin
 import type { SceneCategoryOption } from "@/features/script/components/scene-category-resource-block";
 import { formatSceneNumber } from "@/features/script/lib/libretto-display";
 import { Button } from "@/shared/ui/button";
+import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
 import { useActionSuccess } from "@/shared/ui/unsaved/use-action-success";
 import { useFormGuard } from "@/shared/ui/unsaved/use-form-guard";
 import { useOnChange } from "@/shared/hooks/use-on-change";
@@ -38,6 +41,7 @@ export function SceneEditor({
   projectType,
   shootOnFilm,
   scene,
+  isCut,
   prev,
   next,
   locations: initialLocations,
@@ -50,6 +54,7 @@ export function SceneEditor({
   projectType: ProjectType;
   shootOnFilm: boolean;
   scene: SceneEditData;
+  isCut: boolean;
   prev: Neighbor | null;
   next: Neighbor | null;
   locations: Option[];
@@ -62,6 +67,8 @@ export function SceneEditor({
   const [state, action, pending] = useActionState(boundAction, initial);
   const [dupPending, startDup] = useTransition();
   const [dupError, setDupError] = useState<string | null>(null);
+  const [cutPending, startCut] = useTransition();
+  const confirm = useConfirm();
 
   const [locations, setLocations] = useState(initialLocations);
   const [characters, setCharacters] = useState(initialCharacters);
@@ -114,6 +121,29 @@ export function SceneEditor({
     });
   }
 
+  function onCut() {
+    setDupError(null);
+    void confirm({
+      title: `Вырезать сцену ${title}?`,
+      details: () => getSceneCutImpactAction(projectId, scene.id),
+      confirmLabel: "Вырезать",
+      action: async () => {
+        const result = await setSceneCutAction(projectId, scene.id, "cut");
+        if (result.error) return result.error;
+        router.refresh();
+      },
+    });
+  }
+
+  function onRestore() {
+    setDupError(null);
+    startCut(async () => {
+      const result = await setSceneCutAction(projectId, scene.id, "restore");
+      if (result.error) setDupError(result.error);
+      router.refresh();
+    });
+  }
+
   return (
     <div className="space-y-5">
       <header className="flex flex-wrap items-center gap-3 border-b border-[var(--border)] pb-4">
@@ -137,7 +167,7 @@ export function SceneEditor({
             <span className="px-2 text-sm text-[var(--muted-fg)]">←</span>
           )}
           <h1 className="font-display px-2 text-xl font-semibold">
-            Сцена {title}
+            Сцена <span className={isCut ? "line-through" : undefined}>{title}</span>
           </h1>
           {next ? (
             <Link
@@ -155,6 +185,20 @@ export function SceneEditor({
         <div className="ml-auto flex flex-wrap items-center gap-2">
           {canWrite ? (
             <>
+              {isCut ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={cutPending}
+                  onClick={onRestore}
+                >
+                  {cutPending ? "…" : "Вернуть"}
+                </Button>
+              ) : (
+                <Button type="button" variant="ghost" onClick={onCut}>
+                  Вырезать сцену
+                </Button>
+              )}
               <Button
                 type="button"
                 variant="secondary"
@@ -170,6 +214,13 @@ export function SceneEditor({
           ) : null}
         </div>
       </header>
+
+      {isCut ? (
+        <p className="rounded-xl border border-[var(--border)] px-4 py-3 text-sm text-[var(--muted-fg)]">
+          Сцена вырезана: скрыта в либретто, не попадает в новые дни КПП и в итоги хронометража.
+          История съёмок и отчёты смены не меняются.
+        </p>
+      ) : null}
 
       {(state.error || dupError) && (
         <p className="text-sm text-[var(--danger)]">

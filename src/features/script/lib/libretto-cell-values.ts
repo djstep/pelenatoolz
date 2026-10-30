@@ -94,7 +94,10 @@ export function buildLibrettoExportCell(
     .map((id) => ({
       id,
       label: getLibrettoFieldLabel(id, fieldLabels),
-      value: getLibrettoCellValue(scene, id, projectType),
+      value:
+        id === "number" && scene.cutAt
+          ? `${getLibrettoCellValue(scene, id, projectType)} (вырезана)`
+          : getLibrettoCellValue(scene, id, projectType),
     }))
     .filter((item) => !isEmptyLibrettoValue(item.value));
 

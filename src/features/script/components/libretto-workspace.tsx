@@ -20,6 +20,7 @@ import {
   bulkDeleteScenesAction,
   getScenesDeleteImpactAction,
   bulkUpdateSceneStatusAction,
+  setSceneCutAction,
 } from "@/features/script/actions";
 import { LibrettoExportModal } from "@/features/script/components/libretto-export-modal";
 import { LibrettoFiltersModal } from "@/features/script/components/libretto-filters-modal";
@@ -203,6 +204,16 @@ export function LibrettoWorkspace({
     [scenes, activeFilters, projectType],
   );
 
+  const cutCount = useMemo(() => scenes.filter((s) => s.cutAt).length, [scenes]);
+
+  function restoreScene(scene: LibrettoScene) {
+    startTransition(async () => {
+      const result = await setSceneCutAction(projectId, scene.id, "restore");
+      setMessage(result.error ?? `Сцена ${fmtNum(scene)} возвращена`);
+      router.refresh();
+    });
+  }
+
   const shootingUnits = useMemo(() => {
     const units = new Set<string>();
     for (const s of scenes) {
@@ -261,6 +272,14 @@ export function LibrettoWorkspace({
             onChange={(e) => setColorMode(e.target.checked)}
           />
           Цветной режим
+        </label>
+        <label className="flex items-center gap-2 text-sm text-[var(--muted-fg)]">
+          <input
+            type="checkbox"
+            checked={filters.showCut}
+            onChange={(e) => setFilters((f) => ({ ...f, showCut: e.target.checked }))}
+          />
+          Показать вырезанные{cutCount > 0 ? ` (${cutCount})` : ""}
         </label>
         {canWrite ? (
           <Button type="button" onClick={openCreate}>+ Добавить сцену</Button>
@@ -379,7 +398,8 @@ export function LibrettoWorkspace({
 
       {message ? <p className="text-sm text-[var(--tone-success)]">{message}</p> : null}
       <p className="text-xs text-[var(--muted-fg)]">
-        Показано {filtered.length} из {scenes.length} сцен
+        Показано {filtered.length} из {filters.showCut ? scenes.length : scenes.length - cutCount} сцен
+        {cutCount > 0 ? ` · вырезано: ${cutCount}` : ""}
       </p>
 
       {filtered.length === 0 ? (
@@ -419,6 +439,7 @@ export function LibrettoWorkspace({
                     "border-b border-[var(--border)]/60 align-top",
                     "cursor-pointer",
                     colorMode && sceneStatusRowColors[scene.status],
+                    scene.cutAt && "opacity-50",
                   )}
                   onClick={(e) => {
                     if ((e.target as HTMLElement).closest("input, button, form")) return;
@@ -442,9 +463,16 @@ export function LibrettoWorkspace({
                   {visibleColumns.map((col) => (
                     <td
                       key={col.id}
-                      className="truncate px-2 py-2"
+                      className={cn(
+                        "truncate px-2 py-2",
+                        col.id === "number" && scene.cutAt && "line-through",
+                      )}
                       style={{ maxWidth: widths[col.id] ?? col.defaultWidth }}
-                      title={cellValue(scene, col.id, projectType)}
+                      title={
+                        col.id === "number" && scene.cutAt
+                          ? `${cellValue(scene, col.id, projectType)} — вырезана`
+                          : cellValue(scene, col.id, projectType)
+                      }
                     >
                       {col.id === "status" ? (
                         colorMode ? (
@@ -461,9 +489,20 @@ export function LibrettoWorkspace({
                   ))}
                   {canWrite ? (
                     <td className="px-2 py-2 text-right">
-                      <Button type="button" variant="ghost" onClick={() => openScene(scene)}>
-                        Изм.
-                      </Button>
+                      {scene.cutAt ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          disabled={pending}
+                          onClick={() => restoreScene(scene)}
+                        >
+                          Вернуть
+                        </Button>
+                      ) : (
+                        <Button type="button" variant="ghost" onClick={() => openScene(scene)}>
+                          Изм.
+                        </Button>
+                      )}
                     </td>
                   ) : null}
                 </tr>

@@ -37,6 +37,7 @@ export default async function ScreenplayPage({ params }: Props) {
   const sceneTimings = scenes.map((scene) => ({
     sceneId: scene.id,
     planSeconds: scene.planSeconds,
+    cut: scene.cutAt !== null,
   }));
 
   const versionsOverview = await listScriptVersionsOverview(

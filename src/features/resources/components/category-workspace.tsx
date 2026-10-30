@@ -56,8 +56,9 @@ function exportCsv(categoryName: string, items: ItemRow[]) {
   const lines = [
     ["Название", "Сцен", "Хронометраж (сек)", "Примечание"].join(";"),
     ...items.map((item) => {
+      // Хронометраж — без вырезанных сцен
       const seconds = item.sceneLinks.reduce(
-        (s, l) => s + (l.scene.planSeconds ?? 0),
+        (s, l) => s + (l.scene.cutAt ? 0 : (l.scene.planSeconds ?? 0)),
         0,
       );
       return [
@@ -168,7 +169,7 @@ export function CategoryWorkspace({
             <tbody>
               {filtered.map((item) => {
                 const planSeconds = item.sceneLinks.reduce(
-                  (s, l) => s + (l.scene.planSeconds ?? 0),
+                  (s, l) => s + (l.scene.cutAt ? 0 : (l.scene.planSeconds ?? 0)),
                   0,
                 );
                 const sceneNums = item.sceneLinks
