@@ -115,6 +115,7 @@ function inflateEntry(buffer: Buffer, entry: ZipEntry, maxBytes: number): Buffer
 export type DocxParts = {
   documentXml: string;
   stylesXml: string | null;
+  numberingXml: string | null;
 };
 
 /**
@@ -135,18 +136,22 @@ export function readDocxParts(buffer: Buffer): DocxParts {
     throw new DocxReadError("not_docx");
   }
 
-  const documentXml = inflateEntry(buffer, document, DOCX_LIMITS.maxDocumentXml);
-  const styles = byName.get("word/styles.xml");
-  const stylesXml = styles
-    ? inflateEntry(
-        buffer,
-        styles,
-        DOCX_LIMITS.maxTotalUncompressed - documentXml.length,
-      )
-    : null;
+  let budget = DOCX_LIMITS.maxTotalUncompressed;
+  const read = (entry: ZipEntry, max: number) => {
+    if (budget <= 0) throw new DocxReadError("too_large");
+    const data = inflateEntry(buffer, entry, Math.min(max, budget));
+    budget -= data.length;
+    return data.toString("utf8");
+  };
+  const optional = (name: string) => {
+    const entry = byName.get(name);
+    return entry ? read(entry, budget) : null;
+  };
 
+  const documentXml = read(document, DOCX_LIMITS.maxDocumentXml);
   return {
-    documentXml: documentXml.toString("utf8"),
-    stylesXml: stylesXml?.toString("utf8") ?? null,
+    documentXml,
+    stylesXml: optional("word/styles.xml"),
+    numberingXml: optional("word/numbering.xml"),
   };
 }

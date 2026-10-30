@@ -12,7 +12,8 @@ import {
   readDocxParagraphs,
   type DocxParagraph,
 } from "@/features/import/normalize/docx-paragraphs";
-import { DocxReadError } from "@/features/import/normalize/docx-zip";
+import { DOCX_LIMITS, DocxReadError } from "@/features/import/normalize/docx-zip";
+import { buildDocx, buildZip, p } from "@/features/import/normalize/test-docx";
 
 // Ожидания — утверждённая таблица в docs/tasks/WAVE_4_NOTES.md (коды D*, R*, V*).
 
@@ -85,8 +86,17 @@ describe("ddct.docx — английские стили", () => {
     assert.deepEqual(texts(result, "TRANSITION"), ["CUT TO:", "FADE TO BLACK"]);
   });
 
-  test("ремарки по стилю PARENTHETICAL", () => {
-    assert.equal(texts(result, "PARENTHETICAL").length, 33);
+  test("ремарки — только абзацы стиля PARENTHETICAL, каждая в скобках", () => {
+    const parentheticals = result.blocks.filter((b) => b.type === "PARENTHETICAL");
+    assert.ok(parentheticals.length > 0);
+    for (const block of parentheticals) {
+      assert.equal(block.styleName, "PARENTHETICAL");
+      assert.match(block.text.trim(), /^\(.*\)$/);
+    }
+  });
+
+  test("номера сцен набраны текстом, автонумерации нет", () => {
+    assert.deepEqual(result.notices, []);
   });
 });
 
@@ -189,6 +199,7 @@ function paragraph(text: string, extra: Partial<DocxParagraph> = {}): DocxParagr
     indentLeft: 0,
     align: "left",
     bold: false,
+    autoNumber: null,
     ...extra,
   };
 }
@@ -284,6 +295,22 @@ describe("уровень 1 — стили и сверка с текстом", ()
     );
   });
 
+  test("сверка обязана сработать: стиль CHARACTER, текст «ИНТ. КОМНАТА - ДЕНЬ»", () => {
+    const result = classify([
+      styled("1. ИНТ. КУХНЯ — ДЕНЬ", "SCENEHEADING", "SCENE HEADING"),
+      styled("ИНТ. КОМНАТА - ДЕНЬ", "CHARACTER", "CHARACTER"),
+    ]);
+    assert.equal(result.conflicts.length, 1);
+    assert.deepEqual(result.conflicts[0], {
+      paragraphIndex: 1,
+      text: "ИНТ. КОМНАТА - ДЕНЬ",
+      assigned: "CHARACTER",
+      suggested: "SLUGLINE",
+      level: "style",
+      reason: "looks_like_slugline",
+    });
+  });
+
   test("стиль «персонаж», а текст похож на шапку или на фразу — расхождение", () => {
     const result = classify([
       styled("1. ИНТ. КУХНЯ — ДЕНЬ", "SCENEHEADING", "SCENE HEADING"),
@@ -326,10 +353,184 @@ describe("чтение docx", () => {
     assert.equal(third!.bold, false);
   });
 
-  test("не архив — понятная ошибка", () => {
-    assert.throws(
-      () => readDocxParagraphs(Buffer.from("это не docx, а текст")),
-      (error) => error instanceof DocxReadError && error.code === "not_zip",
+});
+
+describe("исправления Word, скрытый текст, комментарии (собранный docx)", () => {
+  const docx = buildDocx({
+    styles: `<w:style w:type="paragraph" w:styleId="Hidden"><w:name w:val="Hidden"/><w:rPr><w:vanish/></w:rPr></w:style>`,
+    body:
+      `<w:p><w:r><w:t xml:space="preserve">Анна </w:t></w:r>` +
+      `<w:del w:id="1" w:author="a"><w:r><w:delText xml:space="preserve">старое </w:delText></w:r></w:del>` +
+      `<w:ins w:id="2" w:author="a"><w:r><w:t xml:space="preserve">новое </w:t></w:r></w:ins>` +
+      `<w:moveFrom w:id="3" w:author="a"><w:r><w:t xml:space="preserve">перенесённое </w:t></w:r></w:moveFrom>` +
+      `<w:r><w:rPr><w:vanish/></w:rPr><w:t xml:space="preserve">скрытое </w:t></w:r>` +
+      `<w:r><w:rPr><w:vanish w:val="0"/></w:rPr><w:t>видимое</w:t></w:r>` +
+      `<w:commentRangeStart w:id="5"/><w:r><w:commentReference w:id="5"/></w:r><w:commentRangeEnd w:id="5"/></w:p>` +
+      // Удалён только знак абзаца (самозакрытый w:del) — текст абзаца остаётся.
+      `<w:p><w:pPr><w:rPr><w:del w:id="6" w:author="a"/></w:rPr></w:pPr><w:r><w:t>ещё</w:t></w:r></w:p>` +
+      // Прежнее форматирование из правки («было жирным») не учитывается.
+      `<w:p><w:r><w:rPr><w:rPrChange w:id="7" w:author="a"><w:rPr><w:b/></w:rPr></w:rPrChange></w:rPr><w:t>не жирный</w:t></w:r></w:p>` +
+      p("Скрыт стилем", "Hidden"),
+    extra: [
+      {
+        name: "word/comments.xml",
+        data: `<w:comments><w:comment w:id="5"><w:p><w:r><w:t>КОММЕНТАРИЙ</w:t></w:r></w:p></w:comment></w:comments>`,
+      },
+    ],
+  });
+  const paragraphs = readDocxParagraphs(docx);
+
+  test("удалённое и перенесённое не читается, вставленное — читается", () => {
+    assert.equal(paragraphs[0]!.text, "Анна новое видимое");
+    assert.equal(paragraphs[1]!.text, "ещё");
+  });
+
+  test("скрытый текст (в прогоне и в стиле) не читается", () => {
+    assert.ok(paragraphs.every((x) => !x.text.includes("скрытое")));
+    assert.equal(paragraphs[3]!.text, "");
+  });
+
+  test("комментарии не читаются", () => {
+    assert.ok(paragraphs.every((x) => !x.text.includes("КОММЕНТАРИЙ")));
+    assert.equal(paragraphs.length, 4);
+  });
+
+  test("прежнее форматирование из правки не учитывается", () => {
+    assert.equal(paragraphs[2]!.bold, false);
+  });
+});
+
+describe("автонумерация шапок Word (собранный docx)", () => {
+  const numbering =
+    `<w:abstractNum w:abstractNumId="1"><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%1."/></w:lvl></w:abstractNum>` +
+    `<w:abstractNum w:abstractNumId="2"><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%1."/></w:lvl>` +
+    `<w:lvl w:ilvl="1"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%1.%2."/></w:lvl></w:abstractNum>` +
+    `<w:abstractNum w:abstractNumId="3"><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="upperLetter"/><w:lvlText w:val="%1)"/></w:lvl></w:abstractNum>` +
+    `<w:num w:numId="1"><w:abstractNumId w:val="1"/></w:num>` +
+    `<w:num w:numId="2"><w:abstractNumId w:val="2"/></w:num>` +
+    `<w:num w:numId="3"><w:abstractNumId w:val="3"/></w:num>` +
+    `<w:num w:numId="4"><w:abstractNumId w:val="1"/><w:lvlOverride w:ilvl="0"><w:startOverride w:val="10"/></w:lvlOverride></w:num>`;
+  const styles = `<w:style w:type="paragraph" w:styleId="Scene"><w:name w:val="Заголовок сцены"/><w:pPr><w:numPr><w:numId w:val="1"/></w:numPr></w:pPr></w:style>`;
+  const numPr = (numId: string, ilvl = 0) =>
+    `<w:numPr><w:ilvl w:val="${ilvl}"/><w:numId w:val="${numId}"/></w:numPr>`;
+
+  const labels = (result: BlockTypingResult) =>
+    result.blocks
+      .filter((b) => b.type === "SLUGLINE")
+      .map((b) => (b.autoNumber?.kind === "number" ? b.autoNumber.label : b.autoNumber?.kind));
+
+  test("простой десятичный список из стиля шапки — номера посчитаны", () => {
+    const result = classifyParagraphs(
+      readDocxParagraphs(
+        buildDocx({
+          styles,
+          numbering,
+          body:
+            p("ИНТ. КУХНЯ — ДЕНЬ", "Scene") +
+            p("Мама режет хлеб.") +
+            p("НАТ. ДВОР — НОЧЬ", "Scene") +
+            p("ИНТ. КОМНАТА — ДЕНЬ", "Scene"),
+        }),
+      ),
     );
+    assert.deepEqual(labels(result), ["1.", "2.", "3."]);
+    assert.deepEqual(result.notices, []);
+  });
+
+  test("нумерация в самом абзаце и «начать с 10»", () => {
+    const result = classifyParagraphs(
+      readDocxParagraphs(
+        buildDocx({
+          numbering,
+          body: p("ИНТ. КУХНЯ — ДЕНЬ", undefined, numPr("4")) + p("НАТ. ДВОР — НОЧЬ", undefined, numPr("4")),
+        }),
+      ),
+    );
+    assert.deepEqual(labels(result), ["10.", "11."]);
+  });
+
+  test("составной, буквенный или неописанный список — пометка для вопроса", () => {
+    const result = classifyParagraphs(
+      readDocxParagraphs(
+        buildDocx({
+          numbering,
+          body:
+            p("ИНТ. КУХНЯ — ДЕНЬ", undefined, numPr("2", 1)) +
+            p("НАТ. ДВОР — НОЧЬ", undefined, numPr("3")) +
+            p("ИНТ. КОМНАТА — ДЕНЬ", undefined, numPr("99")),
+        }),
+      ),
+    );
+    assert.deepEqual(labels(result), ["unreadable", "unreadable", "unreadable"]);
+    assert.deepEqual(result.notices, [
+      { code: "slugline_autonumber_unreadable", paragraphIndexes: [0, 1, 2] },
+    ]);
+  });
+});
+
+describe("строка «Персонажи:» по тексту", () => {
+  test("сразу после шапки — строка персонажей, в другом месте — действие", () => {
+    const result = classify([
+      paragraph("ИНТ. КУХНЯ — ДЕНЬ"),
+      paragraph("Персонажи: Мама, Анна"),
+      paragraph("Мама режет хлеб."),
+      paragraph("ПЕРСОНАЖИ: папа"),
+      paragraph("НАТ. ДВОР — НОЧЬ"),
+      paragraph("ПЕРСОНАЖИ: АННА", { styleIds: ["7"], styleNames: ["Описание действия"] }),
+    ]);
+    assert.deepEqual(
+      result.blocks.map((b) => b.type),
+      ["SLUGLINE", "SCENE_CAST", "ACTION", "ACTION", "SLUGLINE", "SCENE_CAST"],
+    );
+  });
+});
+
+describe("лимиты распаковки и проверка по содержимому", () => {
+  const isCode = (code: string) => (error: unknown) =>
+    error instanceof DocxReadError && error.code === code;
+
+  test("распакованный архив больше 30 МБ — отказ", () => {
+    const docx = buildDocx({
+      body: p("ИНТ. КУХНЯ — ДЕНЬ"),
+      extra: [
+        { name: "word/media/big.bin", data: Buffer.alloc(DOCX_LIMITS.maxTotalUncompressed + 1) },
+      ],
+    });
+    assert.ok(docx.length < 1024 * 1024); // сжатый файл маленький
+    assert.throws(() => readDocxParagraphs(docx), isCode("too_large"));
+  });
+
+  test("архив врёт о размере — распаковка останавливается на лимите", () => {
+    const docx = buildZip([
+      { name: "[Content_Types].xml", data: "<Types/>" },
+      {
+        name: "word/document.xml",
+        data: Buffer.alloc(DOCX_LIMITS.maxDocumentXml + 1024, "a"),
+        declaredSize: 100,
+      },
+    ]);
+    assert.throws(() => readDocxParagraphs(docx), isCode("too_large"));
+  });
+
+  test("слишком много файлов в архиве — отказ", () => {
+    const files = Array.from({ length: DOCX_LIMITS.maxEntries + 1 }, (_, i) => ({
+      name: `f${i}.xml`,
+      data: "x",
+      method: 0 as const,
+    }));
+    assert.throws(() => readDocxParagraphs(buildZip(files)), isCode("too_many_files"));
+  });
+
+  test("не docx с расширением .docx: таблица Excel, PDF, текст — отказ", () => {
+    const xlsx = buildZip([
+      { name: "[Content_Types].xml", data: "<Types/>" },
+      { name: "xl/workbook.xml", data: "<workbook/>" },
+    ]);
+    assert.throws(() => readDocxParagraphs(xlsx), isCode("not_docx"));
+    assert.throws(
+      () => readDocxParagraphs(Buffer.from("%PDF-1.4\n1 0 obj\n<<>>\nendobj\n")),
+      isCode("not_zip"),
+    );
+    assert.throws(() => readDocxParagraphs(Buffer.from("это не docx, а текст")), isCode("not_zip"));
   });
 });

@@ -1,4 +1,5 @@
 import type { ScriptBlockType } from "@prisma/client";
+import type { AutoNumber } from "@/features/import/normalize/docx-numbering";
 import type { DocxParagraph } from "@/features/import/normalize/docx-paragraphs";
 import { isStageDirectionLine } from "@/features/screenplay/lib/stage-directions";
 
@@ -28,6 +29,8 @@ export type TypedBlock = {
   styleName?: string;
   /** Абзац до первой шапки сцены — кандидат в титульную страницу. */
   beforeFirstScene: boolean;
+  /** Номер из автонумерации Word (для шапок — номер сцены). */
+  autoNumber: AutoNumber | null;
 };
 
 export type TypeConflictReason =
@@ -58,11 +61,19 @@ export type IndentProfile = {
   parenthetical: number | null;
 };
 
+/** Пометки для экрана проверки, не привязанные к одному блоку. */
+export type TypingNotice = {
+  /** Номера сцен заданы автонумерацией Word и не прочитаны. */
+  code: "slugline_autonumber_unreadable";
+  paragraphIndexes: number[];
+};
+
 export type BlockTypingResult = {
   blocks: TypedBlock[];
   conflicts: TypeConflict[];
   dropped: DroppedParagraph[];
   indentProfile: IndentProfile | null;
+  notices: TypingNotice[];
 };
 
 /**
@@ -97,6 +108,9 @@ export const TRANSITION_LINES = [
   "ВЫХОД ИЗ ЗТМ",
   "ЗАТЕМНЕНИЕ",
 ];
+
+/** Строка персонажей сцены без стиля «Персонажи»: сразу после шапки, «Персонажи: …». */
+const CAST_LINE_RE = /^персонажиs*:/iu;
 
 /** Префиксы примечаний (не экранное время): «ПРЕФИКС: текст». */
 export const NOTE_PREFIXES = ["РЕЖИССЕРСКАЯ ПОМЕТКА", "ПРИМЕЧАНИЕ", "NOTE"];
@@ -144,6 +158,10 @@ export function isNoteText(text: string) {
     const p = matchKey(prefix);
     return key.startsWith(p) && /^\s*:/.test(key.slice(p.length));
   });
+}
+
+export function isCastLineText(text: string) {
+  return CAST_LINE_RE.test(cleanForMatch(text));
 }
 
 function isParentheticalText(text: string) {
@@ -306,7 +324,11 @@ export function classifyParagraphs(paragraphs: DocxParagraph[]): BlockTypingResu
       continue;
     }
 
-    const base = { paragraphIndex: paragraph.index, text: paragraph.text };
+    const base = {
+      paragraphIndex: paragraph.index,
+      text: paragraph.text,
+      autoNumber: paragraph.autoNumber,
+    };
 
     if (i < sceneStart && byStyle?.type !== "SLUGLINE") {
       blocks.push({ ...base, type: "ACTION", level: "text", beforeFirstScene: true });
@@ -314,6 +336,22 @@ export function classifyParagraphs(paragraphs: DocxParagraph[]): BlockTypingResu
     }
 
     const previous = blocks.length > 0 ? blocks[blocks.length - 1]!.type : null;
+
+    // «Персонажи: …» сразу после шапки — строка персонажей, даже без стиля.
+    if (
+      previous === "SLUGLINE" &&
+      (!byStyle || byStyle.type === "ACTION") &&
+      isCastLineText(text)
+    ) {
+      blocks.push({
+        ...base,
+        type: "SCENE_CAST",
+        level: byStyle ? "style" : "text",
+        styleName: byStyle?.styleName,
+        beforeFirstScene: false,
+      });
+      continue;
+    }
 
     if (byStyle) {
       // Примечание в стиле действия — всё равно примечание: это не экранное время.
@@ -350,7 +388,14 @@ export function classifyParagraphs(paragraphs: DocxParagraph[]): BlockTypingResu
     });
   }
 
-  return { blocks, conflicts, dropped, indentProfile };
+  const unreadable = blocks
+    .filter((b) => b.type === "SLUGLINE" && b.autoNumber?.kind === "unreadable")
+    .map((b) => b.paragraphIndex);
+  const notices: TypingNotice[] = unreadable.length
+    ? [{ code: "slugline_autonumber_unreadable", paragraphIndexes: unreadable }]
+    : [];
+
+  return { blocks, conflicts, dropped, indentProfile, notices };
 }
 
 function addConflict(

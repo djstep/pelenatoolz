@@ -1,8 +1,14 @@
+import {
+  createListCounter,
+  parseNumbering,
+  type AutoNumber,
+} from "@/features/import/normalize/docx-numbering";
 import { readDocxParts } from "@/features/import/normalize/docx-zip";
 
 /** Абзац docx: только текст и признаки для определения типа. Разметка не сохраняется. */
 export type DocxParagraph = {
   index: number;
+  /** Видимый текст: без удалённого правкой, без скрытого. Комментарии не читаются. */
   text: string;
   /** Цепочка стилей абзаца: сам стиль и те, на которых он основан (id и названия). */
   styleIds: string[];
@@ -12,7 +18,11 @@ export type DocxParagraph = {
   align: "left" | "center" | "right" | "both";
   /** Весь текст абзаца жирный. */
   bold: boolean;
+  /** Номер из автонумерации Word (свой или из стиля); null — абзац без нумерации. */
+  autoNumber: AutoNumber | null;
 };
+
+type NumPr = { numId: string | null; ilvl: number | null };
 
 type StyleInfo = {
   id: string;
@@ -21,6 +31,8 @@ type StyleInfo = {
   indentLeft: number | null;
   align: string | null;
   bold: boolean | null;
+  vanish: boolean | null;
+  numPr: NumPr | null;
 };
 
 function decodeXmlEntities(value: string) {
@@ -53,12 +65,31 @@ function readAlign(pPr: string): string | null {
   return tag ? attr(tag, "w:val") : null;
 }
 
-/** `<w:b/>` или `<w:b w:val="1|true|on"/>` → true; `w:val="0|false|off"` → false; нет тега → null. */
-function readBold(rPr: string): boolean | null {
-  const tag = rPr.match(/<w:b(?:\s[^>]*)?\/>/)?.[0];
+/** Флаг свойства: `<w:b/>` или `w:val="1|true|on"` → true; `w:val="0|false|off"` → false; нет тега → null. */
+function readToggle(rPr: string, tagName: "b" | "vanish"): boolean | null {
+  const tag = rPr.match(new RegExp(`<w:${tagName}(?:\\s[^>]*)?\\/>`))?.[0];
   if (!tag) return null;
   const value = attr(tag, "w:val");
   return value == null || !/^(0|false|off)$/i.test(value);
+}
+
+function readNumPr(pPr: string): NumPr | null {
+  const body = pPr.match(/<w:numPr>([\s\S]*?)<\/w:numPr>/)?.[1];
+  if (body == null) return null;
+  const numIdTag = body.match(/<w:numId\b[^>]*\/>/)?.[0];
+  const ilvlTag = body.match(/<w:ilvl\b[^>]*\/>/)?.[0];
+  return {
+    numId: numIdTag ? attr(numIdTag, "w:val") : null,
+    ilvl: ilvlTag ? Number(attr(ilvlTag, "w:val") ?? "0") : null,
+  };
+}
+
+/** Свойства абзаца без свойств «знака абзаца» (`w:rPr` внутри `w:pPr`). */
+function paragraphProps(xml: string) {
+  return (xml.match(/<w:pPr>([\s\S]*?)<\/w:pPr>/)?.[1] ?? "").replace(
+    /<w:rPr>[\s\S]*?<\/w:rPr>/g,
+    "",
+  );
 }
 
 function parseStyles(stylesXml: string | null) {
@@ -72,8 +103,8 @@ function parseStyles(stylesXml: string | null) {
     const id = attr(head, "w:styleId");
     if (!id) continue;
     if (/^(1|true|on)$/i.test(attr(head, "w:default") ?? "")) defaultId = id;
-    const pPr = body.match(/<w:pPr>([\s\S]*?)<\/w:pPr>/)?.[1] ?? "";
-    const rPr = body.match(/<w:rPr>([\s\S]*?)<\/w:rPr>/)?.[1] ?? "";
+    const pPr = paragraphProps(body);
+    const rPr = body.replace(/<w:pPr>[\s\S]*?<\/w:pPr>/g, "").match(/<w:rPr>([\s\S]*?)<\/w:rPr>/)?.[1] ?? "";
     const nameTag = body.match(/<w:name\b[^>]*\/>/)?.[0];
     const basedOnTag = body.match(/<w:basedOn\b[^>]*\/>/)?.[0];
     styles.set(id, {
@@ -82,7 +113,9 @@ function parseStyles(stylesXml: string | null) {
       basedOn: basedOnTag ? attr(basedOnTag, "w:val") : null,
       indentLeft: readIndentLeft(pPr),
       align: readAlign(pPr),
-      bold: readBold(rPr),
+      bold: readToggle(rPr, "b"),
+      vanish: readToggle(rPr, "vanish"),
+      numPr: readNumPr(pPr),
     });
   }
   return { styles, defaultId };
@@ -121,13 +154,30 @@ function runText(run: string) {
   return text;
 }
 
+/**
+ * Удалённое правкой (`w:del`) и перенесённое отсюда (`w:moveFrom`) не читаем.
+ * Самозакрытые `<w:del …/>` (пометка удалённого знака абзаца) не трогаем.
+ * Вставленное правкой (`w:ins`, `w:moveTo`) читается как обычный текст.
+ * Прежнее форматирование из правок (`w:pPrChange`, `w:rPrChange`) тоже не учитываем.
+ */
+function withoutDeletions(xml: string) {
+  return xml.replace(
+    /<w:(del|moveFrom|pPrChange|rPrChange)\b[^>]*?(?<!\/)>[\s\S]*?<\/w:\1>/g,
+    "",
+  );
+}
+
 export function parseDocxParagraphs(
   documentXml: string,
   stylesXml: string | null,
+  numberingXml: string | null = null,
 ): DocxParagraph[] {
   const { styles, defaultId } = parseStyles(stylesXml);
+  const nextNumber = createListCounter(parseNumbering(numberingXml));
   // Запасной вариант надписей (текстовых полей) дублирует их текст.
-  const xml = documentXml.replace(/<mc:Fallback>[\s\S]*?<\/mc:Fallback>/g, "");
+  const xml = withoutDeletions(
+    documentXml.replace(/<mc:Fallback>[\s\S]*?<\/mc:Fallback>/g, ""),
+  );
   const result: DocxParagraph[] = [];
 
   for (const chunk of xml.split(/<\/w:p>/)) {
@@ -135,7 +185,7 @@ export function parseDocxParagraphs(
     if (start < 0) continue;
     const paragraph = chunk.slice(start);
 
-    const pPr = paragraph.match(/<w:pPr>([\s\S]*?)<\/w:pPr>/)?.[1] ?? "";
+    const pPr = paragraphProps(paragraph);
     const styleTag = pPr.match(/<w:pStyle\b[^>]*\/>/)?.[0];
     // Без pStyle у абзаца — стиль по умолчанию («Обычный»).
     const chain = styleChain(styles, styleTag ? attr(styleTag, "w:val") : defaultId);
@@ -147,18 +197,26 @@ export function parseDocxParagraphs(
       readAlign(pPr) ?? chain.find((style) => style.align != null)?.align ?? null,
     );
     const styleBold = chain.find((style) => style.bold != null)?.bold ?? false;
+    const styleVanish = chain.find((style) => style.vanish != null)?.vanish ?? false;
+
+    const ownNumPr = readNumPr(pPr);
+    const styleNumPr = chain.find((style) => style.numPr?.numId != null)?.numPr ?? null;
+    const numId = ownNumPr?.numId ?? styleNumPr?.numId ?? null;
+    const ilvl = ownNumPr?.ilvl ?? styleNumPr?.ilvl ?? 0;
+    const autoNumber = numId != null ? nextNumber(numId, ilvl) : null;
 
     let text = "";
     let textRuns = 0;
     let boldRuns = 0;
     for (const run of paragraph.matchAll(/<w:r(?:\s[^>]*)?>([\s\S]*?)<\/w:r>/g)) {
       const body = run[1]!;
+      const rPr = body.match(/<w:rPr>([\s\S]*?)<\/w:rPr>/)?.[1] ?? "";
+      if (readToggle(rPr, "vanish") ?? styleVanish) continue; // скрытый текст
       const piece = runText(body);
       text += piece;
       if (!piece.trim()) continue;
       textRuns += 1;
-      const rPr = body.match(/<w:rPr>([\s\S]*?)<\/w:rPr>/)?.[1] ?? "";
-      if (readBold(rPr) ?? styleBold) boldRuns += 1;
+      if (readToggle(rPr, "b") ?? styleBold) boldRuns += 1;
     }
 
     result.push({
@@ -169,6 +227,7 @@ export function parseDocxParagraphs(
       indentLeft,
       align,
       bold: textRuns > 0 && boldRuns === textRuns,
+      autoNumber,
     });
   }
 
@@ -176,6 +235,6 @@ export function parseDocxParagraphs(
 }
 
 export function readDocxParagraphs(buffer: Buffer): DocxParagraph[] {
-  const { documentXml, stylesXml } = readDocxParts(buffer);
-  return parseDocxParagraphs(documentXml, stylesXml);
+  const { documentXml, stylesXml, numberingXml } = readDocxParts(buffer);
+  return parseDocxParagraphs(documentXml, stylesXml, numberingXml);
 }
