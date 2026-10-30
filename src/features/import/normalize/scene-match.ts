@@ -8,7 +8,7 @@ import { blocksToScriptContent } from "@/features/screenplay/lib/block-serializa
  * Сцена — номер из файла (у «вырезать?» — номер сцены в проекте).
  */
 export const SCENE_QUESTION_TYPES = {
-  /** Совпала по номеру, но поменялись и место, и ИНТ/НАТ, или шапка как у другой сцены. */
+  /** Совпала по номеру, но поменялся объект или шапка как у другой сцены. */
   sameScene: "та-же-сцена",
   /** Вырезанная сцена снова в файле. */
   restoreScene: "сцена-вернуть",
@@ -219,16 +219,16 @@ export function matchScenes(
     } satisfies Partial<SceneMatch>);
   };
 
-  /** Поменялись и место, и ИНТ/НАТ — номер, скорее всего, отдан другой сцене. */
-  const bothChanged = (f: FileScene, s: ExistingScene) => {
-    const intExtChanged = f.intExt != null && s.intExt != null && f.intExt !== s.intExt;
+  /**
+   * Поменялся объект локации — номер, возможно, отдан другой сцене (решение владельца после 6а).
+   * ИНТ/НАТ, подобъект и режим не считаются: объект тот же.
+   */
+  const objectChanged = (f: FileScene, s: ExistingScene) => {
     const objects = s.locationIds.flatMap((id) => {
       const row = locationRows.get(id);
       return row ? [compareKey(row.name)] : [];
     });
-    const placeChanged =
-      objects.length > 0 && f.objects.length > 0 && !f.objects.some((o) => objects.includes(o));
-    return intExtChanged && placeChanged;
+    return objects.length > 0 && f.objects.length > 0 && !f.objects.some((o) => objects.includes(o));
   };
 
   /** Вопрос «та же сцена?» или «вернуть?»: ответ — сцена проекта или «новая». */
@@ -275,7 +275,7 @@ export function matchScenes(
         !fileNumbers.has(s.number) &&
         keyOf.get(s.id) === f.key,
     );
-    if (candidate.cut || others.length > 0 || bothChanged(f, candidate)) {
+    if (candidate.cut || others.length > 0 || objectChanged(f, candidate)) {
       confirm(f, candidate, others, "number");
     } else {
       claim(f, candidate, "number", false, false);

@@ -176,9 +176,24 @@ export function ScriptReview({
       const list = questions.filter((q) => q.type === b.type);
       return list.length > 0 ? [{ ...b, list }] : [];
     });
-    if (simple.length === 0 && noTime.length === 0 && bulk.length === 0) return null;
+    // «Подтвердить все» — текущие варианты постоянных вопросов становятся ответами (в словарь).
+    const unconfirmed = questions.filter((q) => q.persistent && q.answer && answers[q.code] == null);
+    if (simple.length === 0 && noTime.length === 0 && bulk.length === 0 && unconfirmed.length === 0) {
+      return null;
+    }
     return (
       <div className="flex flex-wrap items-center gap-3">
+        {unconfirmed.length > 0 ? (
+          <Button
+            type="button"
+            variant="secondary"
+            className="px-3 py-1.5 text-xs"
+            title="Текущие варианты станут ответами и запомнятся в словаре проекта"
+            onClick={() => answerAll(unconfirmed, (q) => q.answer)}
+          >
+            Подтвердить все ({unconfirmed.length})
+          </Button>
+        ) : null}
         {bulk.map((b) => (
           <Button
             key={b.type}

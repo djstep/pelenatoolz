@@ -1,5 +1,4 @@
 import { prisma } from "@/shared/db/prisma";
-import { bootstrapScriptBlocks } from "@/features/screenplay/lib/sync";
 import {
   ensureCurrentScriptVersion,
   getCurrentScriptVersion,
@@ -7,16 +6,6 @@ import {
   listScriptVersions,
   listVersionBlocks,
 } from "@/features/screenplay/lib/versions";
-
-export async function listScriptBlocksForCurrentVersion(
-  projectId: string,
-  createdById: string,
-) {
-  await bootstrapScriptBlocks(projectId, createdById);
-  const current = await getCurrentScriptVersion(projectId);
-  if (!current) return [];
-  return listVersionBlocks(current.id);
-}
 
 export type { ScriptVersionRow } from "@/features/screenplay/lib/version-types";
 export { versionLabel } from "@/features/screenplay/lib/version-label";

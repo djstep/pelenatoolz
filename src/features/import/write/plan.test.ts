@@ -144,11 +144,15 @@ describe("сопоставление сцен с проектом", () => {
   });
 
   test("связь, которой нет в новой версии, — вопрос «убрать связь?», без ответа остаётся", () => {
-    const result = run(p("1. ИНТ. КОМНАТА — ДЕНЬ") + p("Раз."), TEST_PROJECT);
+    // Объект другой — сначала «та же сцена?»; пока нет ответа, о связях не спрашиваем.
+    const body = p("1. ИНТ. КОМНАТА — ДЕНЬ") + p("Раз.");
+    const same = { "та-же-сцена:1:ИНТ. КОМНАТА — ДЕНЬ": "same" };
+    assert.deepEqual(codesOf(run(body, TEST_PROJECT), QUESTION_TYPES.unlinkLocation), []);
+    const result = run(body, TEST_PROJECT, same);
     const code = "связь-локации:1:ТЕСТ ЛОКАЦИЯ";
     assert.deepEqual(codesOf(result, QUESTION_TYPES.unlinkLocation), [code]);
     assert.deepEqual(result.sceneMatches[0]!.removeLocationIds, []);
-    const removed = run(p("1. ИНТ. КОМНАТА — ДЕНЬ") + p("Раз."), TEST_PROJECT, { [code]: "remove" });
+    const removed = run(body, TEST_PROJECT, { ...same, [code]: "remove" });
     assert.deepEqual(removed.sceneMatches[0]!.removeLocationIds, ["loc-test"]);
   });
 });
@@ -166,10 +170,10 @@ describe("перенумерация: «та же сцена?»", () => {
     ],
   };
 
-  test("поменялись и место, и ИНТ/НАТ — обязательный вопрос, ответ «новая»", () => {
-    const body = p("5. НАТ. ЛЕС — ДЕНЬ") + p("Лес.") + p("6. НАТ. ДВОР — НОЧЬ") + p("Двор.");
+  test("поменялся объект (ИНТ/НАТ тот же) — обязательный вопрос, ответ «новая»", () => {
+    const body = p("5. ИНТ. ЛЕС — ДЕНЬ") + p("Лес.") + p("6. НАТ. ДВОР — НОЧЬ") + p("Двор.");
     const result = run(body, existing);
-    const code = "та-же-сцена:5:НАТ. ЛЕС — ДЕНЬ";
+    const code = "та-же-сцена:5:ИНТ. ЛЕС — ДЕНЬ";
     const q = result.questions.find((x) => x.code === code);
     assert.ok(q);
     assert.equal(q.required, true);
@@ -187,10 +191,13 @@ describe("перенумерация: «та же сцена?»", () => {
     assert.deepEqual(codesOf(fresh, QUESTION_TYPES.cutScene), ["сцена-вырезать:5:ИНТ. КУХНЯ — ДЕНЬ"]);
   });
 
-  test("поменялось только место — совпадение без вопроса", () => {
-    const result = run(p("5. ИНТ. ЛЕС — ДЕНЬ") + p("Лес."), existing);
-    assert.deepEqual(codesOf(result, QUESTION_TYPES.sameScene), []);
-    assert.equal(result.sceneMatches[0]!.existingId, "k");
+  test("поменялись подобъект, режим или ИНТ/НАТ при том же объекте — совпадение без вопроса", () => {
+    for (const heading of ["5. ИНТ. КУХНЯ. УГОЛ — ДЕНЬ", "5. ИНТ. КУХНЯ — НОЧЬ", "5. НАТ. КУХНЯ — ДЕНЬ"]) {
+      const result = run(p(heading) + p("Тут."), existing);
+      assert.deepEqual(codesOf(result, QUESTION_TYPES.sameScene), [], heading);
+      assert.equal(result.sceneMatches[0]!.existingId, "k", heading);
+      assert.equal(result.sceneMatches[0]!.pending, false, heading);
+    }
   });
 
   test("шапка точно как у другой сцены проекта — вопрос с вариантом «это сцена 6»", () => {
@@ -251,14 +258,21 @@ describe("план записи", () => {
     assert.equal(plan.scenes[0]!.scriptContent, "Раз.");
   });
 
-  test("ddct в «ТЕСТ импорт»: сцены 1–4 привязаны, 2 — «вернуть?», новые персонажи и локации", () => {
+  test("ddct в «ТЕСТ импорт»: 2 — «вернуть?», 1, 3, 4 — «та же сцена?» (объект другой)", () => {
     const typing = classifyParagraphs(readDocxParagraphs(readFileSync(path.join(FIXTURES, "ddct.docx"))));
     const first = normalizeScript(typing, {}, { existing: TEST_PROJECT });
     const restore = first.questions.find((q) => q.type === QUESTION_TYPES.restoreScene);
     assert.ok(restore, "нет вопроса «вернуть?» по сцене 2");
     assert.equal(restore.scene, "2");
+    const same = first.questions.filter((q) => q.type === QUESTION_TYPES.sameScene);
+    assert.deepEqual(same.map((q) => q.scene), ["1", "3", "4"]);
+    assert.ok(same.every((q) => q.required));
+    assert.equal(blockingQuestions(first), 4);
 
-    const answers = { [restore.code]: "restore" };
+    const answers = {
+      [restore.code]: "restore",
+      ...Object.fromEntries(same.map((q) => [q.code, "same"])),
+    };
     const result = normalizeScript(typing, answers, { existing: TEST_PROJECT });
     assert.equal(blockingQuestions(result), 0);
     const plan = planImport(result, answers, TEST_PROJECT, TIMING);
