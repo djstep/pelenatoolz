@@ -1,8 +1,14 @@
 import "server-only";
 
 import type { DictionaryRule } from "@/features/import/normalize/dictionary";
-import { compareKey } from "@/features/import/normalize/text";
-import { contentHash, type ExistingScene } from "@/features/import/normalize/scene-match";
+import { parseHeading } from "@/features/import/normalize/heading";
+import { cleanText, compareKey } from "@/features/import/normalize/text";
+import {
+  contentHash,
+  headingKey,
+  type ExistingScene,
+  type VersionScene,
+} from "@/features/import/normalize/scene-match";
 import { prisma } from "@/shared/db/prisma";
 
 const INT_EXT_WORDS = { INT: "ИНТ.", EXT: "НАТ.", INT_EXT: "ИНТ./НАТ." } as const;
@@ -86,6 +92,19 @@ export async function loadImportContext(projectId: string) {
   for (const block of current?.blocks ?? []) {
     if (block.sceneId && !sluglines.has(block.sceneId)) sluglines.set(block.sceneId, block.content);
   }
+  // Шапки текущей версии со сценами — только сцены этого проекта (удалённые и чужие — нет).
+  const projectSceneIds = new Set(scenes.map((s) => s.id));
+  const versionScenes: VersionScene[] = (current?.blocks ?? []).flatMap((block) => {
+    if (!block.sceneId || !projectSceneIds.has(block.sceneId)) return [];
+    const number = parseHeading(cleanText(block.content)).number;
+    return [
+      {
+        sceneId: block.sceneId,
+        number: number ? compareKey(number) : null,
+        key: headingKey(block.content),
+      },
+    ];
+  });
   const locationById = new Map(locations.map((l) => [l.id, l]));
 
   const existingScenes: ExistingScene[] = scenes.map((scene) => {
@@ -120,7 +139,7 @@ export async function loadImportContext(projectId: string) {
 
   return {
     dictionary,
-    existing: { characters, locations, scenes: existingScenes },
+    existing: { characters, locations, scenes: existingScenes, versionScenes },
     currentVersionId: current?.id ?? null,
     timing: {
       mode: project.timingMode,

@@ -45,6 +45,7 @@ import {
   type ExistingScene,
   type MissingScene,
   type SceneMatch,
+  type VersionScene,
 } from "@/features/import/normalize/scene-match";
 import { parseTitlePage, type TitlePage } from "@/features/import/normalize/title-page";
 
@@ -143,6 +144,8 @@ export type ExistingRecords = {
   locations: readonly { id: string; name: string; sublocation: string | null }[];
   /** Сцены проекта — для сопоставления с прошлой версией. */
   scenes?: readonly ExistingScene[];
+  /** Шапки текущей версии и их сцены — сопоставление сначала через них. */
+  versionScenes?: readonly VersionScene[];
 };
 
 export type NormalizeContext = {

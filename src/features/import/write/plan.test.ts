@@ -11,7 +11,7 @@ import {
   type ExistingRecords,
   type NormalizedScript,
 } from "@/features/import/normalize/normalize-script";
-import { contentHash, type ExistingScene } from "@/features/import/normalize/scene-match";
+import { contentHash, headingKey, type ExistingScene } from "@/features/import/normalize/scene-match";
 import { buildDocx, p } from "@/features/import/normalize/test-docx";
 import { blockingQuestions, planImport, splitSceneNumber } from "@/features/import/write/plan";
 
@@ -296,6 +296,109 @@ describe("вопросы, где предложенный ответ созда�
         .filter((q) => q.type === QUESTION_TYPES.similarLocations)
         .every((q) => q.required),
     );
+  });
+});
+
+describe("сопоставление через текущую версию", () => {
+  const K = "ИНТ. КОМНАТА — ДЕНЬ";
+  const Y = "НАТ. ДВОР — НОЧЬ";
+  const locations = [
+    { id: "l-room", name: "КОМНАТА", sublocation: null },
+    { id: "l-yard", name: "ДВОР", sublocation: null },
+  ];
+  // v1: 1 и 2 — одинаковые шапки, 3 — двор, 4 — снова комната.
+  const v1 = [K, K, Y, K];
+  const scenes = v1.map((heading, i) =>
+    scene({
+      id: `v1-${i + 1}`,
+      number: String(i + 1),
+      heading: `${i + 1}. ${heading}`,
+      intExt: heading === Y ? "EXT" : "INT",
+      locationIds: [heading === Y ? "l-yard" : "l-room"],
+    }),
+  );
+  const versionScenes = v1.map((heading, i) => ({
+    sceneId: `v1-${i + 1}`,
+    number: String(i + 1),
+    key: headingKey(heading),
+  }));
+  const shifted = v1.map((heading, i) => p(`${i + 2}. ${heading}`) + p(`Текст ${i + 1}.`)).join("");
+
+  test("номера сдвинуты на 1 — все сцены совпали через версию, без вопросов", () => {
+    const result = run(shifted, { characters: [], locations, scenes, versionScenes });
+    assert.deepEqual(
+      result.sceneMatches.map((m) => m.existingId),
+      ["v1-1", "v1-2", "v1-3", "v1-4"],
+    );
+    assert.ok(result.sceneMatches.every((m) => m.by === "version"));
+    // Номера в либретто не меняются.
+    assert.deepEqual(result.sceneMatches.map((m) => m.number), ["1", "2", "3", "4"]);
+    assert.deepEqual(result.questions.map((q) => q.code), []);
+    assert.deepEqual(result.missingScenes, []);
+  });
+
+  test("текущей версии нет — как раньше: по номеру проекта, вопрос при смене объекта", () => {
+    const without = run(shifted, { characters: [], locations, scenes });
+    const empty = run(shifted, { characters: [], locations, scenes, versionScenes: [] });
+    assert.deepEqual(empty.sceneMatches, without.sceneMatches);
+    assert.deepEqual(empty.questions.map((q) => q.code), without.questions.map((q) => q.code));
+    // Без версии сдвиг виден только вопросами: файл 2 и 3 — шапка как у сцены 1 проекта
+    // (её номера нет в файле), файл 4 — объект сменился (комната → двор).
+    assert.deepEqual(codesOf(without, QUESTION_TYPES.sameScene), [
+      `та-же-сцена:2:${K}`,
+      `та-же-сцена:3:${K}`,
+      `та-же-сцена:4:${Y}`,
+    ]);
+    assert.ok(without.sceneMatches.slice(0, 3).every((m) => m.by === "number" && m.pending));
+  });
+
+  test("шапка версии ссылается на удалённую или чужую сцену — путь по проекту", () => {
+    const ghost = versionScenes.map((v) => ({ ...v, sceneId: `чужая-${v.sceneId}` }));
+    const result = run(shifted, { characters: [], locations, scenes, versionScenes: ghost });
+    const without = run(shifted, { characters: [], locations, scenes });
+    assert.deepEqual(result.sceneMatches, without.sceneMatches);
+  });
+
+  test("две шапки версии на одну сцену — сцену получает первая, вторая идёт путём по проекту", () => {
+    const body = p(`1. ${K}`) + p("Раз.") + p(`2. ${Y}`) + p("Два.");
+    const twice = [
+      { sceneId: "v1-1", number: "1", key: headingKey(K) },
+      { sceneId: "v1-1", number: "2", key: headingKey(Y) },
+    ];
+    const result = run(body, { characters: [], locations, scenes, versionScenes: twice });
+    assert.equal(result.sceneMatches[0]!.existingId, "v1-1");
+    assert.equal(result.sceneMatches[0]!.by, "version");
+    // Вторая: сцена 2 проекта по номеру; объект другой (комната → двор) — вопрос.
+    assert.equal(result.sceneMatches[1]!.existingId, "v1-2");
+    assert.equal(result.sceneMatches[1]!.by, "number");
+    assert.deepEqual(codesOf(result, QUESTION_TYPES.sameScene), [`та-же-сцена:2:${Y}`]);
+  });
+
+  test("ответ «новая сцена» в прошлом импорте (файл 1 → проект 1А) — вопрос не повторяется", () => {
+    const existing: ExistingRecords = {
+      characters: [],
+      locations: [{ id: "loc-test", name: "ТЕСТ ЛОКАЦИЯ", sublocation: null }],
+      scenes: [
+        scene({ id: "t1", number: "1", heading: "ТЕСТ ЛОКАЦИЯ", locationIds: ["loc-test"] }),
+        scene({ id: "t1a", number: "1А", heading: "1. ЗАКАДРОВЫЙ ГОЛОС" }),
+      ],
+      versionScenes: [{ sceneId: "t1a", number: "1", key: headingKey("1. ЗАКАДРОВЫЙ ГОЛОС") }],
+    };
+    // Шапка без ИНТ/НАТ — сцена только по стилю Word (как в ddct).
+    const docx = buildDocx({
+      body: p("1. ЗАКАДРОВЫЙ ГОЛОС", "SceneHeading") + p("Голос."),
+      styles: '<w:style w:type="paragraph" w:styleId="SceneHeading"><w:name w:val="Scene Heading"/></w:style>',
+    });
+    const result = normalizeScript(
+      classifyParagraphs(readDocxParagraphs(docx)),
+      { "шапка-не-сцена:ЗАКАДРОВЫЙ ГОЛОС": "scene" },
+      { existing },
+    );
+    assert.equal(result.sceneMatches[0]!.existingId, "t1a");
+    assert.equal(result.sceneMatches[0]!.by, "version");
+    assert.deepEqual(codesOf(result, QUESTION_TYPES.sameScene), []);
+    // Сцена 1 проекта — «нет в новой версии», как и после прошлого импорта.
+    assert.deepEqual(result.missingScenes.map((m) => m.existingId), ["t1"]);
   });
 });
 

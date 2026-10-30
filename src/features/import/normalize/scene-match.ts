@@ -41,6 +41,18 @@ export type ExistingScene = {
   reportFacts: number;
 };
 
+/**
+ * Шапка текущей версии сценария и сцена проекта, к которой она привязана (`sceneId` блока).
+ * По порядку версии; только сцены этого проекта (удалённые и чужие отброшены на сервере).
+ */
+export type VersionScene = {
+  sceneId: string;
+  /** Номер из текста шапки, как в файле прошлого импорта. */
+  number: string | null;
+  /** Ключ шапки без номера (`headingKey`). */
+  key: string;
+};
+
 /** Сцена файла после нормализации — то, что нужно для сопоставления. */
 export type FileScene = {
   index: number;
@@ -65,8 +77,8 @@ export type SceneMatch = {
   sceneIndex: number;
   /** Сцена проекта; пусто — новая. */
   existingId: string | null;
-  /** Как найдена: по номеру, по шапке, ответом. */
-  by: "number" | "heading" | "answer" | null;
+  /** Как найдена: через текущую версию, по номеру, по шапке, ответом. */
+  by: "version" | "number" | "heading" | "answer" | null;
   status: SceneMatchStatus;
   /** Номер в либретто: у совпавшей — её номер (импорт не перенумеровывает), у новой — новый. */
   number: string | null;
@@ -113,6 +125,7 @@ type Ask = (input: AskInput) => string;
 
 type ExistingInput = {
   scenes?: readonly ExistingScene[];
+  versionScenes?: readonly VersionScene[];
   characters: readonly { id: string; name: string }[];
   locations: readonly { id: string; name: string; sublocation: string | null }[];
 };
@@ -160,7 +173,56 @@ function firstFreeNumber(taken: ReadonlySet<string>) {
 }
 
 /**
- * Сопоставление сцен файла со сценами проекта: по номеру, затем по шапке.
+ * Шапки файла ↔ шапки версии с сохранением порядка: самая длинная общая часть по ключу шапки,
+ * при равенстве — больше пар с тем же номером. Сдвиг номеров и повторяющиеся шапки
+ * («ИНТ. КОМНАТА» трижды) не путают сцены. Возвращает пары [индекс файла, индекс версии].
+ */
+function alignHeadings(
+  files: readonly FileScene[],
+  entries: readonly VersionScene[],
+): [number, number][] {
+  const n = files.length;
+  const m = entries.length;
+  if (n === 0 || m === 0) return [];
+  const gain = (i: number, j: number) => {
+    const f = files[i]!;
+    const e = entries[j]!;
+    if (f.key !== e.key) return 0;
+    return 1000 + (f.number && e.number === compareKey(f.number) ? 1 : 0);
+  };
+  const w = m + 1;
+  const best = new Int32Array((n + 1) * w);
+  for (let i = 1; i <= n; i++) {
+    for (let j = 1; j <= m; j++) {
+      const g = gain(i - 1, j - 1);
+      best[i * w + j] = Math.max(
+        best[(i - 1) * w + j]!,
+        best[i * w + j - 1]!,
+        g ? best[(i - 1) * w + j - 1]! + g : 0,
+      );
+    }
+  }
+  const pairs: [number, number][] = [];
+  let i = n;
+  let j = m;
+  while (i > 0 && j > 0) {
+    const g = gain(i - 1, j - 1);
+    if (g && best[i * w + j] === best[(i - 1) * w + j - 1]! + g) {
+      pairs.push([i - 1, j - 1]);
+      i--;
+      j--;
+    } else if (best[(i - 1) * w + j] === best[i * w + j]) {
+      i--;
+    } else {
+      j--;
+    }
+  }
+  return pairs.reverse();
+}
+
+/**
+ * Сопоставление сцен файла со сценами проекта: сначала через текущую версию сценария
+ * (`sceneId` её шапок), затем по номеру сцены проекта и по шапке.
  * Сцены проекта не удаляются и не перенумеровываются; статус «вырезана» и связи меняются
  * только по ответам. Чистая функция: одинаково в браузере и на сервере.
  */
@@ -171,6 +233,7 @@ export function matchScenes(
 ): { matches: SceneMatch[]; missing: MissingScene[] } {
   const scenes = existing.scenes ?? [];
   const byNumber = new Map(scenes.map((s) => [s.number, s]));
+  const byId = new Map(scenes.map((s) => [s.id, s]));
   const keyOf = new Map(scenes.map((s) => [s.id, headingKey(s.heading)]));
   const fileNumbers = new Set(files.flatMap((f) => (f.number ? [compareKey(f.number)] : [])));
   const locationRows = new Map(existing.locations.map((l) => [l.id, l]));
@@ -263,11 +326,8 @@ export function matchScenes(
     claim(f, candidate, by, answer === "restore", answer === "");
   };
 
-  // 1. По номеру.
-  for (const f of files) {
-    if (!f.number) continue;
-    const candidate = byNumber.get(compareKey(f.number));
-    if (!candidate || claimed.has(candidate.id)) continue;
+  /** Совпала по номеру: вопрос, если вырезана, сменился объект или шапка как у другой сцены. */
+  const matchByNumber = (f: FileScene, candidate: ExistingScene, by: SceneMatch["by"]) => {
     const others = scenes.filter(
       (s) =>
         s.id !== candidate.id &&
@@ -276,15 +336,46 @@ export function matchScenes(
         keyOf.get(s.id) === f.key,
     );
     if (candidate.cut || others.length > 0 || objectChanged(f, candidate)) {
-      confirm(f, candidate, others, "number");
+      confirm(f, candidate, others, by);
     } else {
-      claim(f, candidate, "number", false, false);
+      claim(f, candidate, by, false, false);
     }
+  };
+  const open = (f: FileScene) => !matches[f.index]!.existingId && !explicitNew.has(f.index);
+
+  // 0. Через текущую версию: шапки файла ↔ шапки версии с сохранением порядка (на сдвиг
+  // номеров не реагирует), затем по номеру как в файле. Сцена — из `sceneId` блока шапки.
+  // Две шапки версии на одну сцену — сцену получает первая совпавшая, вторая идёт путём ниже.
+  const versionScenes = (existing.versionScenes ?? []).filter((v) => byId.has(v.sceneId));
+  for (const [fi, vi] of alignHeadings(files, versionScenes)) {
+    const f = files[fi]!;
+    const target = byId.get(versionScenes[vi]!.sceneId)!;
+    if (claimed.has(target.id)) continue;
+    if (target.cut) confirm(f, target, [], "version");
+    else claim(f, target, "version", false, false);
+  }
+  const versionByNumber = new Map<string, VersionScene>();
+  for (const v of versionScenes) {
+    if (v.number && !versionByNumber.has(v.number)) versionByNumber.set(v.number, v);
+  }
+  for (const f of files) {
+    if (!f.number || !open(f)) continue;
+    const v = versionByNumber.get(compareKey(f.number));
+    const candidate = v ? byId.get(v.sceneId) : undefined;
+    if (!candidate || claimed.has(candidate.id)) continue;
+    matchByNumber(f, candidate, "version");
+  }
+
+  // 1. По номеру сцены проекта.
+  for (const f of files) {
+    if (!f.number || !open(f)) continue;
+    const candidate = byNumber.get(compareKey(f.number));
+    if (!candidate || claimed.has(candidate.id)) continue;
+    matchByNumber(f, candidate, "number");
   }
 
   // 2. По шапке — только однозначное совпадение с обеих сторон.
-  const unmatched = () =>
-    files.filter((f) => !matches[f.index]!.existingId && !explicitNew.has(f.index));
+  const unmatched = () => files.filter(open);
   for (const f of unmatched()) {
     if (matches[f.index]!.existingId) continue;
     const candidates = scenes.filter((s) => !claimed.has(s.id) && keyOf.get(s.id) === f.key);
@@ -370,7 +461,6 @@ export function matchScenes(
   }
 
   // 5. Связи совпавших сцен: новые добавляются, пропавшие — вопрос «убрать связь?».
-  const byId = new Map(scenes.map((s) => [s.id, s]));
   const characterNames = new Map(existing.characters.map((c) => [c.id, c.name]));
   for (const f of files) {
     const match = matches[f.index]!;
