@@ -3,12 +3,20 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import {
+  appendImportedSheets,
   createDepartmentBudget,
+  getBudgetSheetNames,
   listDepartmentCodes,
   persistDepartmentBudget,
   setBudgetSheetPinned,
   type ItemChanges,
 } from "@/features/smeta/queries";
+import {
+  IMPORT_LIMITS,
+  ImportError,
+  checkZipLimits,
+  parseXlsxForUniver,
+} from "@/features/smeta/lib/import-xlsx";
 import {
   approveBudget,
   returnBudget,
@@ -109,18 +117,37 @@ function changesSummary(departmentName: string, c: ItemChanges) {
 }
 
 export type SaveBudgetResult =
-  | { error: string }
+  | { error: string; conflict?: boolean }
   | {
       error?: undefined;
       success: string;
       updatedAt: string;
       revision: number;
-      checks: SmetaCheck[];
-      usedCodes: string[];
+      /** Только если менялся основной лист — иначе в силе прежние. */
+      checks: SmetaCheck[] | null;
+      /** Только если изменились статьи. */
+      usedCodes: string[] | null;
       status: BudgetStatus;
     };
 
-/** Автосохранение книги цеха. Разбор основного листа в статьи — здесь, на сервере. */
+/** Смету сохранили из другого окна после того, как эта вкладка её открыла. */
+const CONFLICT = "Смету изменили в другом окне — обновите";
+
+const saveSchema = z.object({
+  workbookId: z.string().min(1).max(64),
+  baseRevision: z.number().int().min(0),
+  order: z
+    .array(z.object({ key: z.string().min(1).max(64), name: z.string().max(200) }))
+    .min(1)
+    .max(100),
+  sheets: z.record(z.string(), z.record(z.string(), z.unknown())),
+  styles: z.record(z.string(), z.unknown()).optional(),
+});
+
+/**
+ * Автосохранение книги цеха: приходят только изменённые листы. Разбор основного листа в
+ * статьи — здесь, на сервере. Ответ — «сохранено» и ревизия, книга обратно не уходит.
+ */
 export async function saveDepartmentBudgetAction(
   projectId: string,
   departmentId: string,
@@ -130,13 +157,12 @@ export async function saveDepartmentBudgetAction(
   if (!access.ok) return { error: access.error };
   const { ctx } = access;
 
-  const parsed = z
-    .object({ data: z.record(z.string(), z.unknown()) })
-    .safeParse(payload);
+  const parsed = saveSchema.safeParse(payload);
   if (!parsed.success) return { error: "Некорректные данные книги" };
 
-  const saved = await persistDepartmentBudget(projectId, departmentId, parsed.data.data);
+  const saved = await persistDepartmentBudget(projectId, departmentId, parsed.data);
   if (saved.error !== undefined) {
+    if (saved.error === "conflict") return { error: CONFLICT, conflict: true };
     return {
       error:
         saved.error === "not_found"
@@ -180,8 +206,100 @@ export async function saveDepartmentBudgetAction(
     updatedAt: saved.updatedAt,
     revision: saved.revision,
     checks: saved.checks,
-    usedCodes: await listDepartmentCodes(projectId, departmentId),
+    usedCodes: saved.changes ? await listDepartmentCodes(projectId, departmentId) : null,
     status: saved.status,
+  };
+}
+
+export type ImportBudgetExcelResult =
+  | { error: string; conflict?: boolean }
+  | { error?: undefined; success: string; sheets: string[]; warnings: string[] };
+
+/**
+ * Импорт .xlsx в книгу цеха: листы файла становятся новыми листами-черновиками в конце
+ * книги, основной лист не трогается. Перед импортом браузер досохраняет правки и
+ * присылает ревизию — не совпала, значит смету изменили в другом окне.
+ */
+export async function importBudgetExcelAction(
+  projectId: string,
+  departmentId: string,
+  formData: FormData,
+): Promise<ImportBudgetExcelResult> {
+  const access = await requireDepartmentEditor(projectId, departmentId);
+  if (!access.ok) return { error: access.error };
+  const { ctx } = access;
+
+  const file = formData.get("file");
+  const baseRevision = Number(formData.get("baseRevision"));
+  if (!(file instanceof File) || !Number.isInteger(baseRevision) || baseRevision < 0) {
+    return { error: "Файл не получен" };
+  }
+  const fileName = file.name.slice(0, 260);
+  if (/\.xls$/i.test(fileName)) return { error: "Старый формат .xls не поддерживается — сохраните файл как .xlsx" };
+  if (!/\.xlsx$/i.test(fileName)) return { error: "Нужен файл Excel в формате .xlsx" };
+  if (file.size > IMPORT_LIMITS.fileBytes) {
+    return { error: "Файл больше 3,5 МБ — такой не импортируется" };
+  }
+
+  const book = await getBudgetSheetNames(projectId, departmentId);
+  if (!book) return { error: NOT_FOUND };
+  if (book.revision !== baseRevision) return { error: CONFLICT, conflict: true };
+
+  let parsed: Awaited<ReturnType<typeof parseXlsxForUniver>>;
+  try {
+    const buffer = Buffer.from(await file.arrayBuffer());
+    checkZipLimits(buffer);
+    // Функции, которые понимает редактор, — из самого Univer (та же версия, что в браузере).
+    const { ALL_IMPLEMENTED_FUNCTIONS_SET } = await import("@univerjs/engine-formula");
+    parsed = await parseXlsxForUniver(
+      buffer,
+      book.names,
+      ALL_IMPLEMENTED_FUNCTIONS_SET as ReadonlySet<string>,
+    );
+  } catch (error) {
+    if (error instanceof ImportError) return { error: error.message };
+    console.error("[importBudgetExcel]", error);
+    return { error: "Не удалось прочитать файл — сохраните его в Excel как .xlsx" };
+  }
+
+  const appended = await appendImportedSheets(projectId, departmentId, {
+    baseRevision,
+    sheets: parsed.sheets,
+    styles: parsed.styles,
+  });
+  if (appended.error !== undefined) {
+    if (appended.error === "conflict") return { error: CONFLICT, conflict: true };
+    return {
+      error:
+        appended.error === "too_many_sheets"
+          ? "В книге будет больше 100 листов — удалите лишние и повторите"
+          : NOT_FOUND,
+    };
+  }
+
+  const names = parsed.sheets.map((s) => s.name);
+  const name = await departmentName(projectId, departmentId);
+  await recordAudit(ctx, {
+    projectId,
+    entityType: AuditEntityType.budget,
+    entityId: appended.budgetId,
+    action: "UPDATE",
+    summary: `Смета цеха «${name}»: импорт Excel «${fileName}» — листов ${names.length}${
+      appended.statusChange ? ", статус «черновик»" : ""
+    }`,
+    changes: {
+      fileName,
+      fileSize: file.size,
+      sheets: names,
+      revision: appended.revision,
+      status: appended.status,
+    },
+  });
+  revalidateSmeta(projectId, departmentId);
+  return {
+    success: `Импортировано листов: ${names.length}`,
+    sheets: names,
+    warnings: parsed.warnings,
   };
 }
 

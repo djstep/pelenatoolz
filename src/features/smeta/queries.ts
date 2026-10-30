@@ -1,5 +1,6 @@
 import "server-only";
 
+import { randomUUID } from "node:crypto";
 import { BudgetStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/shared/db/prisma";
 import {
@@ -16,6 +17,7 @@ import {
   type ParsedRow,
   type SmetaCheck,
 } from "@/features/smeta/lib/main-sheet";
+import { stableJson } from "@/features/smeta/lib/stable-json";
 
 const budgetInclude = {
   sheets: {
@@ -466,43 +468,11 @@ async function syncItems(
 }
 
 /** Заблокировать строку сметы до конца транзакции: сохранение, отправка, утверждение и
- * возврат одной сметы идут строго по очереди. */
-export async function lockBudget(tx: Tx, budgetId: string) {
-  await tx.$queryRaw`SELECT "id" FROM "Budget" WHERE "id" = ${budgetId} FOR UPDATE`;
-}
-
-/** JSON с ключами по алфавиту: база (jsonb) порядок ключей не хранит. */
-function stableJson(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
-  if (value && typeof value === "object") {
-    const entries = Object.entries(value as Record<string, unknown>)
-      .filter(([, v]) => v !== undefined)
-      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
-    return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${stableJson(v)}`).join(",")}}`;
-  }
-  return JSON.stringify(value ?? null);
-}
-
-/** Пришедшая книга совпадает с сохранённой: те же листы, порядок, данные и стили. */
-function sameWorkbook(
-  stored: {
-    styles: unknown;
-    sheets: { sheetKey: string; name: string; sortOrder: number; data: { data: unknown } | null }[];
-  },
-  incoming: ReturnType<typeof splitWorkbookToSheets>,
-) {
-  if (stored.sheets.length !== incoming.sheets.length) return false;
-  if (stableJson(stored.styles) !== stableJson(incoming.styles)) return false;
-  const byKey = new Map(stored.sheets.map((s) => [s.sheetKey, s]));
-  return incoming.sheets.every((sheet) => {
-    const old = byKey.get(sheet.id);
-    return (
-      !!old &&
-      old.name === sheet.name &&
-      old.sortOrder === sheet.sortOrder &&
-      stableJson(old.data?.data ?? null) === stableJson(sheet.data)
-    );
-  });
+ * возврат одной сметы идут строго по очереди. Возвращает ревизию под блокировкой. */
+export async function lockBudget(tx: Tx, budgetId: string): Promise<number | null> {
+  const rows = await tx.$queryRaw<{ revision: number }[]>`
+    SELECT "revision" FROM "Budget" WHERE "id" = ${budgetId} FOR UPDATE`;
+  return rows[0]?.revision ?? null;
 }
 
 /**
@@ -511,169 +481,336 @@ function sameWorkbook(
  */
 export type SaveStatusChange = "changed_after_submit" | "draft_after_approve" | null;
 
+function statusAfterEdit(status: BudgetStatus) {
+  const change: SaveStatusChange =
+    status === BudgetStatus.SUBMITTED
+      ? "changed_after_submit"
+      : status === BudgetStatus.APPROVED
+        ? "draft_after_approve"
+        : null;
+  const data =
+    change === "changed_after_submit"
+      ? { status: BudgetStatus.DRAFT, changedAfterSubmitAt: new Date() }
+      : change === "draft_after_approve"
+        ? { status: BudgetStatus.DRAFT }
+        : {};
+  return { change, data };
+}
+
+/** Сохранение из браузера: данные только изменённых и новых листов, порядок и имена — всех. */
+export type BudgetSaveInput = {
+  /** Id книги в Univer: у черновика это id сметы. */
+  workbookId: string;
+  /** Ревизия, с которой начинал браузер. Не совпала — смету изменили в другом окне. */
+  baseRevision: number;
+  /** Все листы книги по порядку. */
+  order: { key: string; name: string }[];
+  /** Данные изменённых и новых листов по ключу. */
+  sheets: Record<string, Record<string, unknown>>;
+  /** Стили книги — только если изменились. */
+  styles?: Record<string, unknown>;
+};
+
 export type PersistResult =
-  | { error: "not_found" | "bad_sheets" | "not_draft" }
+  | { error: "not_found" | "bad_sheets" | "not_draft" | "conflict" }
   | {
       error?: undefined;
       updatedAt: string;
       revision: number;
-      checks: SmetaCheck[];
+      /** Проверки — только если менялся основной лист (иначе в силе прежние). */
+      checks: SmetaCheck[] | null;
       changes: ItemChanges | null;
       budgetId: string;
       status: BudgetStatus;
       statusChange: SaveStatusChange;
     };
 
+/** Ревизия под блокировкой не совпала с той, от которой начинал браузер. */
+class BudgetConflictError extends Error {}
+
+function validSheetKeys(keys: readonly string[]) {
+  return (
+    keys.length > 0 &&
+    keys.length <= MAX_SHEETS &&
+    new Set(keys).size === keys.length &&
+    keys.every((k) => SHEET_KEY.test(k))
+  );
+}
+
 /**
- * Сохранить книгу цеха и разобрать основной лист в статьи.
+ * Сохранить книгу цеха: пишутся только присланные листы, основной лист разбирается в
+ * статьи, только если он изменился.
  * Листы ищутся только по паре «эта книга + ключ листа»: лист другой книги так не найти,
  * чужой ключ просто станет новым листом этой книги. Основной лист не удаляется никогда.
- * Книга не изменилась (холостое автосохранение) — ничего не пишется, ревизия и статус те же.
+ * До блокировки — одно чтение (смета, листы без данных и данные присланных листов):
+ * ревизия не совпала — конфликт; присланное совпадает с сохранённым — ничего не пишется.
+ * Ревизия перепроверяется под блокировкой перед записью.
  * Сохраняется только черновик: книга с другим id (например, просмотр версии) — отказ.
  */
 export async function persistDepartmentBudget(
   projectId: string,
   departmentId: string,
-  snapshot: Record<string, unknown>,
+  input: BudgetSaveInput,
 ): Promise<PersistResult> {
+  const keys = input.order.map((s) => s.key);
+  const sentKeys = Object.keys(input.sheets);
+  const keySet = new Set(keys);
+  if (!validSheetKeys(keys) || sentKeys.some((k) => !keySet.has(k))) {
+    return { error: "bad_sheets" };
+  }
+
+  const [budget, sentStored] = await Promise.all([
+    prisma.budget.findFirst({
+      where: { projectId, departmentId },
+      select: {
+        id: true,
+        mainSheetId: true,
+        status: true,
+        revision: true,
+        updatedAt: true,
+        styles: true,
+        sheets: { select: { id: true, sheetKey: true, name: true, sortOrder: true } },
+      },
+    }),
+    sentKeys.length
+      ? prisma.budgetSheet.findMany({
+          where: { sheetKey: { in: sentKeys }, budget: { projectId, departmentId } },
+          select: { sheetKey: true, data: { select: { data: true } } },
+        })
+      : Promise.resolve([]),
+  ]);
+  if (!budget) return { error: "not_found" };
+  if (input.workbookId !== budget.id) return { error: "not_draft" };
+  if (budget.revision !== input.baseRevision) return { error: "conflict" };
+
+  const storedJson = new Map(sentStored.map((s) => [s.sheetKey, stableJson(s.data?.data ?? null)]));
+  const storedByKey = new Map(budget.sheets.map((s) => [s.sheetKey, s]));
+  const mainKey = budget.sheets.find((s) => s.id === budget.mainSheetId)?.sheetKey ?? null;
+
+  const incoming = input.order.map((s, index) => {
+    const name = s.name.trim() || `Лист${index + 1}`;
+    const raw = input.sheets[s.key];
+    return {
+      key: s.key,
+      name,
+      sortOrder: index,
+      data: raw ? ({ ...raw, id: s.key, name } as Record<string, unknown>) : null,
+    };
+  });
+  // Новый лист без данных — браузер прислал не всё.
+  if (incoming.some((s) => !storedByKey.has(s.key) && !s.data)) return { error: "bad_sheets" };
+
+  const dataChanged = new Set(
+    incoming
+      .filter((s) => s.data && storedJson.get(s.key) !== stableJson(s.data))
+      .map((s) => s.key),
+  );
+  const metaChanged = incoming.filter((s) => {
+    const old = storedByKey.get(s.key);
+    return old && (old.name !== s.name || old.sortOrder !== s.sortOrder);
+  });
+  const obsoleteIds = budget.sheets
+    .filter((s) => !keySet.has(s.sheetKey) && s.id !== budget.mainSheetId)
+    .map((s) => s.id);
+  const stylesChanged =
+    input.styles !== undefined && stableJson(budget.styles ?? {}) !== stableJson(input.styles);
+
+  if (dataChanged.size === 0 && metaChanged.length === 0 && obsoleteIds.length === 0 && !stylesChanged) {
+    return {
+      budgetId: budget.id,
+      updatedAt: budget.updatedAt.toISOString(),
+      revision: budget.revision,
+      checks: null,
+      changes: null,
+      status: budget.status,
+      statusChange: null,
+    };
+  }
+
+  // Разбор и проверки по проекту — только чтение, до блокировки и только при правке основного листа.
+  const mainData = mainKey && dataChanged.has(mainKey)
+    ? incoming.find((s) => s.key === mainKey)!.data
+    : null;
+  const analysis = mainData
+    ? await analyzeWithProject(prisma, projectId, departmentId, mainData)
+    : null;
+
+  try {
+    return await prisma.$transaction(
+      async (tx) => {
+        if ((await lockBudget(tx, budget.id)) !== input.baseRevision) {
+          throw new BudgetConflictError();
+        }
+
+        if (obsoleteIds.length) {
+          await tx.budgetSheet.deleteMany({
+            where: { budgetId: budget.id, id: { in: obsoleteIds } },
+          });
+        }
+
+        for (const sheet of incoming) {
+          const old = storedByKey.get(sheet.key);
+          if (!old) {
+            await tx.budgetSheet.create({
+              data: {
+                budgetId: budget.id,
+                sheetKey: sheet.key,
+                name: sheet.name,
+                sortOrder: sheet.sortOrder,
+                data: { create: { data: sheet.data as Prisma.InputJsonValue } },
+              },
+            });
+          } else if (dataChanged.has(sheet.key)) {
+            const data = sheet.data as Prisma.InputJsonValue;
+            await tx.budgetSheet.update({
+              where: { id: old.id, budgetId: budget.id },
+              data: {
+                name: sheet.name,
+                sortOrder: sheet.sortOrder,
+                data: { upsert: { create: { data }, update: { data } } },
+              },
+            });
+          } else if (old.name !== sheet.name || old.sortOrder !== sheet.sortOrder) {
+            await tx.budgetSheet.update({
+              where: { id: old.id, budgetId: budget.id },
+              data: { name: sheet.name, sortOrder: sheet.sortOrder },
+            });
+          }
+        }
+
+        // Сломанные заголовки — статьи остаются как были.
+        const changes =
+          analysis && !analysis.broken
+            ? await syncItems(tx, projectId, departmentId, analysis.items, analysis.factCodes)
+            : null;
+
+        const status = statusAfterEdit(budget.status);
+        const saved = await tx.budget.update({
+          where: { id: budget.id },
+          data: {
+            ...(stylesChanged ? { styles: input.styles as Prisma.InputJsonValue } : {}),
+            revision: { increment: 1 },
+            ...status.data,
+          },
+          select: { updatedAt: true, revision: true, status: true },
+        });
+
+        return {
+          budgetId: budget.id,
+          updatedAt: saved.updatedAt.toISOString(),
+          revision: saved.revision,
+          checks: analysis?.checks ?? null,
+          changes: changes && hasChanges(changes) ? changes : null,
+          status: saved.status,
+          statusChange: status.change,
+        };
+      },
+      { timeout: 20_000 },
+    );
+  } catch (error) {
+    if (error instanceof BudgetConflictError) return { error: "conflict" };
+    throw error;
+  }
+}
+
+export type ImportedSheet = { name: string; data: Record<string, unknown> };
+
+/** Имена листов книги и ревизия — импорт подбирает свободные имена до записи. */
+export async function getBudgetSheetNames(projectId: string, departmentId: string) {
+  const budget = await prisma.budget.findFirst({
+    where: { projectId, departmentId },
+    select: { id: true, revision: true, sheets: { select: { name: true } } },
+  });
+  return budget
+    ? { id: budget.id, revision: budget.revision, names: budget.sheets.map((s) => s.name) }
+    : null;
+}
+
+export type AppendSheetsResult =
+  | { error: "not_found" | "conflict" | "too_many_sheets" }
+  | {
+      error?: undefined;
+      budgetId: string;
+      revision: number;
+      status: BudgetStatus;
+      statusChange: SaveStatusChange;
+    };
+
+/**
+ * Добавить листы-черновики из импорта в конец книги цеха. Основной лист и остальные листы
+ * не трогаются, стили импорта дописываются к стилям книги. Под блокировкой, с проверкой
+ * ревизии, как обычное сохранение: имена, подобранные при той же ревизии, ещё свободны.
+ */
+export async function appendImportedSheets(
+  projectId: string,
+  departmentId: string,
+  input: { baseRevision: number; sheets: ImportedSheet[]; styles: Record<string, unknown> },
+): Promise<AppendSheetsResult> {
   const found = await prisma.budget.findFirst({
     where: { projectId, departmentId },
     select: { id: true },
   });
   if (!found) return { error: "not_found" };
-  if (snapshot.id !== found.id) return { error: "not_draft" };
 
-  const split = splitWorkbookToSheets(snapshot);
-  const keys = split.sheets.map((s) => s.id);
-  if (
-    keys.length === 0 ||
-    keys.length > MAX_SHEETS ||
-    new Set(keys).size !== keys.length ||
-    keys.some((k) => !SHEET_KEY.test(k))
-  ) {
-    return { error: "bad_sheets" };
-  }
-
-  return prisma.$transaction(
-    async (tx) => {
-      await lockBudget(tx, found.id);
-      const budget = await tx.budget.findUniqueOrThrow({
-        where: { id: found.id },
-        select: {
-          id: true,
-          mainSheetId: true,
-          status: true,
-          revision: true,
-          updatedAt: true,
-          styles: true,
-          sheets: {
-            select: {
-              id: true,
-              sheetKey: true,
-              name: true,
-              sortOrder: true,
-              data: { select: { data: true } },
-            },
-          },
-        },
-      });
-
-      const existingByKey = new Map(budget.sheets.map((s) => [s.sheetKey, s.id]));
-      const mainKey = budget.sheets.find((s) => s.id === budget.mainSheetId)?.sheetKey ?? null;
-      const incoming = new Set(keys);
-      const obsoleteIds = budget.sheets
-        .filter((s) => !incoming.has(s.sheetKey) && s.id !== budget.mainSheetId)
-        .map((s) => s.id);
-      const mainSheet = mainKey ? split.sheets.find((s) => s.id === mainKey) : undefined;
-
-      const analysis = await analyzeWithProject(
-        tx,
-        projectId,
-        departmentId,
-        mainSheet?.data ?? null,
-      );
-
-      if (sameWorkbook(budget, split)) {
-        return {
-          budgetId: budget.id,
-          updatedAt: budget.updatedAt.toISOString(),
-          revision: budget.revision,
-          checks: analysis.checks,
-          changes: null,
-          status: budget.status,
-          statusChange: null,
-        };
-      }
-
-      if (obsoleteIds.length) {
-        await tx.budgetSheet.deleteMany({
-          where: { budgetId: budget.id, id: { in: obsoleteIds } },
+  try {
+    return await prisma.$transaction(
+      async (tx) => {
+        if ((await lockBudget(tx, found.id)) !== input.baseRevision) {
+          throw new BudgetConflictError();
+        }
+        const budget = await tx.budget.findUniqueOrThrow({
+          where: { id: found.id },
+          select: { status: true, styles: true, sheets: { select: { sortOrder: true } } },
         });
-      }
+        if (budget.sheets.length + input.sheets.length > MAX_SHEETS) {
+          return { error: "too_many_sheets" as const };
+        }
 
-      for (const sheet of split.sheets) {
-        const data = sheet.data as Prisma.InputJsonValue;
-        const sheetId = existingByKey.get(sheet.id);
-        if (sheetId) {
-          await tx.budgetSheet.update({
-            where: { id: sheetId, budgetId: budget.id },
-            data: {
-              name: sheet.name,
-              sortOrder: sheet.sortOrder,
-              data: { upsert: { create: { data }, update: { data } } },
-            },
-          });
-        } else {
+        let sortOrder = budget.sheets.reduce((max, s) => Math.max(max, s.sortOrder), -1);
+        for (const sheet of input.sheets) {
+          const key = `sheet-${randomUUID().slice(0, 8)}`;
           await tx.budgetSheet.create({
             data: {
-              budgetId: budget.id,
-              sheetKey: sheet.id,
+              budgetId: found.id,
+              sheetKey: key,
               name: sheet.name,
-              sortOrder: sheet.sortOrder,
-              data: { create: { data } },
+              sortOrder: ++sortOrder,
+              data: {
+                create: {
+                  data: { ...sheet.data, id: key, name: sheet.name } as Prisma.InputJsonValue,
+                },
+              },
             },
           });
         }
-      }
 
-      // Сломанные заголовки или нет основного листа — статьи остаются как были.
-      const changes = analysis.broken
-        ? null
-        : await syncItems(tx, projectId, departmentId, analysis.items, analysis.factCodes);
-
-      const statusChange: SaveStatusChange =
-        budget.status === BudgetStatus.SUBMITTED
-          ? "changed_after_submit"
-          : budget.status === BudgetStatus.APPROVED
-            ? "draft_after_approve"
-            : null;
-
-      const saved = await tx.budget.update({
-        where: { id: budget.id },
-        data: {
-          styles: split.styles as Prisma.InputJsonValue,
-          revision: { increment: 1 },
-          ...(statusChange === "changed_after_submit"
-            ? { status: BudgetStatus.DRAFT, changedAfterSubmitAt: new Date() }
-            : statusChange === "draft_after_approve"
-              ? { status: BudgetStatus.DRAFT }
-              : {}),
-        },
-        select: { updatedAt: true, revision: true, status: true },
-      });
-
-      return {
-        budgetId: budget.id,
-        updatedAt: saved.updatedAt.toISOString(),
-        revision: saved.revision,
-        checks: analysis.checks,
-        changes: changes && hasChanges(changes) ? changes : null,
-        status: saved.status,
-        statusChange,
-      };
-    },
-    { timeout: 20_000 },
-  );
+        const status = statusAfterEdit(budget.status);
+        const stored =
+          budget.styles && typeof budget.styles === "object"
+            ? (budget.styles as Record<string, unknown>)
+            : {};
+        const saved = await tx.budget.update({
+          where: { id: found.id },
+          data: {
+            styles: { ...stored, ...input.styles } as Prisma.InputJsonValue,
+            revision: { increment: 1 },
+            ...status.data,
+          },
+          select: { revision: true, status: true },
+        });
+        return {
+          budgetId: found.id,
+          revision: saved.revision,
+          status: saved.status,
+          statusChange: status.change,
+        };
+      },
+      { timeout: 20_000 },
+    );
+  } catch (error) {
+    if (error instanceof BudgetConflictError) return { error: "conflict" };
+    throw error;
+  }
 }
 
 export async function setBudgetSheetPinned(

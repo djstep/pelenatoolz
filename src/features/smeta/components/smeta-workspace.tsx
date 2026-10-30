@@ -44,7 +44,8 @@ export function SmetaWorkspace({
   title?: string;
 }) {
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    // Узкий экран: страница прокручивается, и без минимальной высоты листу не остаётся места.
+    <div className="flex min-h-[640px] flex-1 flex-col lg:min-h-0">
       <SmetaSpreadsheetEditor
         key={budget.id}
         projectId={projectId}

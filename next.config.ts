@@ -9,6 +9,13 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ["sql.js"],
   // Только для `next dev`: второй аккаунт открывается на 127.0.0.1 (отдельные куки входа).
   allowedDevOrigins: ["127.0.0.1"],
+  experimental: {
+    serverActions: {
+      // Смета больше 1 МБ и импорт Excel (раздел 6 аудита). Не выше 4,5 МБ — потолок
+      // тела запроса у Vercel.
+      bodySizeLimit: "4mb",
+    },
+  },
   transpilePackages: [
     "@univerjs/presets",
     "@univerjs/preset-sheets-core",

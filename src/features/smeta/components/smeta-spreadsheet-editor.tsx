@@ -4,9 +4,11 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import {
+  importBudgetExcelAction,
   saveDepartmentBudgetAction,
   toggleBudgetSheetPinnedAction,
 } from "@/features/smeta/actions";
+import { SAVE_BODY_LIMIT_BYTES, stableJson } from "@/features/smeta/lib/stable-json";
 import type { BudgetClient } from "@/features/smeta/queries";
 import {
   HEADER_ROW,
@@ -40,8 +42,9 @@ import { formatDateShort } from "@/shared/i18n/format-date";
 import { cn } from "@/shared/lib/cn";
 import { Button } from "@/shared/ui/button";
 import { useToast } from "@/shared/ui/toast";
+import { useUnsavedChanges } from "@/shared/ui/unsaved/unsaved-changes-provider";
 
-type SaveStatus = "idle" | "dirty" | "saving" | "saved" | "error";
+type SaveStatus = "idle" | "dirty" | "saving" | "saved" | "error" | "conflict";
 
 type IRange = {
   startRow: number;
@@ -114,12 +117,125 @@ type UniverAPI = {
     SheetCreated?: unknown;
     SheetDeleted?: unknown;
     BeforeSheetDelete?: unknown;
-    SheetValueChanged?: unknown;
   };
   Enum?: { RangePermissionPoint?: Record<string, string> };
 };
 
+/** Событие Univer CommandExecuted: команда, операция или мутация. */
+type CommandEvent = {
+  id?: string;
+  params?: unknown;
+  options?: { onlyLocal?: boolean; fromCollab?: boolean };
+};
+
 const AUTOSAVE_MS = 2500;
+
+const SET_RANGE_VALUES = "sheet.mutation.set-range-values";
+
+/**
+ * Мутации Univer, которые меняют сохраняемые данные книги, — только они ставят
+ * автосохранение. Выделение, прокрутка, масштаб, смена листа — операции, не мутации,
+ * и сюда не попадают. Пересчёт формул и служебные записи Univer помечает `onlyLocal` —
+ * они пропускаются. Отмена и повтор проигрывают эти же мутации.
+ */
+const SAVE_MUTATIONS = new Set([
+  // значения, формулы, стили ячеек, формат чисел, сортировка
+  SET_RANGE_VALUES,
+  "sheet.mutation.move-range",
+  "sheet.mutation.reorder-range",
+  "sheet.mutation.set.numfmt",
+  "sheet.mutation.remove.numfmt",
+  // строки и колонки
+  "sheet.mutation.insert-row",
+  "sheet.mutation.insert-col",
+  "sheet.mutation.remove-rows",
+  "sheet.mutation.remove-col",
+  "sheet.mutation.move-rows",
+  "sheet.mutation.move-columns",
+  "sheet.mutation.set-row-hidden",
+  "sheet.mutation.set-row-visible",
+  "sheet.mutation.set-col-hidden",
+  "sheet.mutation.set-col-visible",
+  "sheet.mutation.set-worksheet-row-count",
+  "sheet.mutation.set-worksheet-column-count",
+  // объединения
+  "sheet.mutation.add-worksheet-merge",
+  "sheet.mutation.remove-worksheet-merge",
+  // ширина и высота
+  "sheet.mutation.set-worksheet-col-width",
+  "sheet.mutation.set-worksheet-row-height",
+  "sheet.mutation.set-worksheet-row-is-auto-height",
+  // стили строк, колонок и листа, метки строк (smetaNoAutoCode)
+  "sheet.mutation.set-row-data",
+  "sheet.mutation.set-col-data",
+  "sheet.mutation.set-worksheet-default-style",
+  // листы
+  "sheet.mutation.insert-sheet",
+  "sheet.mutation.remove-sheet",
+  "sheet.mutation.set-worksheet-name",
+  "sheet.mutation.set-worksheet-order",
+  "sheet.mutation.set-tab-color",
+  "sheet.mutation.set-worksheet-hidden",
+  // закрепление и сетка
+  "sheet.mutation.set-frozen",
+  "sheet.mutation.toggle-gridlines",
+  "sheet.mutation.set-gridlines-color",
+]);
+
+/** Мутации, после которых меняется список листов в навигаторе. */
+const SHEET_LIST_MUTATIONS = new Set([
+  "sheet.mutation.insert-sheet",
+  "sheet.mutation.remove-sheet",
+  "sheet.mutation.set-worksheet-name",
+  "sheet.mutation.set-worksheet-order",
+  "sheet.mutation.set-worksheet-hidden",
+]);
+
+/** Предупреждения импорта — показать после перезагрузки страницы. */
+const IMPORT_NOTICE_KEY = "smeta-import-notice";
+
+type WorkbookParts = {
+  workbookId: string;
+  order: { key: string; name: string }[];
+  orderJson: string;
+  sheets: Map<string, { data: Record<string, unknown>; json: string }>;
+  styles: Record<string, unknown>;
+  stylesJson: string;
+};
+
+/** Книга Univer по частям: листы со строкой для сравнения, порядок и имена, стили. */
+function workbookParts(snapshot: Record<string, unknown>): WorkbookParts {
+  const raw = (snapshot.sheets ?? {}) as Record<string, Record<string, unknown>>;
+  const keys = Array.isArray(snapshot.sheetOrder)
+    ? (snapshot.sheetOrder as string[])
+    : Object.keys(raw);
+  const sheets = new Map<string, { data: Record<string, unknown>; json: string }>();
+  const order = keys.map((key) => {
+    const data = raw[key] ?? {};
+    sheets.set(key, { data, json: stableJson(data) });
+    return { key, name: typeof data.name === "string" ? data.name : "" };
+  });
+  const styles = (snapshot.styles ?? {}) as Record<string, unknown>;
+  return {
+    workbookId: String(snapshot.id ?? ""),
+    order,
+    orderJson: JSON.stringify(order),
+    sheets,
+    styles,
+    stylesJson: stableJson(styles),
+  };
+}
+
+/** Что последний раз ушло на сервер (или было при открытии). */
+type Baseline = { sheets: Map<string, string>; orderJson: string; stylesJson: string };
+
+function baselineOf(parts: WorkbookParts): Baseline {
+  return {
+    sheets: new Map([...parts.sheets].map(([key, s]) => [key, s.json])),
+    orderJson: parts.orderJson,
+    stylesJson: parts.stylesJson,
+  };
+}
 
 const HIGHLIGHT_STYLE = {
   strokeWidth: 1,
@@ -198,7 +314,23 @@ export function SmetaSpreadsheetEditor({
   const univerRef = useRef<{ dispose: () => void } | null>(null);
   const apiRef = useRef<UniverAPI | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Есть правки, которые ещё не ушли на сервер (в т.ч. после ошибки сохранения). */
+  const dirtyRef = useRef(false);
+  /** Идущее сохранение: пока оно идёт, новые правки сливаются в одно следующее. */
+  const inFlightRef = useRef<Promise<number | null> | null>(null);
+  const againRef = useRef(false);
+  /** Ревизия, от которой правит эта вкладка. */
+  const revisionRef = useRef(budget.revision);
+  const baselineRef = useRef<Baseline | null>(null);
+  const conflictRef = useRef(false);
   const [status, setStatus] = useState<SaveStatus>("idle");
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [importNotice, setImportNotice] = useState<{ sheets: string[]; warnings: string[] } | null>(
+    null,
+  );
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const unsaved = useUnsavedChanges();
   const [savedAt, setSavedAt] = useState(budget.updatedAt);
   const [checks, setChecks] = useState<SmetaCheck[]>(initialChecks);
   const [missingHeaders, setMissingHeaders] = useState<string[]>([]);
@@ -318,40 +450,102 @@ export function SmetaSpreadsheetEditor({
     }
   }
 
-  function scheduleSave() {
-    if (!canWriteRef.current || applyingRef.current) return;
-    setStatus("dirty");
+  /** Правка данных книги: сохранить через паузу после последней правки. */
+  function markDirty() {
+    if (!canWriteRef.current || conflictRef.current) return;
+    dirtyRef.current = true;
+    // После ошибки плашка «Не сохранено» остаётся до удачного сохранения.
+    if (!inFlightRef.current) setStatus((prev) => (prev === "error" ? prev : "dirty"));
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
       void flushSave();
     }, AUTOSAVE_MS);
   }
 
-  /** Сохранить книгу. Возвращает ревизию после сохранения или null, если не сохранилось. */
-  async function flushSave(): Promise<number | null> {
-    if (!canWriteRef.current) return null;
-    if (saveTimer.current) {
-      clearTimeout(saveTimer.current);
-      saveTimer.current = null;
-    }
-    const api = apiRef.current;
-    const active = api?.getActiveWorkbook?.();
+  /** Книга сейчас как она есть в Univer. */
+  function currentParts(): WorkbookParts | null {
+    const active = apiRef.current?.getActiveWorkbook?.();
     if (!active) return null;
-    let snapshot: Record<string, unknown>;
     try {
-      snapshot = active.save();
+      return workbookParts(active.save());
     } catch {
       return null;
     }
-    setStatus("saving");
-    const result = await saveDepartmentBudgetAction(projectId, department.id, {
-      data: snapshot,
-    });
-    if (result.error !== undefined) {
+  }
+
+  /** Смету сохранили из другого окна: дальше не сохраняем, лист — только просмотр. */
+  function enterConflict() {
+    conflictRef.current = true;
+    dirtyRef.current = false;
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    setStatus("conflict");
+    void apiRef.current
+      ?.getActiveWorkbook?.()
+      ?.getWorkbookPermission?.()
+      .setReadOnly()
+      .catch(() => undefined);
+  }
+
+  /**
+   * Одно сохранение: на сервер уходят только листы, которые отличаются от последнего
+   * отправленного, порядок и имена всех листов и стили — если изменились. Ничего не
+   * изменилось — запроса нет. Возвращает ревизию или null, если не сохранилось.
+   */
+  async function saveOnce(): Promise<number | null> {
+    const parts = currentParts();
+    if (!parts) return null;
+    const base = baselineRef.current;
+    const sheets: Record<string, Record<string, unknown>> = {};
+    for (const [key, sheet] of parts.sheets) {
+      if (base?.sheets.get(key) !== sheet.json) sheets[key] = sheet.data;
+    }
+    const stylesChanged = base?.stylesJson !== parts.stylesJson;
+    dirtyRef.current = false;
+    if (Object.keys(sheets).length === 0 && base?.orderJson === parts.orderJson && !stylesChanged) {
+      setStatus((prev) => (prev === "idle" ? "idle" : "saved"));
+      setSaveError(null);
+      return revisionRef.current;
+    }
+
+    const payload = {
+      workbookId: parts.workbookId,
+      baseRevision: revisionRef.current,
+      order: parts.order,
+      sheets,
+      ...(stylesChanged ? { styles: parts.styles } : {}),
+    };
+    if (new Blob([JSON.stringify(payload)]).size > SAVE_BODY_LIMIT_BYTES) {
+      dirtyRef.current = true;
       setStatus("error");
-      toast.error(result.error);
+      setSaveError(
+        "изменённые листы больше 4 МБ — так много за одно сохранение не уходит. Разделите большой лист на несколько.",
+      );
       return null;
     }
+
+    setStatus((prev) => (prev === "error" ? prev : "saving"));
+    let result: Awaited<ReturnType<typeof saveDepartmentBudgetAction>>;
+    try {
+      result = await saveDepartmentBudgetAction(projectId, department.id, payload);
+    } catch {
+      dirtyRef.current = true;
+      setStatus("error");
+      setSaveError("нет связи с сервером.");
+      return null;
+    }
+    if (result.error !== undefined) {
+      if (result.conflict) {
+        enterConflict();
+        return null;
+      }
+      dirtyRef.current = true;
+      setStatus("error");
+      setSaveError(result.error);
+      return null;
+    }
+
+    baselineRef.current = baselineOf(parts);
+    revisionRef.current = result.revision;
     // Правка во время утверждения или после него — смета снова черновик (решает сервер).
     setApprovalInfo((prev) =>
       prev && prev.status !== result.status
@@ -364,22 +558,136 @@ export function SmetaSpreadsheetEditor({
         : prev,
     );
     setSavedAt(result.updatedAt);
-    setChecks(result.checks);
-    usedCodesRef.current = new Set(result.usedCodes.map(normalizeCode));
-    setStatus("saved");
+    setSaveError(null);
+    if (result.checks) {
+      setChecks(result.checks);
+      applyHighlights(result.checks);
+    }
+    if (result.usedCodes) usedCodesRef.current = new Set(result.usedCodes.map(normalizeCode));
+    setStatus(dirtyRef.current ? "dirty" : "saved");
     syncSheetsFromApi();
     refreshMissingHeaders();
-    applyHighlights(result.checks);
     return result.revision;
   }
+
+  /**
+   * Сохранить сейчас. Сохранения не копятся в очередь: если одно уже идёт, следующее
+   * пройдёт сразу после него одно на все правки, а вызвавший получит его итог.
+   * Возвращает ревизию после сохранения или null, если не сохранилось.
+   */
+  function flushSave(): Promise<number | null> {
+    if (!canWriteRef.current || conflictRef.current) return Promise.resolve(null);
+    if (saveTimer.current) {
+      clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+    }
+    if (inFlightRef.current) {
+      againRef.current = true;
+      return inFlightRef.current;
+    }
+    const run = (async () => {
+      let revision: number | null = null;
+      try {
+        do {
+          againRef.current = false;
+          revision = await saveOnce();
+        } while (revision !== null && againRef.current);
+      } finally {
+        inFlightRef.current = null;
+      }
+      return revision;
+    })();
+    inFlightRef.current = run;
+    return run;
+  }
+
+  const flushSaveRef = useRef(flushSave);
+  flushSaveRef.current = flushSave;
+
+  // Несохранённые правки и идущее сохранение — в общем механизме: предупреждение браузера
+  // при закрытии вкладки и вопрос при переходе по ссылке. Только черновик у главы цеха.
+  useEffect(() => {
+    if (mode !== "draft" || !canWrite) return;
+    return unsaved.register(
+      () => !conflictRef.current && (dirtyRef.current || inFlightRef.current !== null),
+      async () => (await flushSaveRef.current()) !== null && !dirtyRef.current,
+    );
+  }, [mode, canWrite, unsaved]);
+
+  /** Импорт .xlsx: досохранить правки, отправить файл, перезагрузить книгу с новыми листами. */
+  async function importExcel(file: File) {
+    if (/\.xls$/i.test(file.name)) {
+      toast.error("Старый формат .xls не поддерживается — сохраните файл как .xlsx");
+      return;
+    }
+    if (!/\.xlsx$/i.test(file.name)) {
+      toast.error("Нужен файл Excel в формате .xlsx");
+      return;
+    }
+    if (file.size > 3.5 * 1024 * 1024) {
+      toast.error("Файл больше 3,5 МБ — такой не импортируется");
+      return;
+    }
+    setImporting(true);
+    try {
+      const revision = await flushSave();
+      if (revision === null || dirtyRef.current) {
+        toast.error("Сначала должны сохраниться правки — импорт не начат");
+        return;
+      }
+      const form = new FormData();
+      form.set("file", file);
+      form.set("baseRevision", String(revision));
+      const result = await importBudgetExcelAction(projectId, department.id, form);
+      if (result.error !== undefined) {
+        if (result.conflict) enterConflict();
+        else toast.error(result.error);
+        return;
+      }
+      try {
+        sessionStorage.setItem(
+          IMPORT_NOTICE_KEY,
+          JSON.stringify({ budgetId: budget.id, sheets: result.sheets, warnings: result.warnings }),
+        );
+      } catch {
+        /* без предупреждений после перезагрузки */
+      }
+      // Книга в браузере устарела (новые листы, новая ревизия) — загрузить заново.
+      window.location.reload();
+    } catch {
+      toast.error("Не удалось отправить файл — проверьте связь и повторите");
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(IMPORT_NOTICE_KEY);
+      if (!raw) return;
+      sessionStorage.removeItem(IMPORT_NOTICE_KEY);
+      const notice = JSON.parse(raw) as { budgetId?: string; sheets?: string[]; warnings?: string[] };
+      if (notice.budgetId !== budget.id) return;
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- sessionStorage есть только в браузере
+      setImportNotice({ sheets: notice.sheets ?? [], warnings: notice.warnings ?? [] });
+    } catch {
+      /* ignore */
+    }
+  }, [budget.id]);
 
   /**
    * Автокод: в строке основного листа появилась Ставка (значение или формула), кода нет
    * и глава его не стирал. Тогда ставим следующий код и формулы Сумма, Налог, Итого
    * (только в пустые ячейки). Стёр код сам — строка помечается, автокод больше не ставится.
+   * Строки и колонки — из самой мутации записи значений (ячейки `cellValue`).
    */
-  function onMainValuesChanged(ranges: FRange[]) {
+  function onMainValuesChanged(params: unknown) {
     if (!canWriteRef.current || applyingRef.current || !mainKey) return;
+    const p = params as {
+      subUnitId?: string;
+      cellValue?: Record<string, Record<string, unknown> | null | undefined>;
+    } | null;
+    if (p?.subUnitId !== mainKey || !p.cellValue) return;
     const sheet = mainSheet();
     if (!sheet) return;
     const found = liveColumns(sheet);
@@ -387,17 +695,14 @@ export function SmetaSpreadsheetEditor({
     const cols = found.columns as MainColumns;
 
     const touched = new Map<number, { code: boolean; rate: boolean }>();
-    for (const range of ranges) {
-      if (range.getSheetId?.() !== mainKey) continue;
-      const r = range.getRange();
-      const hits = (c: number) => r.startColumn <= c && c <= r.endColumn;
-      for (let row = Math.max(r.startRow, HEADER_ROW + 1); row <= r.endRow; row++) {
-        const prev = touched.get(row) ?? { code: false, rate: false };
-        touched.set(row, {
-          code: prev.code || hits(cols.code),
-          rate: prev.rate || hits(cols.rate) || hits(cols.quantity),
-        });
-      }
+    for (const [rowKey, rowCells] of Object.entries(p.cellValue)) {
+      const row = Number(rowKey);
+      if (!Number.isInteger(row) || row <= HEADER_ROW || !rowCells) continue;
+      const columns = new Set(Object.keys(rowCells).map(Number));
+      touched.set(row, {
+        code: columns.has(cols.code),
+        rate: columns.has(cols.rate) || columns.has(cols.quantity),
+      });
     }
     if (touched.size === 0) return;
 
@@ -451,7 +756,6 @@ export function SmetaSpreadsheetEditor({
     } finally {
       applyingRef.current = false;
     }
-    scheduleSave();
   }
 
   /** Дописать недостающие заголовки в первые свободные колонки справа. */
@@ -468,7 +772,7 @@ export function SmetaSpreadsheetEditor({
       }
       toast.success("Заголовки восстановлены");
       refreshMissingHeaders();
-      scheduleSave();
+      markDirty();
     } catch (err) {
       console.error("[smeta restore headers]", err);
       toast.error("Не удалось восстановить заголовки");
@@ -655,13 +959,19 @@ export function SmetaSpreadsheetEditor({
           }
         };
 
-        listen(api.Event?.CommandExecuted, () => {
-          scheduleSave();
-          syncSheetsFromApi();
-        });
-        listen(api.Event?.SheetValueChanged, (params) => {
-          const p = params as { effectedRanges?: FRange[] };
-          onMainValuesChanged(p.effectedRanges ?? []);
+        // Книга при открытии — точка отсчёта: сохраняется только то, что от неё отличается.
+        if (canWriteRef.current) {
+          const parts = currentParts();
+          if (parts) baselineRef.current = baselineOf(parts);
+        }
+
+        listen(api.Event?.CommandExecuted, (event) => {
+          const e = event as CommandEvent;
+          if (!e.id || !SAVE_MUTATIONS.has(e.id)) return;
+          if (e.options?.onlyLocal || e.options?.fromCollab) return;
+          if (e.id === SET_RANGE_VALUES) onMainValuesChanged(e.params);
+          markDirty();
+          if (SHEET_LIST_MUTATIONS.has(e.id)) syncSheetsFromApi();
         });
         listen(api.Event?.BeforeSheetDelete, (params) => {
           const p = params as { worksheet?: FWorksheet; cancel?: boolean };
@@ -773,7 +1083,7 @@ export function SmetaSpreadsheetEditor({
         sheet.setFrozenRows?.(r);
         sheet.setFrozenColumns?.(c);
       }
-      scheduleSave();
+      markDirty();
     } catch (err) {
       console.error("[smeta freeze]", err);
       toast.error("Не удалось закрепить области");
@@ -812,8 +1122,8 @@ export function SmetaSpreadsheetEditor({
       ? "Сохранение…"
       : status === "dirty"
         ? "Есть изменения…"
-        : status === "error"
-          ? "Ошибка сохранения"
+        : status === "error" || status === "conflict"
+          ? "Не сохранено"
           : status === "saved"
             ? `Сохранено ${formatDateShort(savedAt)}`
             : `Обновлено ${formatDateShort(savedAt)}`;
@@ -901,15 +1211,38 @@ export function SmetaSpreadsheetEditor({
             </span>
           ) : null}
           {canWrite ? (
-            <Button
-              type="button"
-              variant="secondary"
-              className="h-9"
-              disabled={pending || status === "saving"}
-              onClick={() => void flushSave()}
-            >
-              Сохранить
-            </Button>
+            <>
+              <Button
+                type="button"
+                variant="secondary"
+                className="h-9"
+                disabled={pending || status === "saving" || status === "conflict"}
+                onClick={() => void flushSave()}
+              >
+                Сохранить
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                className="h-9"
+                disabled={importing || status === "conflict"}
+                title="Листы файла .xlsx добавятся в книгу листами-черновиками. Основной лист не меняется."
+                onClick={() => fileInputRef.current?.click()}
+              >
+                {importing ? "Импорт…" : "Импорт Excel"}
+              </Button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                className="hidden"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  event.target.value = "";
+                  if (file) void importExcel(file);
+                }}
+              />
+            </>
           ) : (
             <span className="text-xs text-[var(--foreground)]/70">
               {mode === "version"
@@ -933,6 +1266,59 @@ export function SmetaSpreadsheetEditor({
       </header>
 
       {approvalInfo ? <SmetaApprovalBanner info={approvalInfo} /> : null}
+
+      {status === "conflict" ? (
+        <div
+          role="alert"
+          className="flex flex-wrap items-center gap-3 border-b border-[var(--border)] bg-[var(--row-danger)] px-4 py-2 text-sm"
+        >
+          <span>
+            <span className="font-medium">Смету изменили в другом окне — обновите.</span>{" "}
+            Несохранённые правки в этой вкладке пропадут.
+          </span>
+          <Button type="button" className="h-8" onClick={() => window.location.reload()}>
+            Обновить
+          </Button>
+        </div>
+      ) : status === "error" ? (
+        <div
+          role="alert"
+          className="flex flex-wrap items-center gap-3 border-b border-[var(--border)] bg-[var(--row-warning)] px-4 py-2 text-sm"
+        >
+          <span>
+            <span className="font-medium">Не сохранено:</span> {saveError ?? "ошибка сервера."}{" "}
+            Правки остаются в этой вкладке.
+          </span>
+          <Button type="button" variant="secondary" className="h-8" onClick={() => void flushSave()}>
+            Повторить
+          </Button>
+        </div>
+      ) : null}
+
+      {importNotice ? (
+        <div className="flex flex-wrap items-start gap-3 border-b border-[var(--border)] bg-[var(--row-neutral)] px-4 py-2 text-sm">
+          <div className="min-w-0 flex-1">
+            <div className="font-medium">
+              Импортированы листы: {importNotice.sheets.map((n) => `«${n}»`).join(", ")}
+            </div>
+            {importNotice.warnings.length > 0 ? (
+              <ul className="mt-1 list-disc space-y-0.5 pl-5 text-[var(--muted-fg)]">
+                {importNotice.warnings.map((w) => (
+                  <li key={w}>{w}</li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+          <Button
+            type="button"
+            variant="secondary"
+            className="h-8"
+            onClick={() => setImportNotice(null)}
+          >
+            Скрыть
+          </Button>
+        </div>
+      ) : null}
 
       {mode === "draft" ? (
         <SmetaChecksPanel
