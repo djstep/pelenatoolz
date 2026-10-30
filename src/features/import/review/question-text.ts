@@ -40,9 +40,44 @@ function blockText(subject: string) {
   return split(subject)[1];
 }
 
-export function questionTitle(q: NormalizeQuestion): string {
+/** Где используется сцена проекта: дни КПП и отчёты смен. */
+export function sceneUsage(scene: { shootDays: number[]; reportFacts: number }) {
+  const parts = [
+    scene.shootDays.length > 0 ? `в КПП: дни ${scene.shootDays.join(", ")}` : null,
+    scene.reportFacts > 0 ? `в отчётах смен: ${scene.reportFacts}` : null,
+  ].filter(Boolean);
+  return parts.length > 0 ? ` · ${parts.join(" · ")}` : " · в КПП и отчётах не используется";
+}
+
+/** Сцена проекта из `detail` вопроса сопоставления (там её id). */
+function projectScene(q: NormalizeQuestion, existing: ExistingRecords | undefined) {
+  const id = q.occurrences.find((o) => o.detail)?.detail;
+  return existing?.scenes?.find((s) => s.id === id) ?? null;
+}
+
+export function questionTitle(q: NormalizeQuestion, existing?: ExistingRecords): string {
   const [a, b] = pairMembers(q.subject) ?? [q.subject, ""];
   switch (q.type) {
+    case QUESTION_TYPES.sameScene: {
+      const scene = projectScene(q, existing);
+      return `${sceneRef(q)} «${q.subject}»: та же сцена, что сцена ${scene?.number ?? "?"} проекта («${scene?.heading ?? ""}»)?`;
+    }
+    case QUESTION_TYPES.restoreScene: {
+      const scene = projectScene(q, existing);
+      return `${sceneRef(q)} «${q.subject}»: сцена ${scene?.number ?? "?"} проекта вырезана — вернуть?`;
+    }
+    case QUESTION_TYPES.cutScene: {
+      const scene = projectScene(q, existing);
+      return `Сцены ${q.scene} «${scene?.heading ?? q.subject}» нет в новой версии — пометить вырезанной?${scene ? sceneUsage(scene) : ""}`;
+    }
+    case QUESTION_TYPES.numberTaken:
+      return /^п\d+$/.test(q.scene ?? "")
+        ? `${sceneRef(q)} «${q.subject}»: новая сцена без номера — какой номер дать в либретто?`
+        : `${sceneRef(q)} «${q.subject}»: номер уже занят в проекте — какой номер дать новой сцене?`;
+    case QUESTION_TYPES.unlinkCharacter:
+      return `${sceneRef(q)}: персонаж ${q.subject} есть в либретто, но нет в новой версии — убрать связь?`;
+    case QUESTION_TYPES.unlinkLocation:
+      return `${sceneRef(q)}: локация «${q.subject}» есть в либретто, но нет в новой версии — убрать связь?`;
     case QUESTION_TYPES.notScene:
       return `Шапка «${q.subject}» — сцена или примечание?`;
     case QUESTION_TYPES.timeMissing:
@@ -89,6 +124,25 @@ export function optionLabel(
   const detail = q.occurrences.find((o) => o.detail)?.detail;
   const [action, name] = split(option);
   switch (q.type) {
+    case QUESTION_TYPES.sameScene:
+    case QUESTION_TYPES.restoreScene: {
+      if (option === "new") return "Нет, это новая сцена";
+      const scene =
+        action === "scene"
+          ? existing.scenes?.find((s) => s.id === name)
+          : projectScene(q, existing);
+      const label = `сцена ${scene?.number ?? "?"} проекта`;
+      if (option === "restore") return `Вернуть: это ${label}`;
+      if (option === "same") return `Да, это ${label}`;
+      return `Это ${label} «${scene?.heading ?? ""}»${scene?.cut ? " (вырезана — вернётся)" : ""}`;
+    }
+    case QUESTION_TYPES.cutScene:
+      return option === "cut" ? "Пометить вырезанной" : "Оставить как есть";
+    case QUESTION_TYPES.numberTaken:
+      return `Номер ${detail ?? "—"}`;
+    case QUESTION_TYPES.unlinkCharacter:
+    case QUESTION_TYPES.unlinkLocation:
+      return option === "remove" ? "Убрать связь" : "Оставить";
     case QUESTION_TYPES.notScene:
       return option === "scene" ? "Сцена" : "Примечание, не сцена";
     case QUESTION_TYPES.timeMissing:
@@ -197,5 +251,9 @@ export function visibleOptions(q: NormalizeQuestion): string[] {
 
 /** Вопросы с номером сцены — можно ввести свой номер. */
 export function acceptsCustomNumber(q: NormalizeQuestion) {
-  return q.type === QUESTION_TYPES.numberMissing || q.type === QUESTION_TYPES.numberDuplicate;
+  return (
+    q.type === QUESTION_TYPES.numberMissing ||
+    q.type === QUESTION_TYPES.numberDuplicate ||
+    q.type === QUESTION_TYPES.numberTaken
+  );
 }

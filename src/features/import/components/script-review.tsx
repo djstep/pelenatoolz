@@ -1,6 +1,16 @@
 "use client";
 
-import { Fragment, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import {
+  Fragment,
+  startTransition,
+  useActionState,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { importScriptAction } from "@/features/import/actions";
 import {
   normalizeScript,
   QUESTION_TYPES,
@@ -8,7 +18,12 @@ import {
   type QuestionGroup,
 } from "@/features/import/normalize/normalize-script";
 import type { TitlePage } from "@/features/import/normalize/title-page";
-import { QuestionCard, SceneDiff } from "@/features/import/components/script-review-parts";
+import {
+  MissingScenes,
+  QuestionCard,
+  SceneDiff,
+  SceneMatchCell,
+} from "@/features/import/components/script-review-parts";
 import {
   GROUP_TITLES,
   NOTICE_TEXT,
@@ -16,11 +31,17 @@ import {
   visibleOptions,
 } from "@/features/import/review/question-text";
 import { previewTimings } from "@/features/import/review/timing";
-import { formatFileSize, type ScriptReviewData } from "@/features/import/review/types";
+import {
+  formatFileSize,
+  type ScriptImportState,
+  type ScriptReviewData,
+} from "@/features/import/review/types";
+import { blockingQuestions } from "@/features/import/write/plan";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
+import { useActionToast } from "@/shared/ui/toast/use-action-toast";
 import { useFormGuard } from "@/shared/ui/unsaved/use-form-guard";
 
 const GROUPS: QuestionGroup[] = ["title", "scenes", "characters", "locations", "blocks"];
@@ -36,16 +57,69 @@ const TITLE_FIELDS: { key: keyof Omit<TitlePage, "other" | "contacts">; label: s
 
 type TitleEdits = Partial<Record<(typeof TITLE_FIELDS)[number]["key"], string>>;
 
+/** Групповые ответы «да» там, где предложено «нет»: вырезать, вернуть, убрать связь. */
+const BULK_ANSWERS: { type: string; answer: string; label: string }[] = [
+  { type: QUESTION_TYPES.cutScene, answer: "cut", label: "Вырезать все" },
+  { type: QUESTION_TYPES.restoreScene, answer: "restore", label: "Вернуть все" },
+  { type: QUESTION_TYPES.unlinkCharacter, answer: "remove", label: "Убрать все связи" },
+  { type: QUESTION_TYPES.unlinkLocation, answer: "remove", label: "Убрать все связи" },
+];
+
+const initialImport: ScriptImportState = {};
+
 /**
- * Экран проверки импорта. Ничего не пишет: ответы и правки титульной живут в браузере,
- * нормализация пересчитывается здесь же на каждый ответ.
+ * Экран проверки импорта. До «Импортировать» ничего не пишет: ответы и правки титульной
+ * живут в браузере, нормализация пересчитывается здесь же на каждый ответ.
+ * «Импортировать» отправляет файл, ответы, правки титульной, хэш и id версии — сервер
+ * разбирает файл заново.
  */
-export function ScriptReview({ data }: { data: ScriptReviewData }) {
+export function ScriptReview({
+  projectId,
+  locale,
+  file,
+  data,
+}: {
+  projectId: string;
+  locale: string;
+  file: File;
+  data: ScriptReviewData;
+}) {
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [titleEdits, setTitleEdits] = useState<TitleEdits>({});
   const [openScene, setOpenScene] = useState<number | null>(null);
   const [timeForAll, setTimeForAll] = useState("");
-  const { ref: formRef } = useFormGuard<HTMLFormElement>(true, data.fileHash);
+  const [importState, importAction, importing] = useActionState(
+    importScriptAction.bind(null, projectId),
+    initialImport,
+  );
+  useActionToast(importState);
+  const router = useRouter();
+  const importedVersionId = importState.versionId;
+  const { ref: formRef } = useFormGuard<HTMLFormElement>(!importedVersionId, data.fileHash);
+
+  useEffect(() => {
+    if (importedVersionId) {
+      router.push(`/${locale}/projects/${projectId}/screenplay/${importedVersionId}`);
+    }
+  }, [importedVersionId, locale, projectId, router]);
+
+  // Второе нажатие до перерисовки кнопки не отправляется: его отказ затёр бы ответ первого.
+  const submitted = useRef(false);
+  useEffect(() => {
+    if (!importing && importState.error) submitted.current = false;
+  }, [importing, importState]);
+
+  function submitImport() {
+    if (submitted.current) return;
+    submitted.current = true;
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("fileHash", data.fileHash);
+    formData.append("currentVersionId", data.currentVersionId ?? "");
+    formData.append("answers", JSON.stringify(answers));
+    formData.append("titleEdits", JSON.stringify(titleEdits));
+    startTransition(() => importAction(formData));
+  }
 
   const result = useMemo(
     () =>
@@ -78,7 +152,7 @@ export function ScriptReview({ data }: { data: ScriptReviewData }) {
     });
 
   const byGroup = (group: QuestionGroup) => result.questions.filter((q) => q.group === group);
-  const requiredLeft = result.questions.filter((q) => q.required && !answers[q.code]).length;
+  const requiredLeft = blockingQuestions(result);
   const newCharacters = result.characters.filter((c) => !c.existingId).length;
   const newLocations = result.locations.filter((l) => !l.existing).length;
 
@@ -98,9 +172,24 @@ export function ScriptReview({ data }: { data: ScriptReviewData }) {
   const acceptAllControls = (questions: NormalizeQuestion[]) => {
     const simple = questions.filter((q) => q.acceptAll && q.type !== QUESTION_TYPES.timeMissing);
     const noTime = questions.filter((q) => q.type === QUESTION_TYPES.timeMissing);
-    if (simple.length === 0 && noTime.length === 0) return null;
+    const bulk = BULK_ANSWERS.flatMap((b) => {
+      const list = questions.filter((q) => q.type === b.type);
+      return list.length > 0 ? [{ ...b, list }] : [];
+    });
+    if (simple.length === 0 && noTime.length === 0 && bulk.length === 0) return null;
     return (
       <div className="flex flex-wrap items-center gap-3">
+        {bulk.map((b) => (
+          <Button
+            key={b.type}
+            type="button"
+            variant="secondary"
+            className="px-3 py-1.5 text-xs"
+            onClick={() => answerAll(b.list, () => b.answer)}
+          >
+            {b.label} ({b.list.length})
+          </Button>
+        ))}
         {simple.length > 0 ? (
           <Button
             type="button"
@@ -152,6 +241,15 @@ export function ScriptReview({ data }: { data: ScriptReviewData }) {
         </p>
         <div className="flex flex-wrap gap-2 text-sm">
           <Badge>Сцен: {result.scenes.length}</Badge>
+          <Badge>
+            Новых сцен: {result.sceneMatches.filter((m) => !m.existingId).length} · совпало{" "}
+            {result.sceneMatches.filter((m) => m.existingId).length}
+          </Badge>
+          {result.missingScenes.some((m) => !m.alreadyCut) ? (
+            <Badge>
+              Нет в новой версии: {result.missingScenes.filter((m) => !m.alreadyCut).length}
+            </Badge>
+          ) : null}
           <Badge>
             Персонажей: {result.characters.length} (новых {newCharacters})
           </Badge>
@@ -236,6 +334,7 @@ export function ScriptReview({ data }: { data: ScriptReviewData }) {
                     <tr className="border-b border-[var(--border)] text-[var(--muted-fg)]">
                       <th className="px-3 py-2">№</th>
                       <th className="px-3 py-2">Шапка</th>
+                      <th className="px-3 py-2">В проекте</th>
                       <th className="px-3 py-2">Персонажи</th>
                       <th className="px-3 py-2">Хрон.</th>
                       <th className="px-3 py-2" />
@@ -247,6 +346,12 @@ export function ScriptReview({ data }: { data: ScriptReviewData }) {
                         <tr className="border-b border-[var(--border)]/50 align-top">
                           <td className="px-3 py-2 font-medium">{scene.number ?? "—"}</td>
                           <td className="px-3 py-2">{scene.heading}</td>
+                          <td className="px-3 py-2">
+                            <SceneMatchCell
+                              match={result.sceneMatches[scene.index]}
+                              fileNumber={scene.number}
+                            />
+                          </td>
                           <td className="px-3 py-2">{scene.characters.join(", ")}</td>
                           <td className="px-3 py-2">{timings.scenes[i]?.label}</td>
                           <td className="px-3 py-2 text-right">
@@ -263,7 +368,7 @@ export function ScriptReview({ data }: { data: ScriptReviewData }) {
                         </tr>
                         {openScene === scene.index ? (
                           <tr>
-                            <td colSpan={5} className="p-3">
+                            <td colSpan={6} className="p-3">
                               <SceneDiff
                                 blocks={result.blocks.filter((b) => b.sceneIndex === scene.index)}
                               />
@@ -276,6 +381,8 @@ export function ScriptReview({ data }: { data: ScriptReviewData }) {
                 </table>
               </div>
             ) : null}
+
+            {group === "scenes" ? <MissingScenes missing={result.missingScenes} /> : null}
 
             {group === "characters" ? (
               <div className="flex flex-wrap gap-2">
@@ -318,11 +425,17 @@ export function ScriptReview({ data }: { data: ScriptReviewData }) {
       })}
 
       <div className="glass-card flex flex-wrap items-center gap-3 p-6">
-        <Button type="button" disabled>
-          Импортировать
+        <Button
+          type="button"
+          disabled={importing || requiredLeft > 0 || Boolean(importedVersionId)}
+          onClick={submitImport}
+        >
+          {importing ? "Импорт…" : "Импортировать"}
         </Button>
         <span className="text-xs text-[var(--muted-fg)]">
-          Запись в базу ещё не подключена (шаг 6 волны). Ответы и правки пока только на этом экране.
+          {requiredLeft > 0
+            ? `Сначала ответьте на обязательные вопросы: ${requiredLeft}.`
+            : "Создаст новую версию сценария и обновит либретто. Сцены, персонажи и локации проекта не удаляются."}
         </span>
       </div>
     </form>

@@ -27,7 +27,7 @@ function fileProblem(file: File) {
   return null;
 }
 
-export function ScriptImportScreen({ projectId }: { projectId: string }) {
+export function ScriptImportScreen({ projectId, locale }: { projectId: string; locale: string }) {
   const [state, action, pending] = useActionState(
     previewScriptImportAction.bind(null, projectId),
     initial,
@@ -68,7 +68,15 @@ export function ScriptImportScreen({ projectId }: { projectId: string }) {
         </div>
       </form>
 
-      {state.data ? <ScriptReview key={state.data.fileHash} data={state.data} /> : null}
+      {state.data && file ? (
+        <ScriptReview
+          key={state.data.fileHash}
+          projectId={projectId}
+          locale={locale}
+          file={file}
+          data={state.data}
+        />
+      ) : null}
     </div>
   );
 }

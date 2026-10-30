@@ -1,16 +1,29 @@
 "use server";
 
 import { createHash } from "crypto";
-import { classifyParagraphs } from "@/features/import/normalize/block-types";
+import { revalidatePath } from "next/cache";
+import { z } from "zod";
+import { classifyParagraphs, type BlockTypingResult } from "@/features/import/normalize/block-types";
 import { readDocxParagraphs } from "@/features/import/normalize/docx-paragraphs";
 import { isDocxReadError, type DocxReadErrorCode } from "@/features/import/normalize/docx-zip";
+import { normalizeScript } from "@/features/import/normalize/normalize-script";
 import { loadImportContext } from "@/features/import/review/load-context";
 import {
   formatMegabytes,
   SCRIPT_IMPORT_MAX_BYTES,
+  type ScriptImportState,
   type ScriptPreviewState,
 } from "@/features/import/review/types";
+import {
+  isScriptVersionConflictError,
+  writeScript,
+  type ScriptWriteInput,
+  type ScriptWriteResult,
+} from "@/features/import/write/apply";
+import { blockingQuestions, planImport } from "@/features/import/write/plan";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
+import { AuditEntityType } from "@/shared/audit/entity-types";
+import { auditMutation } from "@/shared/audit/with-audit";
 
 const DOCX_ERRORS: Record<DocxReadErrorCode, string> = {
   not_zip: "Это не файл Word (.docx). Сохраните сценарий в Word как .docx и загрузите снова.",
@@ -20,20 +33,16 @@ const DOCX_ERRORS: Record<DocxReadErrorCode, string> = {
   unsupported: "Файл .docx сжат неподдерживаемым способом. Пересохраните его в Word.",
 };
 
-/**
- * Предпросмотр импорта. Ничего не пишет в базу: разбирает файл, читает словарь и имена проекта,
- * отдаёт браузеру блоки с типами. Только с правом правки сценария.
- */
-export async function previewScriptImportAction(
-  projectId: string,
-  _prev: ScriptPreviewState,
-  formData: FormData,
-): Promise<ScriptPreviewState> {
-  const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:write")) {
-    return { error: "Импорт сценария доступен только с правом правки сценария" };
-  }
+const NO_RIGHTS = "Импорт сценария доступен только с правом правки сценария";
+const CHANGED =
+  "Сценарий проекта уже изменился (вторая вкладка или повторное нажатие). Обновите страницу и сделайте предпросмотр заново.";
 
+type ReadFile =
+  | { error: string }
+  | { file: File; hash: string; typing: BlockTypingResult };
+
+/** Файл из формы: размер, содержимое docx, типы блоков. Одинаково для предпросмотра и записи. */
+async function readScriptFile(formData: FormData): Promise<ReadFile> {
   const file = formData.get("file");
   if (!(file instanceof File) || file.size === 0) {
     return { error: "Выберите файл сценария .docx" };
@@ -45,7 +54,7 @@ export async function previewScriptImportAction(
   }
 
   const buffer = Buffer.from(await file.arrayBuffer());
-  let typing;
+  let typing: BlockTypingResult;
   try {
     typing = classifyParagraphs(readDocxParagraphs(buffer));
   } catch (error) {
@@ -58,15 +67,153 @@ export async function previewScriptImportAction(
         "В файле не найдено ни одной шапки сцены. Ожидается строка вида «1. ИНТ. КВАРТИРА — ДЕНЬ» или стиль Word «Заголовок сцены» / SCENE HEADING.",
     };
   }
+  return { file, hash: createHash("sha256").update(buffer).digest("hex"), typing };
+}
+
+/**
+ * Предпросмотр импорта. Ничего не пишет в базу: разбирает файл, читает словарь, имена
+ * и сцены проекта, отдаёт браузеру блоки с типами. Только с правом правки сценария.
+ */
+export async function previewScriptImportAction(
+  projectId: string,
+  _prev: ScriptPreviewState,
+  formData: FormData,
+): Promise<ScriptPreviewState> {
+  const ctx = await requireProjectContext(projectId);
+  if (!ctx.can("script:write")) return { error: NO_RIGHTS };
+
+  const read = await readScriptFile(formData);
+  if ("error" in read) return { error: read.error };
 
   const context = await loadImportContext(projectId);
   return {
     data: {
-      fileName: file.name,
-      fileSize: file.size,
-      fileHash: createHash("sha256").update(buffer).digest("hex"),
-      typing,
+      fileName: read.file.name,
+      fileSize: read.file.size,
+      fileHash: read.hash,
+      typing: read.typing,
       ...context,
     },
+  };
+}
+
+const answersSchema = z.record(z.string().max(500), z.string().max(500));
+const titleField = z.string().max(500).optional();
+const titleEditsSchema = z.object({
+  title: titleField,
+  subtitle: titleField,
+  author: titleField,
+  version: titleField,
+  date: titleField,
+  city: titleField,
+});
+
+function parseJson<T>(schema: z.ZodType<T>, value: FormDataEntryValue | null): T | null {
+  if (typeof value !== "string") return null;
+  try {
+    return schema.parse(JSON.parse(value));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * «Импортировать». От браузера — только файл, ответы по кодам вопросов, правки титульной,
+ * хэш файла и id версии с предпросмотра. Сервер разбирает файл заново и применяет ответы
+ * той же нормализацией; неизвестные коды ответов не используются.
+ */
+export async function importScriptAction(
+  projectId: string,
+  _prev: ScriptImportState,
+  formData: FormData,
+): Promise<ScriptImportState> {
+  const ctx = await requireProjectContext(projectId);
+  if (!ctx.can("script:write")) return { error: NO_RIGHTS };
+
+  const read = await readScriptFile(formData);
+  if ("error" in read) return { error: read.error };
+  if (read.hash !== formData.get("fileHash")) {
+    return { error: "Файл отличается от того, что был в предпросмотре. Сделайте предпросмотр заново." };
+  }
+  const answers = parseJson(answersSchema, formData.get("answers"));
+  const titleEdits = parseJson(titleEditsSchema, formData.get("titleEdits"));
+  if (!answers || !titleEdits || Object.keys(answers).length > 10_000) {
+    return { error: "Некорректные данные импорта" };
+  }
+  const expected = formData.get("currentVersionId");
+  const expectedVersionId = typeof expected === "string" && expected ? expected : null;
+
+  const context = await loadImportContext(projectId);
+  if (context.currentVersionId !== expectedVersionId) return { error: CHANGED };
+
+  const result = normalizeScript(read.typing, answers, {
+    dictionary: context.dictionary,
+    existing: context.existing,
+  });
+  const blocking = blockingQuestions(result);
+  if (blocking > 0) {
+    return {
+      error: `Без ответа обязательных вопросов: ${blocking}. Если вы на всё ответили — данные проекта изменились, сделайте предпросмотр заново.`,
+    };
+  }
+  const plan = planImport(result, answers, context.existing, context.timing, titleEdits);
+
+  const fileName = read.file.name;
+  const fileSize = read.file.size;
+  let written: ScriptWriteResult;
+  try {
+    written = await auditMutation(
+      ctx,
+      writeScript,
+      {
+        projectId,
+        userId: ctx.user.id!,
+        expectedVersionId,
+        version: { title: fileName.replace(/\.docx$/i, ""), sourceType: "IMPORTED_DOCX" },
+        plan,
+      } satisfies ScriptWriteInput,
+      {
+        projectId,
+        entityType: AuditEntityType.scriptVersion,
+        action: "CREATE",
+        entityId: (_input, r) => r.versionId,
+        // Без текста сценария и титульной (там бывают почты и телефоны).
+        summary: (_input, r) =>
+          `Импорт сценария: ${fileName}, версия ${r.versionNumber}; сцен создано ${r.scenesCreated}, привязано ${r.scenesMatched}`,
+        changes: (_input, r) => ({
+          file: { name: fileName, size: fileSize },
+          versionNumber: r.versionNumber,
+          scenes: {
+            created: r.scenesCreated,
+            matched: r.scenesMatched,
+            cut: r.scenesCut,
+            restored: r.scenesRestored,
+          },
+          characters: {
+            created: r.charactersCreated,
+            linked: result.characters.filter((c) => c.existingId).length,
+          },
+          locations: {
+            created: r.locationsCreated,
+            linked: result.locations.filter((l) => l.existing).length,
+          },
+          linksRemoved: r.linksRemoved,
+          dictionaryRules: r.rules,
+        }),
+      },
+    );
+  } catch (error) {
+    if (isScriptVersionConflictError(error)) return { error: CHANGED };
+    throw error;
+  }
+
+  revalidatePath(`/ru/projects/${projectId}/screenplay`);
+  revalidatePath(`/ru/projects/${projectId}/libretto`);
+  revalidatePath(`/ru/projects/${projectId}/script`);
+  revalidatePath(`/ru/projects/${projectId}/schedule`);
+  revalidatePath(`/ru/projects/${projectId}`);
+  return {
+    success: `Импортирована версия ${written.versionNumber}: сцен новых ${written.scenesCreated}, привязано ${written.scenesMatched}`,
+    versionId: written.versionId,
   };
 }

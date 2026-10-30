@@ -18,19 +18,6 @@ export async function listScriptBlocksForCurrentVersion(
   return listVersionBlocks(current.id);
 }
 
-export async function listScriptBlocksForVersion(
-  projectId: string,
-  versionId: string,
-  createdById: string,
-) {
-  const version = await getScriptVersion(projectId, versionId);
-  if (!version) return [];
-  if (version._count.blocks === 0) {
-    await bootstrapScriptBlocks(projectId, createdById, versionId);
-  }
-  return listVersionBlocks(versionId);
-}
-
 export type { ScriptVersionRow } from "@/features/screenplay/lib/version-types";
 export { versionLabel } from "@/features/screenplay/lib/version-label";
 export {

@@ -37,6 +37,7 @@ import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Select } from "@/shared/ui/select";
+import { useToast } from "@/shared/ui/toast";
 
 export type SceneEditData = {
   id: string;
@@ -168,6 +169,7 @@ export function SceneFormFields({
   readOnly?: boolean;
 }) {
   const router = useRouter();
+  const toast = useToast();
   const isEdit = Boolean(scene);
   const isSeries = projectType === ProjectType.SERIES;
   const [loadingScript, setLoadingScript] = useState(false);
@@ -330,6 +332,8 @@ export function SceneFormFields({
                     router.push(
                       `/${locale}/projects/${projectId}/screenplay/${result.versionId}?sceneId=${scene.id}`,
                     );
+                  } else if ("error" in result && result.error) {
+                    toast.error(result.error);
                   }
                 } finally {
                   setLoadingScript(false);

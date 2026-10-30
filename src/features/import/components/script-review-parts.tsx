@@ -6,10 +6,12 @@ import type {
   NormalizedBlock,
   NormalizeQuestion,
 } from "@/features/import/normalize/normalize-script";
+import type { MissingScene, SceneMatch } from "@/features/import/normalize/scene-match";
 import {
   acceptsCustomNumber,
   optionLabel,
   questionTitle,
+  sceneUsage,
   visibleOptions,
 } from "@/features/import/review/question-text";
 import { SCRIPT_BLOCK_LABELS } from "@/features/screenplay/lib/block-types";
@@ -58,7 +60,7 @@ export function QuestionCard({
       )}
     >
       <div className="flex flex-wrap items-start justify-between gap-2">
-        <p className="text-sm font-medium">{questionTitle(q)}</p>
+        <p className="text-sm font-medium">{questionTitle(q, existing)}</p>
         <div className="flex flex-wrap gap-1.5">
           {q.required ? (
             <Badge className="text-[var(--danger)]">нужен ответ</Badge>
@@ -108,6 +110,75 @@ export function QuestionCard({
           </label>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+/** Сопоставление сцены файла со сценой проекта. */
+export function SceneMatchCell({
+  match,
+  fileNumber,
+}: {
+  match: SceneMatch | undefined;
+  fileNumber: string | null;
+}) {
+  if (!match) return null;
+  if (!match.existingId) {
+    return (
+      <span className="text-[var(--tone-success-strong)]">
+        новая
+        {match.number && match.number !== fileNumber ? ` · номер ${match.number}` : ""}
+      </span>
+    );
+  }
+  return (
+    <div className="space-y-0.5">
+      <p>
+        {match.pending
+          ? "нужен ответ"
+          : match.status === "unchanged"
+            ? "совпала"
+            : match.headingChanged
+              ? "совпала, шапка изменилась"
+              : "совпала"}
+        {match.by === "heading" ? " (по шапке)" : ""}
+        {match.restore ? " · вернётся" : ""}
+      </p>
+      {match.number !== fileNumber ? (
+        <p className="text-[var(--muted-fg)]">в либретто — сцена {match.number}</p>
+      ) : null}
+      {match.headingChanged && match.previousHeading ? (
+        <p className="text-[var(--muted-fg)]">было: {match.previousHeading}</p>
+      ) : null}
+      {match.contentChanged ? (
+        <p className="text-[var(--tone-warning)]">хронометраж мог устареть</p>
+      ) : null}
+      {match.removeCharacterIds.length + match.removeLocationIds.length > 0 ? (
+        <p className="text-[var(--muted-fg)]">
+          связей убрать: {match.removeCharacterIds.length + match.removeLocationIds.length}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/** Сцены проекта, которых нет в новой версии: не удаляются, «вырезана» — только по ответу. */
+export function MissingScenes({ missing }: { missing: MissingScene[] }) {
+  if (missing.length === 0) return null;
+  return (
+    <div className="space-y-1 text-sm">
+      <p className="font-medium">Нет в новой версии ({missing.length})</p>
+      <ul className="space-y-1 text-xs">
+        {missing.map((m) => (
+          <li key={m.existingId}>
+            Сцена {m.number} «{m.heading}»
+            <span className="text-[var(--muted-fg)]">
+              {m.alreadyCut ? " · уже вырезана" : m.cut ? " · будет вырезана" : " · останется как есть"}
+              {sceneUsage(m)}
+            </span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

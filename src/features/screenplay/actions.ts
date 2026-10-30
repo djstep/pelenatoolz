@@ -1,6 +1,6 @@
 "use server";
 
-import { ScriptBlockType, TimingMode } from "@prisma/client";
+import { Prisma, ScriptBlockType, TimingMode } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import {
@@ -71,6 +71,7 @@ function parseBlocksJson(blocksJson: string) {
   return parsed.blocks as ScreenplayBlock[];
 }
 
+/** Только чтение: версию и блоки не создаёт (право — просмотр сценария). */
 export async function loadScreenplayBlocksAction(
   projectId: string,
   versionId?: string,
@@ -80,21 +81,65 @@ export async function loadScreenplayBlocksAction(
     return { error: "Недостаточно прав" as const };
   }
 
+  const version =
+    versionId != null
+      ? await getScriptVersion(projectId, versionId)
+      : await getCurrentScriptVersion(projectId);
+
+  if (!version) {
+    return {
+      error:
+        versionId != null
+          ? ("Версия не найдена" as const)
+          : ("Версий сценария пока нет — создайте первую на странице «Сценарий»" as const),
+    };
+  }
+
+  const blocks = await listVersionBlocks(version.id);
+  return { blocks, versionId: version.id };
+}
+
+/**
+ * Первая версия сценария из либретто — только кнопкой, с правом правки
+ * (раньше создавалась сама при открытии страницы версий).
+ */
+export async function createFirstScriptVersionAction(
+  projectId: string,
+): Promise<ScreenplayActionState> {
+  const ctx = await requireProjectContext(projectId);
+  if (!ctx.can("script:write")) {
+    return { error: "Недостаточно прав" };
+  }
+  if ((await prisma.scriptVersion.count({ where: { projectId } })) > 0) {
+    return { error: "Версия сценария уже есть" };
+  }
+
   const { ensureCurrentScriptVersion } = await import(
     "@/features/screenplay/lib/versions"
   );
   const { bootstrapScriptBlocks } = await import("@/features/screenplay/lib/sync");
-
-  const version =
-    versionId != null
-      ? await getScriptVersion(projectId, versionId)
-      : await ensureCurrentScriptVersion(projectId, ctx.user.id!);
-
-  if (!version) return { error: "Версия не найдена" as const };
-
+  let version: Awaited<ReturnType<typeof ensureCurrentScriptVersion>>;
+  try {
+    version = await ensureCurrentScriptVersion(projectId, ctx.user.id!);
+  } catch (error) {
+    // Двойное нажатие: вторая версия с тем же номером не создаётся.
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return { error: "Версия сценария уже есть" };
+    }
+    throw error;
+  }
   await bootstrapScriptBlocks(projectId, ctx.user.id!, version.id);
-  const blocks = await listVersionBlocks(version.id);
-  return { blocks, versionId: version.id };
+
+  await recordAudit(ctx, {
+    projectId,
+    entityType: AuditEntityType.scriptVersion,
+    entityId: version.id,
+    action: "CREATE",
+    summary: `Версия сценария ${version.versionNumber} создана из либретто`,
+  });
+
+  revalidateScreenplay(projectId);
+  return { success: "Создана первая версия сценария", versionId: version.id };
 }
 
 export async function saveScreenplayVersionAction(

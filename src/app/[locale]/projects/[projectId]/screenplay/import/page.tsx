@@ -34,7 +34,7 @@ export default async function ScreenplayImportPage({ params }: Props) {
           сценария.
         </p>
       </div>
-      <ScriptImportScreen projectId={projectId} />
+      <ScriptImportScreen projectId={projectId} locale={locale} />
     </div>
   );
 }

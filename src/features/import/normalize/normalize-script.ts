@@ -36,6 +36,16 @@ import {
   nextSceneNumber,
   toCyrillic,
 } from "@/features/import/normalize/text";
+import {
+  contentHash,
+  headingKey,
+  matchScenes,
+  sceneContent,
+  SCENE_QUESTION_TYPES,
+  type ExistingScene,
+  type MissingScene,
+  type SceneMatch,
+} from "@/features/import/normalize/scene-match";
 import { parseTitlePage, type TitlePage } from "@/features/import/normalize/title-page";
 
 /**
@@ -71,6 +81,8 @@ export const QUESTION_TYPES = {
   /** Имя совпало с несколькими записями проекта (старые дубли): к какой привязать. */
   recordCharacter: "запись-персонажа",
   recordLocation: "запись-локации",
+  /** Сопоставление с прошлой версией (шаг 6). */
+  ...SCENE_QUESTION_TYPES,
 } as const;
 
 export type QuestionType = (typeof QUESTION_TYPES)[keyof typeof QUESTION_TYPES];
@@ -123,6 +135,8 @@ export type ExistingRecords = {
   characters: readonly { id: string; name: string }[];
   /** Строки локаций: объект (`name`) и подобъект. */
   locations: readonly { id: string; name: string; sublocation: string | null }[];
+  /** Сцены проекта — для сопоставления с прошлой версией. */
+  scenes?: readonly ExistingScene[];
 };
 
 export type NormalizeContext = {
@@ -217,6 +231,10 @@ export type NormalizedScript = {
   appliedRules: AppliedRule[];
   /** Цель удалена или не из этого проекта — правило не применено. */
   staleRules: DictionaryRule[];
+  /** Сопоставление со сценами проекта — по сцене файла. */
+  sceneMatches: SceneMatch[];
+  /** Сцены проекта, которых нет в новой версии. */
+  missingScenes: MissingScene[];
 };
 
 const TIME_OPTIONS = Object.keys(TIME_WORDS);
@@ -534,16 +552,45 @@ export function normalizeScript(
     draft.block.text = formatHeading(draft.heading, draft.number, draft.tail);
   }
 
+  const result = scenes.map(toScene);
+  const recordOf = new Map(characters.map((c) => [c.key, c.existingId]));
+  const sceneBlocks = new Map<number, NormalizedBlock[]>();
+  for (const b of blocks) {
+    if (b.sceneIndex == null || b.type === "SLUGLINE") continue;
+    sceneBlocks.set(b.sceneIndex, [...(sceneBlocks.get(b.sceneIndex) ?? []), b]);
+  }
+  // Сопоставление — только когда переданы сцены проекта (импорт); без них — одна нормализация.
+  const fileScenes = scenes.map((s, i) => ({
+    index: s.index,
+    paragraphIndex: s.paragraphIndex,
+    ref: s.ref,
+    number: s.number,
+    key: headingKey(s.block.text),
+    intExt: s.heading.intExt,
+    objects: s.locations.map((l) => compareKey(l.object)),
+    places: s.locations,
+    characterIds: result[i]!.characters.flatMap((key) => {
+      const id = recordOf.get(key);
+      return id ? [id] : [];
+    }),
+    contentHash: contentHash(sceneContent(sceneBlocks.get(s.index) ?? [])),
+  }));
+  const { matches, missing } = existing.scenes
+    ? matchScenes(fileScenes, existing, (input) => book.ask(input as AskInput))
+    : { matches: [], missing: [] };
+
   return {
     titlePage,
     blocks,
-    scenes: scenes.map(toScene),
+    scenes: result,
     characters,
     locations,
     questions: book.list(),
     notices: [...notices].map(([code, paragraphIndexes]) => ({ code, paragraphIndexes })),
     appliedRules: book.applied(),
     staleRules: dictionary.stale,
+    sceneMatches: matches,
+    missingScenes: missing,
   };
 }
 

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import {
+  createFirstScriptVersionAction,
   deleteScriptVersionAction,
   duplicateScriptVersionAction,
   setScriptVersionCurrentAction,
@@ -125,6 +126,18 @@ export function ScreenplayVersionsList({
     );
   }
 
+  function createFromLibretto() {
+    runAction(async () => {
+      const result = await createFirstScriptVersionAction(projectId);
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success(result.success ?? "Версия создана");
+      if (result.versionId) router.push(`${base}/${result.versionId}`);
+    });
+  }
+
   function buildActions(version: ScriptVersionOverviewRow): ScriptVersionActionItem[] {
     const items: ScriptVersionActionItem[] = [];
 
@@ -202,9 +215,19 @@ export function ScreenplayVersionsList({
         <div className="rounded-xl border border-dashed border-[var(--border)] p-8 text-center text-sm text-[var(--muted-fg)]">
           <p className="mb-4">Версий сценария пока нет.</p>
           {canWrite ? (
-            <Link href={`${base}/import`}>
-              <Button type="button">Импортировать первую версию</Button>
-            </Link>
+            <div className="flex flex-wrap justify-center gap-2">
+              <Link href={`${base}/import`}>
+                <Button type="button">Импортировать первую версию</Button>
+              </Link>
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={pending}
+                onClick={createFromLibretto}
+              >
+                Создать версию из либретто
+              </Button>
+            </div>
           ) : null}
         </div>
       ) : (

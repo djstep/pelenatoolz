@@ -32,3 +32,6 @@ export type ScriptReviewData = {
 };
 
 export type ScriptPreviewState = { error?: string; data?: ScriptReviewData };
+
+/** Ответ «Импортировать»: id новой версии или отказ. */
+export type ScriptImportState = { error?: string; success?: string; versionId?: string };
