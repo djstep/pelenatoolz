@@ -95,6 +95,8 @@ describe("ddct.docx — нормализация", () => {
         QUESTION_TYPES.timeMissing,
         QUESTION_TYPES.timeFromPrevious,
         QUESTION_TYPES.characterDigit,
+        QUESTION_TYPES.similarCharacters,
+        QUESTION_TYPES.similarLocations,
       ]),
     );
   });
@@ -278,6 +280,41 @@ describe("ddct.docx — нормализация", () => {
     assert.equal(zk?.speaker, "АДМИНИСТРАТОР-ПОМОЩНИК");
   });
 
+  test("D11 (дополнено): похожие имена — предложения, сами не склеиваются", () => {
+    const pairs = (type: QuestionType) =>
+      new Set(questions(result, type).map((q) => q.subject.split("|").sort().join(" ~ ")));
+    assert.deepEqual(
+      pairs(QUESTION_TYPES.similarCharacters),
+      new Set(["АДМИНИСТРАТОР ~ АДМИНИСТРАТОР-ПОМОЩНИК"]),
+    );
+    assert.deepEqual(
+      pairs(QUESTION_TYPES.similarLocations),
+      new Set([
+        "КОРИДОР ~ КОРИДОР ОФИСА DDCT",
+        "ОФИС КОМПАНИИ DDCT ~ ОФИС КОМПАНИИ ПО ПРОИЗВОДСТВУ СЪЕДОБНОЙ БУМАГИ",
+        "КОРИДОР ОФИСА DDCT ~ ОФИС КОМПАНИИ DDCT",
+        "КОРИДОР ОФИСА DDCT ~ ОФИС КОМПАНИИ ПО ПРОИЗВОДСТВУ СЪЕДОБНОЙ БУМАГИ",
+      ]),
+    );
+    for (const q of [
+      ...questions(result, QUESTION_TYPES.similarCharacters),
+      ...questions(result, QUESTION_TYPES.similarLocations),
+    ]) {
+      assert.equal(q.answer, "different", q.code);
+      assert.equal(q.acceptAll, false, q.code);
+      assert.equal(q.persistent, true, q.code);
+    }
+    assert.ok(characterKeys(result).has("АДМИНИСТРАТОР"));
+
+    const merged = normalizeFixture("ddct.docx", {
+      "похожие-персонажи:АДМИНИСТРАТОР|АДМИНИСТРАТОР-ПОМОЩНИК": "same:АДМИНИСТРАТОР-ПОМОЩНИК",
+    });
+    assert.ok(!characterKeys(merged).has("АДМИНИСТРАТОР"));
+    const helper = merged.characters.find((c) => c.key === "АДМИНИСТРАТОР-ПОМОЩНИК");
+    assert.deepEqual(helper?.sourceKeys, ["АДМИНИСТРАТОР-ПОМОЩНИК", "АДМИНИСТРАТОР"]);
+    assert.ok(merged.blocks.every((b) => b.speaker !== "АДМИНИСТРАТОР"));
+  });
+
   test("D12: переходы CUT TO:, FADE TO BLACK", () => {
     assert.deepEqual(
       result.blocks.filter((b) => b.type === "TRANSITION").map((b) => b.text),
@@ -304,8 +341,34 @@ describe("ddct.docx — нормализация", () => {
 describe("moya-malenkaya-draft.docx — нормализация", () => {
   const result = normalizeFixture("moya-malenkaya-draft.docx");
 
-  test("вопрос один — «два объекта» в сцене 9", () => {
-    assert.deepEqual(codes(result), ["объекты:ДВОР ДОМА / ОПУШКА ЛЕСА"]);
+  test("вопросы: «два объекта» в сцене 9 и похожие объекты (R5, R6)", () => {
+    assert.deepEqual(codes(result), [
+      "объекты:ДВОР ДОМА / ОПУШКА ЛЕСА",
+      "похожие-локации:ДВОР ДОМА|ДОМ",
+      "похожие-локации:ДВОР ДОМА|ЗАГОРОДНЫЙ ДОМ",
+      "похожие-локации:ДОМ|ЗАГОРОДНЫЙ ДОМ",
+    ]);
+  });
+
+  test("R5: «ДВОР ДОМА» ~ «ДОМ» — ответ «подобъект»", () => {
+    const answered = normalizeFixture("moya-malenkaya-draft.docx", {
+      "похожие-локации:ДВОР ДОМА|ДОМ": "sub:ДОМ",
+    });
+    assert.deepEqual(places(answered, "9"), ["ДОМ › ДВОР ДОМА", "ОПУШКА ЛЕСА"]);
+    const dom = answered.locations.find((l) => l.object === "ДОМ");
+    assert.ok(dom?.subs.includes("ДВОР ДОМА"));
+    assert.deepEqual(dom?.sourceKeys, ["ДОМ", "ДВОР ДОМА"]);
+  });
+
+  test("R6 (дополнено): «ЗАГОРОДНЫЙ ДОМ» ~ «ДОМ» и ~ «ДВОР ДОМА» — вопросы; ответ «один объект»", () => {
+    assert.ok(result.locations.some((l) => l.object === "ЗАГОРОДНЫЙ ДОМ"));
+    const answered = normalizeFixture("moya-malenkaya-draft.docx", {
+      "похожие-локации:ДОМ|ЗАГОРОДНЫЙ ДОМ": "same:ДОМ",
+    });
+    assert.ok(answered.locations.every((l) => l.object !== "ЗАГОРОДНЫЙ ДОМ"));
+    assert.ok(scene(answered, "1").locations.every((l) => l.object === "ДОМ"));
+    // Текст шапки — как в файле: склейка меняет только объект локации.
+    assert.equal(scene(answered, "1").heading, scene(result, "1").heading);
   });
 
   test("R1: титульная", () => {
@@ -526,6 +589,10 @@ describe("коды вопросов из содержимого", () => {
         QUESTION_TYPES.characterDigit,
         QUESTION_TYPES.latinWord,
         QUESTION_TYPES.latinInWord,
+        QUESTION_TYPES.similarCharacters,
+        QUESTION_TYPES.similarLocations,
+        QUESTION_TYPES.recordCharacter,
+        QUESTION_TYPES.recordLocation,
       ],
     );
   });

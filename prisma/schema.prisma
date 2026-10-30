@@ -310,6 +310,7 @@ model Project {
   cloudFiles  CloudFileLink[]
   scriptVersions ScriptVersion[]
   scriptBlocks ScriptBlock[]
+  scriptDictionaryRules ScriptDictionaryRule[]
   resourceCategories ResourceCategory[]
   actorAvailabilityRows ActorAvailabilityRow[]
   departments Department[]
@@ -492,6 +493,7 @@ model Location {
   scoutCandidateLinks ScoutCandidateLocation[]
   workRows ProductionReportWorkRow[]
   overtimeRates LocationOvertimeRate[]
+  dictionaryRules ScriptDictionaryRule[]
 
   @@index([projectId])
 }
@@ -544,6 +546,7 @@ model Character {
   actors  Actor[]
   castingCandidates CastingCandidate[]
   auditionLinks AuditionActor[]
+  dictionaryRules ScriptDictionaryRule[]
 
   @@index([projectId])
 }
@@ -1476,6 +1479,32 @@ model ScriptImportJob {
 
   @@index([projectId])
   @@index([scriptVersionId])
+}
+
+/// Словарь импорта сценария: ответы на постоянные вопросы экрана проверки (волна 4).
+/// Тип правила — строка (константы в коде), не перечисление: новые типы без миграции.
+model ScriptDictionaryRule {
+  id                String   @id @default(cuid())
+  projectId         String
+  /// Тип вопроса: «похожие-персонажи», «шапка-не-сцена», …
+  type              String
+  /// Ключ из содержимого: имя, пара имён через «|», шапка.
+  key               String
+  answer            String
+  /// Цель правила — запись этого проекта. Запись удалена — пусто, правило устарело.
+  targetCharacterId String?
+  targetLocationId  String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  project         Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  targetCharacter Character? @relation(fields: [targetCharacterId], references: [id], onDelete: SetNull)
+  targetLocation  Location?  @relation(fields: [targetLocationId], references: [id], onDelete: SetNull)
+
+  @@unique([projectId, type, key])
+  @@index([projectId])
+  @@index([targetCharacterId])
+  @@index([targetLocationId])
 }
 
 /// Часть оплаты строки отчёта смены, из которой создано начисление.

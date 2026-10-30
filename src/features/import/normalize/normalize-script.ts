@@ -13,6 +13,7 @@ import {
   withoutTrailingDigit,
   withSpacedDigit,
 } from "@/features/import/normalize/characters";
+import type { DictionaryRule } from "@/features/import/normalize/dictionary";
 import {
   formatHeading,
   isNumberOnly,
@@ -21,6 +22,12 @@ import {
   type HeadingLocation,
   type ParsedHeading,
 } from "@/features/import/normalize/heading";
+import {
+  pairKey,
+  pairMembers,
+  similarReason,
+  type SimilarKind,
+} from "@/features/import/normalize/similar";
 import {
   cleanText,
   compareKey,
@@ -57,6 +64,13 @@ export const QUESTION_TYPES = {
   castMissing: "нет-в-строке-персонажи",
   /** Уровни определения типа блока расходятся (шаг 1). */
   blockType: "тип-блока",
+  /** Похожие имена персонажей (в файле или с записью проекта): разные или один. */
+  similarCharacters: "похожие-персонажи",
+  /** Похожие объекты: разные, один объект или подобъект другого. */
+  similarLocations: "похожие-локации",
+  /** Имя совпало с несколькими записями проекта (старые дубли): к какой привязать. */
+  recordCharacter: "запись-персонажа",
+  recordLocation: "запись-локации",
 } as const;
 
 export type QuestionType = (typeof QUESTION_TYPES)[keyof typeof QUESTION_TYPES];
@@ -71,6 +85,10 @@ export const PERSISTENT_QUESTION_TYPES: ReadonlySet<QuestionType> = new Set([
   QUESTION_TYPES.characterDigit,
   QUESTION_TYPES.latinWord,
   QUESTION_TYPES.latinInWord,
+  QUESTION_TYPES.similarCharacters,
+  QUESTION_TYPES.similarLocations,
+  QUESTION_TYPES.recordCharacter,
+  QUESTION_TYPES.recordLocation,
 ]);
 export type QuestionGroup = "title" | "scenes" | "characters" | "locations" | "blocks";
 
@@ -86,6 +104,8 @@ export type NormalizeQuestion = {
   scene: string | null;
   /** Можно ли принять в группе «Принять все». */
   acceptAll: boolean;
+  /** Без ответа импортировать нельзя: предложенного ответа нет (выбор из записей проекта). */
+  required: boolean;
   options: string[];
   /** Ответ, который применён, пока пользователь не ответил. */
   suggested: string;
@@ -95,8 +115,26 @@ export type NormalizeQuestion = {
   occurrences: { paragraphIndex: number; detail?: string }[];
 };
 
-/** Ответы по коду вопроса. Шаг 3 будет собирать их из словаря проекта. */
+/** Ответы пользователя по коду вопроса — старше правил словаря. */
 export type Answers = Readonly<Record<string, string>>;
+
+/** Записи проекта, прочитанные до нормализации. Сама нормализация базу не читает. */
+export type ExistingRecords = {
+  characters: readonly { id: string; name: string }[];
+  /** Строки локаций: объект (`name`) и подобъект. */
+  locations: readonly { id: string; name: string; sublocation: string | null }[];
+};
+
+export type NormalizeContext = {
+  dictionary?: readonly DictionaryRule[];
+  existing?: ExistingRecords;
+};
+
+/** Запись проекта, к которой привязано имя. У объекта — одна из строк локации с этим именем. */
+export type RecordRef = { id: string; name: string };
+
+/** Вопрос, на который молча ответило правило словаря. */
+export type AppliedRule = { code: string; type: string; subject: string; answer: string };
 
 export type NormalizeNoticeCode =
   /** Пустой абзац в стиле шапки. */
@@ -150,6 +188,10 @@ export type NormalizedCharacter = {
   name: string;
   speaks: boolean;
   scenes: number[];
+  /** Ключи имён файла, вошедших в персонажа (склейка похожих). */
+  sourceKeys: string[];
+  /** Привязан к существующему персонажу проекта; пусто — новый. */
+  existingId: string | null;
 };
 
 export type NormalizedLocation = {
@@ -157,6 +199,10 @@ export type NormalizedLocation = {
   object: string;
   subs: string[];
   scenes: number[];
+  /** Ключи объектов файла, вошедших сюда (склейка или подобъект). */
+  sourceKeys: string[];
+  /** Привязан к существующему объекту проекта; пусто — новый. */
+  existing: RecordRef | null;
 };
 
 export type NormalizedScript = {
@@ -167,6 +213,10 @@ export type NormalizedScript = {
   locations: NormalizedLocation[];
   questions: NormalizeQuestion[];
   notices: NormalizeNotice[];
+  /** «Применено правил словаря: N» с раскрытием. */
+  appliedRules: AppliedRule[];
+  /** Цель удалена или не из этого проекта — правило не применено. */
+  staleRules: DictionaryRule[];
 };
 
 const TIME_OPTIONS = Object.keys(TIME_WORDS);
@@ -180,14 +230,22 @@ type AskInput = {
   options: string[];
   suggested: string;
   acceptAll: boolean;
+  required?: boolean;
   paragraphIndex: number;
   detail?: string;
   /** Свободный ответ, кроме вариантов (например, номер сцены). */
   valid?: (answer: string) => boolean;
 };
 
-function createQuestionBook(answers: Answers) {
+/** Ответ на вопрос: ответ пользователя → правило словаря (только постоянные) → предложенный. */
+function createQuestionBook(answers: Answers, rules: ReadonlyMap<string, DictionaryRule>) {
   const questions = new Map<string, NormalizeQuestion>();
+  const applied = new Map<string, AppliedRule>();
+
+  function applyRule(rule: DictionaryRule) {
+    const code = `${rule.type}:${rule.key}`;
+    applied.set(code, { code, type: rule.type, subject: rule.key, answer: rule.answer });
+  }
 
   function ask(input: AskInput): string {
     const code =
@@ -196,20 +254,28 @@ function createQuestionBook(answers: Answers) {
         : `${input.type}:${input.subject}`;
     let question = questions.get(code);
     if (!question) {
+      const accepts = (answer: string | undefined): answer is string =>
+        answer != null && (input.options.includes(answer) || (input.valid?.(answer) ?? false));
       const given = answers[code];
-      const ok =
-        given != null && (input.options.includes(given) || (input.valid?.(given) ?? false));
+      const persistent = PERSISTENT_QUESTION_TYPES.has(input.type);
+      const rule = persistent && !accepts(given) ? rules.get(code) : undefined;
+      if (rule && accepts(rule.answer)) {
+        // Отвечено словарём — на экран не идёт, только в «применено правил».
+        applyRule(rule);
+        return rule.answer;
+      }
       question = {
         code,
         type: input.type,
         subject: input.subject,
         group: input.group,
-        persistent: PERSISTENT_QUESTION_TYPES.has(input.type),
+        persistent,
         scene: input.scene ?? null,
         acceptAll: input.acceptAll,
+        required: input.required ?? false,
         options: input.options,
         suggested: input.suggested,
-        answer: ok ? given : input.suggested,
+        answer: accepts(given) ? given : input.suggested,
         occurrences: [],
       };
       questions.set(code, question);
@@ -221,7 +287,14 @@ function createQuestionBook(answers: Answers) {
     return question.answer;
   }
 
-  return { ask, list: () => [...questions.values()] };
+  return {
+    ask,
+    applyRule,
+    /** Пользователь сам ответил на вопрос с этим кодом. */
+    answered: (code: string) => answers[code] != null,
+    list: () => [...questions.values()],
+    applied: () => [...applied.values()],
+  };
 }
 
 type QuestionBook = ReturnType<typeof createQuestionBook>;
@@ -255,8 +328,11 @@ function isSceneNumber(answer: string) {
 export function normalizeScript(
   typing: BlockTypingResult,
   answers: Answers = {},
+  context: NormalizeContext = {},
 ): NormalizedScript {
-  const book = createQuestionBook(answers);
+  const existing = context.existing ?? { characters: [], locations: [] };
+  const dictionary = prepareDictionary(context.dictionary ?? [], existing);
+  const book = createQuestionBook(answers, dictionary.byCode);
   const notices = new Map<NormalizeNoticeCode, number[]>();
   const notice = (code: NormalizeNoticeCode, paragraphIndex: number) =>
     notices.set(code, [...(notices.get(code) ?? []), paragraphIndex]);
@@ -314,7 +390,7 @@ export function normalizeScript(
   const conflicts = new Map(typing.conflicts.map((c) => [c.paragraphIndex, c]));
   const blocks: NormalizedBlock[] = [];
   const scenes: SceneDraft[] = [];
-  const characterNames = new Map<string, string>();
+  const characterNames = new Map<string, NameInfo>();
   const speakers = new Set<string>();
   let scene: SceneDraft | null = null;
   let speaker: string | null = null;
@@ -391,7 +467,9 @@ export function normalizeScript(
       );
       block.text = formatCastLine(cast.prefix, names);
       if (scene && !scene.castBlock) {
-        scene.castLine = names.map((name) => registerCharacter(characterNames, name));
+        scene.castLine = names.map((name) =>
+          registerCharacter(characterNames, name, typed.paragraphIndex),
+        );
         scene.castPrefix = cast.prefix;
         scene.castBlock = block;
       }
@@ -419,7 +497,7 @@ export function normalizeScript(
         if (answer === "space") cue.name = withSpacedDigit(cue.name);
         if (answer === "typo") cue.name = withoutTrailingDigit(cue.name);
       }
-      speaker = registerCharacter(characterNames, cue.name);
+      speaker = registerCharacter(characterNames, cue.name, typed.paragraphIndex);
       speakers.add(speaker);
       if (scene && !scene.speaking.includes(speaker)) scene.speaking.push(speaker);
       blocks.push({ ...block, text: formatCue(cue), speaker, extensions: cue.extensions });
@@ -440,6 +518,16 @@ export function normalizeScript(
   assignNumbers(scenes, book);
   resolveTimes(scenes, book);
   resolveLocations(scenes, book);
+  const locations = matchLocations(scenes, existing, dictionary, book);
+  const characters = matchCharacters(
+    scenes,
+    blocks,
+    characterNames,
+    speakers,
+    existing,
+    dictionary,
+    book,
+  );
   checkCastLines(scenes, book);
 
   for (const draft of scenes) {
@@ -450,10 +538,12 @@ export function normalizeScript(
     titlePage,
     blocks,
     scenes: scenes.map(toScene),
-    characters: listCharacters(scenes, characterNames, speakers),
-    locations: listLocations(scenes),
+    characters,
+    locations,
     questions: book.list(),
     notices: [...notices].map(([code, paragraphIndexes]) => ({ code, paragraphIndexes })),
+    appliedRules: book.applied(),
+    staleRules: dictionary.stale,
   };
 }
 
@@ -475,9 +565,12 @@ function blockType(
   return answer as ImportBlockType;
 }
 
-function registerCharacter(names: Map<string, string>, name: string) {
+/** Имя файла: как у первого появления и где оно. */
+type NameInfo = { name: string; paragraphIndex: number };
+
+function registerCharacter(names: Map<string, NameInfo>, name: string, paragraphIndex: number) {
   const key = compareKey(name);
-  if (!names.has(key)) names.set(key, name);
+  if (!names.has(key)) names.set(key, { name, paragraphIndex });
   return key;
 }
 
@@ -700,33 +793,359 @@ function toScene(s: SceneDraft): NormalizedScene {
   };
 }
 
-function listCharacters(
-  scenes: SceneDraft[],
-  names: Map<string, string>,
-  speakers: ReadonlySet<string>,
-): NormalizedCharacter[] {
-  const result = new Map<string, NormalizedCharacter>();
-  for (const [key, name] of names) {
-    result.set(key, { key, name, speaks: speakers.has(key), scenes: [] });
+type PreparedDictionary = {
+  byCode: Map<string, DictionaryRule>;
+  stale: DictionaryRule[];
+  /** Записи проекта по id — цели правил ищутся только здесь. */
+  records: Record<SimilarKind, Map<string, RecordRef>>;
+};
+
+/** Правилу склейки, подобъекта и выбора записи нужна цель — запись этого проекта. */
+function targetKind(rule: DictionaryRule): SimilarKind | null {
+  switch (rule.type) {
+    case QUESTION_TYPES.similarCharacters:
+      return rule.answer === "different" ? null : "character";
+    case QUESTION_TYPES.similarLocations:
+      return rule.answer === "different" ? null : "location";
+    case QUESTION_TYPES.recordCharacter:
+      return "character";
+    case QUESTION_TYPES.recordLocation:
+      return "location";
+    default:
+      return null;
   }
-  for (const s of scenes) {
-    for (const key of sceneCharacters(s)) result.get(key)?.scenes.push(s.index);
-  }
-  return [...result.values()];
 }
 
-function listLocations(scenes: SceneDraft[]): NormalizedLocation[] {
-  const result = new Map<string, NormalizedLocation>();
+/**
+ * Цель правила ищется только среди записей этого проекта: удалённая или чужая цель —
+ * правило устарело, не применяется, вопрос задаётся снова.
+ */
+function prepareDictionary(
+  rules: readonly DictionaryRule[],
+  existing: ExistingRecords,
+): PreparedDictionary {
+  const records: PreparedDictionary["records"] = {
+    character: new Map(existing.characters.map((c) => [c.id, { id: c.id, name: c.name }])),
+    location: new Map(existing.locations.map((l) => [l.id, { id: l.id, name: l.name }])),
+  };
+  const byCode = new Map<string, DictionaryRule>();
+  const stale: DictionaryRule[] = [];
+  for (const rule of rules) {
+    const kind = targetKind(rule);
+    const recordQuestion =
+      rule.type === QUESTION_TYPES.recordCharacter || rule.type === QUESTION_TYPES.recordLocation;
+    const valid =
+      !kind ||
+      (rule.target != null &&
+        rule.target.kind === kind &&
+        records[kind].has(rule.target.id) &&
+        (!recordQuestion || rule.answer === rule.target.id));
+    if (valid) byCode.set(`${rule.type}:${rule.key}`, rule);
+    else stale.push(rule);
+  }
+  return { byCode, stale, records };
+}
+
+const NAME_QUESTIONS = {
+  character: {
+    similar: QUESTION_TYPES.similarCharacters,
+    record: QUESTION_TYPES.recordCharacter,
+    group: "characters",
+  },
+  location: {
+    similar: QUESTION_TYPES.similarLocations,
+    record: QUESTION_TYPES.recordLocation,
+    group: "locations",
+  },
+} as const satisfies Record<
+  SimilarKind,
+  { similar: QuestionType; record: QuestionType; group: QuestionGroup }
+>;
+
+type NameFate =
+  /** Одно лицо или один объект с другим именем файла. */
+  | { kind: "same"; key: string }
+  /** Подобъект другого объекта файла. */
+  | { kind: "sub"; key: string }
+  /** Запись проекта; `sub` — имя стало подобъектом её объекта. */
+  | { kind: "record"; record: RecordRef; sub: boolean };
+
+/** Во что превратилось имя файла. `identity` — одна запись проекта или один корень склейки. */
+type ResolvedName = {
+  identity: string;
+  name: string;
+  sub: string | null;
+  record: RecordRef | null;
+};
+
+/** «same:КЛЮЧ» → ["same", "КЛЮЧ"]. */
+function splitAnswer(answer: string): [string, string] {
+  const at = answer.indexOf(":");
+  return at < 0 ? [answer, ""] : [answer.slice(0, at), answer.slice(at + 1)];
+}
+
+/**
+ * Похожие имена и записи проекта. Порядок: склейки словаря с целью → точное совпадение
+ * с записью → пары внутри файла → похожие записи проекта. Всё — только предложения:
+ * по умолчанию «разные». Записи проекта между собой не сравниваются и не сливаются.
+ */
+function matchNames(
+  kind: SimilarKind,
+  names: ReadonlyMap<string, NameInfo>,
+  records: readonly RecordRef[],
+  dictionary: PreparedDictionary,
+  book: QuestionBook,
+): (key: string) => ResolvedName {
+  const q = NAME_QUESTIONS[kind];
+  const withSub = kind === "location";
+  const byKey = new Map<string, RecordRef[]>();
+  for (const record of records) {
+    const key = compareKey(record.name);
+    byKey.set(key, [...(byKey.get(key) ?? []), record]);
+  }
+  const fates = new Map<string, NameFate>();
+
+  // Старые дубли в проекте («МАМА» и «Мама»): вопрос, а не первая попавшаяся запись.
+  const pickRecord = (key: string, paragraphIndex: number) => {
+    const found = byKey.get(key) ?? [];
+    if (found.length <= 1) return found[0] ?? null;
+    const answer = book.ask({
+      type: q.record,
+      subject: key,
+      group: q.group,
+      options: found.map((r) => r.id),
+      suggested: "",
+      acceptAll: false,
+      required: true,
+      paragraphIndex,
+    });
+    return found.find((r) => r.id === answer) ?? null;
+  };
+
+  // 1. Склейка из словаря: имя из пары → запись, даже если второе имя в проекте переименовано.
+  // Сначала роль «вошёл в другое имя»: так сохраняются цепочки (A — подобъект B, B — подобъект C).
+  const asChild = new Map<string, DictionaryRule>();
+  const asParent = new Map<string, DictionaryRule>();
+  for (const rule of dictionary.byCode.values()) {
+    if (rule.type !== q.similar || !rule.target) continue;
+    if (book.answered(`${rule.type}:${rule.key}`)) continue;
+    const [, parent] = splitAnswer(rule.answer);
+    for (const member of pairMembers(rule.key) ?? []) {
+      const roles = member === parent ? asParent : asChild;
+      if (!roles.has(member)) roles.set(member, rule);
+    }
+  }
+  for (const key of names.keys()) {
+    const rule = asChild.get(key) ?? asParent.get(key);
+    if (!rule?.target) continue;
+    const record = dictionary.records[kind].get(rule.target.id);
+    if (!record) continue;
+    const [action, parent] = splitAnswer(rule.answer);
+    const sub = action === "sub" && key !== parent;
+    // Второе имя пары есть в файле — идём за ним; его судьбу решают его правила.
+    if (key !== parent && names.has(parent)) {
+      fates.set(key, { kind: sub ? "sub" : "same", key: parent });
+    } else {
+      fates.set(key, { kind: "record", record, sub });
+    }
+    book.applyRule(rule);
+  }
+
+  // 2. Точное совпадение с записью проекта — привязка без вопроса.
+  const exact = new Set<string>();
+  for (const [key, info] of names) {
+    if (fates.has(key) || !byKey.has(key)) continue;
+    exact.add(key);
+    const record = pickRecord(key, info.paragraphIndex);
+    if (record) fates.set(key, { kind: "record", record, sub: false });
+  }
+
+  // 3. Похожие имена внутри файла. Оба уже привязаны к записям — не спрашиваем.
+  const keys = [...names.keys()];
+  for (let i = 0; i < keys.length; i++) {
+    for (let j = i + 1; j < keys.length; j++) {
+      const a = keys[i]!;
+      const b = keys[j]!;
+      if (fates.get(a)?.kind === "record" && fates.get(b)?.kind === "record") continue;
+      if (!similarReason(a, b, kind)) continue;
+      const options = [
+        "different",
+        `same:${a}`,
+        `same:${b}`,
+        ...(withSub ? [`sub:${a}`, `sub:${b}`] : []),
+      ];
+      let answer = "different";
+      for (const key of [a, b]) {
+        answer = book.ask({
+          type: q.similar,
+          subject: pairKey(a, b),
+          group: q.group,
+          options,
+          suggested: "different",
+          acceptAll: false,
+          paragraphIndex: names.get(key)!.paragraphIndex,
+        });
+      }
+      if (answer === "different") continue;
+      const [action, parent] = splitAnswer(answer);
+      const child = parent === a ? b : a;
+      if (!fates.has(child)) {
+        fates.set(child, { kind: action === "sub" ? "sub" : "same", key: parent });
+      } else if (action === "same" && !fates.has(parent)) {
+        // Второе имя уже привязано к записи — первое идёт за ним.
+        fates.set(parent, { kind: "same", key: child });
+      }
+    }
+  }
+
+  // 4. Похожие записи проекта — для имён без привязки.
+  for (const [key, info] of names) {
+    if (fates.has(key) || exact.has(key)) continue;
+    for (const recordKey of byKey.keys()) {
+      if (names.has(recordKey) || !similarReason(key, recordKey, kind)) continue;
+      const answer = book.ask({
+        type: q.similar,
+        subject: pairKey(key, recordKey),
+        group: q.group,
+        options: ["different", `same:${recordKey}`, ...(withSub ? [`sub:${recordKey}`] : [])],
+        suggested: "different",
+        acceptAll: false,
+        paragraphIndex: info.paragraphIndex,
+      });
+      if (answer === "different") continue;
+      const record = pickRecord(recordKey, info.paragraphIndex);
+      if (!record) continue;
+      fates.set(key, { kind: "record", record, sub: answer.startsWith("sub:") });
+      break;
+    }
+  }
+
+  const resolve = (key: string, seen: Set<string>): ResolvedName => {
+    const own = names.get(key)?.name ?? key;
+    const fate = seen.has(key) ? undefined : fates.get(key);
+    seen.add(key);
+    if (!fate) return { identity: key, name: own, sub: null, record: null };
+    if (fate.kind === "record") {
+      return {
+        identity: `#${fate.record.id}`,
+        name: fate.record.name,
+        sub: fate.sub ? own : null,
+        record: fate.record,
+      };
+    }
+    const parent = resolve(fate.key, seen);
+    if (fate.kind === "same") return parent;
+    return { ...parent, sub: parent.sub ? `${parent.sub}. ${own}` : own };
+  };
+  return (key) => resolve(key, new Set());
+}
+
+/** Персонажи: склейка похожих, привязка к записям проекта. Ключи в сценах и репликах — новые. */
+function matchCharacters(
+  scenes: SceneDraft[],
+  blocks: NormalizedBlock[],
+  names: ReadonlyMap<string, NameInfo>,
+  speakers: ReadonlySet<string>,
+  existing: ExistingRecords,
+  dictionary: PreparedDictionary,
+  book: QuestionBook,
+): NormalizedCharacter[] {
+  const resolve = matchNames("character", names, existing.characters, dictionary, book);
+  const groups = new Map<string, NormalizedCharacter>();
+  const keyOf = new Map<string, string>();
+  const usedKeys = new Set<string>();
+  for (const key of names.keys()) {
+    const resolved = resolve(key);
+    let group = groups.get(resolved.identity);
+    if (!group) {
+      const base = compareKey(resolved.name);
+      let groupKey = base;
+      for (let n = 2; usedKeys.has(groupKey); n++) groupKey = `${base}#${n}`;
+      usedKeys.add(groupKey);
+      group = {
+        key: groupKey,
+        name: resolved.name,
+        speaks: false,
+        scenes: [],
+        sourceKeys: [],
+        existingId: resolved.record?.id ?? null,
+      };
+      groups.set(resolved.identity, group);
+    }
+    group.sourceKeys.push(key);
+    if (speakers.has(key)) group.speaks = true;
+    keyOf.set(key, group.key);
+  }
+
+  const mapKeys = (keys: string[]) => [...new Set(keys.map((key) => keyOf.get(key) ?? key))];
+  for (const s of scenes) {
+    s.speaking = mapKeys(s.speaking);
+    if (s.castLine) s.castLine = mapKeys(s.castLine);
+  }
+  for (const b of blocks) {
+    if (b.speaker) b.speaker = keyOf.get(b.speaker) ?? b.speaker;
+  }
+
+  const result = [...groups.values()];
+  const byKey = new Map(result.map((c) => [c.key, c]));
+  for (const s of scenes) {
+    for (const key of sceneCharacters(s)) byKey.get(key)?.scenes.push(s.index);
+  }
+  return result;
+}
+
+/** Объекты: склейка и подобъекты похожих, привязка к объектам проекта. */
+function matchLocations(
+  scenes: SceneDraft[],
+  existing: ExistingRecords,
+  dictionary: PreparedDictionary,
+  book: QuestionBook,
+): NormalizedLocation[] {
+  const names = new Map<string, NameInfo>();
   for (const s of scenes) {
     for (const l of s.locations) {
       const key = compareKey(l.object);
-      const location = result.get(key) ?? { key, object: l.object, subs: [], scenes: [] };
-      if (l.sub && !location.subs.some((sub) => compareKey(sub) === compareKey(l.sub!))) {
-        location.subs.push(l.sub);
+      if (!names.has(key)) names.set(key, { name: l.object, paragraphIndex: s.paragraphIndex });
+    }
+  }
+  // Объект проекта — имя строки локации; одна строка на каждое написание имени.
+  const objects = new Map<string, RecordRef>();
+  for (const l of existing.locations) {
+    if (!objects.has(l.name)) objects.set(l.name, { id: l.id, name: l.name });
+  }
+  const resolve = matchNames("location", names, [...objects.values()], dictionary, book);
+
+  const result = new Map<string, NormalizedLocation>();
+  for (const s of scenes) {
+    const seen = new Set<string>();
+    const locations: SceneLocation[] = [];
+    for (const l of s.locations) {
+      const sourceKey = compareKey(l.object);
+      const resolved = resolve(sourceKey);
+      const sub = resolved.sub && l.sub ? `${resolved.sub}. ${l.sub}` : (resolved.sub ?? l.sub);
+      const key = compareKey(resolved.name);
+      const placeKey = `${key}|${sub ? compareKey(sub) : ""}`;
+      if (!seen.has(placeKey)) {
+        seen.add(placeKey);
+        locations.push({ object: resolved.name, sub });
+      }
+      const location = result.get(key) ?? {
+        key,
+        object: resolved.name,
+        subs: [],
+        scenes: [],
+        sourceKeys: [],
+        existing: resolved.record,
+      };
+      if (sub && !location.subs.some((x) => compareKey(x) === compareKey(sub))) {
+        location.subs.push(sub);
       }
       if (!location.scenes.includes(s.index)) location.scenes.push(s.index);
+      if (!location.sourceKeys.includes(sourceKey)) location.sourceKeys.push(sourceKey);
+      location.existing ??= resolved.record;
       result.set(key, location);
     }
+    s.locations = locations;
   }
   return [...result.values()];
 }
