@@ -26,6 +26,7 @@ export function FileDropzone({
   required,
   disabled,
   hint = "Перетащите сценарий сюда или нажмите, чтобы выбрать",
+  formatHint,
   className,
   onFileChange,
 }: {
@@ -34,6 +35,8 @@ export function FileDropzone({
   required?: boolean;
   disabled?: boolean;
   hint?: string;
+  /** Какие форматы принимаются; задан — вместо списка форматов сценария. */
+  formatHint?: string;
   className?: string;
   onFileChange?: (file: File | null) => void;
 }) {
@@ -69,7 +72,7 @@ export function FileDropzone({
     }
     if (!isScriptFile(picked)) {
       commit(null);
-      setError(`Неподдерживаемый формат. ${SCRIPT_FORMAT_HINT}`);
+      setError(`Неподдерживаемый формат. ${formatHint ?? SCRIPT_FORMAT_HINT}`);
       return;
     }
     setError(null);
@@ -165,7 +168,7 @@ export function FileDropzone({
               {hint}
             </p>
             <p className="text-xs text-[var(--muted-fg)]">
-              {SCRIPT_FORMAT_HINT}
+              {formatHint ?? SCRIPT_FORMAT_HINT}
             </p>
           </div>
         )}
@@ -173,7 +176,9 @@ export function FileDropzone({
 
       <div className="flex items-center justify-between gap-3">
         <p className="text-xs text-[var(--muted-fg)]">
-          Fade In / WriterDuet / Highland — .fdx или .fountain; КИТ — .kitsp
+          {formatHint
+            ? null
+            : "Fade In / WriterDuet / Highland — .fdx или .fountain; КИТ — .kitsp"}
         </p>
         {file ? (
           <button

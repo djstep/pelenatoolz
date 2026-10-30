@@ -1,5 +1,3 @@
-import type { ImportPreviewBlock } from "@/features/import/docx-blocks";
-
 export type ImportFieldKey =
   | "location"
   | "characters"
@@ -30,22 +28,5 @@ export type ImportPreviewScene = {
     scriptDay?: number | null;
     dayNight?: string | null;
     script?: string | null;
-  };
-};
-
-export type ImportPreviewPayload = {
-  scenes: ImportPreviewScene[];
-  blocks?: ImportPreviewBlock[];
-};
-
-export type ImportActionState = {
-  error?: string;
-  success?: string;
-  versionId?: string;
-  preview?: {
-    jobId: string;
-    fileName: string;
-    scenes: ImportPreviewScene[];
-    blockCount?: number;
   };
 };
