@@ -32,8 +32,9 @@ import {
 import { parseTitlePage, type TitlePage } from "@/features/import/normalize/title-page";
 
 /**
- * Типы вопросов. Код вопроса — «тип:ключ», ключ строится из содержимого
+ * Типы вопросов. Код постоянного вопроса — «тип:ключ», ключ из содержимого
  * (без номеров сцен и позиций), чтобы узнать отвеченный вопрос в новой версии.
+ * Код разового вопроса по сцене — «тип:сцена:ключ».
  */
 export const QUESTION_TYPES = {
   /** Шапка без ИНТ/НАТ или со служебным словом: сцена или примечание. */
@@ -59,6 +60,18 @@ export const QUESTION_TYPES = {
 } as const;
 
 export type QuestionType = (typeof QUESTION_TYPES)[keyof typeof QUESTION_TYPES];
+
+/**
+ * Постоянные вопросы — про содержимое (имя, место, слово): ответ пойдёт в словарь проекта.
+ * Остальные — разовые: только этот импорт, по каждой сцене отдельно, код с номером сцены.
+ */
+export const PERSISTENT_QUESTION_TYPES: ReadonlySet<QuestionType> = new Set([
+  QUESTION_TYPES.notScene,
+  QUESTION_TYPES.objects,
+  QUESTION_TYPES.characterDigit,
+  QUESTION_TYPES.latinWord,
+  QUESTION_TYPES.latinInWord,
+]);
 export type QuestionGroup = "title" | "scenes" | "characters" | "locations" | "blocks";
 
 export type NormalizeQuestion = {
@@ -67,6 +80,10 @@ export type NormalizeQuestion = {
   /** Нормализованный ключ из содержимого. */
   subject: string;
   group: QuestionGroup;
+  /** Постоянный (в словарь) или разовый (только этот импорт). */
+  persistent: boolean;
+  /** У разового вопроса по сцене — номер сцены из файла, «п<порядок>» без номера, «5#2» при повторе. */
+  scene: string | null;
   /** Можно ли принять в группе «Принять все». */
   acceptAll: boolean;
   options: string[];
@@ -156,6 +173,8 @@ const TIME_OPTIONS = Object.keys(TIME_WORDS);
 
 type AskInput = {
   type: QuestionType;
+  /** Сцена разового вопроса — входит в код. */
+  scene?: string;
   subject: string;
   group: QuestionGroup;
   options: string[];
@@ -171,7 +190,10 @@ function createQuestionBook(answers: Answers) {
   const questions = new Map<string, NormalizeQuestion>();
 
   function ask(input: AskInput): string {
-    const code = `${input.type}:${input.subject}`;
+    const code =
+      input.scene != null
+        ? `${input.type}:${input.scene}:${input.subject}`
+        : `${input.type}:${input.subject}`;
     let question = questions.get(code);
     if (!question) {
       const given = answers[code];
@@ -182,6 +204,8 @@ function createQuestionBook(answers: Answers) {
         type: input.type,
         subject: input.subject,
         group: input.group,
+        persistent: PERSISTENT_QUESTION_TYPES.has(input.type),
+        scene: input.scene ?? null,
         acceptAll: input.acceptAll,
         options: input.options,
         suggested: input.suggested,
@@ -208,6 +232,8 @@ type SceneDraft = {
   heading: ParsedHeading;
   /** Ключ шапки без номера — для кодов вопросов. */
   key: string;
+  /** Сцена в коде разового вопроса: номер из файла, не меняется от ответов. */
+  ref: string;
   number: string | null;
   time: string | null;
   tail: string | null;
@@ -342,6 +368,7 @@ export function normalizeScript(
         paragraphIndex: typed.paragraphIndex,
         heading,
         key,
+        ref: "",
         number: heading.number,
         time: heading.time,
         tail: heading.tail,
@@ -409,6 +436,7 @@ export function normalizeScript(
     blocks.push(block);
   }
 
+  assignRefs(scenes);
   assignNumbers(scenes, book);
   resolveTimes(scenes, book);
   resolveLocations(scenes, book);
@@ -453,7 +481,32 @@ function registerCharacter(names: Map<string, string>, name: string) {
   return key;
 }
 
-/** Номера: без номеров совсем — «пронумеровать подряд»; частично — по одному; повторы — вопрос. */
+/**
+ * Сцена в коде разового вопроса — по номерам из файла, до ответов, чтобы код не менялся
+ * от ответа на соседний вопрос. Без номера — «п<порядок>», повтор номера — «5#2».
+ */
+function assignRefs(scenes: SceneDraft[]) {
+  const total = new Map<string, number>();
+  for (const s of scenes) {
+    if (s.number) total.set(compareKey(s.number), (total.get(compareKey(s.number)) ?? 0) + 1);
+  }
+  const seen = new Map<string, number>();
+  for (const s of scenes) {
+    if (!s.number) {
+      s.ref = `п${s.index + 1}`;
+      continue;
+    }
+    const key = compareKey(s.number);
+    const n = (seen.get(key) ?? 0) + 1;
+    seen.set(key, n);
+    s.ref = (total.get(key) ?? 0) > 1 ? `${key}#${n}` : key;
+  }
+}
+
+/**
+ * Номера: без номеров совсем — один вопрос «пронумеровать подряд» на файл;
+ * частично — вопрос по каждой сцене без номера; повтор — вопрос по каждой сцене, кроме первой.
+ */
 function assignNumbers(scenes: SceneDraft[], book: QuestionBook) {
   if (scenes.length === 0) return;
 
@@ -481,6 +534,7 @@ function assignNumbers(scenes: SceneDraft[], book: QuestionBook) {
       const suggestion: string | null = previous ? nextSceneNumber(previous, used) : null;
       const answer = book.ask({
         type: QUESTION_TYPES.numberMissing,
+        scene: s.ref,
         subject: s.key,
         group: "scenes",
         options: ["suggested", "keep"],
@@ -504,22 +558,22 @@ function assignNumbers(scenes: SceneDraft[], book: QuestionBook) {
     byNumber.set(key, [...(byNumber.get(key) ?? []), s]);
   }
   for (const [number, same] of byNumber) {
-    if (same.length < 2) continue;
-    let answer = "keep";
-    for (const s of same) {
-      answer = book.ask({
+    for (const s of same.slice(1)) {
+      const suggestion = nextSceneNumber(number, used);
+      const answer = book.ask({
         type: QUESTION_TYPES.numberDuplicate,
-        subject: number,
+        scene: s.ref,
+        subject: s.key,
         group: "scenes",
-        options: ["keep", "letters"],
+        options: ["keep", "suggested"],
         suggested: "keep",
         acceptAll: false,
         paragraphIndex: s.paragraphIndex,
+        ...(suggestion ? { detail: suggestion } : {}),
+        valid: isSceneNumber,
       });
-    }
-    if (answer !== "letters") continue;
-    for (const s of same.slice(1)) {
-      const next = nextSceneNumber(number, used);
+      if (answer === "keep") continue;
+      const next = answer === "suggested" ? suggestion : compareKey(answer);
       if (!next) continue;
       s.number = next;
       used.add(next);
@@ -535,6 +589,7 @@ function resolveTimes(scenes: SceneDraft[], book: QuestionBook) {
     if (!heading.time && heading.noteInsteadOfTime && previous) {
       const answer = book.ask({
         type: QUESTION_TYPES.timeFromPrevious,
+        scene: s.ref,
         subject: s.key,
         group: "scenes",
         options: ["previous", "none", ...TIME_OPTIONS],
@@ -547,11 +602,13 @@ function resolveTimes(scenes: SceneDraft[], book: QuestionBook) {
     } else if (!heading.time && heading.intExt) {
       const answer = book.ask({
         type: QUESTION_TYPES.timeMissing,
+        scene: s.ref,
         subject: s.key,
         group: "scenes",
         options: ["none", ...TIME_OPTIONS],
         suggested: "none",
-        acceptAll: false,
+        // «Принять все» — одно выбранное значение на все сцены группы.
+        acceptAll: true,
         paragraphIndex: s.paragraphIndex,
       });
       if (answer !== "none") {
@@ -606,7 +663,8 @@ function checkCastLines(scenes: SceneDraft[], book: QuestionBook) {
     for (const key of missing) {
       const answer = book.ask({
         type: QUESTION_TYPES.castMissing,
-        subject: `${s.key}:${key}`,
+        scene: s.ref,
+        subject: key,
         group: "characters",
         options: ["keep", "add"],
         suggested: "keep",

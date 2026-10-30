@@ -19,8 +19,12 @@ import { buildDocx, buildZip, p } from "@/features/import/normalize/test-docx";
 
 const FIXTURES = path.join(process.cwd(), "docs", "tasks", "fixtures", "scripts");
 
+function fixtureParagraphs(name: string) {
+  return readDocxParagraphs(readFileSync(path.join(FIXTURES, name)));
+}
+
 function classifyFixture(name: string): BlockTypingResult {
-  return classifyParagraphs(readDocxParagraphs(readFileSync(path.join(FIXTURES, name))));
+  return classifyParagraphs(fixtureParagraphs(name));
 }
 
 function texts(result: BlockTypingResult, type: ImportBlockType) {
@@ -95,7 +99,8 @@ describe("ddct.docx — английские стили", () => {
     }
   });
 
-  test("номера сцен набраны текстом, автонумерации нет", () => {
+  test("номера сцен набраны текстом, автонумерации нет ни в одном абзаце", () => {
+    assert.ok(fixtureParagraphs("ddct.docx").every((x) => x.autoNumber === null));
     assert.deepEqual(result.notices, []);
   });
 });
@@ -146,6 +151,10 @@ describe("moya-malenkaya-draft.docx — без стилей, по отступа
   test("расхождений уровней нет", () => {
     assert.deepEqual(result.conflicts, []);
   });
+
+  test("номера набраны текстом, автонумерации нет ни в одном абзаце", () => {
+    assert.ok(fixtureParagraphs("moya-malenkaya-draft.docx").every((x) => x.autoNumber === null));
+  });
 });
 
 describe("moya-malenkaya-v4.docx — русские стили", () => {
@@ -177,6 +186,18 @@ describe("moya-malenkaya-v4.docx — русские стили", () => {
   test("V6, V7: строки «Персонажи» и имена в репликах", () => {
     assert.equal(texts(result, "SCENE_CAST").length, 10);
     assert.deepEqual(cueNames(result), new Set(["МАМА", "ПАПА", "АННА", "ДИАНА"]));
+  });
+
+  test("V2: номера шапок 1.–11. из автонумерации Word (в тексте абзацев номеров нет)", () => {
+    const sluglines = result.blocks.filter((b) => b.type === "SLUGLINE");
+    assert.ok(sluglines.every((b) => !/^\s*\d/.test(b.text)));
+    assert.deepEqual(
+      sluglines.map((b) => (b.autoNumber?.kind === "number" ? b.autoNumber.label : b.autoNumber?.kind)),
+      Array.from({ length: 11 }, (_, i) => `${i + 1}.`),
+    );
+    // Пронумерованы только шапки.
+    assert.equal(fixtureParagraphs("moya-malenkaya-v4.docx").filter((x) => x.autoNumber).length, 11);
+    assert.deepEqual(result.notices, []);
   });
 
   test("V8: «Переход через коридор в спальню.» — действие", () => {

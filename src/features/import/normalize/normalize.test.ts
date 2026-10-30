@@ -10,6 +10,7 @@ import {
 import { parseHeading } from "@/features/import/normalize/heading";
 import {
   normalizeScript,
+  PERSISTENT_QUESTION_TYPES,
   QUESTION_TYPES,
   type Answers,
   type NormalizedScript,
@@ -133,25 +134,46 @@ describe("ddct.docx — нормализация", () => {
     assert.equal(questions(answered, QUESTION_TYPES.timeMissing).flatMap((q) => q.occurrences).length, 4);
   });
 
-  test("D4: без режима — сцены 2, 3, 4, 20, 36", () => {
+  test("D4: без режима — разовый вопрос по каждой сцене: 2, 3, 4, 20, 36", () => {
     const missing = questions(result, QUESTION_TYPES.timeMissing);
-    const numbers = missing.flatMap((q) => sceneNumbers(result, q.occurrences.map((o) => o.paragraphIndex)));
-    assert.deepEqual(numbers.sort((a, b) => Number(a) - Number(b)), ["2", "3", "4", "20", "36"]);
-    assert.equal(question(result, "режим-не-указан:ИНТ. КОМНАТА").occurrences.length, 3);
-    assert.ok(missing.every((q) => !q.acceptAll));
+    assert.deepEqual(missing.map((q) => q.code), [
+      "режим-не-указан:2:ИНТ. КОМНАТА",
+      "режим-не-указан:3:ИНТ. КОМНАТА",
+      "режим-не-указан:4:ИНТ. КОМНАТА",
+      "режим-не-указан:20:ИНТ. ОФИС КОМПАНИИ DDCT.КАБИНЕТ",
+      "режим-не-указан:36:ИНТ. ЗАКАДРОВЫЙ ГОЛОС",
+    ]);
+    for (const q of missing) {
+      assert.equal(q.persistent, false);
+      assert.equal(q.acceptAll, true);
+      assert.deepEqual(sceneNumbers(result, q.occurrences.map((o) => o.paragraphIndex)), [q.scene]);
+    }
     assert.equal(scene(result, "2").time, null);
   });
 
-  test("D4: ответ «ДЕНЬ» — режим в сцене и в тексте шапки", () => {
-    const answered = normalizeFixture("ddct.docx", { "режим-не-указан:ИНТ. КОМНАТА": "ДЕНЬ" });
-    assert.equal(scene(answered, "3").time, "ДЕНЬ");
-    assert.equal(scene(answered, "3").dayNight, "DAY");
-    assert.equal(scene(answered, "3").heading, "3. ИНТ. КОМНАТА — ДЕНЬ");
+  test("D4: «Принять все» одним значением — три вопроса сцен 2, 3, 4; ответ на одну сцену не трогает соседние", () => {
+    const all = normalizeFixture("ddct.docx", {
+      "режим-не-указан:2:ИНТ. КОМНАТА": "ДЕНЬ",
+      "режим-не-указан:3:ИНТ. КОМНАТА": "ДЕНЬ",
+      "режим-не-указан:4:ИНТ. КОМНАТА": "ДЕНЬ",
+    });
+    for (const number of ["2", "3", "4"]) {
+      assert.equal(scene(all, number).time, "ДЕНЬ");
+      assert.equal(scene(all, number).dayNight, "DAY");
+    }
+    assert.equal(scene(all, "3").heading, "3. ИНТ. КОМНАТА — ДЕНЬ");
+
+    const one = normalizeFixture("ddct.docx", { "режим-не-указан:3:ИНТ. КОМНАТА": "НОЧЬ" });
+    assert.deepEqual(
+      ["2", "3", "4"].map((number) => scene(one, number).time),
+      [null, "НОЧЬ", null],
+    );
   });
 
   test("D5: пометка вместо режима — режим от предыдущей шапки, вопрос (можно «Принять все»)", () => {
     const fromPrevious = questions(result, QUESTION_TYPES.timeFromPrevious);
-    assert.ok(fromPrevious.every((q) => q.acceptAll));
+    assert.equal(fromPrevious.length, 7);
+    assert.ok(fromPrevious.every((q) => q.acceptAll && !q.persistent && q.occurrences.length === 1));
     const byScene = Object.fromEntries(
       fromPrevious.flatMap((q) =>
         q.occurrences.map((o) => [sceneNumbers(result, [o.paragraphIndex])[0], o.detail]),
@@ -174,7 +196,7 @@ describe("ddct.docx — нормализация", () => {
       "6. ИНТ. ОФИС КОМПАНИИ ПО ПРОИЗВОДСТВУ СЪЕДОБНОЙ БУМАГИ — ПОЗЖЕ",
     );
     const rejected = normalizeFixture("ddct.docx", {
-      "режим-от-предыдущей:ИНТ. ОФИС КОМПАНИИ ПО ПРОИЗВОДСТВУ СЪЕДОБНОЙ БУМАГИ — ПОЗЖЕ": "none",
+      "режим-от-предыдущей:6:ИНТ. ОФИС КОМПАНИИ ПО ПРОИЗВОДСТВУ СЪЕДОБНОЙ БУМАГИ — ПОЗЖЕ": "none",
     });
     assert.equal(scene(rejected, "6").time, null);
   });
@@ -351,9 +373,7 @@ describe("moya-malenkaya-v4.docx — нормализация", () => {
   const result = normalizeFixture("moya-malenkaya-v4.docx");
 
   test("вопрос один — ДИАНА нет в строке «Персонажи» сцены 10", () => {
-    assert.deepEqual(codes(result), [
-      "нет-в-строке-персонажи:ИНТ. КВАРТИРА/ДЕТСКАЯ — ВЕЧЕР:ДИАНА",
-    ]);
+    assert.deepEqual(codes(result), ["нет-в-строке-персонажи:10:ДИАНА"]);
   });
 
   test("V1: титульная", () => {
@@ -436,29 +456,78 @@ describe("коды вопросов из содержимого", () => {
     const heading = typing.blocks.find((b) => b.type === "SLUGLINE")!;
     const action = typing.blocks.find((b) => b.type === "ACTION" && !b.beforeFirstScene)!;
     const at = heading.paragraphIndex;
-    const extraHeading = paragraphs[at]!.autoNumber
-      ? { ...paragraphs[at]!, text: "ИНТ. ПРОБНАЯ — ДЕНЬ", autoNumber: { kind: "number" as const, value: 0, label: "0." } }
-      : { ...paragraphs[at]!, text: "0. ИНТ. ПРОБНАЯ — ДЕНЬ" };
     const extraAction = { ...paragraphs[action.paragraphIndex]!, text: "Пробная сцена." };
-    return [...paragraphs.slice(0, at), extraHeading, extraAction, ...paragraphs.slice(at)];
+    if (!paragraphs[at]!.autoNumber) {
+      const extraHeading = { ...paragraphs[at]!, text: "0. ИНТ. ПРОБНАЯ — ДЕНЬ" };
+      return [...paragraphs.slice(0, at), extraHeading, extraAction, ...paragraphs.slice(at)];
+    }
+    // Автонумерация Word: вставка первой сцены сдвигает номера всех следующих шапок.
+    const shift = (x: DocxParagraph): DocxParagraph =>
+      x.autoNumber?.kind === "number"
+        ? {
+            ...x,
+            autoNumber: {
+              kind: "number",
+              value: x.autoNumber.value + 1,
+              label: `${x.autoNumber.value + 1}.`,
+            },
+          }
+        : x;
+    const extraHeading: DocxParagraph = {
+      ...paragraphs[at]!,
+      text: "ИНТ. ПРОБНАЯ — ДЕНЬ",
+      autoNumber: { kind: "number", value: 1, label: "1." },
+    };
+    return [
+      ...paragraphs.slice(0, at),
+      extraHeading,
+      extraAction,
+      ...paragraphs.slice(at).map(shift),
+    ];
   }
 
+  const persistentCodes = (result: NormalizedScript) =>
+    result.questions.filter((q) => q.persistent).map((q) => q.code).sort();
+
   for (const name of ["ddct.docx", "moya-malenkaya-draft.docx", "moya-malenkaya-v4.docx"]) {
-    test(`${name}: лишняя сцена в начале — те же коды`, () => {
+    test(`${name}: лишняя сцена в начале — те же коды постоянных вопросов`, () => {
       const original = normalizeFixture(name);
       const shifted = normalizeParagraphs(withExtraScene(name));
       assert.equal(shifted.scenes.length, original.scenes.length + 1);
-      assert.deepEqual(codes(shifted), codes(original));
+      assert.deepEqual(persistentCodes(shifted), persistentCodes(original));
     });
   }
 
-  test("коды без номеров сцен и позиций", () => {
+  test("v4: автонумерация сдвинулась — разовый вопрос получает новый номер сцены", () => {
+    const shifted = normalizeParagraphs(withExtraScene("moya-malenkaya-v4.docx"));
+    assert.deepEqual(codes(shifted), ["нет-в-строке-персонажи:11:ДИАНА"]);
+  });
+
+  test("постоянные — без номеров сцен; разовые по сцене — с номером сцены", () => {
     for (const name of ["ddct.docx", "moya-malenkaya-draft.docx", "moya-malenkaya-v4.docx"]) {
       for (const q of normalizeFixture(name).questions) {
-        assert.ok(!/^\S+:\d+\./.test(q.code), q.code);
-        assert.equal(q.code, `${q.type}:${q.subject}`);
+        if (q.persistent) {
+          assert.equal(q.scene, null, q.code);
+          assert.equal(q.code, `${q.type}:${q.subject}`);
+        } else {
+          assert.ok(q.scene, q.code);
+          assert.equal(q.code, `${q.type}:${q.scene}:${q.subject}`);
+        }
       }
     }
+  });
+
+  test("какие вопросы постоянные, какие разовые", () => {
+    assert.deepEqual(
+      Object.values(QUESTION_TYPES).filter((type) => PERSISTENT_QUESTION_TYPES.has(type)),
+      [
+        QUESTION_TYPES.notScene,
+        QUESTION_TYPES.objects,
+        QUESTION_TYPES.characterDigit,
+        QUESTION_TYPES.latinWord,
+        QUESTION_TYPES.latinInWord,
+      ],
+    );
   });
 });
 
@@ -481,26 +550,41 @@ describe("номера сцен (собранные файлы)", () => {
       p("ИНТ. КОРИДОР — ДЕНЬ") + p("Пусто.") +
       p("2. НАТ. ДВОР — НОЧЬ") + p("Тихо.");
     const result = normalizeDocx(body);
-    const missing = question(result, "номер-не-указан:ИНТ. КОРИДОР — ДЕНЬ");
+    const code = "номер-не-указан:п2:ИНТ. КОРИДОР — ДЕНЬ";
+    const missing = question(result, code);
+    assert.equal(missing.persistent, false);
     assert.deepEqual(missing.occurrences.map((o) => o.detail), ["1А"]);
     assert.deepEqual(result.scenes.map((s) => s.number), ["1", "1А", "2"]);
-    const manual = normalizeDocx(body, { "номер-не-указан:ИНТ. КОРИДОР — ДЕНЬ": "1б" });
+    const manual = normalizeDocx(body, { [code]: "1б" });
     assert.equal(manual.scenes[1]!.number, "1Б");
-    const kept = normalizeDocx(body, { "номер-не-указан:ИНТ. КОРИДОР — ДЕНЬ": "keep" });
+    const kept = normalizeDocx(body, { [code]: "keep" });
     assert.equal(kept.scenes[1]!.number, null);
   });
 
-  test("одинаковый номер у двух сцен — вопрос; ответ «буквы»", () => {
+  test("одинаковый номер у двух сцен — разовый вопрос у второй, предложена буква", () => {
     const body =
       p("5. ИНТ. КУХНЯ — ДЕНЬ") + p("Раз.") +
       p("5. НАТ. ДВОР — НОЧЬ") + p("Два.") +
       p("5А. ИНТ. КОРИДОР — НОЧЬ") + p("Три.");
     const result = normalizeDocx(body);
-    const duplicate = question(result, "номер-повтор:5");
-    assert.equal(duplicate.occurrences.length, 2);
+    assert.deepEqual(codes(result), ["номер-повтор:5#2:НАТ. ДВОР — НОЧЬ"]);
+    const duplicate = question(result, "номер-повтор:5#2:НАТ. ДВОР — НОЧЬ");
+    assert.deepEqual(duplicate.occurrences.map((o) => o.detail), ["5Б"]);
     assert.deepEqual(result.scenes.map((s) => s.number), ["5", "5", "5А"]);
-    const fixed = normalizeDocx(body, { "номер-повтор:5": "letters" });
+    const fixed = normalizeDocx(body, { "номер-повтор:5#2:НАТ. ДВОР — НОЧЬ": "suggested" });
     assert.deepEqual(fixed.scenes.map((s) => s.number), ["5", "5Б", "5А"]);
+    const manual = normalizeDocx(body, { "номер-повтор:5#2:НАТ. ДВОР — НОЧЬ": "5в" });
+    assert.equal(manual.scenes[1]!.number, "5В");
+  });
+
+  test("одинаковые шапки без режима — отдельный вопрос по каждой сцене", () => {
+    const result = normalizeDocx(
+      p("1. ИНТ. КОМНАТА") + p("Раз.") + p("2. ИНТ. КОМНАТА") + p("Два."),
+    );
+    assert.deepEqual(codes(result), [
+      "режим-не-указан:1:ИНТ. КОМНАТА",
+      "режим-не-указан:2:ИНТ. КОМНАТА",
+    ]);
   });
 
   test("буква в номере: 11a, 11A → 11А", () => {
