@@ -177,7 +177,7 @@ export function ScriptReview({
       return list.length > 0 ? [{ ...b, list }] : [];
     });
     // «Подтвердить все» — текущие варианты постоянных вопросов становятся ответами (в словарь).
-    const unconfirmed = questions.filter((q) => q.persistent && q.answer && answers[q.code] == null);
+    const unconfirmed = questions.filter((q) => q.persistent && q.answer && !q.confirmed);
     if (simple.length === 0 && noTime.length === 0 && bulk.length === 0 && unconfirmed.length === 0) {
       return null;
     }

@@ -46,7 +46,7 @@ export function QuestionCard({
 }) {
   const custom = acceptsCustomNumber(q) && answered != null && !q.options.includes(answered);
   const [number, setNumber] = useState(custom ? answered : "");
-  const unanswered = q.required && !answered;
+  const unanswered = q.required && !q.confirmed;
 
   return (
     <div
@@ -62,7 +62,7 @@ export function QuestionCard({
       <div className="flex flex-wrap items-start justify-between gap-2">
         <p className="text-sm font-medium">{questionTitle(q, existing)}</p>
         <div className="flex flex-wrap gap-1.5">
-          {q.required ? (
+          {unanswered ? (
             <Badge className="text-[var(--danger)]">нужен ответ</Badge>
           ) : null}
           <KindBadge q={q} />
@@ -78,7 +78,7 @@ export function QuestionCard({
               type="radio"
               name={`q:${q.code}`}
               value={option}
-              checked={q.answer === option}
+              checked={q.answer === option && !unanswered}
               onChange={() => onAnswer(option)}
               className="accent-[var(--accent)]"
             />

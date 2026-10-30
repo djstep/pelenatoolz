@@ -46,6 +46,13 @@ function codesOf(result: NormalizedScript, type: string) {
   return result.questions.filter((q) => q.type === type).map((q) => q.code);
 }
 
+/** «Подтвердить все»: текущие варианты постоянных вопросов — явные ответы. */
+function confirmAll(result: NormalizedScript): Answers {
+  return Object.fromEntries(
+    result.questions.filter((q) => q.persistent && q.answer && !q.confirmed).map((q) => [q.code, q.answer]),
+  );
+}
+
 /** «ТЕСТ импорт» после шага 5: сцены 1–4, сцена 2 вырезана, 1 в дне 1, 3 в дне 2. */
 const TEST_PROJECT: ExistingRecords = {
   characters: [],
@@ -224,6 +231,74 @@ describe("перенумерация: «та же сцена?»", () => {
   });
 });
 
+describe("вопросы, где предложенный ответ создаёт запись, — обязательные (решение владельца после 6а)", () => {
+  const typing = () =>
+    classifyParagraphs(readDocxParagraphs(readFileSync(path.join(FIXTURES, "ddct.docx"))));
+  const EMPTY: ExistingRecords = { characters: [], locations: [], scenes: [] };
+
+  test("ddct: без ответов импорт нельзя; «Подтвердить все» — можно; повтор со словарём — вопросов нет", () => {
+    const first = normalizeScript(typing(), {}, { existing: EMPTY });
+    const required = first.questions.filter((q) => q.required).map((q) => q.type).sort();
+    assert.deepEqual(required, [
+      QUESTION_TYPES.characterDigit,
+      QUESTION_TYPES.similarCharacters,
+      ...Array(4).fill(QUESTION_TYPES.similarLocations),
+      ...Array(2).fill(QUESTION_TYPES.notScene),
+    ].sort());
+    // Предложенный вариант есть, но он не считается ответом.
+    assert.ok(first.questions.filter((q) => q.required).every((q) => q.answer && !q.confirmed));
+    assert.equal(blockingQuestions(first), 8);
+
+    const answers = confirmAll(first);
+    const confirmed = normalizeScript(typing(), answers, { existing: EMPTY });
+    assert.equal(blockingQuestions(confirmed), 0);
+    // СТАЖЕР1 подтверждён «оставить» — отдельный персонаж.
+    assert.equal(confirmed.characters.length, 12);
+    assert.ok(confirmed.characters.some((c) => c.name === "СТАЖЕР1"));
+
+    // Словарь из подтверждённых ответов: новых записей ещё нет, цели «по имени» → id.
+    const drafts = planImport(confirmed, answers, EMPTY, TIMING).rules;
+    assert.equal(drafts.length, 8);
+    const records = {
+      characters: confirmed.characters.map((c) => ({ id: `c:${c.key}`, name: c.name })),
+      locations: confirmed.locations.map((l) => ({ id: `l:${l.key}`, name: l.object, sublocation: null })),
+    };
+    const dictionary = drafts.map((d) => ({
+      ...d,
+      target:
+        d.target && "name" in d.target
+          ? { kind: d.target.kind, id: `${d.target.kind === "character" ? "c" : "l"}:${d.target.name}` }
+          : d.target,
+    }));
+    const again = normalizeScript(typing(), {}, {
+      dictionary,
+      existing: { ...records, scenes: [] },
+    });
+    assert.deepEqual(
+      again.questions.filter((q) => q.persistent).map((q) => q.code),
+      [],
+    );
+    assert.equal(blockingQuestions(again), 0);
+  });
+
+  test("draft: «два объекта» (сц. 9) и похожие объекты — обязательные", () => {
+    const draft = normalizeScript(
+      classifyParagraphs(
+        readDocxParagraphs(readFileSync(path.join(FIXTURES, "moya-malenkaya-draft.docx"))),
+      ),
+      {},
+      { existing: EMPTY },
+    );
+    const objects = draft.questions.find((q) => q.type === QUESTION_TYPES.objects);
+    assert.ok(objects?.required);
+    assert.ok(
+      draft.questions
+        .filter((q) => q.type === QUESTION_TYPES.similarLocations)
+        .every((q) => q.required),
+    );
+  });
+});
+
 describe("план записи", () => {
   test("номер с буквой — номер и буква отдельно", () => {
     assert.deepEqual(splitSceneNumber("11А"), { number: "11", postfix: "А" });
@@ -267,11 +342,13 @@ describe("план записи", () => {
     const same = first.questions.filter((q) => q.type === QUESTION_TYPES.sameScene);
     assert.deepEqual(same.map((q) => q.scene), ["1", "3", "4"]);
     assert.ok(same.every((q) => q.required));
-    assert.equal(blockingQuestions(first), 4);
+    // + 8 обязательных вопросов об именах (решение владельца после 6а).
+    assert.equal(blockingQuestions(first), 4 + 8);
 
     const answers = {
       [restore.code]: "restore",
       ...Object.fromEntries(same.map((q) => [q.code, "same"])),
+      ...confirmAll(first),
     };
     const result = normalizeScript(typing, answers, { existing: TEST_PROJECT });
     assert.equal(blockingQuestions(result), 0);

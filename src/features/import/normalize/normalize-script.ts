@@ -116,13 +116,19 @@ export type NormalizeQuestion = {
   scene: string | null;
   /** Можно ли принять в группе «Принять все». */
   acceptAll: boolean;
-  /** Без ответа импортировать нельзя: предложенного ответа нет (выбор из записей проекта). */
+  /**
+   * Без ответа пользователя импортировать нельзя: предложенного ответа нет (выбор из записей
+   * проекта, сопоставление сцен) или предложенный создал бы новую запись (решение владельца
+   * после 6а: похожие имена, имя с цифрой, два объекта, «шапка не сцена»).
+   */
   required: boolean;
   options: string[];
   /** Ответ, который применён, пока пользователь не ответил. */
   suggested: string;
   /** Применённый ответ: из `answers` или предложенный. */
   answer: string;
+  /** Ответил пользователь (в том числе «Подтвердить все»), а не взят предложенный. */
+  confirmed: boolean;
   /** Где встречается. `detail` — что предложено именно здесь (режим, номер). */
   occurrences: { paragraphIndex: number; detail?: string }[];
 };
@@ -294,6 +300,7 @@ function createQuestionBook(answers: Answers, rules: ReadonlyMap<string, Diction
         options: input.options,
         suggested: input.suggested,
         answer: accepts(given) ? given : input.suggested,
+        confirmed: accepts(given),
         occurrences: [],
       };
       questions.set(code, question);
@@ -449,6 +456,7 @@ export function normalizeScript(
           options: ["scene", "note"],
           suggested: "scene",
           acceptAll: false,
+          required: true,
           paragraphIndex: typed.paragraphIndex,
         });
         if (answer === "note") {
@@ -510,6 +518,7 @@ export function normalizeScript(
           options: ["keep", "space", "typo"],
           suggested: "keep",
           acceptAll: false,
+          required: true,
           paragraphIndex: typed.paragraphIndex,
         });
         if (answer === "space") cue.name = withSpacedDigit(cue.name);
@@ -772,6 +781,7 @@ function resolveLocations(scenes: SceneDraft[], book: QuestionBook) {
         options: ["separate", "sub"],
         suggested: "separate",
         acceptAll: false,
+        required: true,
         paragraphIndex: s.paragraphIndex,
       });
       if (answer === "sub") {
@@ -1030,6 +1040,7 @@ function matchNames(
           options,
           suggested: "different",
           acceptAll: false,
+          required: true,
           paragraphIndex: names.get(key)!.paragraphIndex,
         });
       }
@@ -1057,6 +1068,7 @@ function matchNames(
         options: ["different", `same:${recordKey}`, ...(withSub ? [`sub:${recordKey}`] : [])],
         suggested: "different",
         acceptAll: false,
+        required: true,
         paragraphIndex: info.paragraphIndex,
       });
       if (answer === "different") continue;

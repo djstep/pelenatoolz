@@ -54,12 +54,12 @@ export type ImportPlan = {
 
 export type TitleEdits = Partial<Record<Exclude<keyof TitlePage, "other" | "contacts">, string>>;
 
-/** Почему импорт нельзя записать: обязательные вопросы без ответа. */
+/** Почему импорт нельзя записать: обязательные вопросы без ответа пользователя. */
 export function blockingQuestions(result: NormalizedScript) {
   // Совпавшая сцена ждёт ответа только из обязательного вопроса — его уже посчитали;
   // новая — когда для неё не нашлось номера.
   return (
-    result.questions.filter((q) => q.required && !q.answer).length +
+    result.questions.filter((q) => q.required && !q.confirmed).length +
     result.sceneMatches.filter((m) => m.pending && !m.existingId).length
   );
 }
