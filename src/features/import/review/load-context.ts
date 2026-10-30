@@ -95,6 +95,15 @@ export async function loadImportContext(
         : null,
   }));
 
+  // Сверяемая версия — не текущая: id текущей отдельным запросом (только при синхронизации).
+  const currentProjectVersion =
+    current && !current.isCurrent
+      ? await prisma.scriptVersion.findFirst({
+          where: { projectId, isCurrent: true },
+          select: { id: true },
+        })
+      : null;
+
   const sluglines = new Map<string, string>();
   for (const block of current?.blocks ?? []) {
     if (block.sceneId && !sluglines.has(block.sceneId)) sluglines.set(block.sceneId, block.content);
@@ -147,8 +156,8 @@ export async function loadImportContext(
   return {
     dictionary,
     existing: { characters, locations, scenes: existingScenes, versionScenes },
-    // Синхронизация с другой версией: текущую здесь не знаем, она и не нужна.
-    currentVersionId: current?.isCurrent ? current.id : null,
+    // Синхронизация: при записи сверяется и текущая версия проекта, как у импорта.
+    currentVersionId: current?.isCurrent ? current.id : (currentProjectVersion?.id ?? null),
     timing: {
       mode: project.timingMode,
       pageToMinuteRatio: Number(project.pageToMinuteRatio) || 1,

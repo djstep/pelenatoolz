@@ -24,6 +24,14 @@ export class ScriptVersionConflictError extends Error {
   }
 }
 
+/** Синхронизация: блоки версии изменились с момента предпросмотра. */
+export class VersionBlocksChangedError extends Error {
+  constructor() {
+    super("Версия сценария изменилась");
+    this.name = "VersionBlocksChangedError";
+  }
+}
+
 export function isScriptVersionConflictError(error: unknown): error is ScriptVersionConflictError {
   if (error instanceof ScriptVersionConflictError) return true;
   // Две записи успели взять один номер версии — тот же случай.
@@ -46,6 +54,8 @@ export type ScriptWriteTarget =
   | {
       kind: "existing";
       versionId: string;
+      /** Текущая версия проекта на момент предпросмотра; сменилась (импорт в другой вкладке) — отказ. */
+      expectedVersionId: string | null;
       /** Хэш блоков версии с предпросмотра; блоки изменились (в том числе их сцены) — отказ. */
       blocksHash: string;
       /** Блоки версии по порядку: сцена — индекс сцены плана. Текст не переписывается. */
@@ -165,6 +175,15 @@ export async function writeScript(input: ScriptWriteInput): Promise<ScriptWriteR
         }),
       );
       if (!found || versionBlocksHash(blocks) !== target.blocksHash) {
+        throw new VersionBlocksChangedError();
+      }
+      const current = await q(
+        tx.scriptVersion.findFirst({
+          where: { projectId, isCurrent: true },
+          select: { id: true },
+        }),
+      );
+      if ((current?.id ?? null) !== target.expectedVersionId) {
         throw new ScriptVersionConflictError();
       }
       if (!found.isCurrent) {

@@ -30,7 +30,14 @@ export type ScriptReviewData = {
    * Синхронизация версии с либретто вместо импорта файла: файла нет, `fileHash` — хэш блоков
    * версии, текст версии и титульная не меняются.
    */
-  sync?: { versionId: string; label: string };
+  sync?: {
+    versionId: string;
+    label: string;
+    /** Версия не текущая: после «Обновить либретто» она станет текущей. */
+    isCurrent: boolean;
+    /** Текущая версия проекта (её место займёт эта). */
+    currentLabel: string | null;
+  };
   dictionary: DictionaryRule[];
   existing: ExistingRecords;
   timing: { mode: TimingMode; pageToMinuteRatio: number };

@@ -449,6 +449,16 @@ export function ScriptReview({
         );
       })}
 
+      {data.sync && !data.sync.isCurrent ? (
+        <div className="rounded-xl border border-[var(--tone-warning)] bg-[var(--tone-warning-bg)] p-4 text-sm">
+          <p className="font-medium">Эта версия станет текущей</p>
+          <p className="mt-1 text-[var(--muted-fg)]">
+            Сейчас текущая — {data.sync.currentLabel ?? "другая версия"}. После «Обновить
+            либретто» текущей станет «{data.sync.label}», а либретто обновится по ней.
+          </p>
+        </div>
+      ) : null}
+
       <div className="glass-card flex flex-wrap items-center gap-3 p-6">
         <Button
           type="button"

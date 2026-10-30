@@ -19,6 +19,7 @@ import {
 } from "@/features/import/review/types";
 import {
   isScriptVersionConflictError,
+  VersionBlocksChangedError,
   writeScript,
   type ScriptWriteInput,
   type ScriptWriteResult,
@@ -259,6 +260,8 @@ export async function syncScriptAction(
   const source = await loadVersionSource(projectId, versionId);
   if (!source) return { error: "Версия не найдена" };
   if (source.hash !== formData.get("fileHash")) return { error: VERSION_CHANGED };
+  const expected = formData.get("currentVersionId");
+  const expectedVersionId = typeof expected === "string" && expected ? expected : null;
   const answers = parseJson(answersSchema, formData.get("answers"));
   if (!answers || Object.keys(answers).length > 10_000) {
     return { error: "Некорректные данные синхронизации" };
@@ -269,6 +272,9 @@ export async function syncScriptAction(
     return { error: "В версии нет шапок сцен — нечего переносить в либретто." };
   }
   const context = await loadImportContext(projectId, { referenceVersionId: versionId });
+  // Как у импорта: текущая версия проекта сменилась (импорт в другой вкладке) — отказ,
+  // иначе эта версия молча стала бы текущей.
+  if (context.currentVersionId !== expectedVersionId) return { error: CHANGED };
   const result = normalizeScript(typing, answers, {
     dictionary: context.dictionary,
     existing: context.existing,
@@ -298,7 +304,13 @@ export async function syncScriptAction(
       {
         projectId,
         userId: ctx.user.id!,
-        target: { kind: "existing", versionId, blocksHash: source.hash, blocks },
+        target: {
+          kind: "existing",
+          versionId,
+          expectedVersionId,
+          blocksHash: source.hash,
+          blocks,
+        },
         plan,
       } satisfies ScriptWriteInput,
       {
@@ -312,7 +324,8 @@ export async function syncScriptAction(
       },
     );
   } catch (error) {
-    if (isScriptVersionConflictError(error)) return { error: VERSION_CHANGED };
+    if (error instanceof VersionBlocksChangedError) return { error: VERSION_CHANGED };
+    if (isScriptVersionConflictError(error)) return { error: CHANGED };
     throw error;
   }
 
