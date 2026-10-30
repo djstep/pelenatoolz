@@ -17,9 +17,13 @@ const DAY_NIGHT_WORDS = { DAY: "ДЕНЬ", NIGHT: "НОЧЬ", DAWN: "УТРО", 
 /**
  * Всё, что нормализации нужно из базы, — только чтение: словарь проекта, имена персонажей
  * и локаций проекта, сцены (для сопоставления с прошлой версией), текущая версия сценария,
- * режим хронометража.
+ * режим хронометража. `referenceVersionId` — синхронизация: шапки и сцены берутся из этой
+ * версии, а не из текущей.
  */
-export async function loadImportContext(projectId: string) {
+export async function loadImportContext(
+  projectId: string,
+  options: { referenceVersionId?: string } = {},
+) {
   const [rules, characters, locations, current, project, scenes] = await Promise.all([
     prisma.scriptDictionaryRule.findMany({
       where: { projectId },
@@ -43,9 +47,12 @@ export async function loadImportContext(projectId: string) {
       orderBy: { createdAt: "asc" },
     }),
     prisma.scriptVersion.findFirst({
-      where: { projectId, isCurrent: true },
+      where: options.referenceVersionId
+        ? { id: options.referenceVersionId, projectId }
+        : { projectId, isCurrent: true },
       select: {
         id: true,
+        isCurrent: true,
         blocks: {
           where: { type: "SLUGLINE", sceneId: { not: null } },
           select: { sceneId: true, content: true },
@@ -140,7 +147,8 @@ export async function loadImportContext(projectId: string) {
   return {
     dictionary,
     existing: { characters, locations, scenes: existingScenes, versionScenes },
-    currentVersionId: current?.id ?? null,
+    // Синхронизация с другой версией: текущую здесь не знаем, она и не нужна.
+    currentVersionId: current?.isCurrent ? current.id : null,
     timing: {
       mode: project.timingMode,
       pageToMinuteRatio: Number(project.pageToMinuteRatio) || 1,

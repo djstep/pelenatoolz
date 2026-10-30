@@ -9,6 +9,7 @@ export type AssertInProjectEntity =
   | "ScriptVersion"
   | "ScriptBlock"
   | "ScriptComment"
+  | "ScriptDictionaryRule"
   | "Location"
   | "LocationPhoto"
   | "ResourceItem"
@@ -45,6 +46,7 @@ type ProjectDb = Pick<
   | "scriptVersion"
   | "scriptBlock"
   | "scriptComment"
+  | "scriptDictionaryRule"
   | "location"
   | "locationPhoto"
   | "resourceItem"
@@ -128,6 +130,10 @@ async function countInProject(
           id: { in: ids },
           scriptVersion: { projectId },
         },
+      });
+    case "ScriptDictionaryRule":
+      return db.scriptDictionaryRule.count({
+        where: { id: { in: ids }, projectId },
       });
     case "Location":
       return db.location.count({

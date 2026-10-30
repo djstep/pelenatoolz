@@ -127,10 +127,12 @@ export function buildSlugline(input: {
     input.episodeNumber > 0
       ? `${input.episodeNumber}-${input.number}${input.postfix}`
       : `${input.number}${input.postfix}`;
-  const ie = input.intExt ? intExtToSlug(input.intExt) : "ИНТ.";
-  const loc = input.location?.trim() || "ЛОКАЦИЯ";
-  const dn = input.dayNight ? dayNightToSlug(input.dayNight) : "ДЕНЬ";
-  return `${num}. ${ie} ${loc} – ${dn}`;
+  // Пустое поле сцены — пусто в шапке: ИНТ/НАТ, место и режим не подставляются.
+  const ie = input.intExt ? intExtToSlug(input.intExt) : null;
+  const loc = input.location?.trim() || null;
+  const dn = input.dayNight ? dayNightToSlug(input.dayNight) : null;
+  const head = [`${num}.`, ie, loc].filter(Boolean).join(" ");
+  return dn ? `${head} – ${dn}` : head;
 }
 
 export function intExtLabel(value?: IntExt | null) {

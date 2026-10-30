@@ -230,6 +230,7 @@ export function matchScenes(
   files: readonly FileScene[],
   existing: ExistingInput,
   ask: Ask,
+  options: { sync?: boolean } = {},
 ): { matches: SceneMatch[]; missing: MissingScene[] } {
   const scenes = existing.scenes ?? [];
   const byNumber = new Map(scenes.map((s) => [s.number, s]));
@@ -412,6 +413,8 @@ export function matchScenes(
         options: ["suggested"],
         suggested: "suggested",
         acceptAll: false,
+        // При синхронизации номер новой сцены — только ответом, не предложением.
+        required: options.sync ?? false,
         paragraphIndex: f.paragraphIndex,
         ...(suggestion ? { detail: suggestion } : {}),
         valid: (value) => {

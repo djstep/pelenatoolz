@@ -10,7 +10,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { importScriptAction } from "@/features/import/actions";
+import { importScriptAction, syncScriptAction } from "@/features/import/actions";
 import {
   normalizeScript,
   QUESTION_TYPES,
@@ -81,7 +81,8 @@ export function ScriptReview({
 }: {
   projectId: string;
   locale: string;
-  file: File;
+  /** Файл импорта; при синхронизации версии с либретто файла нет. */
+  file: File | null;
   data: ScriptReviewData;
 }) {
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -89,7 +90,9 @@ export function ScriptReview({
   const [openScene, setOpenScene] = useState<number | null>(null);
   const [timeForAll, setTimeForAll] = useState("");
   const [importState, importAction, importing] = useActionState(
-    importScriptAction.bind(null, projectId),
+    data.sync
+      ? syncScriptAction.bind(null, projectId, data.sync.versionId)
+      : importScriptAction.bind(null, projectId),
     initialImport,
   );
   useActionToast(importState);
@@ -113,7 +116,7 @@ export function ScriptReview({
     if (submitted.current) return;
     submitted.current = true;
     const formData = new FormData();
-    formData.append("file", file);
+    if (file) formData.append("file", file);
     formData.append("fileHash", data.fileHash);
     formData.append("currentVersionId", data.currentVersionId ?? "");
     formData.append("answers", JSON.stringify(answers));
@@ -164,6 +167,7 @@ export function ScriptReview({
         answered={answers[q.code]}
         existing={data.existing}
         fileKeys={fileKeys}
+        sync={Boolean(data.sync)}
         onAnswer={(value) => answer(q.code, value)}
       />
     ));
@@ -252,7 +256,9 @@ export function ScriptReview({
       <section className="glass-card space-y-3 p-6">
         <h3 className="font-display text-lg font-semibold">Сводка</h3>
         <p className="text-sm text-[var(--muted-fg)]">
-          {data.fileName} · {formatFileSize(data.fileSize)}
+          {data.sync
+            ? `Обновление либретто из версии «${data.sync.label}». Текст версии не меняется.`
+            : `${data.fileName} · ${formatFileSize(data.fileSize)}`}
         </p>
         <div className="flex flex-wrap gap-2 text-sm">
           <Badge>Сцен: {result.scenes.length}</Badge>
@@ -312,7 +318,11 @@ export function ScriptReview({
             {acceptAllControls(questions)}
 
             {group === "title" ? (
-              titlePage ? (
+              data.sync ? (
+                <p className="text-sm text-[var(--muted-fg)]">
+                  Обновление либретто титульную страницу версии не меняет.
+                </p>
+              ) : titlePage ? (
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   {TITLE_FIELDS.map(({ key, label }) => (
                     <div key={key}>
@@ -445,12 +455,20 @@ export function ScriptReview({
           disabled={importing || requiredLeft > 0 || Boolean(importedVersionId)}
           onClick={submitImport}
         >
-          {importing ? "Импорт…" : "Импортировать"}
+          {data.sync
+            ? importing
+              ? "Обновление…"
+              : "Обновить либретто"
+            : importing
+              ? "Импорт…"
+              : "Импортировать"}
         </Button>
         <span className="text-xs text-[var(--muted-fg)]">
           {requiredLeft > 0
             ? `Сначала ответьте на обязательные вопросы: ${requiredLeft}.`
-            : "Создаст новую версию сценария и обновит либретто. Сцены, персонажи и локации проекта не удаляются."}
+            : data.sync
+              ? "Обновит сцены, персонажей, локации и связи в либретто; версия станет текущей. Сцены, персонажи и локации не удаляются."
+              : "Создаст новую версию сценария и обновит либретто. Сцены, персонажи и локации проекта не удаляются."}
         </span>
       </div>
     </form>

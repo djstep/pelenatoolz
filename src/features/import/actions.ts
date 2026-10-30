@@ -6,7 +6,10 @@ import { z } from "zod";
 import { classifyParagraphs, type BlockTypingResult } from "@/features/import/normalize/block-types";
 import { readDocxParagraphs } from "@/features/import/normalize/docx-paragraphs";
 import { isDocxReadError, type DocxReadErrorCode } from "@/features/import/normalize/docx-zip";
-import { normalizeScript } from "@/features/import/normalize/normalize-script";
+import {
+  normalizeScript,
+  type NormalizedScript,
+} from "@/features/import/normalize/normalize-script";
 import { loadImportContext } from "@/features/import/review/load-context";
 import {
   formatMegabytes,
@@ -21,6 +24,8 @@ import {
   type ScriptWriteResult,
 } from "@/features/import/write/apply";
 import { blockingQuestions, planImport } from "@/features/import/write/plan";
+import { loadVersionSource } from "@/features/import/write/version-source";
+import { typingFromVersionBlocks } from "@/features/import/write/version-typing";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { AuditEntityType } from "@/shared/audit/entity-types";
 import { auditMutation } from "@/shared/audit/with-audit";
@@ -34,6 +39,7 @@ const DOCX_ERRORS: Record<DocxReadErrorCode, string> = {
 };
 
 const NO_RIGHTS = "Импорт сценария доступен только с правом правки сценария";
+const NO_RIGHTS_SYNC = "Обновить либретто из версии можно только с правом правки сценария";
 const CHANGED =
   "Сценарий проекта уже изменился (вторая вкладка или повторное нажатие). Обновите страницу и сделайте предпросмотр заново.";
 
@@ -168,8 +174,12 @@ export async function importScriptAction(
       {
         projectId,
         userId: ctx.user.id!,
-        expectedVersionId,
-        version: { title: fileName.replace(/\.docx$/i, ""), sourceType: "IMPORTED_DOCX" },
+        target: {
+          kind: "new",
+          expectedVersionId,
+          title: fileName.replace(/\.docx$/i, ""),
+          sourceType: "IMPORTED_DOCX",
+        },
         plan,
       } satisfies ScriptWriteInput,
       {
@@ -182,23 +192,7 @@ export async function importScriptAction(
           `Импорт сценария: ${fileName}, версия ${r.versionNumber}; сцен создано ${r.scenesCreated}, привязано ${r.scenesMatched}`,
         changes: (_input, r) => ({
           file: { name: fileName, size: fileSize },
-          versionNumber: r.versionNumber,
-          scenes: {
-            created: r.scenesCreated,
-            matched: r.scenesMatched,
-            cut: r.scenesCut,
-            restored: r.scenesRestored,
-          },
-          characters: {
-            created: r.charactersCreated,
-            linked: result.characters.filter((c) => c.existingId).length,
-          },
-          locations: {
-            created: r.locationsCreated,
-            linked: result.locations.filter((l) => l.existing).length,
-          },
-          linksRemoved: r.linksRemoved,
-          dictionaryRules: r.rules,
+          ...writeChanges(result, r),
         }),
       },
     );
@@ -207,13 +201,124 @@ export async function importScriptAction(
     throw error;
   }
 
+  revalidateScript(projectId);
+  return {
+    success: `Импортирована версия ${written.versionNumber}: сцен новых ${written.scenesCreated}, привязано ${written.scenesMatched}`,
+    versionId: written.versionId,
+  };
+}
+
+/** Счётчики импорта и синхронизации для журнала — без текста сценария и титульной. */
+function writeChanges(result: NormalizedScript, r: ScriptWriteResult) {
+  return {
+    versionNumber: r.versionNumber,
+    scenes: {
+      created: r.scenesCreated,
+      matched: r.scenesMatched,
+      cut: r.scenesCut,
+      restored: r.scenesRestored,
+    },
+    characters: {
+      created: r.charactersCreated,
+      linked: result.characters.filter((c) => c.existingId).length,
+    },
+    locations: {
+      created: r.locationsCreated,
+      linked: result.locations.filter((l) => l.existing).length,
+    },
+    linksRemoved: r.linksRemoved,
+    dictionaryRules: r.rules,
+  };
+}
+
+function revalidateScript(projectId: string) {
   revalidatePath(`/ru/projects/${projectId}/screenplay`);
   revalidatePath(`/ru/projects/${projectId}/libretto`);
   revalidatePath(`/ru/projects/${projectId}/script`);
   revalidatePath(`/ru/projects/${projectId}/schedule`);
   revalidatePath(`/ru/projects/${projectId}`);
+}
+
+const VERSION_CHANGED =
+  "Версия сценария изменилась с момента предпросмотра (правка, вторая вкладка или повторное нажатие). Обновите страницу.";
+
+/**
+ * «Обновить либретто» из версии сценария — та же нормализация и та же запись, что у импорта.
+ * От браузера — только ответы и хэш блоков версии с предпросмотра. Текст версии не меняется,
+ * у её блоков обновляется сцена; версия становится текущей. Только с правом правки сценария.
+ */
+export async function syncScriptAction(
+  projectId: string,
+  versionId: string,
+  _prev: ScriptImportState,
+  formData: FormData,
+): Promise<ScriptImportState> {
+  const ctx = await requireProjectContext(projectId);
+  if (!ctx.can("script:write")) return { error: NO_RIGHTS_SYNC };
+
+  const source = await loadVersionSource(projectId, versionId);
+  if (!source) return { error: "Версия не найдена" };
+  if (source.hash !== formData.get("fileHash")) return { error: VERSION_CHANGED };
+  const answers = parseJson(answersSchema, formData.get("answers"));
+  if (!answers || Object.keys(answers).length > 10_000) {
+    return { error: "Некорректные данные синхронизации" };
+  }
+
+  const typing = typingFromVersionBlocks(source.blocks);
+  if (!typing.blocks.some((b) => b.type === "SLUGLINE")) {
+    return { error: "В версии нет шапок сцен — нечего переносить в либретто." };
+  }
+  const context = await loadImportContext(projectId, { referenceVersionId: versionId });
+  const result = normalizeScript(typing, answers, {
+    dictionary: context.dictionary,
+    existing: context.existing,
+    sync: true,
+  });
+  const blocking = blockingQuestions(result);
+  if (blocking > 0) {
+    return {
+      error: `Без ответа обязательных вопросов: ${blocking}. Если вы на всё ответили — данные проекта изменились, обновите страницу.`,
+    };
+  }
+  const plan = planImport(result, answers, context.existing, context.timing);
+
+  // Сцена каждого блока версии: свой блок нормализации или предыдущий (выброшенные «(ДАЛЬШЕ)»).
+  const sceneOfBlock = new Map(result.blocks.map((b) => [b.paragraphIndex, b.sceneIndex]));
+  let last: number | null = null;
+  const blocks = source.blocks.map((block, index) => {
+    if (sceneOfBlock.has(index)) last = sceneOfBlock.get(index) ?? null;
+    return { id: block.id, scene: last };
+  });
+
+  let written: ScriptWriteResult;
+  try {
+    written = await auditMutation(
+      ctx,
+      writeScript,
+      {
+        projectId,
+        userId: ctx.user.id!,
+        target: { kind: "existing", versionId, blocksHash: source.hash, blocks },
+        plan,
+      } satisfies ScriptWriteInput,
+      {
+        projectId,
+        entityType: AuditEntityType.scriptVersion,
+        action: "UPDATE",
+        entityId: versionId,
+        summary: (_input, r) =>
+          `Либретто обновлено из версии ${r.versionNumber}: сцен создано ${r.scenesCreated}, привязано ${r.scenesMatched}`,
+        changes: (_input, r) => writeChanges(result, r),
+      },
+    );
+  } catch (error) {
+    if (isScriptVersionConflictError(error)) return { error: VERSION_CHANGED };
+    throw error;
+  }
+
+  revalidateScript(projectId);
   return {
-    success: `Импортирована версия ${written.versionNumber}: сцен новых ${written.scenesCreated}, привязано ${written.scenesMatched}`,
-    versionId: written.versionId,
+    success: `Либретто обновлено: сцен новых ${written.scenesCreated}, привязано ${written.scenesMatched}`,
+    versionId,
   };
 }

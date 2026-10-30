@@ -35,6 +35,7 @@ export function QuestionCard({
   answered,
   existing,
   fileKeys,
+  sync = false,
   onAnswer,
 }: {
   q: NormalizeQuestion;
@@ -42,6 +43,8 @@ export function QuestionCard({
   answered: string | undefined;
   existing: ExistingRecords;
   fileKeys: ReadonlySet<string>;
+  /** Синхронизация с либретто: «без режима» — «не менять в либретто». */
+  sync?: boolean;
   onAnswer: (value: string) => void;
 }) {
   const custom = acceptsCustomNumber(q) && answered != null && !q.options.includes(answered);
@@ -82,7 +85,7 @@ export function QuestionCard({
               onChange={() => onAnswer(option)}
               className="accent-[var(--accent)]"
             />
-            {optionLabel(q, option, existing, fileKeys)}
+            {optionLabel(q, option, existing, fileKeys, sync)}
             {option === q.suggested && answered == null ? (
               <span className="text-xs text-[var(--muted-fg)]">(предложено)</span>
             ) : null}

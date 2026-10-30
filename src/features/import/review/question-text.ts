@@ -120,9 +120,18 @@ export function optionLabel(
   option: string,
   existing: ExistingRecords,
   fileKeys: ReadonlySet<string>,
+  /** Синхронизация с либретто: «без режима» значит «режим в либретто не менять». */
+  sync = false,
 ): string {
   const detail = q.occurrences.find((o) => o.detail)?.detail;
   const [action, name] = split(option);
+  if (
+    sync &&
+    option === "none" &&
+    (q.type === QUESTION_TYPES.timeMissing || q.type === QUESTION_TYPES.timeFromPrevious)
+  ) {
+    return "Не менять режим в либретто";
+  }
   switch (q.type) {
     case QUESTION_TYPES.sameScene:
     case QUESTION_TYPES.restoreScene: {

@@ -151,6 +151,12 @@ export type ExistingRecords = {
 export type NormalizeContext = {
   dictionary?: readonly DictionaryRule[];
   existing?: ExistingRecords;
+  /**
+   * Синхронизация версии с либретто (текст версии не переписывается): предложенный ответ не
+   * пишет в либретто — режим «от предыдущей» по умолчанию не ставится, номера новых сцен —
+   * только ответом; вопрос «нет в строке Персонажи» не задаётся (меняет только текст).
+   */
+  sync?: boolean;
 };
 
 /** Запись проекта, к которой привязано имя. У объекта — одна из строк локации с этим именем. */
@@ -359,6 +365,7 @@ export function normalizeScript(
   context: NormalizeContext = {},
 ): NormalizedScript {
   const existing = context.existing ?? { characters: [], locations: [] };
+  const sync = context.sync ?? false;
   const dictionary = prepareDictionary(context.dictionary ?? [], existing);
   const book = createQuestionBook(answers, dictionary.byCode);
   const notices = new Map<NormalizeNoticeCode, number[]>();
@@ -545,8 +552,8 @@ export function normalizeScript(
   }
 
   assignRefs(scenes);
-  assignNumbers(scenes, book);
-  resolveTimes(scenes, book);
+  assignNumbers(scenes, book, sync);
+  resolveTimes(scenes, book, sync);
   resolveLocations(scenes, book);
   const locations = matchLocations(scenes, existing, dictionary, book);
   const characters = matchCharacters(
@@ -558,7 +565,8 @@ export function normalizeScript(
     dictionary,
     book,
   );
-  checkCastLines(scenes, book);
+  // Строка «Персонажи» меняет только текст: при синхронизации текст версии не переписывается.
+  if (!sync) checkCastLines(scenes, book);
 
   for (const draft of scenes) {
     draft.block.text = formatHeading(draft.heading, draft.number, draft.tail);
@@ -588,7 +596,7 @@ export function normalizeScript(
     contentHash: contentHash(sceneContent(sceneBlocks.get(s.index) ?? [])),
   }));
   const { matches, missing } = existing.scenes
-    ? matchScenes(fileScenes, existing, (input) => book.ask(input as AskInput))
+    ? matchScenes(fileScenes, existing, (input) => book.ask(input as AskInput), { sync })
     : { matches: [], missing: [] };
 
   return {
@@ -659,7 +667,7 @@ function assignRefs(scenes: SceneDraft[]) {
  * Номера: без номеров совсем — один вопрос «пронумеровать подряд» на файл;
  * частично — вопрос по каждой сцене без номера; повтор — вопрос по каждой сцене, кроме первой.
  */
-function assignNumbers(scenes: SceneDraft[], book: QuestionBook) {
+function assignNumbers(scenes: SceneDraft[], book: QuestionBook, sync: boolean) {
   if (scenes.length === 0) return;
 
   if (scenes.every((s) => !s.number)) {
@@ -671,6 +679,7 @@ function assignNumbers(scenes: SceneDraft[], book: QuestionBook) {
         options: ["number", "keep"],
         suggested: "number",
         acceptAll: false,
+        required: sync,
         paragraphIndex: s.paragraphIndex,
         detail: String(s.index + 1),
       });
@@ -692,6 +701,7 @@ function assignNumbers(scenes: SceneDraft[], book: QuestionBook) {
         options: ["suggested", "keep"],
         suggested: "suggested",
         acceptAll: false,
+        required: sync,
         paragraphIndex: s.paragraphIndex,
         ...(suggestion ? { detail: suggestion } : {}),
         valid: isSceneNumber,
@@ -720,6 +730,7 @@ function assignNumbers(scenes: SceneDraft[], book: QuestionBook) {
         options: ["keep", "suggested"],
         suggested: "keep",
         acceptAll: false,
+        required: sync,
         paragraphIndex: s.paragraphIndex,
         ...(suggestion ? { detail: suggestion } : {}),
         valid: isSceneNumber,
@@ -734,7 +745,7 @@ function assignNumbers(scenes: SceneDraft[], book: QuestionBook) {
 }
 
 /** Режим: пометка вместо режима — от предыдущей шапки; нет режима — вопрос. */
-function resolveTimes(scenes: SceneDraft[], book: QuestionBook) {
+function resolveTimes(scenes: SceneDraft[], book: QuestionBook, sync: boolean) {
   let previous: string | null = null;
   for (const s of scenes) {
     const { heading } = s;
@@ -745,7 +756,8 @@ function resolveTimes(scenes: SceneDraft[], book: QuestionBook) {
         subject: s.key,
         group: "scenes",
         options: ["previous", "none", ...TIME_OPTIONS],
-        suggested: "previous",
+        // При синхронизации предложенный ответ не пишет режим в либретто.
+        suggested: sync ? "none" : "previous",
         acceptAll: true,
         paragraphIndex: s.paragraphIndex,
         detail: previous,
@@ -874,6 +886,14 @@ function targetKind(rule: DictionaryRule): SimilarKind | null {
     default:
       return null;
   }
+}
+
+/** Устаревшие правила — та же проверка, что при нормализации (для экрана словаря). */
+export function staleDictionaryRules(
+  rules: readonly DictionaryRule[],
+  existing: ExistingRecords,
+): DictionaryRule[] {
+  return prepareDictionary(rules, existing).stale;
 }
 
 /**

@@ -54,6 +54,11 @@ export const projectNavGroups: NavGroupDef[] = [
       { href: "", label: "Обзор" },
       { href: "/screenplay", label: "Сценарий", visible: anyOf("script:read") },
       {
+        href: "/screenplay/dictionary",
+        label: "Словарь сценария",
+        visible: anyOf("script:read"),
+      },
+      {
         href: "/files",
         label: "Файлы",
         visible: anyOf("script:read", "project:read"),

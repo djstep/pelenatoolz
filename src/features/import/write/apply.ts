@@ -5,6 +5,7 @@ import type { DictionaryRuleDraft } from "@/features/import/normalize/dictionary
 import { QUESTION_TYPES } from "@/features/import/normalize/normalize-script";
 import { compareKey } from "@/features/import/normalize/text";
 import type { ImportPlan, PlanRef } from "@/features/import/write/plan";
+import { versionBlocksHash } from "@/features/import/write/version-source";
 import { assertInProject } from "@/features/memberships/assert-in-project";
 import { prisma } from "@/shared/db/prisma";
 
@@ -33,12 +34,28 @@ export function isScriptVersionConflictError(error: unknown): error is ScriptVer
   );
 }
 
+/** Куда пишется версия: новая (импорт) или существующая (синхронизация с либретто). */
+export type ScriptWriteTarget =
+  | {
+      kind: "new";
+      /** Текущая версия на момент предпросмотра; сменилась — отказ. */
+      expectedVersionId: string | null;
+      title: string | null;
+      sourceType: ScriptVersionSourceType;
+    }
+  | {
+      kind: "existing";
+      versionId: string;
+      /** Хэш блоков версии с предпросмотра; блоки изменились (в том числе их сцены) — отказ. */
+      blocksHash: string;
+      /** Блоки версии по порядку: сцена — индекс сцены плана. Текст не переписывается. */
+      blocks: { id: string; scene: number | null }[];
+    };
+
 export type ScriptWriteInput = {
   projectId: string;
   userId: string;
-  /** Текущая версия на момент предпросмотра; сменилась — отказ. */
-  expectedVersionId: string | null;
-  version: { title: string | null; sourceType: ScriptVersionSourceType };
+  target: ScriptWriteTarget;
   plan: ImportPlan;
 };
 
@@ -80,12 +97,14 @@ function needsTarget(rule: DictionaryRuleDraft) {
 }
 
 /**
- * Одна точка записи сценария: версия с титульной, блоки, сцены, связи, новые персонажи
- * и локации, правила словаря — в одной транзакции, пачками. Сцены, персонажи и локации
- * не удаляются; убираются только связи, на которые ответили «убрать». `contentHtml` не пишется.
+ * Одна точка записи сценария — для импорта и для синхронизации с либретто: версия (новая с
+ * титульной и блоками или существующая — только сцены её блоков), сцены, связи, новые
+ * персонажи и локации, правила словаря — в одной транзакции, пачками. Сцены, персонажи
+ * и локации не удаляются; убираются только связи, на которые ответили «убрать».
+ * `contentHtml` не пишется. Версия после записи — текущая.
  */
 export async function writeScript(input: ScriptWriteInput): Promise<ScriptWriteResult> {
-  const { projectId, plan } = input;
+  const { projectId, plan, target } = input;
   let queries = 0;
   const q = <T>(promise: Promise<T>) => {
     queries += 1;
@@ -93,42 +112,72 @@ export async function writeScript(input: ScriptWriteInput): Promise<ScriptWriteR
   };
 
   return prisma.$transaction(async (tx) => {
-    // Вторая запись того же проекта ждёт здесь и потом видит новую текущую версию.
+    // Вторая запись того же проекта ждёт здесь и потом видит изменения первой.
     await q(tx.$queryRaw`SELECT "id" FROM "Project" WHERE "id" = ${projectId} FOR UPDATE`);
-    const current = await q(
-      tx.scriptVersion.findFirst({
-        where: { projectId, isCurrent: true },
-        select: { id: true },
-      }),
-    );
-    if ((current?.id ?? null) !== input.expectedVersionId) {
-      throw new ScriptVersionConflictError();
-    }
-    const last = await q(
-      tx.scriptVersion.aggregate({ where: { projectId }, _max: { versionNumber: true } }),
-    );
-    if (current) {
-      await q(
-        tx.scriptVersion.updateMany({
+    let version: { id: string; versionNumber: number };
+    if (target.kind === "new") {
+      const current = await q(
+        tx.scriptVersion.findFirst({
           where: { projectId, isCurrent: true },
-          data: { isCurrent: false },
+          select: { id: true },
         }),
       );
+      if ((current?.id ?? null) !== target.expectedVersionId) {
+        throw new ScriptVersionConflictError();
+      }
+      const last = await q(
+        tx.scriptVersion.aggregate({ where: { projectId }, _max: { versionNumber: true } }),
+      );
+      if (current) {
+        await q(
+          tx.scriptVersion.updateMany({
+            where: { projectId, isCurrent: true },
+            data: { isCurrent: false },
+          }),
+        );
+      }
+      version = await q(
+        tx.scriptVersion.create({
+          data: {
+            projectId,
+            versionNumber: (last._max.versionNumber ?? 0) + 1,
+            title: target.title?.trim().slice(0, 200) || null,
+            isCurrent: true,
+            sourceType: target.sourceType,
+            createdById: input.userId,
+            ...(plan.titlePage ? { titlePage: plan.titlePage } : {}),
+          },
+          select: { id: true, versionNumber: true },
+        }),
+      );
+    } else {
+      const found = await q(
+        tx.scriptVersion.findFirst({
+          where: { id: target.versionId, projectId },
+          select: { id: true, versionNumber: true, isCurrent: true },
+        }),
+      );
+      const blocks = await q(
+        tx.scriptBlock.findMany({
+          where: { scriptVersionId: target.versionId, projectId },
+          orderBy: { sortOrder: "asc" },
+          select: { id: true, type: true, content: true, sceneId: true },
+        }),
+      );
+      if (!found || versionBlocksHash(blocks) !== target.blocksHash) {
+        throw new ScriptVersionConflictError();
+      }
+      if (!found.isCurrent) {
+        await q(
+          tx.scriptVersion.updateMany({
+            where: { projectId, isCurrent: true },
+            data: { isCurrent: false },
+          }),
+        );
+        await q(tx.scriptVersion.update({ where: { id: found.id }, data: { isCurrent: true } }));
+      }
+      version = found;
     }
-    const version = await q(
-      tx.scriptVersion.create({
-        data: {
-          projectId,
-          versionNumber: (last._max.versionNumber ?? 0) + 1,
-          title: input.version.title?.trim().slice(0, 200) || null,
-          isCurrent: true,
-          sourceType: input.version.sourceType,
-          createdById: input.userId,
-          ...(plan.titlePage ? { titlePage: plan.titlePage } : {}),
-        },
-        select: { id: true, versionNumber: true },
-      }),
-    );
 
     // Новые персонажи и строки локаций: ключ плана → id.
     const characterIds = new Map<string, string>();
@@ -273,17 +322,33 @@ export async function writeScript(input: ScriptWriteInput): Promise<ScriptWriteR
       await q(tx.sceneLocation.createMany({ data: part, skipDuplicates: true }));
     }
 
-    // Блоки версии — только текст.
-    const blocks = plan.blocks.map((b, sortOrder) => ({
-      projectId,
-      scriptVersionId: version.id,
-      sceneId: b.scene != null ? (sceneIds.get(b.scene) ?? null) : null,
-      type: b.type,
-      content: b.content,
-      sortOrder,
-    }));
-    for (const part of chunks(blocks)) {
-      await q(tx.scriptBlock.createMany({ data: part }));
+    const sceneOf = (scene: number | null) => (scene != null ? (sceneIds.get(scene) ?? null) : null);
+    if (target.kind === "new") {
+      // Блоки новой версии — только текст.
+      const blocks = plan.blocks.map((b, sortOrder) => ({
+        projectId,
+        scriptVersionId: version.id,
+        sceneId: sceneOf(b.scene),
+        type: b.type,
+        content: b.content,
+        sortOrder,
+      }));
+      for (const part of chunks(blocks)) {
+        await q(tx.scriptBlock.createMany({ data: part }));
+      }
+    } else {
+      // Существующая версия: текст не трогаем, у блоков меняется только сцена — одним запросом.
+      for (const part of chunks(target.blocks, 500)) {
+        const values = Prisma.join(
+          part.map((b) => Prisma.sql`(${b.id}, ${sceneOf(b.scene)}::text)`),
+        );
+        await q(tx.$executeRaw`
+          UPDATE "ScriptBlock" AS b SET
+            "sceneId" = v.scene_id,
+            "updatedAt" = ${now}::timestamp(3)
+          FROM (VALUES ${values}) AS v(id, scene_id)
+          WHERE b."id" = v.id AND b."scriptVersionId" = ${version.id} AND b."projectId" = ${projectId}`);
+      }
     }
 
     // Словарь: цель «по имени» → id записи, созданной выше (у объекта — строка без

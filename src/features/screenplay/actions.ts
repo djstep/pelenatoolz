@@ -19,10 +19,6 @@ import {
   type SceneScriptExportOptions,
 } from "@/features/screenplay/lib/export-scene-script";
 import type { ExportColumn } from "@/features/exports/types";
-import { buildLibrettoPreviewFromBlocks } from "@/features/screenplay/lib/libretto-sync";
-import { applyScenesFromPreview } from "@/features/screenplay/lib/libretto-apply";
-import { mergeSceneEdits } from "@/features/import/merge-scene-edits";
-import type { ImportPreviewScene } from "@/features/import/types";
 import {
   linkBlocksToExistingScenes,
   syncSluglineFromScene,
@@ -228,88 +224,6 @@ export async function duplicateScriptVersionAction(
   return {
     success: "Версия продублирована",
     versionId: version.id,
-  };
-}
-
-export async function previewLibrettoSyncAction(
-  projectId: string,
-  versionId: string,
-) {
-  const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:write")) {
-    return { error: "Недостаточно прав" as const };
-  }
-
-  const version = await getScriptVersion(projectId, versionId);
-  if (!version) return { error: "Версия не найдена" as const };
-
-  const blocks = await listVersionBlocks(versionId);
-  const existing = await listScenes(projectId);
-  const project = await prisma.project.findUniqueOrThrow({
-    where: { id: projectId },
-    select: { timingMode: true, pageToMinuteRatio: true },
-  });
-  const scenes = buildLibrettoPreviewFromBlocks(
-    blocks,
-    existing,
-    project.timingMode,
-    Number(project.pageToMinuteRatio),
-  );
-
-  return { scenes, versionId };
-}
-
-export async function applyLibrettoSyncAction(
-  projectId: string,
-  versionId: string,
-  scenesJson: string,
-  formData: FormData,
-): Promise<ScreenplayActionState> {
-  const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:write")) {
-    return { error: "Недостаточно прав" };
-  }
-
-  const version = await getScriptVersion(projectId, versionId);
-  if (!version) return { error: "Версия не найдена" };
-
-  let scenes: ImportPreviewScene[];
-  try {
-    const base = JSON.parse(scenesJson) as ImportPreviewScene[];
-    scenes = base.map((scene) => mergeSceneEdits(scene, formData));
-  } catch {
-    return { error: "Некорректные данные предпросмотра" };
-  }
-
-  let result: Awaited<ReturnType<typeof applyScenesFromPreview>>;
-  try {
-    result = await applyScenesFromPreview(projectId, scenes, formData);
-  } catch (error) {
-    if (isNotInProjectError(error)) {
-      return { error: "Объект не найден" };
-    }
-    throw error;
-  }
-
-  const blocks = await listVersionBlocks(versionId);
-  const linked = await linkBlocksToExistingScenes(projectId, blocks);
-  await replaceVersionBlocks(projectId, versionId, linked);
-  await setCurrentScriptVersion(projectId, versionId);
-
-  await recordAudit(ctx, {
-    projectId,
-    entityType: AuditEntityType.scriptVersion,
-    entityId: versionId,
-    action: "UPDATE",
-    summary: `Либретто: создано ${result.created}, обновлено ${result.updated}`,
-  });
-
-  revalidateScreenplay(projectId);
-  return {
-    success:
-      `Либретто обновлено: создано сцен ${result.created}, обновлено ${result.updated}` +
-      (result.unchanged ? `, без изменений ${result.unchanged}` : "") +
-      (result.skipped ? `, пропущено ${result.skipped}` : ""),
   };
 }
 

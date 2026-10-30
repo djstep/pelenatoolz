@@ -26,6 +26,11 @@ export type ScriptReviewData = {
   /** Текущая версия сценария на момент предпросмотра: сменилась — импорт отклоняется. */
   currentVersionId: string | null;
   typing: BlockTypingResult;
+  /**
+   * Синхронизация версии с либретто вместо импорта файла: файла нет, `fileHash` — хэш блоков
+   * версии, текст версии и титульная не меняются.
+   */
+  sync?: { versionId: string; label: string };
   dictionary: DictionaryRule[];
   existing: ExistingRecords;
   timing: { mode: TimingMode; pageToMinuteRatio: number };
