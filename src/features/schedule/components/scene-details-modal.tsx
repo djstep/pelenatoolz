@@ -7,6 +7,7 @@ import {
 } from "@/shared/i18n/domain-labels";
 import { FormattedScriptContent } from "@/features/script/components/formatted-script-content";
 import { Badge } from "@/shared/ui/badge";
+import { Button } from "@/shared/ui/button";
 import { Modal } from "@/shared/ui/modal";
 import {
   formatPagesMinutes,
@@ -36,9 +37,14 @@ export type SceneDetails = {
 export function SceneDetailsModal({
   scene,
   onClose,
+  dayNumber,
+  onRemoveFromDay,
 }: {
   scene: SceneDetails | null;
   onClose: () => void;
+  /** День КПП, в котором стоит сцена; с `onRemoveFromDay` — кнопка «Убрать из дня». */
+  dayNumber?: number;
+  onRemoveFromDay?: () => void;
 }) {
   if (!scene) return null;
 
@@ -118,6 +124,14 @@ export function SceneDetailsModal({
             Текст сцены не загружен.
           </p>
         )}
+
+        {onRemoveFromDay && dayNumber != null ? (
+          <div className="flex justify-end border-t border-[var(--border)] pt-3">
+            <Button type="button" variant="secondary" onClick={onRemoveFromDay}>
+              Убрать из дня {dayNumber}
+            </Button>
+          </div>
+        ) : null}
       </div>
     </Modal>
   );

@@ -20,6 +20,8 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import {
   assignSceneToDayByDnDAction,
+  getSceneDayRemoveImpactAction,
+  removeSceneFromDayAction,
   reorderScenesAction,
 } from "@/features/schedule/actions";
 import { DayContextMenu, type MenuAnchor } from "@/features/schedule/components/day-context-menu";
@@ -45,6 +47,7 @@ import {
 import { Badge } from "@/shared/ui/badge";
 import { Input } from "@/shared/ui/input";
 import { Select } from "@/shared/ui/select";
+import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
 import { useToast } from "@/shared/ui/toast";
 import {
   computePlanningHint,
@@ -471,6 +474,7 @@ export function ScheduleDnDBoard({
   availability?: ScheduleAvailabilityBundle;
 }) {
   const toast = useToast();
+  const confirm = useConfirm();
   const [activeScene, setActiveScene] = useState<SceneCard | null>(null);
   const [menuState, setMenuState] = useState<{
     dayId: string;
@@ -608,6 +612,22 @@ export function ScheduleDnDBoard({
   }
 
   const menuDay = shootDays.find((d) => d.id === menuState?.dayId);
+  const detailDay = detailScene
+    ? shootDays.find((d) => d.scenes.some((s) => s.scene.id === detailScene.id))
+    : undefined;
+
+  function removeFromDay(day: ShootDay, scene: SceneCard) {
+    setDetailScene(null);
+    void confirm({
+      title: `Убрать сцену ${formatSceneBrief(scene)} из дня ${day.dayNumber}?`,
+      details: () => getSceneDayRemoveImpactAction(projectId, day.id, scene.id),
+      confirmLabel: "Убрать из дня",
+      action: async () => {
+        const result = await removeSceneFromDayAction(projectId, day.id, scene.id);
+        if (result.error) return result.error;
+      },
+    });
+  }
 
   function resetFilters() {
     setQ("");
@@ -855,6 +875,12 @@ export function ScheduleDnDBoard({
       <SceneDetailsModal
         scene={detailScene}
         onClose={() => setDetailScene(null)}
+        dayNumber={detailDay?.dayNumber}
+        onRemoveFromDay={
+          canWrite && detailDay && !detailDay.isLocked && detailScene
+            ? () => removeFromDay(detailDay, detailScene)
+            : undefined
+        }
       />
     </DndContext>
   );

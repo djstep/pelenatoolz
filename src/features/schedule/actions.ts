@@ -277,6 +277,63 @@ export async function clearShootDayAction(
   revalidateSchedule(projectId);
 }
 
+/** Что будет при «Убрать из дня» — для окна подтверждения. Только чтение. */
+export async function getSceneDayRemoveImpactAction(
+  projectId: string,
+  shootDayId: string,
+  sceneId: string,
+): Promise<string[]> {
+  const ctx = await requireProjectContext(projectId);
+  if (!ctx.can("schedule:write")) return [];
+  const facts = await prisma.productionReportSceneFact.count({
+    where: { sceneId, scene: { projectId }, report: { shootDayId, shootDay: { projectId } } },
+  });
+  const lines = ["Сама сцена, отчёты смены и история съёмок не меняются"];
+  if (facts > 0) {
+    lines.push("По сцене в этот день есть факт в отчёте смены — он останется в отчёте без изменений");
+  }
+  return lines;
+}
+
+/** Убрать одну сцену из дня КПП. Сцена, отчёты смены и история съёмок не меняются. */
+export async function removeSceneFromDayAction(
+  projectId: string,
+  shootDayId: string,
+  sceneId: string,
+): Promise<{ error?: string }> {
+  const ctx = await requireProjectContext(projectId);
+  if (!ctx.can("schedule:write")) {
+    return { error: "Недостаточно прав" };
+  }
+
+  const link = await prisma.shootDayScene.findFirst({
+    where: { shootDayId, sceneId, shootDay: { projectId }, scene: { projectId } },
+    select: {
+      id: true,
+      shootDay: { select: { dayNumber: true, isLocked: true } },
+      scene: { select: { number: true, postfix: true, episodeNumber: true } },
+    },
+  });
+  if (!link) return { error: "Сцены нет в этом дне" };
+  if (link.shootDay.isLocked) {
+    return { error: "День зафиксирован — сначала снимите фиксацию" };
+  }
+
+  await prisma.shootDayScene.delete({ where: { id: link.id } });
+  await syncShootDayResourceUsages(shootDayId);
+
+  await recordAudit(ctx, {
+    projectId,
+    entityType: AuditEntityType.scene,
+    entityId: sceneId,
+    action: "UPDATE",
+    summary: `Сцена ${link.scene.number}${link.scene.postfix} убрана из дня ${link.shootDay.dayNumber}`,
+  });
+
+  revalidateSchedule(projectId);
+  return {};
+}
+
 export async function insertShootDayBeforeAction(
   projectId: string,
   beforeDayId: string,
