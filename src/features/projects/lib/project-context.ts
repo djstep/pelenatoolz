@@ -36,6 +36,8 @@ export async function requireProjectContext(projectId: string) {
     role: membership.role,
     matrix,
     categoryFinance,
+    /** Цеха, где участник — глава (только активное участие: membership уже ACTIVE). */
+    headDepartmentIds: membership.departmentHeads.map((h) => h.departmentId),
     can: (permission: Permission) => hasPermission(matrix, permission),
     canFinanceRead: (target: EntityFinanceTarget) =>
       canEntityFinance(matrix, categoryFinance, target, "read"),

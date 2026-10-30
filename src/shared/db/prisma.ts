@@ -55,21 +55,23 @@ function createPrismaClient() {
 
 type ExtendedPrismaClient = ReturnType<typeof createPrismaClient>;
 
+/**
+ * The cached client predates the current schema: some generated model has no
+ * delegate on it (`CashPayment` → `cashPayment`). Model names come from the
+ * generated client itself, so adding or removing models needs no edit here.
+ */
+function isStaleClient(client: object): boolean {
+  return Object.values(Prisma.ModelName).some((model) => {
+    const key = model.charAt(0).toLowerCase() + model.slice(1);
+    return typeof (client as Record<string, unknown>)[key] === "undefined";
+  });
+}
+
 function getPrismaClient(): ExtendedPrismaClient {
   const cached = globalForPrisma.prisma as ExtendedPrismaClient | undefined;
   // After `prisma generate`, a long-lived global singleton can miss new models
-  // (e.g. company) until the process restarts. Drop the stale instance in dev.
-  if (
-    cached &&
-    process.env.NODE_ENV !== "production" &&
-    (typeof (cached as { company?: unknown }).company === "undefined" ||
-      typeof (cached as { projectFinanceVariable?: unknown })
-        .projectFinanceVariable === "undefined" ||
-      typeof (cached as { budgetTemplate?: unknown }).budgetTemplate ===
-        "undefined" ||
-      typeof (cached as { accrual?: unknown }).accrual === "undefined" ||
-      typeof (cached as { cashPayment?: unknown }).cashPayment === "undefined")
-  ) {
+  // until the process restarts. Drop the stale instance in dev.
+  if (cached && process.env.NODE_ENV !== "production" && isStaleClient(cached)) {
     void cached.$disconnect().catch(() => undefined);
     globalForPrisma.prisma = undefined;
   }

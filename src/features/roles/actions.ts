@@ -8,6 +8,7 @@ import {
   buildPermissionsDocument,
   type CategoryFinancePermissions,
   type PermissionMatrix,
+  isSectionFlagAllowed,
   PERMISSION_FLAGS,
   PERMISSION_SECTIONS,
 } from "@/features/roles/permissions-matrix";
@@ -43,6 +44,7 @@ function matrixFromFormData(formData: FormData): PermissionMatrix {
   const matrix = buildEmptyMatrix();
   for (const section of PERMISSION_SECTIONS) {
     for (const flag of PERMISSION_FLAGS) {
+      if (!isSectionFlagAllowed(section.id, flag)) continue;
       const key = `perm_${section.id}_${flag}`;
       matrix[section.id][flag] = formData.get(key) === "on";
     }
@@ -92,6 +94,8 @@ async function projectCategoryIdsFromForm(
 
 const RESERVED_NAME_ERROR = "Это название зарезервировано для системной роли";
 const GRANT_ERROR = "Нельзя выдать права шире ваших собственных";
+const WIDER_ROLE_EDIT_ERROR = "Нельзя менять роль с правами шире ваших";
+const WIDER_ROLE_DELETE_ERROR = "Нельзя удалить роль с правами шире ваших";
 
 export async function createRoleAction(
   projectId: string,
@@ -170,6 +174,10 @@ export async function updateRoleAction(
   if (role.id === ctx.membership.roleId) {
     return { error: "Нельзя изменить роль, которая назначена вам" };
   }
+  // Роль с правами шире ваших менять нельзя — ни расширять, ни урезать.
+  if (!canGrantPermissions(ctx.role, role.permissions)) {
+    return { error: WIDER_ROLE_EDIT_ERROR };
+  }
 
   const parsed = roleSchema.safeParse({
     name: formData.get("name"),
@@ -234,6 +242,9 @@ export async function deleteRoleAction(
   });
   if (!role) return { error: "Роль не найдена" };
   if (role.isSystem) return { error: "Системную роль удалить нельзя" };
+  if (!canGrantPermissions(ctx.role, role.permissions)) {
+    return { error: WIDER_ROLE_DELETE_ERROR };
+  }
 
   // Действующие участники и действующие приглашения не дают удалить роль.
   const now = new Date();

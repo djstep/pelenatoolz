@@ -1,13 +1,17 @@
 import { AccrualsWorkspace } from "@/features/accruals/components/accruals-workspace";
 import {
-  getAccrualTotals,
+  accrualTotals,
   listAccruals,
-  listBudgetLinesForAccrual,
   listProjectGroupUnits,
   listShootDaysBrief,
 } from "@/features/accruals/queries";
 import { listCounterpartyOptions } from "@/features/counterparties/queries";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
+import {
+  describeBudgetItems,
+  listVisibleBudgetItems,
+  visibleDepartments,
+} from "@/features/smeta/budget-item-access";
 import Link from "next/link";
 import { Button } from "@/shared/ui/button";
 
@@ -17,11 +21,10 @@ type Props = {
     q?: string;
     dateFrom?: string;
     dateTo?: string;
-    budgetLineId?: string;
+    budgetItemId?: string;
     counterpartyId?: string;
     groupUnit?: string;
     create?: string;
-    lineId?: string;
   }>;
 };
 
@@ -40,34 +43,31 @@ export default async function AccrualsPage({ params, searchParams }: Props) {
     q: sp.q ?? "",
     dateFrom: sp.dateFrom ?? "",
     dateTo: sp.dateTo ?? "",
-    budgetLineId: sp.budgetLineId ?? "",
+    budgetItemId: sp.budgetItemId ?? "",
     counterpartyId: sp.counterpartyId ?? "",
     groupUnit: sp.groupUnit ?? "",
   };
 
-  const [accruals, totals, lines, counterparties, shootDays, groupUnits] =
+  const [accruals, items, counterparties, shootDays, groupUnits] =
     await Promise.all([
-      listAccruals(projectId, {
+      listAccruals(projectId, visibleDepartments(ctx), {
         q: filters.q || undefined,
         dateFrom: filters.dateFrom || undefined,
         dateTo: filters.dateTo || undefined,
-        budgetLineId: filters.budgetLineId || undefined,
+        budgetItemId: filters.budgetItemId || undefined,
         counterpartyId: filters.counterpartyId || undefined,
         groupUnit: filters.groupUnit || undefined,
       }),
-      getAccrualTotals(projectId, {
-        q: filters.q || undefined,
-        dateFrom: filters.dateFrom || undefined,
-        dateTo: filters.dateTo || undefined,
-        budgetLineId: filters.budgetLineId || undefined,
-        counterpartyId: filters.counterpartyId || undefined,
-        groupUnit: filters.groupUnit || undefined,
-      }),
-      listBudgetLinesForAccrual(projectId),
+      listVisibleBudgetItems(projectId, ctx),
       listCounterpartyOptions(projectId),
       listShootDaysBrief(projectId),
       listProjectGroupUnits(projectId),
     ]);
+  const itemLabels = await describeBudgetItems(
+    projectId,
+    ctx,
+    [...accruals.map((a) => a.budgetItemId), filters.budgetItemId],
+  );
 
   const initialCreate =
     sp.create === "shift"
@@ -99,15 +99,15 @@ export default async function AccrualsPage({ params, searchParams }: Props) {
         projectId={projectId}
         currency={ctx.project.currency}
         accruals={accruals}
-        lines={lines}
+        items={items}
+        itemLabels={itemLabels}
         counterparties={counterparties}
         shootDays={shootDays}
         groupUnits={groupUnits}
         filters={filters}
-        totals={totals}
+        totals={accrualTotals(accruals)}
         canWrite={ctx.can("finance:write")}
         initialCreate={initialCreate}
-        initialBudgetLineId={sp.lineId}
       />
     </div>
   );

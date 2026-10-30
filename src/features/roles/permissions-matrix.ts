@@ -7,7 +7,7 @@ export const PERMISSION_SECTIONS = [
   { id: "characters", label: "Персонажи" },
   { id: "locations", label: "Объекты и места" },
   { id: "elements", label: "Прочие ресурсы (новые категории)" },
-  { id: "budget", label: "Смета" },
+  { id: "smeta_all", label: "Сметы — просмотр всех" },
   { id: "reports", label: "Производственные отчёты" },
   { id: "finance", label: "Финансы" },
   { id: "contracts", label: "Договоры и акты" },
@@ -54,6 +54,35 @@ export const PERMISSION_FLAGS = [
   "financeUnlock",
 ] as const;
 
+/**
+ * Разделы-флаги: у них в матрице только эти колонки, остальные всегда выключены
+ * (в редакторе, при сохранении роли и при чтении из базы).
+ */
+const RESTRICTED_SECTION_FLAGS: Partial<
+  Record<PermissionSectionId, readonly (keyof SectionPermissions)[]>
+> = {
+  smeta_all: ["access", "read"],
+};
+
+export function isSectionFlagAllowed(
+  section: PermissionSectionId,
+  flag: keyof SectionPermissions,
+): boolean {
+  const allowed = RESTRICTED_SECTION_FLAGS[section];
+  return !allowed || allowed.includes(flag);
+}
+
+function restrictSectionFlags(
+  section: PermissionSectionId,
+  perms: SectionPermissions,
+): SectionPermissions {
+  const out = { ...perms };
+  for (const flag of PERMISSION_FLAGS) {
+    if (!isSectionFlagAllowed(section, flag)) out[flag] = false;
+  }
+  return out;
+}
+
 /** Разделы, где колонки фин. условий относятся к сущности (не к модулю «Финансы»). */
 export const ENTITY_FINANCE_SECTIONS: PermissionSectionId[] = [
   "actors",
@@ -95,18 +124,23 @@ export function buildEmptyMatrix(): PermissionMatrix {
 
 export function buildFullMatrix(): PermissionMatrix {
   return Object.fromEntries(
-    PERMISSION_SECTIONS.map((s) => [s.id, fullSectionPermissions()]),
+    PERMISSION_SECTIONS.map((s) => [
+      s.id,
+      restrictSectionFlags(s.id, fullSectionPermissions()),
+    ]),
   ) as PermissionMatrix;
 }
 
 export function buildViewerMatrix(): PermissionMatrix {
   const matrix = buildEmptyMatrix();
   for (const section of PERMISSION_SECTIONS) {
+    // «Сметы — просмотр всех» наблюдателю не выдаётся: сметы цехов видят продюсер и главы.
+    if (section.id === "smeta_all") continue;
     matrix[section.id] = {
       ...emptySectionPermissions(),
       access: true,
       read: true,
-      financeRead: ["budget", "finance", "actors"].includes(section.id),
+      financeRead: ["finance", "actors"].includes(section.id),
     };
   }
   return matrix;
@@ -119,7 +153,7 @@ export function parsePermissionMatrix(raw: unknown): PermissionMatrix {
     const value = (raw as Record<string, unknown>)[section.id];
     if (!value || typeof value !== "object") continue;
     const v = value as Record<string, unknown>;
-    base[section.id] = {
+    base[section.id] = restrictSectionFlags(section.id, {
       access: Boolean(v.access),
       read: Boolean(v.read),
       create: Boolean(v.create),
@@ -128,7 +162,7 @@ export function parsePermissionMatrix(raw: unknown): PermissionMatrix {
       financeRead: Boolean(v.financeRead),
       financeWrite: Boolean(v.financeWrite),
       financeUnlock: Boolean(v.financeUnlock),
-    };
+    });
   }
   return base;
 }

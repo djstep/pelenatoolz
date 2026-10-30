@@ -1,10 +1,9 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import type {
-  BudgetClient,
-  BudgetListItem,
-} from "@/features/smeta/queries";
+import type { SmetaCheck } from "@/features/smeta/lib/main-sheet";
+import type { BudgetClient } from "@/features/smeta/queries";
+import type { SmetaApprovalProps } from "@/features/smeta/components/smeta-spreadsheet-editor";
 
 const SmetaSpreadsheetEditor = dynamic(
   () =>
@@ -23,23 +22,42 @@ const SmetaSpreadsheetEditor = dynamic(
 
 export function SmetaWorkspace({
   projectId,
+  department,
   budget,
-  budgets,
   canWrite,
+  initialChecks,
+  usedCodes,
+  listHref,
+  approval,
+  mode,
+  title,
 }: {
   projectId: string;
+  department: { id: string; name: string; codePrefix: string };
   budget: BudgetClient;
-  budgets: BudgetListItem[];
   canWrite: boolean;
+  initialChecks: SmetaCheck[];
+  usedCodes: string[];
+  listHref: string;
+  approval?: SmetaApprovalProps;
+  mode?: "draft" | "version" | "summary";
+  title?: string;
 }) {
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    // Узкий экран: страница прокручивается, и без минимальной высоты листу не остаётся места.
+    <div className="flex min-h-[640px] flex-1 flex-col lg:min-h-0">
       <SmetaSpreadsheetEditor
         key={budget.id}
         projectId={projectId}
+        department={department}
         budget={budget}
-        budgets={budgets}
         canWrite={canWrite}
+        initialChecks={initialChecks}
+        usedCodes={usedCodes}
+        listHref={listHref}
+        approval={approval}
+        mode={mode}
+        title={title}
       />
     </div>
   );

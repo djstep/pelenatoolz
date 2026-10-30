@@ -42,6 +42,10 @@ export const AuditEntityType = {
   locationPhoto: "location_photo",
   scriptComment: "script_comment",
   budgetTemplate: "budget_template",
+  department: "department",
+  budget: "budget",
+  budgetVersion: "budget_version",
+  smetaExport: "smeta_export",
 } as const;
 
 export type AuditEntityTypeValue =
@@ -100,6 +104,10 @@ export const auditEntityLabels: Record<string, string> = {
   [AuditEntityType.locationPhoto]: "Фото локации",
   [AuditEntityType.scriptComment]: "Комментарий к сценарию",
   [AuditEntityType.budgetTemplate]: "Шаблон сметы",
+  [AuditEntityType.department]: "Цех",
+  [AuditEntityType.budget]: "Смета цеха",
+  [AuditEntityType.budgetVersion]: "Версия сметы",
+  [AuditEntityType.smetaExport]: "Выгрузка смет",
   ShootDay: "Вызывной (устар.)",
 };
 

@@ -15,6 +15,7 @@ export type NavSheetItem = {
 export function SmetaSheetNavigator({
   sheets,
   activeSheetId,
+  mainSheetId = null,
   collapsed,
   canWrite,
   onToggleCollapsed,
@@ -33,6 +34,8 @@ export function SmetaSheetNavigator({
 }: {
   sheets: NavSheetItem[];
   activeSheetId: string | null;
+  /** Основной лист сметы — по нему считаются статьи */
+  mainSheetId?: string | null;
   collapsed: boolean;
   canWrite: boolean;
   onToggleCollapsed: () => void;
@@ -181,6 +184,9 @@ export function SmetaSheetNavigator({
                         </span>
                       ) : null}
                       {sheet.name}
+                      {sheet.id === mainSheetId ? (
+                        <span className="ml-1.5 text-xs text-[var(--muted-fg)]">основной</span>
+                      ) : null}
                     </span>
                   </button>
                   <button

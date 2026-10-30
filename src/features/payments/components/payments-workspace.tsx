@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useMemo, useState, useTransition } from "react";
+import { useActionState, useState, useTransition } from "react";
 import {
   createCashPaymentAction,
   deleteCashPaymentAction,
@@ -11,6 +11,11 @@ import {
 } from "@/features/payments/actions";
 import { computeTaxAmounts, roundMoney } from "@/features/payments/lib/calc";
 import type { CashPaymentListRow } from "@/features/payments/queries";
+import { BudgetItemSelect } from "@/features/smeta/components/budget-item-select";
+import {
+  budgetItemLabel,
+  type BudgetItemOption,
+} from "@/features/smeta/lib/budget-item-option";
 import { formatDateShort } from "@/shared/i18n/format-date";
 import { Button } from "@/shared/ui/button";
 import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
@@ -24,11 +29,11 @@ import { useActionToast, useToast } from "@/shared/ui/toast";
 const initial: PaymentActionState = {};
 
 type Opt = { id: string; name: string };
-type LineOpt = { id: string; title: string };
 
 type BreakdownRow = {
   key: string;
-  budgetLineId: string;
+  /** Пусто — «без статьи» */
+  budgetItemId: string;
   amount: number;
   comment: string;
 };
@@ -53,12 +58,14 @@ function PaymentFormFields({
   payment,
   counterparties,
   companies,
-  lines,
+  items,
+  itemLabels,
 }: {
   payment?: CashPaymentListRow;
   counterparties: Opt[];
   companies: Opt[];
-  lines: LineOpt[];
+  items: BudgetItemOption[];
+  itemLabels: Record<string, BudgetItemOption>;
 }) {
   const [amount, setAmount] = useState(payment ? Number(payment.amount) : 0);
   const [taxPercent, setTaxPercent] = useState(
@@ -68,14 +75,14 @@ function PaymentFormFields({
     payment?.breakdown?.length
       ? payment.breakdown.map((b) => ({
           key: newKey(),
-          budgetLineId: b.budgetLineId,
+          budgetItemId: b.budgetItemId ?? "",
           amount: Number(b.amount),
           comment: b.comment ?? "",
         }))
       : [
           {
             key: newKey(),
-            budgetLineId: lines[0]?.id ?? "",
+            budgetItemId: "",
             amount: payment ? Number(payment.amount) : 0,
             comment: "",
           },
@@ -217,7 +224,7 @@ function PaymentFormFields({
           </p>
         </div>
         <p className="text-xs text-[var(--muted-fg)]">
-          Один платёж может закрывать несколько статей сметы.
+          Один платёж может закрывать несколько статей сметы. Строка без статьи — «без статьи».
         </p>
         <div className="space-y-2">
           {breakdown.map((row, index) => (
@@ -225,24 +232,18 @@ function PaymentFormFields({
               key={row.key}
               className="grid gap-2 rounded-xl border border-[var(--border)] p-3 sm:grid-cols-[1fr_7rem_1fr_auto]"
             >
-              <Select
-                value={row.budgetLineId}
-                onChange={(e) => {
-                  const budgetLineId = e.target.value;
+              <BudgetItemSelect
+                value={row.budgetItemId}
+                options={items}
+                current={row.budgetItemId ? itemLabels[row.budgetItemId] : null}
+                onChange={(budgetItemId) => {
                   setBreakdown((prev) => {
                     const next = [...prev];
-                    next[index] = { ...next[index]!, budgetLineId };
+                    next[index] = { ...next[index]!, budgetItemId };
                     return next;
                   });
                 }}
-              >
-                <option value="">Статья…</option>
-                {lines.map((l) => (
-                  <option key={l.id} value={l.id}>
-                    {l.title}
-                  </option>
-                ))}
-              </Select>
+              />
               <Input
                 type="number"
                 min={0.01}
@@ -290,7 +291,7 @@ function PaymentFormFields({
               ...prev,
               {
                 key: newKey(),
-                budgetLineId: lines[0]?.id ?? "",
+                budgetItemId: "",
                 amount: 0,
                 comment: "",
               },
@@ -303,8 +304,8 @@ function PaymentFormFields({
           type="hidden"
           name="breakdownJson"
           value={JSON.stringify(
-            breakdown.map(({ budgetLineId, amount: a, comment }) => ({
-              budgetLineId,
+            breakdown.map(({ budgetItemId, amount: a, comment }) => ({
+              budgetItemId: budgetItemId || null,
               amount: a,
               comment: comment || null,
             })),
@@ -338,7 +339,8 @@ function PaymentModal({
   payment,
   counterparties,
   companies,
-  lines,
+  items,
+  itemLabels,
   open,
   onClose,
 }: {
@@ -346,7 +348,8 @@ function PaymentModal({
   payment?: CashPaymentListRow;
   counterparties: Opt[];
   companies: Opt[];
-  lines: LineOpt[];
+  items: BudgetItemOption[];
+  itemLabels: Record<string, BudgetItemOption>;
   open: boolean;
   onClose: () => void;
 }) {
@@ -384,7 +387,8 @@ function PaymentModal({
           payment={payment}
           counterparties={counterparties}
           companies={companies}
-          lines={lines}
+          items={items}
+          itemLabels={itemLabels}
         />
       </form>
     </Modal>
@@ -396,7 +400,8 @@ export function PaymentsWorkspace({
   locale,
   currency,
   payments,
-  lines,
+  items,
+  itemLabels,
   counterparties,
   companies,
   filters,
@@ -408,14 +413,15 @@ export function PaymentsWorkspace({
   locale: string;
   currency: string;
   payments: CashPaymentListRow[];
-  lines: LineOpt[];
+  items: BudgetItemOption[];
+  itemLabels: Record<string, BudgetItemOption>;
   counterparties: Opt[];
   companies: Opt[];
   filters: {
     q: string;
     dateFrom: string;
     dateTo: string;
-    budgetLineId: string;
+    budgetItemId: string;
     counterpartyId: string;
     companyId: string;
     locked: string;
@@ -430,10 +436,15 @@ export function PaymentsWorkspace({
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<CashPaymentListRow | null>(null);
 
-  const lineTitle = useMemo(
-    () => new Map(lines.map((l) => [l.id, l.title])),
-    [lines],
-  );
+  // В фильтре — видимые статьи и выбранная, даже если её нет среди видимых.
+  const filterItem =
+    filters.budgetItemId && filters.budgetItemId !== "none"
+      ? itemLabels[filters.budgetItemId]
+      : undefined;
+  const filterOptions =
+    filterItem && !items.some((i) => i.id === filterItem.id)
+      ? [filterItem, ...items]
+      : items;
 
   return (
     <div className="space-y-6">
@@ -494,16 +505,17 @@ export function PaymentsWorkspace({
           />
         </div>
         <div>
-          <Label htmlFor="budgetLineId">Статья</Label>
+          <Label htmlFor="budgetItemId">Статья</Label>
           <Select
-            id="budgetLineId"
-            name="budgetLineId"
-            defaultValue={filters.budgetLineId}
+            id="budgetItemId"
+            name="budgetItemId"
+            defaultValue={filters.budgetItemId}
           >
             <option value="">Все</option>
-            {lines.map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.title}
+            <option value="none">Без статьи</option>
+            {filterOptions.map((i) => (
+              <option key={i.id} value={i.id}>
+                {budgetItemLabel(i)}
               </option>
             ))}
           </Select>
@@ -606,7 +618,7 @@ export function PaymentsWorkspace({
                     {p.breakdown
                       .map(
                         (b) =>
-                          `${b.budgetLine?.title ?? lineTitle.get(b.budgetLineId) ?? "—"}: ${Number(b.amount).toLocaleString("ru-RU")}`,
+                          `${budgetItemLabel(b.budgetItemId ? itemLabels[b.budgetItemId] : null)}: ${Number(b.amount).toLocaleString("ru-RU")}`,
                       )
                       .join(" · ")}
                   </td>
@@ -705,7 +717,8 @@ export function PaymentsWorkspace({
         projectId={projectId}
         counterparties={counterparties}
         companies={companies}
-        lines={lines}
+        items={items}
+        itemLabels={itemLabels}
         open={creating}
         onClose={() => setCreating(false)}
       />
@@ -714,7 +727,8 @@ export function PaymentsWorkspace({
         payment={editing ?? undefined}
         counterparties={counterparties}
         companies={companies}
-        lines={lines}
+        items={items}
+        itemLabels={itemLabels}
         open={editing != null}
         onClose={() => setEditing(null)}
       />

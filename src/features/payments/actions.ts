@@ -6,7 +6,13 @@ import {
   breakdownSumMatches,
   computeTaxAmounts,
 } from "@/features/payments/lib/calc";
+import {
+  assertInProject,
+  isNotInProjectError,
+} from "@/features/memberships/assert-in-project";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
+import { checkBudgetItemsUsable } from "@/features/smeta/budget-item-access";
+import type { SmetaAccessContext } from "@/features/smeta/lib/smeta-access";
 import { prisma } from "@/shared/db/prisma";
 import { AuditEntityType } from "@/shared/audit/entity-types";
 import { recordAudit } from "@/shared/audit/with-audit";
@@ -24,7 +30,11 @@ function revalidatePayments(projectId: string) {
 }
 
 const breakdownSchema = z.object({
-  budgetLineId: z.string().cuid(),
+  /** Пусто — «без статьи» */
+  budgetItemId: z.preprocess(
+    (v) => (v === "" || v === undefined ? null : v),
+    z.string().cuid().nullable(),
+  ),
   amount: z.coerce.number().positive().max(1_000_000_000),
   comment: z.string().trim().max(1000).optional().nullable(),
 });
@@ -46,6 +56,13 @@ function parseTaxPercent(v: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+/** Без контрагента платёж не проводится — об этом отдельное сообщение. */
+function paymentParseError(error: z.ZodError) {
+  return error.issues.some((i) => i.path[0] === "counterpartyId")
+    ? "Укажите контрагента — платёж без контрагента провести нельзя"
+    : "Проверьте данные платежа";
+}
+
 function parseBreakdown(formData: FormData) {
   const raw = String(formData.get("breakdownJson") ?? "[]");
   try {
@@ -55,29 +72,36 @@ function parseBreakdown(formData: FormData) {
   }
 }
 
+/**
+ * Контрагент и компания — из проекта; статьи разбивки — из проекта, действующие и из смет,
+ * которые пользователь видит (статьи, уже стоящие в платеже, — `keepItemIds` — можно оставить).
+ */
 async function validatePaymentRefs(
   projectId: string,
+  access: SmetaAccessContext,
   data: z.infer<typeof paymentSchema>,
+  keepItemIds: (string | null)[] = [],
 ) {
-  const [cp, company] = await Promise.all([
-    prisma.counterparty.findFirst({
-      where: { id: data.counterpartyId, projectId },
-      select: { id: true },
-    }),
-    prisma.company.findFirst({
-      where: { id: data.companyId, projectId },
-      select: { id: true },
-    }),
-  ]);
-  if (!cp) return "Контрагент не найден";
-  if (!company) return "Компания не найдена";
+  try {
+    await assertInProject("Counterparty", data.counterpartyId, projectId);
+  } catch (error) {
+    if (isNotInProjectError(error)) return "Контрагент не найден";
+    throw error;
+  }
+  try {
+    await assertInProject("Company", data.companyId, projectId);
+  } catch (error) {
+    if (isNotInProjectError(error)) return "Компания не найдена";
+    throw error;
+  }
 
-  const lineIds = [...new Set(data.breakdown.map((b) => b.budgetLineId))];
-  const lines = await prisma.budgetLine.findMany({
-    where: { projectId, id: { in: lineIds } },
-    select: { id: true },
-  });
-  if (lines.length !== lineIds.length) return "Статья сметы не найдена";
+  const itemError = await checkBudgetItemsUsable(
+    projectId,
+    access,
+    data.breakdown.map((b) => b.budgetItemId),
+    keepItemIds,
+  );
+  if (itemError) return itemError;
 
   if (
     !breakdownSumMatches(
@@ -109,9 +133,9 @@ export async function createCashPaymentAction(
     isLocked: formData.get("isLocked") === "on" || formData.get("isLocked") === "true",
     breakdown: parseBreakdown(formData),
   });
-  if (!parsed.success) return { error: "Проверьте данные платежа" };
+  if (!parsed.success) return { error: paymentParseError(parsed.error) };
 
-  const err = await validatePaymentRefs(projectId, parsed.data);
+  const err = await validatePaymentRefs(projectId, ctx, parsed.data);
   if (err) return { error: err };
 
   const tax = computeTaxAmounts(
@@ -137,7 +161,7 @@ export async function createCashPaymentAction(
       lockedById: lock ? ctx.user.id : null,
       breakdown: {
         create: parsed.data.breakdown.map((b, i) => ({
-          budgetLineId: b.budgetLineId,
+          budgetItemId: b.budgetItemId,
           amount: b.amount,
           comment: b.comment || null,
           sortOrder: i,
@@ -169,6 +193,7 @@ export async function updateCashPaymentAction(
 
   const existing = await prisma.cashPayment.findFirst({
     where: { id: paymentId, projectId },
+    include: { breakdown: { select: { budgetItemId: true } } },
   });
   if (!existing) return { error: "Платёж не найден" };
 
@@ -189,9 +214,14 @@ export async function updateCashPaymentAction(
     isLocked: formData.get("isLocked") === "on" || formData.get("isLocked") === "true",
     breakdown: parseBreakdown(formData),
   });
-  if (!parsed.success) return { error: "Проверьте данные платежа" };
+  if (!parsed.success) return { error: paymentParseError(parsed.error) };
 
-  const err = await validatePaymentRefs(projectId, parsed.data);
+  const err = await validatePaymentRefs(
+    projectId,
+    ctx,
+    parsed.data,
+    existing.breakdown.map((b) => b.budgetItemId),
+  );
   if (err) return { error: err };
 
   const tax = computeTaxAmounts(
@@ -218,7 +248,7 @@ export async function updateCashPaymentAction(
         lockedById: lock ? ctx.user.id : null,
         breakdown: {
           create: parsed.data.breakdown.map((b, i) => ({
-            budgetLineId: b.budgetLineId,
+            budgetItemId: b.budgetItemId,
             amount: b.amount,
             comment: b.comment || null,
             sortOrder: i,
@@ -226,6 +256,20 @@ export async function updateCashPaymentAction(
         },
       },
     });
+  });
+
+  await recordAudit(ctx, {
+    projectId,
+    entityType: AuditEntityType.cashPayment,
+    entityId: paymentId,
+    action: "UPDATE",
+    summary: `Платёж ${parsed.data.amount}${lock ? " (зафиксирован)" : ""}`,
+    changes: {
+      budgetItemIds: [
+        existing.breakdown.map((b) => b.budgetItemId),
+        parsed.data.breakdown.map((b) => b.budgetItemId),
+      ],
+    },
   });
 
   revalidatePayments(projectId);

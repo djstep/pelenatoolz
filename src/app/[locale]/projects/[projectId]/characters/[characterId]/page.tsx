@@ -7,6 +7,7 @@ import {
 } from "@/features/casting/lib/cast-list-export-data";
 import { getAvailabilityMiniBundle } from "@/features/actor-availability/lib/serialize-bundle";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
+import { DefaultBudgetItemsCard } from "@/features/smeta/components/default-budget-items-card";
 import { Card } from "@/shared/ui/card";
 
 type Props = {
@@ -28,32 +29,48 @@ export default async function CharacterDetailPage({ params }: Props) {
   ]);
   if (!character) notFound();
 
-  const actorId = character.actors[0]?.id;
+  const actor = character.actors[0];
+  const actorId = actor?.id;
 
   return (
-    <Card>
-      <CharacterDetailView
-        projectId={projectId}
-        locale={locale}
-        character={character}
-        castListBundle={
-          castBundle ? serializeCastListBundle(castBundle) : null
-        }
-        canWriteScript={ctx.can("script:write")}
-        canWriteCast={ctx.can("cast:write")}
-        canFinanceRead={ctx.canFinanceRead("actors")}
-        canFinanceWrite={ctx.canFinanceWrite("actors")}
-        availabilityMini={
-          actorId
-            ? {
-                rowId: availability.rowByActorId[actorId],
-                actorId,
-                manualDays: availability.manualDays,
-                kppBusySerialized: availability.kppBusySerialized,
-              }
-            : undefined
-        }
-      />
-    </Card>
+    <div className="space-y-4">
+      <Card>
+        <CharacterDetailView
+          projectId={projectId}
+          locale={locale}
+          character={character}
+          castListBundle={
+            castBundle ? serializeCastListBundle(castBundle) : null
+          }
+          canWriteScript={ctx.can("script:write")}
+          canWriteCast={ctx.can("cast:write")}
+          canFinanceRead={ctx.canFinanceRead("actors")}
+          canFinanceWrite={ctx.canFinanceWrite("actors")}
+          availabilityMini={
+            actorId
+              ? {
+                  rowId: availability.rowByActorId[actorId],
+                  actorId,
+                  manualDays: availability.manualDays,
+                  kppBusySerialized: availability.kppBusySerialized,
+                }
+              : undefined
+          }
+        />
+      </Card>
+      {actor && ctx.canFinanceRead("actors") ? (
+        <DefaultBudgetItemsCard
+          projectId={projectId}
+          access={ctx}
+          target="actor"
+          entityId={actor.id}
+          values={{
+            defaultBudgetItemId: actor.defaultBudgetItemId,
+            overtimeBudgetItemId: actor.overtimeBudgetItemId,
+          }}
+          canEdit={ctx.can("cast:write") && ctx.canFinanceWrite("actors")}
+        />
+      ) : null}
+    </div>
   );
 }

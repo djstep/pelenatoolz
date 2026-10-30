@@ -233,7 +233,8 @@ model User {
   scriptComments  ScriptComment[]
   castingCandidateComments CastingCandidateComment[]
   createdBudgets Budget[] @relation("BudgetCreator")
-  createdBudgetTemplates BudgetTemplate[] @relation("BudgetTemplateCreator")
+  submittedBudgets Budget[] @relation("BudgetSubmitter")
+  returnedBudgets Budget[] @relation("BudgetReturner")
   createdAccruals Accrual[] @relation("AccrualCreator")
   createdCashPayments CashPayment[] @relation("CashPaymentCreator")
   lockedCashPayments CashPayment[] @relation("CashPaymentLocker")
@@ -292,9 +293,9 @@ model Project {
   projectFiles  ProjectFile[]
   scoutCandidates ScoutCandidate[]
   auditLogs   AuditLog[]
-  budgetLines BudgetLine[]
   budgets     Budget[]
-  budgetTemplates BudgetTemplate[]
+  budgetItems BudgetItem[]
+  budgetVersions BudgetVersion[]
   accruals    Accrual[]
   cashPayments CashPayment[]
   financeOps  FinanceOperation[]
@@ -311,7 +312,7 @@ model Project {
   scriptBlocks ScriptBlock[]
   resourceCategories ResourceCategory[]
   actorAvailabilityRows ActorAvailabilityRow[]
-  payments Payment[]
+  departments Department[]
 
   @@index([createdById])
   @@index([status])
@@ -348,10 +349,47 @@ model ProjectMembership {
   project Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
   user    User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
   role    ProjectRoleDefinition @relation(fields: [roleId], references: [id])
+  departmentHeads DepartmentHead[]
 
   @@unique([projectId, userId])
   @@index([userId])
   @@index([projectId, status])
+}
+
+/// Цех проекта (художники, операторский, звук…). У цеха своя смета и главы.
+model Department {
+  id         String   @id @default(cuid())
+  projectId  String
+  name       String
+  /// Префикс кодов статей сметы цеха: 2–6 заглавных букв/цифр, первая — буква.
+  codePrefix String
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  project     Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  heads       DepartmentHead[]
+  budget      Budget?
+  budgetItems BudgetItem[]
+  budgetVersions BudgetVersion[]
+
+  @@unique([projectId, name])
+  @@unique([projectId, codePrefix])
+  @@index([projectId, sortOrder])
+}
+
+/// Глава цеха — участник проекта (не пользователь). Доступ даёт только активное участие.
+model DepartmentHead {
+  id           String   @id @default(cuid())
+  departmentId String
+  membershipId String
+  createdAt    DateTime @default(now())
+
+  department Department        @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  membership ProjectMembership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+
+  @@unique([departmentId, membershipId])
+  @@index([membershipId])
 }
 
 model ProjectInvite {
@@ -440,10 +478,15 @@ model Location {
   taxPercent        Decimal? @db.Decimal(6, 2)
   overtimeMode      OvertimeCalcMode   @default(HOURLY_CUMULATIVE)
   unpaidOvertimeMode UnpaidOvertimeMode @default(FIRST_HOUR)
+  /// Статьи сметы для начислений из отчёта смены: основная оплата и переработка (пусто — основная).
+  defaultBudgetItemId  String?
+  overtimeBudgetItemId String?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
   project Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  defaultBudgetItem  BudgetItem? @relation("LocationDefaultBudgetItem", fields: [defaultBudgetItemId], references: [id], onDelete: SetNull)
+  overtimeBudgetItem BudgetItem? @relation("LocationOvertimeBudgetItem", fields: [overtimeBudgetItemId], references: [id], onDelete: SetNull)
   scenes  SceneLocation[]
   photos  LocationPhoto[]
   scoutCandidateLinks ScoutCandidateLocation[]
@@ -823,10 +866,18 @@ model ResourceItem {
   unpaidOvertimeMode UnpaidOvertimeMode @default(FIRST_HOUR)
   /// Ставка за километр (для транспорта)
   kmRate            Decimal? @db.Decimal(12, 2)
+  /// Статьи сметы для начислений из отчёта смены: основная оплата (смена, доплаты),
+  /// переработка и км. Пустые переработка и км — берётся основная.
+  defaultBudgetItemId  String?
+  overtimeBudgetItemId String?
+  mileageBudgetItemId  String?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
   category      ResourceCategory        @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  defaultBudgetItem  BudgetItem? @relation("ResourceItemDefaultBudgetItem", fields: [defaultBudgetItemId], references: [id], onDelete: SetNull)
+  overtimeBudgetItem BudgetItem? @relation("ResourceItemOvertimeBudgetItem", fields: [overtimeBudgetItemId], references: [id], onDelete: SetNull)
+  mileageBudgetItem  BudgetItem? @relation("ResourceItemMileageBudgetItem", fields: [mileageBudgetItemId], references: [id], onDelete: SetNull)
   sceneLinks    SceneResourceItem[]
   shiftUsages   ShootDayResourceUsage[]
   workRows      ProductionReportWorkRow[]
@@ -934,7 +985,6 @@ model ShootDay {
   resourceUsages   ShootDayResourceUsage[]
   productionReport ProductionReport?
   shootAttempts    SceneShootAttempt[]
-  payments         Payment[]
   accruals         Accrual[]
 
   @@unique([projectId, dayNumber])
@@ -1178,6 +1228,9 @@ model ProductionReportWorkRow {
   kmRate             Decimal?           @db.Decimal(12, 2)
   mileagePay         Decimal?           @db.Decimal(14, 2)
   totalPay           Decimal?           @db.Decimal(14, 2)
+  /// Снимок почасовых ставок переработки с карточки: [{ hourNumber, percentRate, amount,
+  /// taxPercent }]. Меняется только при «Обновить из КПП» с галочкой «Обновить ставки».
+  overtimeRates      Json               @default("[]")
   sortOrder          Int                @default(0)
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
@@ -1187,7 +1240,7 @@ model ProductionReportWorkRow {
   item    ResourceItem?               @relation(fields: [resourceItemId], references: [id], onDelete: SetNull)
   location Location?                  @relation(fields: [locationId], references: [id], onDelete: SetNull)
   extras  ProductionReportWorkExtra[]
-  payment Payment?
+  accruals Accrual[]
 
   @@unique([reportId, sourceKey])
   @@index([reportId, sortOrder])
@@ -1209,33 +1262,6 @@ model ProductionReportWorkExtra {
   workRow ProductionReportWorkRow @relation(fields: [workRowId], references: [id], onDelete: Cascade)
 
   @@index([workRowId])
-}
-
-/// Выплата, рассчитанная из факта смены (источник для гонораров / actuals).
-/// Не путать с кассовым CashPayment («Платежи»).
-model Payment {
-  id             String            @id @default(cuid())
-  projectId      String
-  shootDayId     String?
-  workRowId      String?           @unique
-  actorId        String?
-  resourceItemId String?
-  category       FinanceOpCategory @default(OTHER)
-  title          String
-  amount         Decimal           @db.Decimal(14, 2)
-  paymentDate    DateTime
-  notes          String?
-  createdAt      DateTime          @default(now())
-  updatedAt      DateTime          @updatedAt
-
-  project  Project                 @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  shootDay ShootDay?               @relation(fields: [shootDayId], references: [id], onDelete: SetNull)
-  workRow  ProductionReportWorkRow? @relation(fields: [workRowId], references: [id], onDelete: SetNull)
-  actor    Actor?                  @relation(fields: [actorId], references: [id], onDelete: SetNull)
-
-  @@index([projectId, paymentDate])
-  @@index([shootDayId])
-  @@index([actorId])
 }
 
 model Actor {
@@ -1265,18 +1291,23 @@ model Actor {
   taxPercent       Decimal?          @db.Decimal(6, 2)
   overtimeMode      OvertimeCalcMode   @default(HOURLY_CUMULATIVE)
   unpaidOvertimeMode UnpaidOvertimeMode @default(FIRST_HOUR)
+  /// Статьи сметы для начислений из отчёта смены: основная оплата (смена, доплаты) и
+  /// переработка (пусто — основная).
+  defaultBudgetItemId  String?
+  overtimeBudgetItemId String?
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
 
   project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
   character Character? @relation(fields: [characterId], references: [id])
+  defaultBudgetItem  BudgetItem? @relation("ActorDefaultBudgetItem", fields: [defaultBudgetItemId], references: [id], onDelete: SetNull)
+  overtimeBudgetItem BudgetItem? @relation("ActorOvertimeBudgetItem", fields: [overtimeBudgetItemId], references: [id], onDelete: SetNull)
   overtimeRates ActorOvertimeRate[]
   extraPayments ActorExtraPayment[]
   financeOps    FinanceOperation[]
   shootDayCalls ShootDayActorCall[]
   availabilityRows ActorAvailabilityRow[]
   workRows      ProductionReportWorkRow[]
-  payments      Payment[]
 
   @@index([projectId])
 }
@@ -1447,74 +1478,12 @@ model ScriptImportJob {
   @@index([scriptVersionId])
 }
 
-enum BudgetCategory {
-  CAST
-  CREW
-  EQUIPMENT
-  LOCATIONS
-  TRANSPORT
-  CATERING
-  POST
-  OTHER
-}
-
-enum BudgetLineType {
-  /// Посменная: ставка × ед. × смены (смены по умолчанию из СМЕНЫ)
-  PER_SHIFT
-  /// Разовая фиксированная сумма
-  ONE_TIME
-  /// Расходы за месяц
-  MONTHLY
-  /// Расходы за день
-  DAILY
-}
-
-model BudgetLine {
-  id                   String         @id @default(cuid())
-  projectId            String
-  category             BudgetCategory @default(OTHER)
-  /// Тип статьи для авторасчёта количества / суммы
-  lineType             BudgetLineType @default(ONE_TIME)
-  title                String
-  description          String?
-  /// Кол-во человек/единиц (для PER_SHIFT); иначе обычно 1
-  unitsCount           Decimal        @default(1) @db.Decimal(12, 2)
-  /// Периоды / смены / дни / месяцы (или 1 для разовой)
-  quantity             Decimal        @default(1) @db.Decimal(12, 2)
-  /// Ключ переменной проекта (SMENY / SERII / custom) — источник quantity
-  quantityVariableKey  String?
-  /// Корректировка к значению переменной (+/-), итог quantity = var + adjustment
-  quantityAdjustment   Decimal        @default(0) @db.Decimal(12, 2)
-  /// Ставка: за смену / за месяц / за день / фикс. сумма
-  unitCost             Decimal        @default(0) @db.Decimal(14, 2)
-  planned              Decimal        @default(0) @db.Decimal(14, 2)
-  actual               Decimal        @default(0) @db.Decimal(14, 2)
-  /// Плановый контрагент (для начислений по статье)
-  plannedCounterpartyId String?
-  /// Ставка налога %, для подтягивания в начисления
-  taxPercent           Decimal?       @db.Decimal(5, 2)
-  /// Связь статьи с актёром/ресурсом (для ввода посменных расходов)
-  linkedResourceType   BudgetLinkedResourceType?
-  linkedResourceId     String?
-  sortOrder            Int            @default(0)
-  createdAt            DateTime       @default(now())
-  updatedAt            DateTime       @updatedAt
-
-  project             Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  plannedCounterparty Counterparty? @relation(fields: [plannedCounterpartyId], references: [id], onDelete: SetNull)
-  accruals            Accrual[]
-  paymentBreakdowns   CashPaymentBreakdown[]
-
-  @@index([projectId, category])
-  @@index([projectId, sortOrder])
-  @@index([projectId, lineType])
-  @@index([plannedCounterpartyId])
-  @@index([projectId, linkedResourceType, linkedResourceId])
-}
-
-enum BudgetLinkedResourceType {
-  ACTOR
-  RESOURCE_ITEM
+/// Часть оплаты строки отчёта смены, из которой создано начисление.
+enum AccrualReportPart {
+  SHIFT
+  OVERTIME
+  EXTRAS
+  MILEAGE
 }
 
 enum AccrualType {
@@ -1528,10 +1497,12 @@ enum AccrualType {
 model Accrual {
   id             String      @id @default(cuid())
   projectId      String
-  budgetLineId   String
+  /// Статья сметы цеха. Пусто — «без статьи».
+  budgetItemId   String?
   amount         Decimal     @db.Decimal(14, 2)
   quantity       Decimal?    @db.Decimal(12, 2)
-  counterpartyId String
+  /// Пусто только у начислений из отчёта смены — «контрагент не указан».
+  counterpartyId String?
   taxPercent     Decimal?    @db.Decimal(5, 2)
   taxAmount      Decimal?    @db.Decimal(14, 2)
   amountWithTax  Decimal     @db.Decimal(14, 2)
@@ -1545,16 +1516,26 @@ model Accrual {
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
   contractId     String?
+  /// Начисление из отчёта смены: строка отчёта и часть её оплаты. Удалили строку —
+  /// ссылка пустеет, часть остаётся.
+  workRowId      String?
+  reportPart     AccrualReportPart?
+  /// Строку отчёта обнулили или удалили: сумма стала 0, начисление не удаляется само.
+  reportZeroedAt DateTime?
+  /// Статью или контрагента меняли руками — отчёт их больше не перезаписывает.
+  editedManually Boolean     @default(false)
 
-  project      Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  budgetLine   BudgetLine   @relation(fields: [budgetLineId], references: [id], onDelete: Restrict)
-  counterparty Counterparty @relation(fields: [counterpartyId], references: [id], onDelete: Restrict)
-  shootDay     ShootDay?    @relation(fields: [shootDayId], references: [id], onDelete: SetNull)
-  contract     Contract?    @relation(fields: [contractId], references: [id], onDelete: SetNull)
-  createdBy    User?        @relation("AccrualCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  project      Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  budgetItem   BudgetItem?   @relation(fields: [budgetItemId], references: [id], onDelete: SetNull)
+  counterparty Counterparty? @relation(fields: [counterpartyId], references: [id], onDelete: Restrict)
+  shootDay     ShootDay?     @relation(fields: [shootDayId], references: [id], onDelete: SetNull)
+  contract     Contract?     @relation(fields: [contractId], references: [id], onDelete: SetNull)
+  createdBy    User?         @relation("AccrualCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  workRow      ProductionReportWorkRow? @relation(fields: [workRowId], references: [id], onDelete: SetNull)
 
+  @@unique([workRowId, reportPart])
   @@index([projectId, date])
-  @@index([projectId, budgetLineId])
+  @@index([projectId, budgetItemId])
   @@index([projectId, counterpartyId])
   @@index([projectId, groupUnit])
   @@index([shootDayId])
@@ -1597,37 +1578,21 @@ model CashPayment {
   @@index([contractId])
 }
 
-/// Управленческая разбивка кассового платежа по статьям сметы.
+/// Управленческая разбивка кассового платежа по статьям сметы. Сумма строк = сумма платежа.
 model CashPaymentBreakdown {
   id            String  @id @default(cuid())
   paymentId     String
-  budgetLineId  String
+  /// Статья сметы цеха. Пусто — «без статьи».
+  budgetItemId  String?
   amount        Decimal @db.Decimal(14, 2)
   comment       String?
   sortOrder     Int     @default(0)
 
   payment    CashPayment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
-  budgetLine BudgetLine  @relation(fields: [budgetLineId], references: [id], onDelete: Restrict)
+  budgetItem BudgetItem? @relation(fields: [budgetItemId], references: [id], onDelete: SetNull)
 
   @@index([paymentId, sortOrder])
-  @@index([budgetLineId])
-}
-
-/// Сохранённый шаблон табличной сметы (Univer snapshot) для проекта.
-model BudgetTemplate {
-  id          String   @id @default(cuid())
-  projectId   String
-  name        String
-  /// Полный снимок Univer workbook
-  snapshot    Json
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  createdById String?
-
-  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  createdBy User?   @relation("BudgetTemplateCreator", fields: [createdById], references: [id], onDelete: SetNull)
-
-  @@index([projectId, name])
+  @@index([budgetItemId])
 }
 
 /// Именованные переменные для финансовых расчётов (СМЕНЫ, СЕРИИ, кастомные).
@@ -1805,20 +1770,43 @@ model CertificateFile {
   @@index([fileId])
 }
 
-/// Табличная смета проекта (Excel-like). Не путать со статьями BudgetLine.
+/// Смета цеха — книга Univer. Одна книга на цех. Не путать со статьями BudgetLine.
 model Budget {
-  id          String   @id @default(cuid())
-  projectId   String
-  name        String   @default("Смета")
+  id           String   @id @default(cuid())
+  projectId    String
+  departmentId String   @unique
+  /// Основной лист: по нему разбираются статьи, удалить нельзя.
+  mainSheetId  String?  @unique
+  /// Растёт при каждом сохранении, в котором книга действительно изменилась.
+  revision     Int      @default(0)
+  status       BudgetStatus @default(DRAFT)
+  /// Последняя отправка на утверждение. Очищается при утверждении и возврате.
+  submittedAt       DateTime?
+  submittedById     String?
+  submitComment     String?
+  submittedRevision Int?
+  /// Глава сохранил правку, пока смета была на утверждении: статус стал «черновик»,
+  /// смета остаётся в списке продюсера. Очищается при отправке, утверждении и возврате.
+  changedAfterSubmitAt DateTime?
+  /// Последний возврат. Комментарий показывается, пока статус «возвращена».
+  returnedAt    DateTime?
+  returnedById  String?
+  returnComment String?
+  name         String   @default("Смета")
   /// Общая карта стилей Univer (workbook-level), на листы ссылаются по id
-  styles      Json     @default("{}")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  createdById String?
+  styles       Json     @default("{}")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  createdById  String?
 
-  project   Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  createdBy User?        @relation("BudgetCreator", fields: [createdById], references: [id], onDelete: SetNull)
-  sheets    BudgetSheet[]
+  project    Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  department Department    @relation(fields: [departmentId], references: [id], onDelete: NoAction)
+  createdBy  User?         @relation("BudgetCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  submittedBy User?        @relation("BudgetSubmitter", fields: [submittedById], references: [id], onDelete: SetNull)
+  returnedBy User?         @relation("BudgetReturner", fields: [returnedById], references: [id], onDelete: SetNull)
+  mainSheet  BudgetSheet?  @relation("BudgetMainSheet", fields: [mainSheetId], references: [id], onDelete: NoAction)
+  sheets     BudgetSheet[]
+  versions   BudgetVersion[]
 
   @@index([projectId])
 }
@@ -1826,14 +1814,18 @@ model Budget {
 model BudgetSheet {
   id        String  @id @default(cuid())
   budgetId  String
+  /// Id листа в Univer. Уникален только внутри книги: сервер ищет лист по паре книга + ключ.
+  sheetKey  String
   name      String
   sortOrder Int     @default(0)
   /// Избранный / закреплённый в начале бокового навигатора
   pinned    Boolean @default(false)
 
   budget Budget           @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  mainOf Budget?          @relation("BudgetMainSheet")
   data   BudgetSheetData?
 
+  @@unique([budgetId, sheetKey])
   @@index([budgetId, sortOrder])
 }
 
@@ -1843,6 +1835,116 @@ model BudgetSheetData {
   data    Json
 
   sheet BudgetSheet @relation(fields: [sheetId], references: [id], onDelete: Cascade)
+}
+
+/// Статья сметы цеха — строка основного листа с кодом. Код уникален в проекте и не переходит к другой статье.
+/// Значения — текущий черновик; Сумма, Налог, Итого посчитаны сервером.
+model BudgetItem {
+  id           String    @id @default(cuid())
+  projectId    String
+  departmentId String
+  code         String
+  name         String
+  unit         String?
+  quantity     Decimal?  @db.Decimal(18, 4)
+  rate         Decimal?  @db.Decimal(18, 2)
+  days         Decimal?  @db.Decimal(18, 4)
+  amount       Decimal   @db.Decimal(18, 2)
+  taxPercent   Decimal?  @db.Decimal(9, 4)
+  tax          Decimal   @db.Decimal(18, 2)
+  total        Decimal   @db.Decimal(18, 2)
+  /// Номер строки на основном листе (с 1)
+  sortOrder    Int       @default(0)
+  /// Код пропал с основного листа — статья в архиве, связи остаются.
+  archivedAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  project    Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  department Department @relation(fields: [departmentId], references: [id], onDelete: NoAction)
+  versionLines BudgetVersionLine[]
+  accruals          Accrual[]
+  paymentBreakdowns CashPaymentBreakdown[]
+  actorsDefault     Actor[]        @relation("ActorDefaultBudgetItem")
+  actorsOvertime    Actor[]        @relation("ActorOvertimeBudgetItem")
+  resourcesDefault  ResourceItem[] @relation("ResourceItemDefaultBudgetItem")
+  resourcesOvertime ResourceItem[] @relation("ResourceItemOvertimeBudgetItem")
+  resourcesMileage  ResourceItem[] @relation("ResourceItemMileageBudgetItem")
+  locationsDefault  Location[]     @relation("LocationDefaultBudgetItem")
+  locationsOvertime Location[]     @relation("LocationOvertimeBudgetItem")
+
+  @@unique([projectId, code])
+  @@index([departmentId, archivedAt])
+}
+
+enum BudgetStatus {
+  DRAFT
+  SUBMITTED
+  RETURNED
+  APPROVED
+}
+
+/// Утверждённая версия сметы цеха. Неизменяема: изменить или удалить её не даёт
+/// триггер в базе (удаляется только вместе со всем проектом).
+model BudgetVersion {
+  id           String   @id @default(cuid())
+  projectId    String
+  departmentId String
+  budgetId     String
+  /// Номер версии в цехе: 1, 2, 3…
+  number       Int
+  /// Ревизия черновика, которую видел и утвердил продюсер.
+  revision     Int
+  /// Кто утвердил и кто отправил: id и имя на тот момент, без связей — версия не меняется.
+  approvedById    String
+  approvedByName  String
+  /// Утвердил продюсер, который сам глава этого цеха.
+  approvedByHead  Boolean  @default(false)
+  approvedAt      DateTime @default(now())
+  submittedById   String?
+  submittedByName String?
+  submittedAt     DateTime?
+  submitComment   String?
+  total        Decimal  @db.Decimal(18, 2)
+  itemCount    Int
+  /// Снимок основного листа (формулы заменены значениями) и стили книги — для показа.
+  sheetName    String
+  sheetData    Json
+  styles       Json     @default("{}")
+
+  project    Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  department Department          @relation(fields: [departmentId], references: [id], onDelete: NoAction)
+  budget     Budget              @relation(fields: [budgetId], references: [id], onDelete: NoAction)
+  lines      BudgetVersionLine[]
+
+  @@unique([departmentId, number])
+  @@index([projectId])
+  @@index([budgetId])
+}
+
+/// Строка утверждённой версии: ссылка на статью по id + копия её значений.
+model BudgetVersionLine {
+  id           String   @id @default(cuid())
+  versionId    String
+  budgetItemId String
+  code         String
+  name         String
+  unit         String?
+  quantity     Decimal? @db.Decimal(18, 4)
+  rate         Decimal? @db.Decimal(18, 2)
+  days         Decimal? @db.Decimal(18, 4)
+  amount       Decimal  @db.Decimal(18, 2)
+  taxPercent   Decimal? @db.Decimal(9, 4)
+  tax          Decimal  @db.Decimal(18, 2)
+  total        Decimal  @db.Decimal(18, 2)
+  sortOrder    Int      @default(0)
+
+  version    BudgetVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  /// Каскад только ради удаления проекта: удалить статью из версии отдельно не даст триггер.
+  budgetItem BudgetItem    @relation(fields: [budgetItemId], references: [id], onDelete: Cascade)
+
+  @@unique([versionId, budgetItemId])
+  @@index([budgetItemId])
 }
 
 enum FinanceOpType {
@@ -1904,7 +2006,6 @@ model Counterparty {
 
   project     Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
   financeOps  FinanceOperation[]
-  budgetLines BudgetLine[]
   accruals    Accrual[]
   cashPayments CashPayment[]
   contracts   Contract[]

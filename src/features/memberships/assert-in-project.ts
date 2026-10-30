@@ -1,5 +1,6 @@
 import "server-only";
 
+import { MembershipStatus } from "@prisma/client";
 import { prisma } from "@/shared/db/prisma";
 
 /** Имя модели из схемы. Новый вид сущности — ещё одно значение и один case. */
@@ -20,7 +21,12 @@ export type AssertInProjectEntity =
   | "Character"
   | "Actor"
   | "Element"
-  | "CastingCandidate";
+  | "CastingCandidate"
+  | "Department"
+  | "BudgetItem"
+  | "ShootDay"
+  /** Только активный участник (не приглашённый и не удалённый). */
+  | "ProjectMembership";
 
 type TransactionCallback = Extract<
   Parameters<typeof prisma.$transaction>[0],
@@ -52,6 +58,10 @@ type ProjectDb = Pick<
   | "actor"
   | "element"
   | "castingCandidate"
+  | "department"
+  | "budgetItem"
+  | "shootDay"
+  | "projectMembership"
 >;
 
 /** Нет записи и чужой проект. Текст один, чтобы по ответу нельзя было их различить. */
@@ -176,6 +186,26 @@ async function countInProject(
     case "CastingCandidate":
       return db.castingCandidate.count({
         where: { id: { in: ids }, projectId },
+      });
+    case "Department":
+      return db.department.count({
+        where: { id: { in: ids }, projectId },
+      });
+    case "BudgetItem":
+      return db.budgetItem.count({
+        where: { id: { in: ids }, projectId },
+      });
+    case "ShootDay":
+      return db.shootDay.count({
+        where: { id: { in: ids }, projectId },
+      });
+    case "ProjectMembership":
+      return db.projectMembership.count({
+        where: {
+          id: { in: ids },
+          projectId,
+          status: MembershipStatus.ACTIVE,
+        },
       });
     default: {
       const unexpected: never = entity;

@@ -2,6 +2,7 @@
 
 import {
   ENTITY_FINANCE_SECTIONS,
+  isSectionFlagAllowed,
   PERMISSION_FLAGS,
   PERMISSION_SECTIONS,
   resolveCategoryFinance,
@@ -64,12 +65,16 @@ export function PermissionMatrixEditor({
                 <td className="py-2 pr-3 font-medium">{section.label}</td>
                 {MAIN_FLAGS.map((flag) => (
                   <td key={flag} className="px-1 py-2 text-center">
-                    <input
-                      type="checkbox"
-                      name={`${prefix}_${section.id}_${flag}`}
-                      defaultChecked={matrix[section.id][flag]}
-                      className="h-4 w-4 accent-[var(--accent)]"
-                    />
+                    {isSectionFlagAllowed(section.id, flag) ? (
+                      <input
+                        type="checkbox"
+                        name={`${prefix}_${section.id}_${flag}`}
+                        defaultChecked={matrix[section.id][flag]}
+                        className="h-4 w-4 accent-[var(--accent)]"
+                      />
+                    ) : (
+                      <span className="text-[var(--muted-fg)]">—</span>
+                    )}
                   </td>
                 ))}
               </tr>
@@ -224,7 +229,7 @@ export function PermissionMatrixEditor({
               </tr>
             </thead>
             <tbody>
-              {(["budget", "finance"] as const).map((sectionId) => {
+              {(["finance"] as const).map((sectionId) => {
                 const section = PERMISSION_SECTIONS.find(
                   (s) => s.id === sectionId,
                 )!;
@@ -270,12 +275,12 @@ export function PermissionMatrixEditor({
         </div>
       </div>
 
-      {/* Preserve finance flags for non-entity sections that are not budget/finance */}
+      {/* Preserve finance flags for non-entity sections that are not finance */}
       {PERMISSION_SECTIONS.filter(
         (s) =>
           !ENTITY_FINANCE_SECTIONS.includes(s.id) &&
-          s.id !== "budget" &&
-          s.id !== "finance",
+          s.id !== "finance" &&
+          isSectionFlagAllowed(s.id, "financeRead"),
       ).map((section) => (
         <div key={section.id} className="hidden">
           <input

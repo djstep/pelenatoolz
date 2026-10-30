@@ -1,8 +1,5 @@
 import ExcelJS from "exceljs";
-import type {
-  CashFlowReport,
-  PlanFactReport,
-} from "@/features/finance/queries-reports";
+import type { CashFlowReport } from "@/features/finance/queries-reports";
 import { formatDateShort } from "@/shared/i18n/format-date";
 
 const HEADER_FILL: ExcelJS.Fill = {
@@ -22,75 +19,6 @@ function styleHeader(row: ExcelJS.Row) {
 function moneyCell(cell: ExcelJS.Cell, n: number) {
   cell.value = n;
   cell.numFmt = "#,##0.00";
-}
-
-export async function buildPlanFactWorkbook(
-  report: PlanFactReport,
-  meta: { projectName: string; currency: string; periodLabel: string },
-) {
-  const workbook = new ExcelJS.Workbook();
-  workbook.creator = "PELENA";
-  const sheet = workbook.addWorksheet("План-факт");
-
-  sheet.addRow([`План-факт по статьям · ${meta.projectName}`]);
-  sheet.addRow([`Период: ${meta.periodLabel} · валюта: ${meta.currency}`]);
-  sheet.addRow([]);
-
-  const header = sheet.addRow([
-    "Категория",
-    "Статья",
-    "План",
-    "Начисления",
-    "Оплачено",
-    "План − начисл.",
-    "Начисл. − оплачено",
-  ]);
-  styleHeader(header);
-
-  for (const row of report.rows) {
-    const r = sheet.addRow([
-      row.categoryLabel,
-      row.title,
-      null,
-      null,
-      null,
-      null,
-      null,
-    ]);
-    moneyCell(r.getCell(3), row.planned);
-    moneyCell(r.getCell(4), row.accrued);
-    moneyCell(r.getCell(5), row.paid);
-    moneyCell(r.getCell(6), row.variancePlan);
-    moneyCell(r.getCell(7), row.unpaid);
-  }
-
-  const total = sheet.addRow([
-    "",
-    "Итого",
-    null,
-    null,
-    null,
-    null,
-    null,
-  ]);
-  total.font = { bold: true };
-  moneyCell(total.getCell(3), report.totals.planned);
-  moneyCell(total.getCell(4), report.totals.accrued);
-  moneyCell(total.getCell(5), report.totals.paid);
-  moneyCell(total.getCell(6), report.totals.variancePlan);
-  moneyCell(total.getCell(7), report.totals.unpaid);
-
-  sheet.columns = [
-    { width: 22 },
-    { width: 36 },
-    { width: 14 },
-    { width: 14 },
-    { width: 14 },
-    { width: 16 },
-    { width: 18 },
-  ];
-
-  return workbook;
 }
 
 export async function buildCashFlowWorkbook(
