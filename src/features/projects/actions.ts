@@ -25,6 +25,7 @@ import {
   isProducerRole,
 } from "@/features/roles/role-rules";
 import { AuditEntityType } from "@/shared/audit/entity-types";
+import { auditMemberName } from "@/shared/audit/member-name";
 import { recordAudit } from "@/shared/audit/with-audit";
 import { nanoid } from "nanoid";
 
@@ -478,7 +479,7 @@ export async function updateMemberRoleAction(
 
   const target = await prisma.projectMembership.findFirst({
     where: { id: parsed.data.membershipId, projectId },
-    include: { role: true },
+    include: { role: true, user: { select: { name: true } } },
   });
 
   if (!target) {
@@ -516,16 +517,18 @@ export async function updateMemberRoleAction(
     data: { roleId: parsed.data.roleId },
   });
 
+  const memberName = auditMemberName(target.user.name);
   await recordAudit({ user: { id: user.id! } }, {
     projectId,
     entityType: AuditEntityType.membership,
     entityId: target.id,
     action: "UPDATE",
-    summary: `Роль участника изменена: «${target.role.name}» → «${newRole.name}»`,
+    summary: `Роль участника «${memberName}» изменена: «${target.role.name}» → «${newRole.name}»`,
     changes: {
       userId: target.userId,
-      fromRoleId: target.roleId,
-      toRoleId: newRole.id,
+      memberName,
+      roleId: { from: target.roleId, to: newRole.id },
+      roleName: { from: target.role.name, to: newRole.name },
     },
   });
 
@@ -542,7 +545,7 @@ export async function removeMemberAction(
 
   const target = await prisma.projectMembership.findFirst({
     where: { id: membershipId, projectId },
-    include: { role: true },
+    include: { role: true, user: { select: { name: true } } },
   });
 
   if (!target) {
@@ -583,6 +586,7 @@ export async function removeMemberAction(
     return heads.map((h) => h.department);
   });
 
+  const memberName = auditMemberName(target.user.name);
   await recordAudit({ user: { id: user.id! } }, {
     projectId,
     entityType: AuditEntityType.membership,
@@ -590,11 +594,13 @@ export async function removeMemberAction(
     action: "DELETE",
     summary:
       removedHeads.length > 0
-        ? `Участник с ролью «${target.role.name}» удалён из проекта и снят с глав цехов: ${removedHeads.map((d) => `«${d.name}»`).join(", ")}`
-        : `Участник с ролью «${target.role.name}» удалён из проекта`,
+        ? `Участник «${memberName}» с ролью «${target.role.name}» удалён из проекта и снят с глав цехов: ${removedHeads.map((d) => `«${d.name}»`).join(", ")}`
+        : `Участник «${memberName}» с ролью «${target.role.name}» удалён из проекта`,
     changes: {
       userId: target.userId,
+      memberName,
       roleId: target.roleId,
+      roleName: target.role.name,
       ...(removedHeads.length > 0 ? { removedFromDepartmentHeads: removedHeads } : {}),
     },
   });
@@ -639,7 +645,7 @@ export async function acceptInviteAction(token: string): Promise<ActionState> {
     return { error: "Вы уже участник проекта" };
   }
 
-  const membershipId = await prisma.$transaction(async (tx) => {
+  const { membershipId, previousRole } = await prisma.$transaction(async (tx) => {
     const existing = await tx.projectMembership.findUnique({
       where: {
         projectId_userId: {
@@ -647,6 +653,7 @@ export async function acceptInviteAction(token: string): Promise<ActionState> {
           userId: user.id!,
         },
       },
+      include: { role: { select: { id: true, name: true } } },
     });
 
     const membership = existing
@@ -671,16 +678,32 @@ export async function acceptInviteAction(token: string): Promise<ActionState> {
       data: { acceptedAt: new Date() },
     });
 
-    return membership.id;
+    // Прежняя запись участия — возврат в проект; роль до возврата пишется в журнал.
+    return { membershipId: membership.id, previousRole: existing?.role ?? null };
   });
 
+  // Возврат пишется тем же действием CREATE, что и первое принятие, — отличается по returned.
   await recordAudit({ user: { id: user.id! } }, {
     projectId: invite.projectId,
     entityType: AuditEntityType.membership,
     entityId: membershipId,
     action: "CREATE",
-    summary: `Принято приглашение с ролью «${invite.role.name}»`,
-    changes: { inviteId: invite.id, roleId: invite.roleId },
+    summary: previousRole
+      ? `Принято приглашение с ролью «${invite.role.name}» — возврат в проект (была роль «${previousRole.name}»)`
+      : `Принято приглашение с ролью «${invite.role.name}»`,
+    changes: {
+      inviteId: invite.id,
+      userId: user.id!,
+      roleId: invite.roleId,
+      roleName: invite.role.name,
+      ...(previousRole
+        ? {
+            returned: true,
+            previousRoleId: previousRole.id,
+            previousRoleName: previousRole.name,
+          }
+        : {}),
+    },
   });
 
   redirect(`/ru/projects/${invite.projectId}`);

@@ -1,6 +1,7 @@
 import "server-only";
 
 import { MembershipStatus } from "@prisma/client";
+import { auditMemberName } from "@/shared/audit/member-name";
 import { prisma } from "@/shared/db/prisma";
 
 /** Как показать участника: имя, иначе почта. */
@@ -66,7 +67,7 @@ export async function listHeadCandidates(projectId: string): Promise<HeadCandida
     .sort((a, b) => a.label.localeCompare(b.label, "ru"));
 }
 
-/** Подписи участников для аудита (кого назначили / сняли). */
+/** Подписи участников для аудита (кого назначили / сняли): имя без почты. */
 export async function memberLabelsById(
   projectId: string,
   membershipIds: readonly string[],
@@ -74,9 +75,9 @@ export async function memberLabelsById(
   if (membershipIds.length === 0) return new Map();
   const rows = await prisma.projectMembership.findMany({
     where: { projectId, id: { in: [...membershipIds] } },
-    select: { id: true, user: { select: { name: true, email: true } } },
+    select: { id: true, user: { select: { name: true } } },
   });
-  return new Map(rows.map((row) => [row.id, memberLabel(row.user)]));
+  return new Map(rows.map((row) => [row.id, auditMemberName(row.user.name)]));
 }
 
 /** Цеха, видимые в разделе «Сметы»: все или только перечисленные. */

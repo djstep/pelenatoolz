@@ -17,6 +17,7 @@ import {
   isReservedRoleName,
 } from "@/features/roles/role-rules";
 import { AuditEntityType } from "@/shared/audit/entity-types";
+import { auditMemberName } from "@/shared/audit/member-name";
 import { recordAudit } from "@/shared/audit/with-audit";
 import { isForeignKeyError, LINKED_ERROR } from "@/shared/db/foreign-key";
 import { prisma } from "@/shared/db/prisma";
@@ -274,11 +275,21 @@ export async function deleteRoleAction(
   // Отменённые, просроченные и принятые приглашения уже отработали — удаляются вместе с ролью.
   let deletedInvites = 0;
   let movedMembers = 0;
+  let movedToViewer: { userId: string; name: string }[] = [];
   try {
     await prisma.$transaction(async (tx) => {
       if (viewerId) {
+        const formerWhere = { roleId, projectId, status: MembershipStatus.REMOVED };
+        const former = await tx.projectMembership.findMany({
+          where: formerWhere,
+          select: { userId: true, user: { select: { name: true } } },
+        });
+        movedToViewer = former.map((m) => ({
+          userId: m.userId,
+          name: auditMemberName(m.user.name),
+        }));
         const moved = await tx.projectMembership.updateMany({
-          where: { roleId, projectId, status: MembershipStatus.REMOVED },
+          where: formerWhere,
           data: { roleId: viewerId },
         });
         movedMembers = moved.count;
@@ -303,6 +314,7 @@ export async function deleteRoleAction(
     changes: {
       deletedInvites,
       formerMembersMovedToViewer: movedMembers,
+      ...(movedToViewer.length > 0 ? { movedToViewer } : {}),
     },
   });
 
