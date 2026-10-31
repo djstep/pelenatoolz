@@ -15,14 +15,14 @@ const FIXTURES = path.join(process.cwd(), "docs", "tasks", "fixtures", "scripts"
 const fixtures = readdirSync(FIXTURES).filter((name) => name.toLowerCase().endsWith(".docx"));
 
 /**
- * Файлы из разных программ — по имени: `…-word.docx`, `…-gdocs.docx`, `…-libreoffice.docx`.
- * Три исходных файла волны сделаны не в Word (ddct — без сведений о программе, draft —
- * библиотекой, v4 — WPS Office), поэтому файлы программ добавляются отдельно.
+ * Файлы из разных программ — по имени: `…-word.docx`, `…-gdocs.docx`. Три исходных файла
+ * волны сделаны не в Word (ddct — без сведений о программе, draft — библиотекой, v4 — WPS
+ * Office), поэтому файлы программ добавляются отдельно. LibreOffice не проверяется (решение
+ * владельца).
  */
 const SOURCES = [
   { suffix: "-word.docx", label: "Microsoft Word" },
   { suffix: "-gdocs.docx", label: "Google Docs" },
-  { suffix: "-libreoffice.docx", label: "LibreOffice" },
 ];
 
 /**
