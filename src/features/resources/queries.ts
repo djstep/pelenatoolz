@@ -43,6 +43,7 @@ export async function getResourceCategory(projectId: string, categoryId: string)
                   postfix: true,
                   status: true,
                   planSeconds: true,
+                  cutAt: true,
                 },
               },
             },
@@ -76,6 +77,7 @@ export async function getResourceItem(
               status: true,
               planSeconds: true,
               factSeconds: true,
+              cutAt: true,
             },
           },
         },
@@ -85,15 +87,16 @@ export async function getResourceItem(
 
   if (!item) return null;
 
+  // Хронометраж — без вырезанных сцен
   const planSeconds = item.sceneLinks.reduce(
-    (sum, link) => sum + (link.scene.planSeconds ?? 0),
+    (sum, link) => sum + (link.scene.cutAt ? 0 : (link.scene.planSeconds ?? 0)),
     0,
   );
   const unshotLinks = item.sceneLinks.filter(
     (l) => l.scene.status !== "SHOT",
   );
   const unshotSeconds = unshotLinks.reduce(
-    (sum, link) => sum + (link.scene.planSeconds ?? 0),
+    (sum, link) => sum + (link.scene.cutAt ? 0 : (link.scene.planSeconds ?? 0)),
     0,
   );
 

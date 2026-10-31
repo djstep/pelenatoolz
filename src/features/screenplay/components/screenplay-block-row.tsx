@@ -9,6 +9,11 @@ import {
   type ScreenplayBlock,
 } from "@/features/screenplay/lib/block-types";
 import { stripHtml } from "@/features/screenplay/lib/plain-text";
+import {
+  blockFromEditorHtml,
+  blockNodes,
+  safeBlockHtml,
+} from "@/features/screenplay/lib/safe-block-html";
 import { cn } from "@/shared/lib/cn";
 
 const SINGLE_LINE_TYPES = new Set<ScriptBlockType>([
@@ -68,18 +73,16 @@ export function ScreenplayBlockRow({
   const syncFromDom = useCallback(() => {
     const el = editableRef.current;
     if (!el) return;
-    const html = el.innerHTML;
-    const text = stripHtml(html);
-    onChange({ content: text, contentHtml: html === text ? null : html });
+    onChange(blockFromEditorHtml(el.innerHTML));
     adjustHeight(el);
   }, [onChange]);
 
   useEffect(() => {
     const el = editableRef.current;
     if (!el || document.activeElement === el) return;
-    const html = block.contentHtml ?? block.content;
-    if (el.innerHTML !== html) {
-      el.innerHTML = html || "";
+    // Не через innerHTML: текст — текстом, из contentHtml — только разрешённая разметка.
+    if (el.innerHTML !== safeBlockHtml(block.content, block.contentHtml)) {
+      el.replaceChildren(...blockNodes(document, block.content, block.contentHtml));
       adjustHeight(el);
     }
   }, [block.content, block.contentHtml, block.id]);

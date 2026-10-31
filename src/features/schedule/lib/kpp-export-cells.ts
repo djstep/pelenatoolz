@@ -179,7 +179,9 @@ export function getKppFullCellValue(
   const scene = row.scene;
   switch (fieldId) {
     case "sceneNumber":
-      return formatSceneNumber(scene, projectType);
+      return scene.cutAt
+        ? `${formatSceneNumber(scene, projectType)} (вырезана)`
+        : formatSceneNumber(scene, projectType);
     case "location":
       return formatLocation(scene);
     case "intExt":

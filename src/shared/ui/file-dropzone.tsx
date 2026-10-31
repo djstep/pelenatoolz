@@ -8,11 +8,22 @@ import {
   type DragEvent,
 } from "react";
 import { cn } from "@/shared/lib/cn";
-import {
-  isScriptFile,
-  SCRIPT_ACCEPT,
-  SCRIPT_FORMAT_HINT,
-} from "@/features/import/script-formats";
+
+/** Сценарий принимается только в Word .docx (решение владельца, волна 4). */
+const DEFAULT_ACCEPT =
+  ".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+const DEFAULT_FORMAT_HINT = "Только Word .docx";
+
+/** Расширение файла — из `accept` (типы файлов браузер учитывает сам при выборе). */
+function matchesAccept(file: File, accept: string) {
+  const extensions = accept
+    .split(",")
+    .map((item) => item.trim().toLowerCase())
+    .filter((item) => item.startsWith("."));
+  if (extensions.length === 0) return true;
+  const fileName = file.name.toLowerCase();
+  return extensions.some((extension) => fileName.endsWith(extension));
+}
 
 function formatBytes(size: number) {
   if (size < 1024) return `${size} Б`;
@@ -22,10 +33,11 @@ function formatBytes(size: number) {
 
 export function FileDropzone({
   name = "file",
-  accept = SCRIPT_ACCEPT,
+  accept = DEFAULT_ACCEPT,
   required,
   disabled,
   hint = "Перетащите сценарий сюда или нажмите, чтобы выбрать",
+  formatHint,
   className,
   onFileChange,
 }: {
@@ -34,6 +46,8 @@ export function FileDropzone({
   required?: boolean;
   disabled?: boolean;
   hint?: string;
+  /** Подпись: какие форматы принимаются. */
+  formatHint?: string;
   className?: string;
   onFileChange?: (file: File | null) => void;
 }) {
@@ -67,9 +81,9 @@ export function FileDropzone({
       setError(null);
       return;
     }
-    if (!isScriptFile(picked)) {
+    if (!matchesAccept(picked, accept)) {
       commit(null);
-      setError(`Неподдерживаемый формат. ${SCRIPT_FORMAT_HINT}`);
+      setError(`Неподдерживаемый формат. ${formatHint ?? DEFAULT_FORMAT_HINT}`);
       return;
     }
     setError(null);
@@ -165,16 +179,13 @@ export function FileDropzone({
               {hint}
             </p>
             <p className="text-xs text-[var(--muted-fg)]">
-              {SCRIPT_FORMAT_HINT}
+              {formatHint ?? DEFAULT_FORMAT_HINT}
             </p>
           </div>
         )}
       </label>
 
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-xs text-[var(--muted-fg)]">
-          Fade In / WriterDuet / Highland — .fdx или .fountain; КИТ — .kitsp
-        </p>
+      <div className="flex items-center justify-end gap-3">
         {file ? (
           <button
             type="button"

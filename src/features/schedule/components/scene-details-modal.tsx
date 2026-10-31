@@ -7,6 +7,7 @@ import {
 } from "@/shared/i18n/domain-labels";
 import { FormattedScriptContent } from "@/features/script/components/formatted-script-content";
 import { Badge } from "@/shared/ui/badge";
+import { Button } from "@/shared/ui/button";
 import { Modal } from "@/shared/ui/modal";
 import {
   formatPagesMinutes,
@@ -27,6 +28,8 @@ export type SceneDetails = {
   dayNight: keyof typeof dayNightLabels | null;
   status: keyof typeof sceneStatusLabels | string;
   scriptDay: number | null;
+  /** Сцена вырезана (пусто — нет). */
+  cutAt?: Date | string | null;
   locations: { location: { name: string } }[];
   characters: { character: { id: string; name: string } }[];
 };
@@ -34,9 +37,14 @@ export type SceneDetails = {
 export function SceneDetailsModal({
   scene,
   onClose,
+  dayNumber,
+  onRemoveFromDay,
 }: {
   scene: SceneDetails | null;
   onClose: () => void;
+  /** День КПП, в котором стоит сцена; с `onRemoveFromDay` — кнопка «Убрать из дня». */
+  dayNumber?: number;
+  onRemoveFromDay?: () => void;
 }) {
   if (!scene) return null;
 
@@ -54,6 +62,11 @@ export function SceneDetailsModal({
       wide
     >
       <div className="space-y-4 text-sm">
+        {scene.cutAt ? (
+          <p className="rounded-xl border border-[var(--border)] px-3 py-2 text-[var(--muted-fg)]">
+            Сцена вырезана. Из дня сама не убирается — решение за вами.
+          </p>
+        ) : null}
         <div className="flex flex-wrap gap-2">
           <Badge>{statusLabel}</Badge>
           {scene.intExt ? <Badge>{intExtLabels[scene.intExt]}</Badge> : null}
@@ -111,6 +124,14 @@ export function SceneDetailsModal({
             Текст сцены не загружен.
           </p>
         )}
+
+        {onRemoveFromDay && dayNumber != null ? (
+          <div className="flex justify-end border-t border-[var(--border)] pt-3">
+            <Button type="button" variant="secondary" onClick={onRemoveFromDay}>
+              Убрать из дня {dayNumber}
+            </Button>
+          </div>
+        ) : null}
       </div>
     </Modal>
   );

@@ -1,306 +1,346 @@
 "use server";
 
-import type { DayNight, IntExt } from "@prisma/client";
+import { createHash } from "crypto";
 import { revalidatePath } from "next/cache";
-import { bootstrapScriptBlocks, applyImportScriptBlocks } from "@/features/screenplay/lib/sync";
-import { createScriptVersion } from "@/features/screenplay/lib/versions";
-import { buildSlugline } from "@/features/screenplay/lib/slugline";
+import { z } from "zod";
+import { classifyParagraphs, type BlockTypingResult } from "@/features/import/normalize/block-types";
+import { readDocxParagraphs } from "@/features/import/normalize/docx-paragraphs";
+import { isDocxReadError, type DocxReadErrorCode } from "@/features/import/normalize/docx-zip";
 import {
-  buildImportBlocksFromDocx,
-  buildImportBlocksFromSceneScripts,
-  type ImportPreviewBlock,
-} from "@/features/import/docx-blocks";
-import { extractScriptText } from "@/features/import/extract-script";
+  normalizeScript,
+  type NormalizedScript,
+} from "@/features/import/normalize/normalize-script";
+import { loadImportContext } from "@/features/import/review/load-context";
 import {
-  parseScenesFromText,
-  previewExtractedText,
-} from "@/features/import/parse-script";
-import { detectScriptFormat, formatLabel } from "@/features/import/script-formats";
+  SCRIPT_IMPORT_MAX_BYTES,
+  SIZE_REFUSALS,
+  type ScriptImportState,
+  type ScriptPreviewState,
+} from "@/features/import/review/types";
+import {
+  isScriptVersionConflictError,
+  VersionBlocksChangedError,
+  writeScript,
+  type ScriptWriteInput,
+  type ScriptWriteResult,
+} from "@/features/import/write/apply";
+import { blockingQuestions, planImport } from "@/features/import/write/plan";
+import { loadVersionSource } from "@/features/import/write/version-source";
+import { typingFromVersionBlocks } from "@/features/import/write/version-typing";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
-import { listScenes } from "@/features/script/queries";
-import { prisma } from "@/shared/db/prisma";
 import { AuditEntityType } from "@/shared/audit/entity-types";
-import { recordAudit } from "@/shared/audit/with-audit";
+import { auditMutation } from "@/shared/audit/with-audit";
 
-import { mergeSceneEdits } from "@/features/import/merge-scene-edits";
-import type {
-  ImportActionState,
-  ImportPreviewPayload,
-  ImportPreviewScene,
-} from "@/features/import/types";
+const DOCX_ERRORS: Record<DocxReadErrorCode, string> = {
+  not_zip: "Это не файл Word (.docx). Сохраните сценарий в Word как .docx и загрузите снова.",
+  not_docx: "Это не документ Word (.docx). Сохраните сценарий в Word как .docx и загрузите снова.",
+  too_many_files: "Файл .docx устроен необычно: слишком много частей внутри. Пересохраните его в Word.",
+  too_large: SIZE_REFUSALS.script,
+  unsupported: "Файл .docx сжат неподдерживаемым способом. Пересохраните его в Word.",
+  script_too_large: SIZE_REFUSALS.document,
+};
 
-export type {
-  ImportActionState,
-  ImportFieldKey,
-  ImportPreviewPayload,
-  ImportPreviewScene,
-} from "@/features/import/types";
+const NO_RIGHTS = "Импорт сценария доступен только с правом правки сценария";
+const NO_RIGHTS_SYNC = "Обновить либретто из версии можно только с правом правки сценария";
+const CHANGED =
+  "Сценарий проекта уже изменился (вторая вкладка или повторное нажатие). Обновите страницу и сделайте предпросмотр заново.";
 
-function formatSeconds(sec: number | null | undefined) {
-  if (sec == null) return undefined;
-  const m = Math.floor(sec / 60);
-  const s = sec % 60;
-  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
-}
+type ReadFile =
+  | { error: string }
+  | { file: File; hash: string; typing: BlockTypingResult };
 
-function toDayNight(value?: string): DayNight | undefined {
-  if (
-    value === "DAY" ||
-    value === "NIGHT" ||
-    value === "DAWN" ||
-    value === "DUSK"
-  ) {
-    return value;
-  }
-  return undefined;
-}
-
-function toIntExt(value?: string): IntExt | undefined {
-  if (value === "INT" || value === "EXT" || value === "INT_EXT") {
-    return value;
-  }
-  return undefined;
-}
-
-export async function previewScriptImportAction(
-  projectId: string,
-  _prev: ImportActionState,
-  formData: FormData,
-): Promise<ImportActionState> {
-  const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:write")) {
-    return { error: "Недостаточно прав" };
-  }
-
+/** Файл из формы: размер, содержимое docx, типы блоков. Одинаково для предпросмотра и записи. */
+async function readScriptFile(formData: FormData): Promise<ReadFile> {
   const file = formData.get("file");
   if (!(file instanceof File) || file.size === 0) {
-    return { error: "Выберите файл сценария" };
+    return { error: "Выберите файл сценария .docx" };
   }
+  // Только .docx: по имени здесь, по содержимому — при разборе.
+  if (!file.name.toLowerCase().endsWith(".docx")) {
+    return { error: "Нужен файл Word .docx. Другие форматы не поддерживаются." };
+  }
+  // Браузер присылает облегчённый docx (без картинок) — лимит на него.
+  if (file.size > SCRIPT_IMPORT_MAX_BYTES) return { error: SIZE_REFUSALS.script };
 
-  const detected = detectScriptFormat(file.name);
-  if (!detected) {
+  const buffer = Buffer.from(await file.arrayBuffer());
+  let typing: BlockTypingResult;
+  try {
+    typing = classifyParagraphs(readDocxParagraphs(buffer));
+  } catch (error) {
+    if (isDocxReadError(error)) return { error: DOCX_ERRORS[error.code] };
+    return { error: "Не удалось прочитать файл .docx. Пересохраните его в Word и загрузите снова." };
+  }
+  if (!typing.blocks.some((b) => b.type === "SLUGLINE")) {
     return {
       error:
-        "Формат не поддерживается. Загрузите .kitsp (КИТ Сценарист), .docx, .fdx, .fountain, .celtx или .txt",
+        "В файле не найдено ни одной шапки сцены. Ожидается строка вида «1. ИНТ. КВАРТИРА — ДЕНЬ» или стиль Word «Заголовок сцены» / SCENE HEADING.",
     };
   }
+  return { file, hash: createHash("sha256").update(buffer).digest("hex"), typing };
+}
 
-  const timingMethod = String(formData.get("timingMethod") ?? "pages");
-  const pageRatio = Number(formData.get("pageRatio") ?? 1) || 1;
-  const showComparison = formData.get("showComparison") === "on";
+/**
+ * Предпросмотр импорта. Ничего не пишет в базу: разбирает файл, читает словарь, имена
+ * и сцены проекта, отдаёт браузеру блоки с типами. Только с правом правки сценария.
+ */
+export async function previewScriptImportAction(
+  projectId: string,
+  _prev: ScriptPreviewState,
+  formData: FormData,
+): Promise<ScriptPreviewState> {
+  const ctx = await requireProjectContext(projectId);
+  if (!ctx.can("script:write")) return { error: NO_RIGHTS };
 
-  let text: string;
-  let format = detected;
-  try {
-    const extracted = await extractScriptText(file);
-    text = extracted.text;
-    format = extracted.format;
-  } catch {
-    return {
-      error: `Не удалось прочитать файл (${formatLabel(detected)}). Проверьте формат.`,
-    };
-  }
+  const read = await readScriptFile(formData);
+  if ("error" in read) return { error: read.error };
 
-  if (!text) {
-    return { error: "В файле нет текста" };
-  }
-
-  const parsed = parseScenesFromText(text, timingMethod, pageRatio);
-  if (parsed.length === 0) {
-    return {
-      error: `Сцены не найдены (${formatLabel(format)}). Ожидается шапка: «1. ИНТ. ЛОКАЦИЯ – ДЕНЬ» или «INT. LOCATION - DAY». Из файла: ${previewExtractedText(text)}`,
-    };
-  }
-
-  const existing = await listScenes(projectId);
-
-  const scenes: ImportPreviewScene[] = parsed.map((p, idx) => {
-    const match = existing.find(
-      (s) =>
-        s.number === p.number &&
-        (s.postfix ?? "") === (p.postfix ?? "") &&
-        (s.episodeNumber ?? 0) === (p.episodeNumber ?? 0),
-    );
-    const key = `${p.episodeNumber}-${p.number}-${p.postfix || ""}-${idx}`;
-    const row: ImportPreviewScene = { ...p, key };
-    if (match && showComparison) {
-      row.existingId = match.id;
-      row.old = {
-        location: match.locations[0]?.location.name,
-        intExt: match.intExt,
-        characters: match.characters.map((c) => c.character.name),
-        timing: formatSeconds(match.planSeconds),
-        scriptDay: match.scriptDay,
-        dayNight: match.dayNight,
-        script: match.scriptContent,
-      };
-    }
-    return row;
-  });
-
-  let importBlocks: ImportPreviewBlock[] = [];
-  if (format === "docx") {
-    const buffer = Buffer.from(await file.arrayBuffer());
-    importBlocks = buildImportBlocksFromDocx(buffer);
-  } else {
-    importBlocks = buildImportBlocksFromSceneScripts(
-      parsed.map((p) => ({
-        script: p.script,
-        characters: p.characters,
-      })),
-    );
-  }
-
-  const job = await prisma.scriptImportJob.create({
-    data: {
-      projectId,
-      fileName: file.name,
-      status: "preview",
-      timingMethod,
-      showComparison,
-      previewData: {
-        scenes,
-        blocks: importBlocks,
-      },
-    },
-  });
-
+  const context = await loadImportContext(projectId);
   return {
-    preview: {
-      jobId: job.id,
-      fileName: file.name,
-      scenes,
-      blockCount: importBlocks.length,
+    data: {
+      fileName: read.file.name,
+      fileSize: read.file.size,
+      fileHash: read.hash,
+      typing: read.typing,
+      ...context,
     },
   };
 }
 
-export async function applyScriptImportAction(
+const answersSchema = z.record(z.string().max(500), z.string().max(500));
+const titleField = z.string().max(500).optional();
+const titleEditsSchema = z.object({
+  title: titleField,
+  subtitle: titleField,
+  author: titleField,
+  version: titleField,
+  date: titleField,
+  city: titleField,
+});
+
+function parseJson<T>(schema: z.ZodType<T>, value: FormDataEntryValue | null): T | null {
+  if (typeof value !== "string") return null;
+  try {
+    return schema.parse(JSON.parse(value));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * «Импортировать». От браузера — только файл, ответы по кодам вопросов, правки титульной,
+ * хэш файла и id версии с предпросмотра. Сервер разбирает файл заново и применяет ответы
+ * той же нормализацией; неизвестные коды ответов не используются.
+ */
+export async function importScriptAction(
   projectId: string,
-  _prev: ImportActionState,
+  _prev: ScriptImportState,
   formData: FormData,
-): Promise<ImportActionState> {
+): Promise<ScriptImportState> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:write")) {
-    return { error: "Недостаточно прав" };
-  }
+  if (!ctx.can("script:write")) return { error: NO_RIGHTS };
 
-  const jobId = String(formData.get("jobId") ?? "");
-  const job = await prisma.scriptImportJob.findFirst({
-    where: { id: jobId, projectId },
+  const read = await readScriptFile(formData);
+  if ("error" in read) return { error: read.error };
+  if (read.hash !== formData.get("fileHash")) {
+    return { error: "Файл отличается от того, что был в предпросмотре. Сделайте предпросмотр заново." };
+  }
+  const answers = parseJson(answersSchema, formData.get("answers"));
+  const titleEdits = parseJson(titleEditsSchema, formData.get("titleEdits"));
+  if (!answers || !titleEdits || Object.keys(answers).length > 10_000) {
+    return { error: "Некорректные данные импорта" };
+  }
+  const expected = formData.get("currentVersionId");
+  const expectedVersionId = typeof expected === "string" && expected ? expected : null;
+
+  const context = await loadImportContext(projectId);
+  if (context.currentVersionId !== expectedVersionId) return { error: CHANGED };
+
+  const result = normalizeScript(read.typing, answers, {
+    dictionary: context.dictionary,
+    existing: context.existing,
+    timing: context.timing,
   });
-  if (!job || !job.previewData) {
-    return { error: "Сессия предпросмотра не найдена" };
+  const blocking = blockingQuestions(result);
+  if (blocking > 0) {
+    return {
+      error: `Без ответа обязательных вопросов: ${blocking}. Если вы на всё ответили — данные проекта изменились, сделайте предпросмотр заново.`,
+    };
   }
+  const plan = planImport(result, answers, context.existing, context.timing, titleEdits);
 
-  const rawPreview = job.previewData as ImportPreviewPayload | ImportPreviewScene[];
-  const scenes = Array.isArray(rawPreview) ? rawPreview : rawPreview.scenes;
-  const importBlocks = Array.isArray(rawPreview) ? [] : (rawPreview.blocks ?? []);
-
-  let applied = 0;
-  const appliedScenes: ImportPreviewScene[] = [];
-  const appliedSceneIds: Array<string | null> = [];
-
-  for (const baseScene of scenes) {
-    const scene = mergeSceneEdits(baseScene, formData);
-    const selected = formData.get(`sel_${scene.key}`) === "on";
-    if (!selected) continue;
-
-    appliedScenes.push(scene);
-
-    const existing = scene.existingId
-      ? await prisma.scene.findFirst({
-          where: { id: scene.existingId, projectId },
-          select: { id: true },
-        })
-      : await prisma.scene.findFirst({
-          where: {
-            projectId,
-            episodeNumber: scene.episodeNumber ?? 0,
-            number: scene.number,
-            postfix: scene.postfix ?? "",
-          },
-          select: { id: true },
-        });
-
-    appliedSceneIds.push(existing?.id ?? null);
-    applied += 1;
-  }
-
-  const sourceType =
-    job.fileName.toLowerCase().endsWith(".docx") ? "IMPORTED_DOCX" : "IMPORTED_OTHER";
-
-  const versionTitle = String(formData.get("versionTitle") ?? "").trim();
-  if (!versionTitle) {
-    return { error: "Укажите название версии сценария" };
-  }
-
-  const version = await createScriptVersion({
-    projectId,
-    createdById: ctx.user.id!,
-    sourceType,
-    title: versionTitle,
-    makeCurrent: true,
-    blocks: [],
-  });
-
-  const indexMap = new Map<number, number>();
-  let remappedIndex = 1;
-  scenes.forEach((scene, index) => {
-    if (formData.get(`sel_${scene.key}`) === "on") {
-      indexMap.set(index + 1, remappedIndex++);
-    }
-  });
-
-  const remappedBlocks = importBlocks
-    .filter((block) => indexMap.has(block.sceneIndex))
-    .map((block) => ({
-      ...block,
-      sceneIndex: indexMap.get(block.sceneIndex)!,
-    }));
-
-  const sluglines = appliedScenes.map((scene) =>
-    buildSlugline({
-      episodeNumber: scene.episodeNumber ?? 0,
-      number: scene.number,
-      postfix: scene.postfix ?? "",
-      intExt: toIntExt(scene.intExt),
-      dayNight: toDayNight(scene.dayNight),
-      location: scene.location ?? "",
-    }),
-  );
-
-  if (remappedBlocks.length > 0 && appliedScenes.length > 0) {
-    await applyImportScriptBlocks(
-      projectId,
-      version.id,
-      appliedSceneIds,
-      remappedBlocks,
-      sluglines,
+  const fileName = read.file.name;
+  const fileSize = read.file.size;
+  let written: ScriptWriteResult;
+  try {
+    written = await auditMutation(
+      ctx,
+      writeScript,
+      {
+        projectId,
+        userId: ctx.user.id!,
+        target: {
+          kind: "new",
+          expectedVersionId,
+          title: fileName.replace(/\.docx$/i, ""),
+          sourceType: "IMPORTED_DOCX",
+        },
+        plan,
+      } satisfies ScriptWriteInput,
+      {
+        projectId,
+        entityType: AuditEntityType.scriptVersion,
+        action: "CREATE",
+        entityId: (_input, r) => r.versionId,
+        // Без текста сценария и титульной (там бывают почты и телефоны).
+        summary: (_input, r) =>
+          `Импорт сценария: ${fileName}, версия ${r.versionNumber}; сцен создано ${r.scenesCreated}, привязано ${r.scenesMatched}`,
+        changes: (_input, r) => ({
+          file: { name: fileName, size: fileSize },
+          ...writeChanges(result, r),
+        }),
+      },
     );
-  } else {
-    await bootstrapScriptBlocks(projectId, ctx.user.id!, version.id);
+  } catch (error) {
+    if (isScriptVersionConflictError(error)) return { error: CHANGED };
+    throw error;
   }
 
-  await prisma.scriptImportJob.update({
-    where: { id: jobId },
-    data: { status: "applied", scriptVersionId: version.id },
-  });
-
-  await recordAudit(ctx, {
-    projectId,
-    entityType: AuditEntityType.scriptImport,
-    entityId: jobId,
-    action: "CREATE",
-    summary: `Импортирована версия сценария (${applied} сцен в тексте)`,
-  });
-
-  revalidatePath(`/ru/projects/${projectId}/libretto`);
-  revalidatePath(`/ru/projects/${projectId}/screenplay`);
-  revalidatePath(`/ru/projects/${projectId}/screenplay/import`);
-
+  revalidateScript(projectId);
   return {
-    success: `Создана версия сценария (${applied} сцен). Обновите либретто при необходимости.`,
-    versionId: version.id,
+    success: `Импортирована версия ${written.versionNumber}: сцен новых ${written.scenesCreated}, привязано ${written.scenesMatched}`,
+    versionId: written.versionId,
+  };
+}
+
+/** Счётчики импорта и синхронизации для журнала — без текста сценария и титульной. */
+function writeChanges(result: NormalizedScript, r: ScriptWriteResult) {
+  return {
+    versionNumber: r.versionNumber,
+    scenes: {
+      created: r.scenesCreated,
+      matched: r.scenesMatched,
+      cut: r.scenesCut,
+      restored: r.scenesRestored,
+    },
+    characters: {
+      created: r.charactersCreated,
+      linked: result.characters.filter((c) => c.existingId).length,
+    },
+    locations: {
+      created: r.locationsCreated,
+      linked: result.locations.filter((l) => l.existing).length,
+    },
+    linksRemoved: r.linksRemoved,
+    // Хронометраж совпавших сцен: заполнен пустой / пересчитан по ответу.
+    timing: {
+      filled: result.timingUpdates.filter((u) => u.mode === "fill").length,
+      recalculated: result.timingUpdates.filter((u) => u.mode === "set").length,
+    },
+    dictionaryRules: r.rules,
+  };
+}
+
+function revalidateScript(projectId: string) {
+  revalidatePath(`/ru/projects/${projectId}/screenplay`);
+  revalidatePath(`/ru/projects/${projectId}/libretto`);
+  revalidatePath(`/ru/projects/${projectId}/script`);
+  revalidatePath(`/ru/projects/${projectId}/schedule`);
+  revalidatePath(`/ru/projects/${projectId}`);
+}
+
+const VERSION_CHANGED =
+  "Версия сценария изменилась с момента предпросмотра (правка, вторая вкладка или повторное нажатие). Обновите страницу.";
+
+/**
+ * «Обновить либретто» из версии сценария — та же нормализация и та же запись, что у импорта.
+ * От браузера — только ответы и хэш блоков версии с предпросмотра. Текст версии не меняется,
+ * у её блоков обновляется сцена; версия становится текущей. Только с правом правки сценария.
+ */
+export async function syncScriptAction(
+  projectId: string,
+  versionId: string,
+  _prev: ScriptImportState,
+  formData: FormData,
+): Promise<ScriptImportState> {
+  const ctx = await requireProjectContext(projectId);
+  if (!ctx.can("script:write")) return { error: NO_RIGHTS_SYNC };
+
+  const source = await loadVersionSource(projectId, versionId);
+  if (!source) return { error: "Версия не найдена" };
+  if (source.hash !== formData.get("fileHash")) return { error: VERSION_CHANGED };
+  const expected = formData.get("currentVersionId");
+  const expectedVersionId = typeof expected === "string" && expected ? expected : null;
+  const answers = parseJson(answersSchema, formData.get("answers"));
+  if (!answers || Object.keys(answers).length > 10_000) {
+    return { error: "Некорректные данные синхронизации" };
+  }
+
+  const typing = typingFromVersionBlocks(source.blocks);
+  if (!typing.blocks.some((b) => b.type === "SLUGLINE")) {
+    return { error: "В версии нет шапок сцен — нечего переносить в либретто." };
+  }
+  const context = await loadImportContext(projectId, { referenceVersionId: versionId });
+  // Как у импорта: текущая версия проекта сменилась (импорт в другой вкладке) — отказ,
+  // иначе эта версия молча стала бы текущей.
+  if (context.currentVersionId !== expectedVersionId) return { error: CHANGED };
+  const result = normalizeScript(typing, answers, {
+    dictionary: context.dictionary,
+    existing: context.existing,
+    sync: true,
+    timing: context.timing,
+  });
+  const blocking = blockingQuestions(result);
+  if (blocking > 0) {
+    return {
+      error: `Без ответа обязательных вопросов: ${blocking}. Если вы на всё ответили — данные проекта изменились, обновите страницу.`,
+    };
+  }
+  const plan = planImport(result, answers, context.existing, context.timing);
+
+  // Сцена каждого блока версии: свой блок нормализации или предыдущий (выброшенные «(ДАЛЬШЕ)»).
+  const sceneOfBlock = new Map(result.blocks.map((b) => [b.paragraphIndex, b.sceneIndex]));
+  let last: number | null = null;
+  const blocks = source.blocks.map((block, index) => {
+    if (sceneOfBlock.has(index)) last = sceneOfBlock.get(index) ?? null;
+    return { id: block.id, scene: last };
+  });
+
+  let written: ScriptWriteResult;
+  try {
+    written = await auditMutation(
+      ctx,
+      writeScript,
+      {
+        projectId,
+        userId: ctx.user.id!,
+        target: {
+          kind: "existing",
+          versionId,
+          expectedVersionId,
+          blocksHash: source.hash,
+          blocks,
+        },
+        plan,
+      } satisfies ScriptWriteInput,
+      {
+        projectId,
+        entityType: AuditEntityType.scriptVersion,
+        action: "UPDATE",
+        entityId: versionId,
+        summary: (_input, r) =>
+          `Либретто обновлено из версии ${r.versionNumber}: сцен создано ${r.scenesCreated}, привязано ${r.scenesMatched}`,
+        changes: (_input, r) => writeChanges(result, r),
+      },
+    );
+  } catch (error) {
+    if (error instanceof VersionBlocksChangedError) return { error: VERSION_CHANGED };
+    if (isScriptVersionConflictError(error)) return { error: CHANGED };
+    throw error;
+  }
+
+  revalidateScript(projectId);
+  return {
+    success: `Либретто обновлено: сцен новых ${written.scenesCreated}, привязано ${written.scenesMatched}`,
+    versionId,
   };
 }

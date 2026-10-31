@@ -13,6 +13,7 @@ export type KppExportScene = {
   intExt: string | null;
   dayNight: string | null;
   status: string;
+  cutAt: Date | null;
   scriptDay: number | null;
   locations: { location: { id: string; name: string; sublocation: string | null } }[];
   characters: { character: { id: string; name: string } }[];
@@ -95,6 +96,7 @@ export async function getKppExportBundle(
                 intExt: true,
                 dayNight: true,
                 status: true,
+                cutAt: true,
                 scriptDay: true,
                 locations: {
                   include: {

@@ -1,6 +1,6 @@
 "use server";
 
-import { ScriptBlockType, TimingMode } from "@prisma/client";
+import { Prisma, ScriptBlockType, TimingMode } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import {
@@ -19,10 +19,6 @@ import {
   type SceneScriptExportOptions,
 } from "@/features/screenplay/lib/export-scene-script";
 import type { ExportColumn } from "@/features/exports/types";
-import { buildLibrettoPreviewFromBlocks } from "@/features/screenplay/lib/libretto-sync";
-import { applyScenesFromPreview } from "@/features/screenplay/lib/libretto-apply";
-import { mergeSceneEdits } from "@/features/import/merge-scene-edits";
-import type { ImportPreviewScene } from "@/features/import/types";
 import {
   linkBlocksToExistingScenes,
   syncSluglineFromScene,
@@ -71,6 +67,7 @@ function parseBlocksJson(blocksJson: string) {
   return parsed.blocks as ScreenplayBlock[];
 }
 
+/** Только чтение: версию и блоки не создаёт (право — просмотр сценария). */
 export async function loadScreenplayBlocksAction(
   projectId: string,
   versionId?: string,
@@ -80,21 +77,65 @@ export async function loadScreenplayBlocksAction(
     return { error: "Недостаточно прав" as const };
   }
 
+  const version =
+    versionId != null
+      ? await getScriptVersion(projectId, versionId)
+      : await getCurrentScriptVersion(projectId);
+
+  if (!version) {
+    return {
+      error:
+        versionId != null
+          ? ("Версия не найдена" as const)
+          : ("Версий сценария пока нет — создайте первую на странице «Сценарий»" as const),
+    };
+  }
+
+  const blocks = await listVersionBlocks(version.id);
+  return { blocks, versionId: version.id };
+}
+
+/**
+ * Первая версия сценария из либретто — только кнопкой, с правом правки
+ * (раньше создавалась сама при открытии страницы версий).
+ */
+export async function createFirstScriptVersionAction(
+  projectId: string,
+): Promise<ScreenplayActionState> {
+  const ctx = await requireProjectContext(projectId);
+  if (!ctx.can("script:write")) {
+    return { error: "Недостаточно прав" };
+  }
+  if ((await prisma.scriptVersion.count({ where: { projectId } })) > 0) {
+    return { error: "Версия сценария уже есть" };
+  }
+
   const { ensureCurrentScriptVersion } = await import(
     "@/features/screenplay/lib/versions"
   );
   const { bootstrapScriptBlocks } = await import("@/features/screenplay/lib/sync");
-
-  const version =
-    versionId != null
-      ? await getScriptVersion(projectId, versionId)
-      : await ensureCurrentScriptVersion(projectId, ctx.user.id!);
-
-  if (!version) return { error: "Версия не найдена" as const };
-
+  let version: Awaited<ReturnType<typeof ensureCurrentScriptVersion>>;
+  try {
+    version = await ensureCurrentScriptVersion(projectId, ctx.user.id!);
+  } catch (error) {
+    // Двойное нажатие: вторая версия с тем же номером не создаётся.
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return { error: "Версия сценария уже есть" };
+    }
+    throw error;
+  }
   await bootstrapScriptBlocks(projectId, ctx.user.id!, version.id);
-  const blocks = await listVersionBlocks(version.id);
-  return { blocks, versionId: version.id };
+
+  await recordAudit(ctx, {
+    projectId,
+    entityType: AuditEntityType.scriptVersion,
+    entityId: version.id,
+    action: "CREATE",
+    summary: `Версия сценария ${version.versionNumber} создана из либретто`,
+  });
+
+  revalidateScreenplay(projectId);
+  return { success: "Создана первая версия сценария", versionId: version.id };
 }
 
 export async function saveScreenplayVersionAction(
@@ -183,88 +224,6 @@ export async function duplicateScriptVersionAction(
   return {
     success: "Версия продублирована",
     versionId: version.id,
-  };
-}
-
-export async function previewLibrettoSyncAction(
-  projectId: string,
-  versionId: string,
-) {
-  const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:write")) {
-    return { error: "Недостаточно прав" as const };
-  }
-
-  const version = await getScriptVersion(projectId, versionId);
-  if (!version) return { error: "Версия не найдена" as const };
-
-  const blocks = await listVersionBlocks(versionId);
-  const existing = await listScenes(projectId);
-  const project = await prisma.project.findUniqueOrThrow({
-    where: { id: projectId },
-    select: { timingMode: true, pageToMinuteRatio: true },
-  });
-  const scenes = buildLibrettoPreviewFromBlocks(
-    blocks,
-    existing,
-    project.timingMode,
-    Number(project.pageToMinuteRatio),
-  );
-
-  return { scenes, versionId };
-}
-
-export async function applyLibrettoSyncAction(
-  projectId: string,
-  versionId: string,
-  scenesJson: string,
-  formData: FormData,
-): Promise<ScreenplayActionState> {
-  const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:write")) {
-    return { error: "Недостаточно прав" };
-  }
-
-  const version = await getScriptVersion(projectId, versionId);
-  if (!version) return { error: "Версия не найдена" };
-
-  let scenes: ImportPreviewScene[];
-  try {
-    const base = JSON.parse(scenesJson) as ImportPreviewScene[];
-    scenes = base.map((scene) => mergeSceneEdits(scene, formData));
-  } catch {
-    return { error: "Некорректные данные предпросмотра" };
-  }
-
-  let result: Awaited<ReturnType<typeof applyScenesFromPreview>>;
-  try {
-    result = await applyScenesFromPreview(projectId, scenes, formData);
-  } catch (error) {
-    if (isNotInProjectError(error)) {
-      return { error: "Объект не найден" };
-    }
-    throw error;
-  }
-
-  const blocks = await listVersionBlocks(versionId);
-  const linked = await linkBlocksToExistingScenes(projectId, blocks);
-  await replaceVersionBlocks(projectId, versionId, linked);
-  await setCurrentScriptVersion(projectId, versionId);
-
-  await recordAudit(ctx, {
-    projectId,
-    entityType: AuditEntityType.scriptVersion,
-    entityId: versionId,
-    action: "UPDATE",
-    summary: `Либретто: создано ${result.created}, обновлено ${result.updated}`,
-  });
-
-  revalidateScreenplay(projectId);
-  return {
-    success:
-      `Либретто обновлено: создано сцен ${result.created}, обновлено ${result.updated}` +
-      (result.unchanged ? `, без изменений ${result.unchanged}` : "") +
-      (result.skipped ? `, пропущено ${result.skipped}` : ""),
   };
 }
 

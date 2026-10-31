@@ -4,7 +4,6 @@ import { useRouter } from "next/navigation";
 import { useCallback, useState, useTransition } from "react";
 import { quickCreateLocationAction } from "@/features/locations/actions";
 import { ScreenplayBlockEditor } from "@/features/screenplay/components/screenplay-block-editor";
-import { ScreenplayLibrettoSyncPanel } from "@/features/screenplay/components/screenplay-libretto-sync-panel";
 import { ScreenplaySaveModal } from "@/features/screenplay/components/screenplay-save-modal";
 import { ScriptVersionTitleEditor } from "@/features/screenplay/components/script-version-title-editor";
 import { ScriptVersionNoteEditor } from "@/features/screenplay/components/script-version-note-editor";
@@ -91,7 +90,6 @@ export function ScreenplayWorkspace({
   const [pendingBlocks, setPendingBlocks] = useState<ScreenplayBlock[] | null>(
     null,
   );
-  const [librettoOpen, setLibrettoOpen] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -188,9 +186,11 @@ export function ScreenplayWorkspace({
   }
 
   function openLibretto() {
-    // Окно сравнивает либретто с сохранённым текстом версии, а не с тем, что сейчас в редакторе.
+    // Страница синхронизации берёт сохранённый текст версии, а не то, что сейчас в редакторе.
+    const syncPage = () =>
+      router.push(`${base}/${version.id}/sync`);
     if (!isDirty) {
-      setLibrettoOpen(true);
+      syncPage();
       return;
     }
     void confirmAction({
@@ -200,7 +200,7 @@ export function ScreenplayWorkspace({
         "Если правки нужны в либретто — сначала сохраните версию.",
       ],
       confirmLabel: "Продолжить",
-      action: async () => setLibrettoOpen(true),
+      action: async () => syncPage(),
     });
   }
 
@@ -266,7 +266,9 @@ export function ScreenplayWorkspace({
     try {
       const result = await exportScreenplayPrintHtmlAction(projectId, version.id);
       if ("error" in result) return;
-      const printWindow = window.open("", "_blank", "noopener,noreferrer");
+      // Без noopener: с ним window.open возвращает null и печать не открывалась.
+      // В окно пишется только своя страница с экранированным текстом.
+      const printWindow = window.open("", "_blank");
       if (!printWindow) return;
       printWindow.document.write(result.html);
       printWindow.document.close();
@@ -377,18 +379,6 @@ export function ScreenplayWorkspace({
         }}
         onSaveSame={() => persist("same")}
         onSaveNew={(title) => persist("new", title)}
-      />
-
-      <ScreenplayLibrettoSyncPanel
-        open={librettoOpen}
-        onClose={() => setLibrettoOpen(false)}
-        onApplied={() => {
-          setLibrettoOpen(false);
-          toast.success("Либретто обновлено");
-          router.refresh();
-        }}
-        projectId={projectId}
-        versionId={version.id}
       />
     </div>
   );

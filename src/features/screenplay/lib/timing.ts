@@ -18,6 +18,8 @@ const TIMING_BLOCK_TYPES = new Set([
 export type SceneTimingRef = {
   sceneId: string;
   planSeconds: number | null;
+  /** Сцена вырезана — не входит в итог сценария. */
+  cut?: boolean;
 };
 
 function formatMmSs(sec: number) {
@@ -46,7 +48,7 @@ function sumScenePlanSeconds(
   );
   let total = 0;
   for (const ref of sceneTimings) {
-    if (!sceneIds.has(ref.sceneId)) continue;
+    if (!sceneIds.has(ref.sceneId) || ref.cut) continue;
     if (ref.planSeconds != null) total += ref.planSeconds;
   }
   return total;
@@ -78,11 +80,18 @@ function calcByPages(
 }
 
 export function estimateScreenplayTiming(
-  blocks: ScreenplayBlock[],
+  allBlocks: ScreenplayBlock[],
   timingMode: TimingMode,
   pageToMinuteRatio: number,
   sceneTimings: SceneTimingRef[] = [],
 ) {
+  // Итог — без вырезанных сцен: их блоки не считаются, формула та же.
+  const cutIds = new Set(sceneTimings.filter((ref) => ref.cut).map((ref) => ref.sceneId));
+  const blocks =
+    cutIds.size > 0
+      ? allBlocks.filter((block) => !block.sceneId || !cutIds.has(block.sceneId))
+      : allBlocks;
+
   if (timingMode === "MANUAL") {
     const seconds = sumScenePlanSeconds(blocks, sceneTimings);
     return { seconds, label: formatMmSs(seconds), pages: 0 };

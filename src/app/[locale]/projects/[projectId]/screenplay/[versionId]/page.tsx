@@ -4,9 +4,10 @@ import { ScreenplayWorkspace } from "@/features/screenplay/components/screenplay
 import {
   getProjectScreenplayMeta,
   getScriptVersion,
-  listScriptBlocksForVersion,
   listScriptCommentsForVersion,
+  listVersionBlocks,
 } from "@/features/screenplay/queries";
+import { ScriptTitlePage } from "@/features/screenplay/components/script-title-page";
 import {
   listCharacters,
   listLocations,
@@ -30,8 +31,9 @@ export default async function ScreenplayVersionPage({ params, searchParams }: Pr
   const version = await getScriptVersion(projectId, versionId);
   if (!version) notFound();
 
+  // Открытие версии ничего не пишет: пустая версия показывается пустой.
   const [blocks, characters, locations, meta, comments, scenes] = await Promise.all([
-    listScriptBlocksForVersion(projectId, versionId, ctx.user.id!),
+    listVersionBlocks(versionId),
     listCharacters(projectId),
     listLocations(projectId),
     getProjectScreenplayMeta(projectId),
@@ -42,29 +44,33 @@ export default async function ScreenplayVersionPage({ params, searchParams }: Pr
   const sceneTimings = scenes.map((scene) => ({
     sceneId: scene.id,
     planSeconds: scene.planSeconds,
+    cut: scene.cutAt !== null,
   }));
 
   return (
-    <ScreenplayWorkspace
-      projectId={projectId}
-      locale={locale}
-      version={{
-        id: version.id,
-        versionNumber: version.versionNumber,
-        title: version.title,
-        note: version.note,
-        isCurrent: version.isCurrent,
-        isLocked: version.isLocked,
-      }}
-      blocks={blocks}
-      comments={comments}
-      characters={characters}
-      locations={locations}
-      timingMode={meta.timingMode}
-      pageToMinuteRatio={Number(meta.pageToMinuteRatio)}
-      sceneTimings={sceneTimings}
-      scrollToSceneId={sceneId ?? null}
-      canWrite={ctx.can("script:write") && !version.isLocked}
-    />
+    <>
+      <ScriptTitlePage value={version.titlePage} />
+      <ScreenplayWorkspace
+        projectId={projectId}
+        locale={locale}
+        version={{
+          id: version.id,
+          versionNumber: version.versionNumber,
+          title: version.title,
+          note: version.note,
+          isCurrent: version.isCurrent,
+          isLocked: version.isLocked,
+        }}
+        blocks={blocks}
+        comments={comments}
+        characters={characters}
+        locations={locations}
+        timingMode={meta.timingMode}
+        pageToMinuteRatio={Number(meta.pageToMinuteRatio)}
+        sceneTimings={sceneTimings}
+        scrollToSceneId={sceneId ?? null}
+        canWrite={ctx.can("script:write") && !version.isLocked}
+      />
+    </>
   );
 }

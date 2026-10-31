@@ -1,12 +1,7 @@
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { ScreenplayVersionsList } from "@/features/screenplay/components/screenplay-versions-list";
 import { listScriptVersionsOverview } from "@/features/screenplay/lib/version-overview";
-import {
-  ensureCurrentScriptVersion,
-  getProjectScreenplayMeta,
-  listScriptVersions,
-} from "@/features/screenplay/queries";
-import { bootstrapScriptBlocks } from "@/features/screenplay/lib/sync";
+import { getProjectScreenplayMeta } from "@/features/screenplay/queries";
 import { listScenes } from "@/features/script/queries";
 
 type Props = {
@@ -21,14 +16,7 @@ export default async function ScreenplayPage({ params }: Props) {
     return <p className="text-sm text-[var(--danger)]">Нет доступа к сценарию</p>;
   }
 
-  let versions = await listScriptVersions(projectId);
-
-  if (versions.length === 0 && ctx.can("script:write")) {
-    const version = await ensureCurrentScriptVersion(projectId, ctx.user.id!);
-    await bootstrapScriptBlocks(projectId, ctx.user.id!, version.id);
-    versions = await listScriptVersions(projectId);
-  }
-
+  // Открытие страницы ничего не пишет: первая версия — только действием с правом правки.
   const [meta, scenes] = await Promise.all([
     getProjectScreenplayMeta(projectId),
     listScenes(projectId),
@@ -37,6 +25,7 @@ export default async function ScreenplayPage({ params }: Props) {
   const sceneTimings = scenes.map((scene) => ({
     sceneId: scene.id,
     planSeconds: scene.planSeconds,
+    cut: scene.cutAt !== null,
   }));
 
   const versionsOverview = await listScriptVersionsOverview(

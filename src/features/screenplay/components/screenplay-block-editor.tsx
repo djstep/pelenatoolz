@@ -251,6 +251,15 @@ export function ScreenplayBlockEditor({
     () => new Set(pageBreaks.map((b) => b.afterBlockIndex)),
     [pageBreaks],
   );
+  // Подсказки без повторов: у объекта с подобъектами несколько строк локаций с одним названием.
+  const characterOptions = useMemo(
+    () => [...new Set(characters.map((c) => c.name))],
+    [characters],
+  );
+  const locationOptions = useMemo(
+    () => [...new Set(locations.map((l) => l.name))],
+    [locations],
+  );
 
   const commentThreads = useMemo(
     () => groupCommentThreads(comments),
@@ -478,8 +487,8 @@ export function ScreenplayBlockEditor({
                     onTypeChange={(type) => updateBlock(index, { type })}
                     onCharacterBlur={handleCharacterBlur}
                     onSluglineBlur={handleSluglineBlur}
-                    characterOptions={characters.map((c) => c.name)}
-                    locationOptions={locations.map((l) => l.name)}
+                    characterOptions={characterOptions}
+                    locationOptions={locationOptions}
                     editorRef={(node) => {
                       if (index === activeIndex) activeEditorRef.current = node;
                     }}
