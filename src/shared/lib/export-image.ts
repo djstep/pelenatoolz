@@ -1,3 +1,4 @@
+import "server-only";
 import { promises as dnsPromises, type LookupAddress } from "node:dns";
 import { readFile, stat } from "node:fs/promises";
 import http, { type IncomingMessage } from "node:http";
@@ -13,7 +14,7 @@ import path from "node:path";
 
 /** Ожидание одного фото вместе с редиректами. */
 export const EXPORT_IMAGE_TIMEOUT_MS = 5_000;
-/** Предел одного фото: больше — фото нет. */
+/** Предел одного фото: больше — фото нет и предупреждение. */
 export const EXPORT_IMAGE_MAX_BYTES = 3 * 1024 * 1024;
 /**
  * Общий бюджет байт фото на одну выгрузку; исчерпан — остальные без фото.
@@ -34,7 +35,7 @@ export const EXPORT_IMAGE_MAX_REDIRECTS = 3;
 const ALLOWED_PORTS: readonly number[] = [80, 443];
 
 export const EXPORT_IMAGES_PARTIAL_WARNING =
-  "Часть фото не вставлена: превышен размер или время выгрузки";
+  "Часть фото не вставлена: слишком большой размер или превышено время выгрузки";
 
 const BLOCKED_IPV4: [string, number][] = [
   ["0.0.0.0", 8],
@@ -133,7 +134,7 @@ export type ExportImage = { data: Uint8Array; type: "jpg" | "png" | "gif" };
 export type ExportImages = {
   /** Фото по исходному адресу; `null` — фото нет. */
   get(url: string | null | undefined): ExportImage | null;
-  /** Хоть одно фото пропущено из-за общего бюджета байт или общего времени. */
+  /** Хоть одно фото пропущено из-за размера (своего или общего бюджета) или общего времени. */
   partial: boolean;
 };
 
@@ -178,6 +179,8 @@ export function loadExportImages(
 }
 
 class OverBudget extends Error {}
+/** Фото больше предела одного фото: пропуск с предупреждением, остальные фото продолжаются. */
+class TooLarge extends Error {}
 
 type Run = {
   limits: ExportImageLimits;
@@ -255,7 +258,9 @@ async function loadOne(
       : await download(url, deps, run, ticket);
     image = bytes ? asImage(bytes) : null;
   } catch (err) {
-    if (err instanceof OverBudget || run.signal.aborted) run.partial = true;
+    if (err instanceof OverBudget || err instanceof TooLarge || run.signal.aborted) {
+      run.partial = true;
+    }
   }
   if (!image) run.bytesLeft += ticket.bytes;
   return image;
@@ -293,7 +298,8 @@ async function readUpload(
 
   const file = path.join(uploadsRoot, projectId, name);
   const info = await stat(file);
-  if (!info.isFile() || info.size > run.limits.maxBytes) return null;
+  if (!info.isFile()) return null;
+  if (info.size > run.limits.maxBytes) throw new TooLarge();
   reserve(run, ticket, info.size);
   const data = await readFile(file, { signal: run.signal });
   if (data.length > info.size) reserve(run, ticket, data.length - info.size);
@@ -348,7 +354,7 @@ async function download(
     if (Number.isFinite(declared)) {
       if (declared > run.limits.maxBytes) {
         res.destroy();
-        return null;
+        throw new TooLarge();
       }
       if (declared > run.bytesLeft) {
         res.destroy();
@@ -386,7 +392,7 @@ function request(
   });
 }
 
-/** Тело ответа с подсчётом байт по ходу: больше предела фото — обрыв, больше бюджета — обрыв и пропуск. */
+/** Тело ответа с подсчётом байт по ходу: больше предела фото или бюджета — обрыв и пропуск с предупреждением. */
 async function readBody(
   res: IncomingMessage,
   run: Run,
@@ -398,7 +404,7 @@ async function readBody(
     size += chunk.length;
     if (size > run.limits.maxBytes) {
       res.destroy();
-      return null;
+      throw new TooLarge();
     }
     reserve(run, ticket, chunk.length);
     chunks.push(chunk);

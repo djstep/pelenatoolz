@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import type { LookupAddress } from "node:dns";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import http from "node:http";
+import nodeModule from "node:module";
 import type { AddressInfo } from "node:net";
 import os from "node:os";
 import path from "node:path";
@@ -14,16 +15,47 @@ import {
 import type { AuditionScheduleRow } from "@/features/auditions/lib/schedule-shared";
 import type { CastListExportBundle } from "@/features/casting/lib/cast-list-export-data";
 import { buildCastListDocx, castListPhotoUrls } from "@/features/casting/lib/export-cast-list";
-import {
-  createGuardedLookup,
-  EXPORT_IMAGE_MAX_BYTES,
-  EXPORT_IMAGE_TIMEOUT_MS,
-  isBlockedIp,
-  loadExportImages,
-  loadExportImagesWith,
-  type ExportImageDeps,
-  type ResolveHost,
-} from "@/shared/lib/export-image";
+import type { ExportImageDeps, ResolveHost } from "@/shared/lib/export-image";
+
+// export-image.ts — серверный модуль ("server-only"): как и Next на сервере,
+// берём его с условием react-server (пустой файл вместо ошибки).
+// registerHooks есть в Node 22.15+, а типы в проекте — от Node 20.
+type ResolveContext = { conditions: string[] };
+type RegisterHooks = (hooks: {
+  resolve: (
+    specifier: string,
+    context: ResolveContext,
+    nextResolve: (specifier: string, context: ResolveContext) => unknown,
+  ) => unknown;
+}) => void;
+(nodeModule as unknown as { registerHooks: RegisterHooks }).registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (specifier === "server-only") {
+      return nextResolve(specifier, {
+        ...context,
+        conditions: [...context.conditions, "react-server"],
+      });
+    }
+    return nextResolve(specifier, context);
+  },
+});
+type ExportImageModule = typeof import("@/shared/lib/export-image");
+let createGuardedLookup: ExportImageModule["createGuardedLookup"];
+let EXPORT_IMAGE_MAX_BYTES: ExportImageModule["EXPORT_IMAGE_MAX_BYTES"];
+let EXPORT_IMAGE_TIMEOUT_MS: ExportImageModule["EXPORT_IMAGE_TIMEOUT_MS"];
+let isBlockedIp: ExportImageModule["isBlockedIp"];
+let loadExportImages: ExportImageModule["loadExportImages"];
+let loadExportImagesWith: ExportImageModule["loadExportImagesWith"];
+before(async () => {
+  ({
+    createGuardedLookup,
+    EXPORT_IMAGE_MAX_BYTES,
+    EXPORT_IMAGE_TIMEOUT_MS,
+    isBlockedIp,
+    loadExportImages,
+    loadExportImagesWith,
+  } = await import("@/shared/lib/export-image"));
+});
 
 /** Выгрузка в Word: сервер сам получает фото — только свои загрузки с диска и публичные адреса. */
 
@@ -98,7 +130,8 @@ describe("запрещённые адреса", () => {
 });
 
 describe("lookup сокета", () => {
-  const lookup = createGuardedLookup(hosts({ "pub.test": ["8.8.8.8", "2001:4860:4860::8888"], "mix.test": ["8.8.8.8", "10.0.0.5"] }), isBlockedIp);
+  const lookup: ReturnType<ExportImageModule["createGuardedLookup"]> = (...args) =>
+    createGuardedLookup(hosts({ "pub.test": ["8.8.8.8", "2001:4860:4860::8888"], "mix.test": ["8.8.8.8", "10.0.0.5"] }), isBlockedIp)(...args);
 
   test("all: true — массив проверенных адресов", async () => {
     const out = await new Promise<unknown>((resolve, reject) =>
@@ -284,22 +317,36 @@ describe("внешние адреса — тестовый сервер", () => 
     assert.deepEqual(requestsSince(start), ["/c1", "/c2", "/c3", "/c4"]);
   });
 
-  test("Content-Length больше 3 МБ — отказ", async () => {
-    const result = await one(at("/huge-declared"));
-    assert.equal(result.image, null);
-    assert.equal(result.partial, false, "ошибка одного фото — тихо");
+  test("Content-Length больше 3 МБ — отказ и предупреждение, остальные фото вставлены", async () => {
+    const urls = [at("/huge-declared"), at("/a.png")];
+    const result = await loadExportImagesWith("p1", urls, deps());
+    assert.equal(result.get(urls[0]), null);
+    assert.equal(result.get(urls[1])?.type, "png");
+    assert.equal(result.partial, true);
   });
 
-  test("без Content-Length бесконечный поток — обрыв", async () => {
+  test("без Content-Length бесконечный поток — обрыв и предупреждение", async () => {
     const result = await one(at("/infinite"));
     assert.equal(result.image, null);
+    assert.equal(result.partial, true);
     await new Promise((resolve) => setTimeout(resolve, 100));
     assert.ok(closed.includes("/infinite"), "соединение закрыто");
   });
 
-  test("text/html и HTML под видом image/png — отказ", async () => {
-    assert.equal((await one(at("/html"))).image, null);
-    assert.equal((await one(at("/fake.png"))).image, null);
+  test("свой файл больше 3 МБ — фото нет и предупреждение", async () => {
+    await mkdir(path.join(uploadsRoot, "p1"), { recursive: true });
+    await writeFile(path.join(uploadsRoot, "p1", "huge.jpg"), Buffer.concat([JPEG, Buffer.alloc(EXPORT_IMAGE_MAX_BYTES)]));
+    const result = await one("/uploads/p1/huge.jpg");
+    assert.equal(result.image, null);
+    assert.equal(result.partial, true);
+  });
+
+  test("text/html, HTML под видом image/png, 404 — отказ без предупреждения", async () => {
+    for (const p of ["/html", "/fake.png", "/missing.png"]) {
+      const result = await one(at(p));
+      assert.equal(result.image, null, p);
+      assert.equal(result.partial, false, `${p}: ошибка одного фото — тихо`);
+    }
   });
 
   test("сервер молчит — через 5 с фото нет", async () => {
@@ -344,7 +391,9 @@ describe("внешние адреса — тестовый сервер", () => 
       "/api/projects/p1/media/x",
       "//img.test/a.png",
     ]) {
-      assert.equal((await one(url, d)).image, null, url);
+      const result = await one(url, d);
+      assert.equal(result.image, null, url);
+      assert.equal(result.partial, false, url);
     }
     assert.deepEqual(dns, []);
     assert.deepEqual(requestsSince(start), []);
