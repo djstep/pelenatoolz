@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { describe, test } from "node:test";
+import { describe, mock, test } from "node:test";
 import type { AuditionScheduleRow } from "@/features/auditions/lib/schedule-shared";
 import {
   buildSchedulePrintHtml,
@@ -19,6 +19,7 @@ import {
 import { buildScreenplayPrintHtml } from "@/features/screenplay/lib/export-screenplay";
 import type { LibrettoScene } from "@/features/script/lib/libretto-display";
 import { PRINT_HTML_CSP_META } from "@/shared/lib/escape-html";
+import { PRINT_IMAGES_TIMEOUT_MS, printWhenImagesSettled } from "@/shared/lib/print-window";
 
 /** Все печатные страницы: сборка строкой на сервере → `document.write` в новую вкладку. */
 
@@ -285,5 +286,67 @@ describe("печать сценария, сцен, роли, вызывного"
     assert.ok(html.includes(IMG_ESCAPED));
     assert.ok(html.includes(QUOTES_ESCAPED));
     assert.ok(html.includes(`<title>${IMG_ESCAPED}</title>`));
+  });
+});
+
+describe("автопечать проб и кастинга", () => {
+  function fakeImage(complete: boolean) {
+    const listeners: Record<string, () => void> = {};
+    return {
+      complete,
+      addEventListener: (type: "load" | "error", fn: () => void) => {
+        listeners[type] = fn;
+      },
+      fire: (type: "load" | "error") => listeners[type]?.(),
+    };
+  }
+
+  function fakeWindow(images: ReturnType<typeof fakeImage>[]) {
+    const calls: string[] = [];
+    return {
+      calls,
+      win: { focus: () => calls.push("focus"), print: () => calls.push("print"), document: { images } },
+    };
+  }
+
+  test("фото нет или уже готовы — печать сразу", () => {
+    const { calls, win } = fakeWindow([fakeImage(true)]);
+    printWhenImagesSettled(win);
+    assert.deepEqual(calls, ["focus", "print"]);
+  });
+
+  test("ждёт все фото: одно загрузилось, другое с ошибкой (404) — печать один раз", () => {
+    mock.timers.enable({ apis: ["setTimeout"] });
+    try {
+      const a = fakeImage(false);
+      const b = fakeImage(false);
+      const { calls, win } = fakeWindow([a, b]);
+      printWhenImagesSettled(win);
+      a.fire("load");
+      assert.deepEqual(calls, []);
+      b.fire("error");
+      assert.deepEqual(calls, ["focus", "print"]);
+      mock.timers.tick(PRINT_IMAGES_TIMEOUT_MS);
+      assert.deepEqual(calls, ["focus", "print"]);
+    } finally {
+      mock.timers.reset();
+    }
+  });
+
+  test("хост не отвечает — печать через 5 с, поздний ответ не печатает второй раз", () => {
+    mock.timers.enable({ apis: ["setTimeout"] });
+    try {
+      const a = fakeImage(false);
+      const { calls, win } = fakeWindow([a]);
+      printWhenImagesSettled(win);
+      mock.timers.tick(PRINT_IMAGES_TIMEOUT_MS - 1);
+      assert.deepEqual(calls, []);
+      mock.timers.tick(1);
+      assert.deepEqual(calls, ["focus", "print"]);
+      a.fire("error");
+      assert.deepEqual(calls, ["focus", "print"]);
+    } finally {
+      mock.timers.reset();
+    }
   });
 });

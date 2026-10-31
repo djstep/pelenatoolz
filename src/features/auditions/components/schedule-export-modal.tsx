@@ -8,6 +8,7 @@ import {
   type ScheduleExportField,
 } from "@/features/auditions/lib/export-schedule";
 import { formatDateShort } from "@/shared/i18n/format-date";
+import { printWhenImagesSettled } from "@/shared/lib/print-window";
 import { Button } from "@/shared/ui/button";
 import { Label } from "@/shared/ui/label";
 import { Modal } from "@/shared/ui/modal";
@@ -88,12 +89,7 @@ export function ScheduleExportModal({
           win.document.write(result.html);
           win.document.close();
           // Скрипты в странице печати запрещены (CSP) — печать вызывается отсюда, после загрузки фото.
-          const print = () => {
-            win.focus();
-            win.print();
-          };
-          if (win.document.readyState === "complete") print();
-          else win.addEventListener("load", print, { once: true });
+          printWhenImagesSettled(win);
         }
         toast.success("Открыто окно печати");
         onClose();
