@@ -1,5 +1,6 @@
 import { LocationKind } from "@prisma/client";
 import { z } from "zod";
+import { toOwnUploadPath } from "@/shared/lib/own-upload-url";
 
 export const locationFormSchema = z.object({
   name: z.string().trim().min(1).max(200),
@@ -19,7 +20,7 @@ export const locationFormSchema = z.object({
 });
 
 export const locationPhotoSchema = z.object({
-  url: z.string().trim().url().max(2000),
+  url: z.string().trim().url().max(2000).transform(toOwnUploadPath),
   caption: z.string().trim().max(500).optional(),
 });
 
