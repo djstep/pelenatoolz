@@ -8,6 +8,12 @@ import {
   clearCastSnapshotAudited,
   shouldClearCastSnapshot,
 } from "@/features/casting/lib/cast-snapshot-reject";
+import {
+  castingPersonDeleteLines,
+  loadCastingPersonDeletePlan,
+  type CastingPersonDeleteCounts,
+} from "@/features/casting/lib/delete-person";
+import { deleteAuditions } from "@/features/auditions/lib/delete-auditions";
 import { approveCastingCandidate } from "@/features/preproduction/lib/approve-casting";
 import { fullNameFromParts } from "@/features/preproduction/lib/snapshots";
 import {
@@ -17,7 +23,7 @@ import {
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { prisma } from "@/shared/db/prisma";
 import { AuditEntityType } from "@/shared/audit/entity-types";
-import { recordAudit } from "@/shared/audit/with-audit";
+import { auditMutation, recordAudit } from "@/shared/audit/with-audit";
 
 export type CastingActionState = { error?: string; success?: string };
 
@@ -313,19 +319,65 @@ export async function deleteCastingPersonAction(
   const ctx = await requireProjectContext(projectId);
   if (!ctx.can("cast:write")) return { error: "Недостаточно прав" };
 
-  const person = await prisma.castingPerson.findFirst({
-    where: { id: personId, projectId },
-    select: { lastName: true, firstName: true },
-  });
-  if (!person) return { error: "Кандидат не найден" };
-  await prisma.castingPerson.deleteMany({ where: { id: personId, projectId } });
-  await recordAudit(ctx, {
-    projectId,
-    entityType: AuditEntityType.castingPerson,
-    entityId: personId,
-    action: "DELETE",
-    summary: `Удалён кандидат ${[person.lastName, person.firstName].filter(Boolean).join(" ")}`,
-  });
+  try {
+    await assertInProject("CastingPerson", personId, projectId);
+  } catch (error) {
+    if (isNotInProjectError(error)) return { error: "Кандидат не найден" };
+    throw error;
+  }
+
+  let deleted: { name: string; counts: CastingPersonDeleteCounts };
+  try {
+    deleted = await auditMutation(
+      ctx,
+      () =>
+        // Отказ и список одиночных проб — в той же транзакции, что удаление,
+        // а не из данных окна подтверждения.
+        prisma.$transaction(async (tx) => {
+          const plan = await loadCastingPersonDeletePlan(tx, projectId, personId);
+          if (!plan) throw new CastingPersonDeleteRefused("Кандидат не найден");
+          if (plan.refusal) throw new CastingPersonDeleteRefused(plan.refusal);
+          await deleteAuditions(tx, projectId, plan.soloAuditionIds);
+          await tx.castingPerson.deleteMany({ where: { id: personId, projectId } });
+          return { name: plan.name, counts: plan.counts };
+        }),
+      null,
+      {
+        projectId,
+        entityType: AuditEntityType.castingPerson,
+        entityId: personId,
+        action: "DELETE",
+        summary: (_, r) => `Удалён кандидат кастинга «${r.name}»`,
+        changes: (_, r) => r.counts,
+      },
+    );
+  } catch (error) {
+    if (error instanceof CastingPersonDeleteRefused) return { error: error.message };
+    throw error;
+  }
+
   revalidateCasting(projectId);
-  return { success: "Кандидат удалён" };
+  revalidatePath(`/ru/projects/${projectId}/preproduction/auditions`);
+  return { success: `Кандидат «${deleted.name}» удалён` };
+}
+
+class CastingPersonDeleteRefused extends Error {}
+
+/** Что удалится вместе с кандидатом — для окна подтверждения. */
+export async function getCastingPersonDeleteImpactAction(
+  projectId: string,
+  personId: string,
+): Promise<string[]> {
+  const ctx = await requireProjectContext(projectId);
+  if (!ctx.can("cast:write")) return [];
+  try {
+    await assertInProject("CastingPerson", personId, projectId);
+  } catch (error) {
+    if (isNotInProjectError(error)) return [];
+    throw error;
+  }
+  const plan = await loadCastingPersonDeletePlan(prisma, projectId, personId);
+  if (!plan) return [];
+  if (plan.refusal) return [plan.refusal];
+  return castingPersonDeleteLines(plan.counts);
 }
