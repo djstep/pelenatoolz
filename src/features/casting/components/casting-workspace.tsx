@@ -13,7 +13,9 @@ import {
 } from "@/features/casting/actions";
 import { fullNameFromParts } from "@/features/preproduction/lib/snapshots";
 import { PersonFormFields } from "@/features/casting/components/casting-person-form-fields";
+import { CastingCastListExport } from "@/features/casting/components/casting-cast-list-export";
 import {
+  CASTING_FILTER_NO_CHARACTER,
   countCastingPeople,
   groupCastingPeople,
   resolveCastingFilter,
@@ -125,6 +127,9 @@ export function CastingWorkspace({
   const filter = resolveCastingFilter(filterValue, groups);
   const visibleGroups = filter ? groups.filter((g) => g.key === filter) : groups;
   const peopleCount = countCastingPeople(visibleGroups);
+  const exportCharacters = groups.flatMap((g) => (g.character ? [g.character] : []));
+  const filterCharacterId =
+    filter && filter !== CASTING_FILTER_NO_CHARACTER ? filter : null;
 
   function changeFilter(next: string) {
     setFilterValue(next);
@@ -165,6 +170,14 @@ export function CastingWorkspace({
           <Button type="button" onClick={() => setCreating(true)}>
             + Кандидат
           </Button>
+        ) : null}
+        {exportCharacters.length > 0 ? (
+          <CastingCastListExport
+            projectId={projectId}
+            locale={locale}
+            characters={exportCharacters}
+            selectedCharacterId={filterCharacterId}
+          />
         ) : null}
         {groups.length > 0 ? (
           <Select

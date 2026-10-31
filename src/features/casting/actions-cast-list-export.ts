@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import {
   loadCastListExportBundle,
+  serializeCastListBundle,
 } from "@/features/casting/lib/cast-list-export-data";
 import {
   buildCastListDocx,
@@ -67,6 +68,34 @@ const exportPayloadSchema = z.object({
   candidateConfigs: z.array(candidateConfigSchema),
   locale: z.string().min(2).max(8).optional(),
 });
+
+const loadBundlePayloadSchema = z.object({
+  characterId: z.string().min(1),
+  locale: z.string().min(2).max(8).optional(),
+});
+
+/** Набор для окна каст-листа со страницы кастинга: персонаж ищется только внутри проекта из контекста. */
+export async function loadCastListExportBundleAction(
+  projectId: string,
+  payload: unknown,
+) {
+  const ctx = await requireProjectContext(projectId);
+  if (!ctx.can("cast:read")) return { error: "Недостаточно прав" };
+
+  const parsed = loadBundlePayloadSchema.safeParse(payload);
+  if (!parsed.success) return { error: "Персонаж не найден" };
+
+  const bundle = await loadCastListExportBundle(
+    projectId,
+    parsed.data.characterId,
+    parsed.data.locale ?? "ru",
+  );
+  if (!bundle) return { error: "Персонаж не найден" };
+  if (bundle.candidates.length === 0) {
+    return { error: "Нет кандидатов для экспорта" };
+  }
+  return { bundle: serializeCastListBundle(bundle) };
+}
 
 export async function exportCastListAction(
   projectId: string,
