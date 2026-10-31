@@ -5,8 +5,7 @@ import {
   navAccessFromContext,
   projectNavGroups,
 } from "@/features/projects/lib/project-nav-groups";
-import { getScheduleStats } from "@/features/schedule/queries";
-import { getScriptStats } from "@/features/script/queries";
+import { getOverviewStats } from "@/features/projects/queries";
 import { Card } from "@/shared/ui/card";
 import { Button } from "@/shared/ui/button";
 
@@ -17,16 +16,28 @@ type Props = {
 export default async function ProjectOverviewPage({ params }: Props) {
   const { locale, projectId } = await params;
   const ctx = await requireProjectContext(projectId);
-  const [script, schedule] = await Promise.all([
-    getScriptStats(projectId),
-    getScheduleStats(projectId),
-  ]);
 
-  // Кнопки разделов — по тем же условиям, что и пункты меню.
+  // Кнопки разделов и цифры — по тем же условиям, что и пункты меню.
   const nav = filterNavGroups(projectNavGroups, navAccessFromContext(ctx));
   const navHrefs = new Set(nav.flatMap((group) => group.items.map((item) => item.href)));
   const canOpen = (href: string) => navHrefs.has(href);
   const canOpenPost = nav.some((group) => group.id === "post");
+
+  const show = {
+    scenes: canOpen("/libretto"),
+    locations: canOpen("/locations"),
+    characters: canOpen("/characters"),
+    schedule: canOpen("/schedule"),
+  };
+  const stats = await getOverviewStats(projectId, show);
+
+  const showScriptCard = show.scenes || show.locations || show.characters;
+  const showTeamCard = canOpen("/members");
+  const showDayDocsCard =
+    canOpen("/call-sheets") || canOpen("/reports") || canOpen("/smeta");
+  const showFinanceCard = canOpen("/finance") || canOpenPost;
+  const hasCards =
+    showScriptCard || show.schedule || showTeamCard || showDayDocsCard || showFinanceCard;
 
   return (
     <div className="space-y-6">
@@ -46,113 +57,129 @@ export default async function ProjectOverviewPage({ params }: Props) {
         ) : null}
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Card>
-          <h3 className="font-display text-lg font-semibold">Сцены (либретто)</h3>
-          <dl className="mt-3 space-y-1 text-sm">
-            <div className="flex justify-between">
-              <dt className="text-[var(--muted-fg)]">Сцены</dt>
-              <dd className="font-medium">{script.scenes}</dd>
-            </div>
-            <div className="flex justify-between">
-              <dt className="text-[var(--muted-fg)]">Локации</dt>
-              <dd className="font-medium">{script.locations}</dd>
-            </div>
-            <div className="flex justify-between">
-              <dt className="text-[var(--muted-fg)]">Персонажи</dt>
-              <dd className="font-medium">{script.characters}</dd>
-            </div>
-          </dl>
-          {canOpen("/libretto") ? (
-            <div className="mt-4">
-              <Link href={`/${locale}/projects/${projectId}/libretto`}>
-                <Button variant="secondary">Открыть либретто</Button>
-              </Link>
-            </div>
+      {hasCards ? (
+        <div className="grid gap-4 sm:grid-cols-2">
+          {showScriptCard ? (
+            <Card>
+              <h3 className="font-display text-lg font-semibold">Сцены (либретто)</h3>
+              <dl className="mt-3 space-y-1 text-sm">
+                {stats.scenes !== null ? (
+                  <div className="flex justify-between">
+                    <dt className="text-[var(--muted-fg)]">Сцены</dt>
+                    <dd className="font-medium">{stats.scenes}</dd>
+                  </div>
+                ) : null}
+                {stats.locations !== null ? (
+                  <div className="flex justify-between">
+                    <dt className="text-[var(--muted-fg)]">Локации</dt>
+                    <dd className="font-medium">{stats.locations}</dd>
+                  </div>
+                ) : null}
+                {stats.characters !== null ? (
+                  <div className="flex justify-between">
+                    <dt className="text-[var(--muted-fg)]">Персонажи</dt>
+                    <dd className="font-medium">{stats.characters}</dd>
+                  </div>
+                ) : null}
+              </dl>
+              {canOpen("/libretto") ? (
+                <div className="mt-4">
+                  <Link href={`/${locale}/projects/${projectId}/libretto`}>
+                    <Button variant="secondary">Открыть либретто</Button>
+                  </Link>
+                </div>
+              ) : null}
+            </Card>
           ) : null}
-        </Card>
 
-        <Card>
-          <h3 className="font-display text-lg font-semibold">КПП и вызывные</h3>
-          <dl className="mt-3 space-y-1 text-sm">
-            <div className="flex justify-between">
-              <dt className="text-[var(--muted-fg)]">Съёмочные дни</dt>
-              <dd className="font-medium">{schedule.days}</dd>
-            </div>
-            <div className="flex justify-between">
-              <dt className="text-[var(--muted-fg)]">Сцены в плане</dt>
-              <dd className="font-medium">
-                {schedule.plannedScenes} / {schedule.totalScenes}
-              </dd>
-            </div>
-          </dl>
-          {canOpen("/schedule") ? (
-            <div className="mt-4">
-              <Link href={`/${locale}/projects/${projectId}/schedule`}>
-                <Button variant="secondary">Открыть КПП</Button>
-              </Link>
-            </div>
+          {show.schedule ? (
+            <Card>
+              <h3 className="font-display text-lg font-semibold">КПП и вызывные</h3>
+              <dl className="mt-3 space-y-1 text-sm">
+                <div className="flex justify-between">
+                  <dt className="text-[var(--muted-fg)]">Съёмочные дни</dt>
+                  <dd className="font-medium">{stats.days}</dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt className="text-[var(--muted-fg)]">Сцены в плане</dt>
+                  <dd className="font-medium">
+                    {stats.plannedScenes} / {stats.totalScenes}
+                  </dd>
+                </div>
+              </dl>
+              <div className="mt-4">
+                <Link href={`/${locale}/projects/${projectId}/schedule`}>
+                  <Button variant="secondary">Открыть КПП</Button>
+                </Link>
+              </div>
+            </Card>
           ) : null}
-        </Card>
 
-        <Card>
-          <h3 className="font-display text-lg font-semibold">Команда</h3>
-          <p className="mt-2 text-sm text-[var(--muted-fg)]">
-            Приглашения, роли и доступ участников проекта.
-          </p>
-          {canOpen("/members") ? (
-            <div className="mt-4">
-              <Link href={`/${locale}/projects/${projectId}/members`}>
-                <Button variant="secondary">Участники</Button>
-              </Link>
-            </div>
+          {showTeamCard ? (
+            <Card>
+              <h3 className="font-display text-lg font-semibold">Команда</h3>
+              <p className="mt-2 text-sm text-[var(--muted-fg)]">
+                Приглашения, роли и доступ участников проекта.
+              </p>
+              <div className="mt-4">
+                <Link href={`/${locale}/projects/${projectId}/members`}>
+                  <Button variant="secondary">Участники</Button>
+                </Link>
+              </div>
+            </Card>
           ) : null}
-        </Card>
 
-        <Card>
-          <h3 className="font-display text-lg font-semibold">Вызывные и отчёты</h3>
-          <p className="mt-2 text-sm text-[var(--muted-fg)]">
-            Вызывной лист, производственный отчёт и занятость актёров по
-            съёмочному дню.
-          </p>
-          <div className="mt-4 flex flex-wrap gap-2">
-            {canOpen("/call-sheets") ? (
-              <Link href={`/${locale}/projects/${projectId}/call-sheets`}>
-                <Button variant="secondary">Вызывные</Button>
-              </Link>
-            ) : null}
-            {canOpen("/reports") ? (
-              <Link href={`/${locale}/projects/${projectId}/reports`}>
-                <Button variant="secondary">Отчёты</Button>
-              </Link>
-            ) : null}
-            {canOpen("/smeta") ? (
-              <Link href={`/${locale}/projects/${projectId}/smeta`}>
-                <Button variant="secondary">Смета</Button>
-              </Link>
-            ) : null}
-          </div>
-        </Card>
+          {showDayDocsCard ? (
+            <Card>
+              <h3 className="font-display text-lg font-semibold">Вызывные и отчёты</h3>
+              <p className="mt-2 text-sm text-[var(--muted-fg)]">
+                Вызывной лист, производственный отчёт и занятость актёров по
+                съёмочному дню.
+              </p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {canOpen("/call-sheets") ? (
+                  <Link href={`/${locale}/projects/${projectId}/call-sheets`}>
+                    <Button variant="secondary">Вызывные</Button>
+                  </Link>
+                ) : null}
+                {canOpen("/reports") ? (
+                  <Link href={`/${locale}/projects/${projectId}/reports`}>
+                    <Button variant="secondary">Отчёты</Button>
+                  </Link>
+                ) : null}
+                {canOpen("/smeta") ? (
+                  <Link href={`/${locale}/projects/${projectId}/smeta`}>
+                    <Button variant="secondary">Смета</Button>
+                  </Link>
+                ) : null}
+              </div>
+            </Card>
+          ) : null}
 
-        <Card>
-          <h3 className="font-display text-lg font-semibold">Финансы и пост</h3>
-          <p className="mt-2 text-sm text-[var(--muted-fg)]">
-            Движение денег по проекту и пайплайн постпродакшна.
-          </p>
-          <div className="mt-4 flex flex-wrap gap-2">
-            {canOpen("/finance") ? (
-              <Link href={`/${locale}/projects/${projectId}/finance`}>
-                <Button variant="secondary">Финансы</Button>
-              </Link>
-            ) : null}
-            {canOpenPost ? (
-              <Link href={`/${locale}/projects/${projectId}/post`}>
-                <Button variant="secondary">Постпродакшн</Button>
-              </Link>
-            ) : null}
-          </div>
-        </Card>
-      </div>
+          {showFinanceCard ? (
+            <Card>
+              <h3 className="font-display text-lg font-semibold">Финансы и пост</h3>
+              <p className="mt-2 text-sm text-[var(--muted-fg)]">
+                Движение денег по проекту и пайплайн постпродакшна.
+              </p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {canOpen("/finance") ? (
+                  <Link href={`/${locale}/projects/${projectId}/finance`}>
+                    <Button variant="secondary">Финансы</Button>
+                  </Link>
+                ) : null}
+                {canOpenPost ? (
+                  <Link href={`/${locale}/projects/${projectId}/post`}>
+                    <Button variant="secondary">Постпродакшн</Button>
+                  </Link>
+                ) : null}
+              </div>
+            </Card>
+          ) : null}
+        </div>
+      ) : (
+        <p className="text-sm text-[var(--muted-fg)]">Нет разделов, доступных вашей роли.</p>
+      )}
     </div>
   );
 }

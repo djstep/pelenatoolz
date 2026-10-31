@@ -118,13 +118,3 @@ export async function listElements(projectId: string) {
     orderBy: { name: "asc" },
   });
 }
-
-export async function getScriptStats(projectId: string) {
-  const [scenes, locations, characters, elements] = await Promise.all([
-    prisma.scene.count({ where: { projectId, cutAt: null } }),
-    prisma.location.count({ where: { projectId } }),
-    prisma.character.count({ where: { projectId } }),
-    prisma.element.count({ where: { projectId } }),
-  ]);
-  return { scenes, locations, characters, elements };
-}
