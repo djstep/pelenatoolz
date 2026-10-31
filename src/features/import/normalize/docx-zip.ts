@@ -1,4 +1,5 @@
 import { inflateRawSync } from "zlib";
+import { SCRIPT_DOCUMENT_XML_MAX_BYTES } from "@/features/import/review/types";
 
 /** Лимиты распаковки docx (пункт 20 аудита): защита от zip-бомбы. */
 export const DOCX_LIMITS = {
@@ -9,13 +10,6 @@ export const DOCX_LIMITS = {
   /** Распакованный `word/document.xml`. */
   maxDocumentXml: 20 * 1024 * 1024,
 } as const;
-
-/**
- * Распакованный `word/document.xml` сценария — не больше 3 МБ. Это не защита от zip-бомбы
- * (она — `DOCX_LIMITS`), а предел импорта: ответ предпросмотра ≈ 1,3 × `document.xml`,
- * у Vercel потолок ответа — 4,5 МБ.
- */
-export const SCRIPT_DOCUMENT_XML_MAX_BYTES = 3 * 1024 * 1024;
 
 export type DocxReadErrorCode =
   | "not_zip"

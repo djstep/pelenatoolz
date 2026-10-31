@@ -5,19 +5,15 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { classifyParagraphs, type BlockTypingResult } from "@/features/import/normalize/block-types";
 import { readDocxParagraphs } from "@/features/import/normalize/docx-paragraphs";
-import {
-  isDocxReadError,
-  SCRIPT_DOCUMENT_XML_MAX_BYTES,
-  type DocxReadErrorCode,
-} from "@/features/import/normalize/docx-zip";
+import { isDocxReadError, type DocxReadErrorCode } from "@/features/import/normalize/docx-zip";
 import {
   normalizeScript,
   type NormalizedScript,
 } from "@/features/import/normalize/normalize-script";
 import { loadImportContext } from "@/features/import/review/load-context";
 import {
-  formatMegabytes,
   SCRIPT_IMPORT_MAX_BYTES,
+  SIZE_REFUSALS,
   type ScriptImportState,
   type ScriptPreviewState,
 } from "@/features/import/review/types";
@@ -39,9 +35,9 @@ const DOCX_ERRORS: Record<DocxReadErrorCode, string> = {
   not_zip: "Это не файл Word (.docx). Сохраните сценарий в Word как .docx и загрузите снова.",
   not_docx: "Это не документ Word (.docx). Сохраните сценарий в Word как .docx и загрузите снова.",
   too_many_files: "Файл .docx устроен необычно: слишком много частей внутри. Пересохраните его в Word.",
-  too_large: "Файл .docx после распаковки слишком большой. Уберите из него картинки или разделите сценарий.",
+  too_large: SIZE_REFUSALS.script,
   unsupported: "Файл .docx сжат неподдерживаемым способом. Пересохраните его в Word.",
-  script_too_large: `Сценарий слишком большой для импорта: текст документа больше ${SCRIPT_DOCUMENT_XML_MAX_BYTES / (1024 * 1024)} МБ. Если в документе включён режим исправлений — примите все исправления в Word и попробуйте снова.`,
+  script_too_large: SIZE_REFUSALS.document,
 };
 
 const NO_RIGHTS = "Импорт сценария доступен только с правом правки сценария";
@@ -64,11 +60,7 @@ async function readScriptFile(formData: FormData): Promise<ReadFile> {
     return { error: "Нужен файл Word .docx. Другие форматы не поддерживаются." };
   }
   // Браузер присылает облегчённый docx (без картинок) — лимит на него.
-  if (file.size > SCRIPT_IMPORT_MAX_BYTES) {
-    return {
-      error: `Текст сценария в файле — ${formatMegabytes(file.size)}, а можно не больше ${formatMegabytes(SCRIPT_IMPORT_MAX_BYTES)}. Разделите сценарий на части.`,
-    };
-  }
+  if (file.size > SCRIPT_IMPORT_MAX_BYTES) return { error: SIZE_REFUSALS.script };
 
   const buffer = Buffer.from(await file.arrayBuffer());
   let typing: BlockTypingResult;

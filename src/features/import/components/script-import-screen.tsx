@@ -6,9 +6,9 @@ import { ScriptReview } from "@/features/import/components/script-review";
 import { isDocxSlimError, slimDocx } from "@/features/import/normalize/docx-slim";
 import {
   formatFileSize,
-  formatMegabytes,
   SCRIPT_IMPORT_MAX_BYTES,
   SCRIPT_SOURCE_MAX_BYTES,
+  SIZE_REFUSALS,
   type ScriptPreviewState,
 } from "@/features/import/review/types";
 import { Button } from "@/shared/ui/button";
@@ -37,11 +37,7 @@ async function prepare(source: File): Promise<Prepared> {
   if (!source.name.toLowerCase().endsWith(".docx")) {
     return fail("Нужен файл Word .docx. Другие форматы не поддерживаются.");
   }
-  if (source.size > SCRIPT_SOURCE_MAX_BYTES) {
-    return fail(
-      `Файл ${formatMegabytes(source.size)}, а можно не больше ${formatMegabytes(SCRIPT_SOURCE_MAX_BYTES)}. Уберите из него картинки или разделите сценарий.`,
-    );
-  }
+  if (source.size > SCRIPT_SOURCE_MAX_BYTES) return fail(SIZE_REFUSALS.source);
   let bytes: ReturnType<typeof slimDocx>;
   try {
     bytes = slimDocx(new Uint8Array(await source.arrayBuffer()));
@@ -49,11 +45,7 @@ async function prepare(source: File): Promise<Prepared> {
     if (isDocxSlimError(error)) return fail(SLIM_ERRORS[error.code]);
     return fail("Не удалось прочитать файл .docx. Пересохраните его в Word и загрузите снова.");
   }
-  if (bytes.length > SCRIPT_IMPORT_MAX_BYTES) {
-    return fail(
-      `Текст сценария в файле — ${formatMegabytes(bytes.length)}, а можно не больше ${formatMegabytes(SCRIPT_IMPORT_MAX_BYTES)}. Разделите сценарий на части.`,
-    );
-  }
+  if (bytes.length > SCRIPT_IMPORT_MAX_BYTES) return fail(SIZE_REFUSALS.script);
   const slim = new File([bytes], source.name, { type: source.type });
   return { source, slim, problem: null };
 }

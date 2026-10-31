@@ -12,11 +12,8 @@ import {
   readDocxParagraphs,
   type DocxParagraph,
 } from "@/features/import/normalize/docx-paragraphs";
-import {
-  DOCX_LIMITS,
-  DocxReadError,
-  SCRIPT_DOCUMENT_XML_MAX_BYTES,
-} from "@/features/import/normalize/docx-zip";
+import { DOCX_LIMITS, DocxReadError } from "@/features/import/normalize/docx-zip";
+import { SCRIPT_DOCUMENT_XML_MAX_BYTES } from "@/features/import/review/types";
 import { buildDocx, buildZip, p } from "@/features/import/normalize/test-docx";
 
 // Ожидания — утверждённая таблица в docs/tasks/WAVE_4_NOTES.md (коды D*, R*, V*).
