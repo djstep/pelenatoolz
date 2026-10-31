@@ -4,6 +4,7 @@ import type { CharacterCastSnapshot } from "@/features/preproduction/lib/snapsho
 import { fullNameFromParts } from "@/features/preproduction/lib/snapshots";
 import { assertInProject } from "@/features/memberships/assert-in-project";
 import { prisma } from "@/shared/db/prisma";
+import { toOwnUploadPath } from "@/shared/lib/own-upload-url";
 
 type PersonWithRates = {
   photoUrl: string | null;
@@ -26,7 +27,7 @@ export function buildCastSnapshotFromPerson(
   extras?: Partial<CharacterCastSnapshot>,
 ): CharacterCastSnapshot {
   return {
-    photoUrl: person.photoUrl,
+    photoUrl: person.photoUrl ? toOwnUploadPath(person.photoUrl) : null,
     lastName: person.lastName,
     firstName: person.firstName,
     middleName: person.middleName,

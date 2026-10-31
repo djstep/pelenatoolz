@@ -5,6 +5,7 @@ import http, { type IncomingMessage } from "node:http";
 import https from "node:https";
 import net, { type LookupFunction } from "node:net";
 import path from "node:path";
+import { toOwnUploadPath } from "@/shared/lib/own-upload-url";
 
 /**
  * Фото для выгрузки в Word: сервер сам получает картинку по адресу из базы или из окна выгрузки.
@@ -253,9 +254,11 @@ async function loadOne(
   const ticket: Ticket = { bytes: 0 };
   let image: ExportImage | null = null;
   try {
-    const bytes = url.startsWith("/")
-      ? await readUpload(url, projectId, deps.uploadsRoot, run, ticket)
-      : await download(url, deps, run, ticket);
+    // Полный адрес своего сайта на свою загрузку — тоже с диска, не по сети.
+    const target = toOwnUploadPath(url);
+    const bytes = target.startsWith("/")
+      ? await readUpload(target, projectId, deps.uploadsRoot, run, ticket)
+      : await download(target, deps, run, ticket);
     image = bytes ? asImage(bytes) : null;
   } catch (err) {
     if (err instanceof OverBudget || err instanceof TooLarge || run.signal.aborted) {

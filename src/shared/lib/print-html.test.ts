@@ -103,6 +103,10 @@ describe("печать плана проб", () => {
 
   test("фото: http(s) и путь сайта — да, остальное — «—»", () => {
     assert.ok(buildSchedulePrintHtml("П", schedule("/uploads/p1/a.jpg"), fields).includes(`<img src="/uploads/p1/a.jpg"`));
+    assert.ok(
+      buildSchedulePrintHtml("П", schedule("https://pelenatoolz.vercel.app/uploads/p1/a.jpg"), fields).includes(`<img src="/uploads/p1/a.jpg"`),
+      "свой домен — путём сайта",
+    );
     for (const url of [...BAD_URLS, "@evil.com/x.png"]) {
       const html = buildSchedulePrintHtml("П", schedule(url), fields);
       assertInert(html);
@@ -173,11 +177,19 @@ describe("печать каст-листа", () => {
     assert.ok(!html.includes("window.print"));
   });
 
-  test("фото: путь сайта — с APP_URL, «@evil.com» и прочее — отбрасывается", () => {
+  test("фото: своя загрузка — путём сайта без APP_URL, «@evil.com» и прочее — отбрасывается", () => {
     const savedAppUrl = process.env.APP_URL;
     process.env.APP_URL = "https://app.example";
     try {
-      assert.ok(build({}).includes(`src="https://app.example/uploads/p1/a.jpg"`));
+      assert.ok(build({}).includes(`src="/uploads/p1/a.jpg"`));
+      assert.ok(!build({}).includes("app.example/uploads"));
+      for (const own of [
+        "https://app.example/uploads/p1/b.jpg",
+        "https://pelenatoolz.vercel.app/uploads/p1/b.jpg",
+        "http://localhost:3000/uploads/p1/b.jpg",
+      ]) {
+        assert.ok(build({ photoOverrideUrl: own }).includes(`src="/uploads/p1/b.jpg"`), own);
+      }
     } finally {
       if (savedAppUrl === undefined) delete process.env.APP_URL;
       else process.env.APP_URL = savedAppUrl;

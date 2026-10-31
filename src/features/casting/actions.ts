@@ -25,6 +25,7 @@ import { prisma } from "@/shared/db/prisma";
 import { AuditEntityType } from "@/shared/audit/entity-types";
 import { auditMutation, recordAudit } from "@/shared/audit/with-audit";
 import { safePrintUrl } from "@/shared/lib/escape-html";
+import { toOwnUploadPath } from "@/shared/lib/own-upload-url";
 
 export type CastingActionState = { error?: string; success?: string };
 
@@ -54,7 +55,8 @@ const personSchema = z.object({
     .trim()
     .max(2000)
     .optional()
-    .refine((v) => !v || safePrintUrl(v) !== null),
+    .refine((v) => !v || safePrintUrl(v) !== null)
+    .transform((v) => (v ? toOwnUploadPath(v) : v)),
   skills: z.string().trim().optional(),
   birthDate: z.string().optional(),
   education: z.string().trim().max(2000).optional(),

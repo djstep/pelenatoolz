@@ -23,6 +23,7 @@ import {
   safePrintUrl,
 } from "@/shared/lib/escape-html";
 import type { ExportImages } from "@/shared/lib/export-image";
+import { toOwnUploadPath } from "@/shared/lib/own-upload-url";
 
 export type ScheduleExportField =
   | "time"
@@ -292,7 +293,9 @@ export function buildSchedulePrintHtml(
         html += `<tr>`;
         for (const f of bodyCols) {
           if (f === "photo") {
-            const photoSrc = safePrintUrl(c.person.photoUrl);
+            const photoSrc = c.person.photoUrl
+              ? safePrintUrl(toOwnUploadPath(c.person.photoUrl))
+              : null;
             html += `<td>${
               photoSrc ? `<img src="${escapeHtml(photoSrc)}" alt=""/>` : "—"
             }</td>`;

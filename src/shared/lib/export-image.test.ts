@@ -382,7 +382,15 @@ describe("внешние адреса — тестовый сервер", () => 
     const d = deps({ resolveHost: noDns(dns) });
 
     assert.equal((await one("/uploads/p1/own_1-A.png", d)).image?.type, "png");
+    // Полный адрес своего сайта — тоже с диска, без DNS и запросов.
     for (const url of [
+      "http://localhost:3000/uploads/p1/own_1-A.png",
+      "https://pelenatoolz.vercel.app/uploads/p1/own_1-A.png",
+    ]) {
+      assert.equal((await one(url, d)).image?.type, "png", url);
+    }
+    for (const url of [
+      "https://pelenatoolz.vercel.app/uploads/p2/other.png",
       "/uploads/p2/other.png",
       "/uploads/p1/../p2/other.png",
       "/uploads/p1/pic.webp",

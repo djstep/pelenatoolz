@@ -27,11 +27,11 @@ import { castingStatusLabels } from "@/features/preproduction/lib/status-labels"
 import { formatDateShort } from "@/shared/i18n/format-date";
 import {
   escapeHtml,
-  isSitePath,
   PRINT_HTML_CSP_META,
   safePrintUrl,
 } from "@/shared/lib/escape-html";
 import type { ExportImages } from "@/shared/lib/export-image";
+import { toOwnUploadPath } from "@/shared/lib/own-upload-url";
 
 function appBaseUrl() {
   return (process.env.APP_URL ?? "http://localhost:3000").replace(/\/$/, "");
@@ -465,9 +465,10 @@ function printLink(href: string, labelHtml: string) {
   return safe ? `<a href="${escapeHtml(safe)}">${labelHtml}</a>` : labelHtml;
 }
 
-/** Адрес фото в печати: проверка до склейки, `APP_URL` — только к пути сайта. */
+/**
+ * Адрес фото в печати. Своя загрузка — путём сайта без домена: окно печати открыто
+ * с того же сайта и берёт файл оттуда же (APP_URL указывал бы на другой сервер).
+ */
 function printPhotoSrc(url: string | null | undefined) {
-  const safe = safePrintUrl(url);
-  if (!safe) return null;
-  return isSitePath(safe) ? `${appBaseUrl()}${safe}` : safe;
+  return url ? safePrintUrl(toOwnUploadPath(url)) : null;
 }
