@@ -4,6 +4,7 @@ import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/features/auth/session";
 import {
+  exportLayoutPermission,
   isExportLayoutKey,
   normalizeAttendanceSheetSettings,
   normalizeExportLayout,
@@ -29,15 +30,19 @@ export async function getExportLayoutAction(
   projectId: string,
   key: string,
 ): Promise<ExportActionState> {
-  try {
-    const user = await requireUser();
-    await requireProjectAccess(projectId, user.id!, "project:read");
-  } catch {
-    return { error: "Недостаточно прав" };
-  }
-
   if (!isExportLayoutKey(key)) {
     return { error: "Неизвестный тип экспорта" };
+  }
+
+  try {
+    const user = await requireUser();
+    await requireProjectAccess(
+      projectId,
+      user.id!,
+      exportLayoutPermission(key, "read"),
+    );
+  } catch {
+    return { error: "Недостаточно прав" };
   }
 
   const project = await prisma.project.findUnique({
@@ -59,15 +64,19 @@ export async function saveExportLayoutAction(
     showWeekday?: boolean;
   },
 ): Promise<ExportActionState> {
-  try {
-    const user = await requireUser();
-    await requireProjectAccess(projectId, user.id!, "project:write");
-  } catch {
-    return { error: "Недостаточно прав" };
-  }
-
   if (!isExportLayoutKey(key)) {
     return { error: "Неизвестный тип экспорта" };
+  }
+
+  try {
+    const user = await requireUser();
+    await requireProjectAccess(
+      projectId,
+      user.id!,
+      exportLayoutPermission(key, "write"),
+    );
+  } catch {
+    return { error: "Недостаточно прав" };
   }
 
   const layout = normalizeExportLayout({

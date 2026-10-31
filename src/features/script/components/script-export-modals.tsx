@@ -10,7 +10,10 @@ import {
   columnsReadyForExport,
   createExportColumnId,
 } from "@/features/exports/lib/column-utils";
-import type { ExportColumn } from "@/features/exports/types";
+import {
+  EXPORT_LAYOUT_NOT_SAVED_HINT,
+  type ExportColumn,
+} from "@/features/exports/types";
 import {
   exportSceneScriptAction,
   type SceneScriptExportPayload,
@@ -238,6 +241,7 @@ function DirectorScriptExportModal({
   selectedCount,
   filteredCount,
   resourceCategories,
+  canSaveLayout,
 }: {
   open: boolean;
   onClose: () => void;
@@ -246,6 +250,7 @@ function DirectorScriptExportModal({
   selectedCount: number;
   filteredCount: number;
   resourceCategories: { id: string; name: string }[];
+  canSaveLayout: boolean;
 }) {
   const toast = useToast();
   const [pending, startTransition] = useTransition();
@@ -292,7 +297,9 @@ function DirectorScriptExportModal({
     }
     const ready = columnsReadyForExport(columns);
     startTransition(async () => {
-      await saveExportLayoutAction(projectId, "directorsScript", columns);
+      if (canSaveLayout) {
+        await saveExportLayoutAction(projectId, "directorsScript", columns);
+      }
       const result = await exportSceneScriptAction(projectId, {
         sceneIds,
         format,
@@ -334,6 +341,11 @@ function DirectorScriptExportModal({
       wide
     >
       <ScopeHint selectedCount={selectedCount} filteredCount={filteredCount} />
+      {canSaveLayout ? null : (
+        <p className="mb-3 text-sm text-[var(--muted-fg)]">
+          {EXPORT_LAYOUT_NOT_SAVED_HINT}
+        </p>
+      )}
 
       <div className="mb-4 space-y-2">
         <p className="text-xs font-medium text-[var(--muted-fg)]">Содержание</p>
@@ -472,6 +484,7 @@ export function LibrettoExportMenu({
   filteredCount,
   resourceCategories,
   onExcelExport,
+  canSaveDirectorsLayout,
 }: {
   projectId: string;
   sceneIds: string[];
@@ -479,6 +492,8 @@ export function LibrettoExportMenu({
   filteredCount: number;
   resourceCategories: { id: string; name: string }[];
   onExcelExport: () => void;
+  /** Право сохранять раскладку «Режиссёрского сценария» — то же, что проверяет сервер по ключу. */
+  canSaveDirectorsLayout: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [scriptOpen, setScriptOpen] = useState(false);
@@ -550,6 +565,7 @@ export function LibrettoExportMenu({
         selectedCount={selectedCount}
         filteredCount={filteredCount}
         resourceCategories={resourceCategories}
+        canSaveLayout={canSaveDirectorsLayout}
       />
     </div>
   );

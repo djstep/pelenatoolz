@@ -11,7 +11,12 @@ import {
   columnsReadyForExport,
   createExportColumnId,
 } from "@/features/exports/lib/column-utils";
-import type { ExportColumn, ExportFieldDef } from "@/features/exports/types";
+import {
+  EXPORT_LAYOUT_NOT_SAVED_HINT,
+  type ExportColumn,
+  type ExportFieldDef,
+  type ExportLayoutKey,
+} from "@/features/exports/types";
 import { getKppExportBundleAction } from "@/features/schedule/actions-export";
 import type { KppExportBundle } from "@/features/schedule/lib/kpp-export-data";
 import { exportKppXls } from "@/features/schedule/lib/export-kpp-xls";
@@ -31,6 +36,12 @@ import { cn } from "@/shared/lib/cn";
 
 export type KppExportMode = "full" | "short";
 
+export type KppLayoutKey = Extract<ExportLayoutKey, "kppFull" | "kppShort">;
+
+function kppLayoutKey(mode: KppExportMode): KppLayoutKey {
+  return mode === "full" ? "kppFull" : "kppShort";
+}
+
 function unitLabel(unit: string) {
   return unit === "main" ? "Основная группа" : unit;
 }
@@ -38,9 +49,12 @@ function unitLabel(unit: string) {
 export function KppExportMenu({
   projectId,
   projectType,
+  canSaveLayout,
 }: {
   projectId: string;
   projectType: ProjectType;
+  /** Право сохранять раскладку в проект — то же, что проверяет сервер по ключу. */
+  canSaveLayout: Record<KppLayoutKey, boolean>;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [mode, setMode] = useState<KppExportMode | null>(null);
@@ -95,6 +109,7 @@ export function KppExportMenu({
           mode={mode}
           projectId={projectId}
           projectType={projectType}
+          canSaveLayout={canSaveLayout[kppLayoutKey(mode)]}
           onClose={() => setMode(null)}
         />
       ) : null}
@@ -108,12 +123,14 @@ function KppExportModal({
   mode,
   projectId,
   projectType,
+  canSaveLayout,
 }: {
   open: boolean;
   onClose: () => void;
   mode: KppExportMode;
   projectId: string;
   projectType: ProjectType;
+  canSaveLayout: boolean;
 }) {
   const toast = useToast();
   const [bundle, setBundle] = useState<KppExportBundle | null>(null);
@@ -126,7 +143,7 @@ function KppExportModal({
   const [unitScope, setUnitScope] = useState<"all" | string>("all");
   const [selectedUnit, setSelectedUnit] = useState("main");
 
-  const layoutKey = mode === "full" ? "kppFull" : "kppShort";
+  const layoutKey = kppLayoutKey(mode);
   const title =
     mode === "full" ? "Настройки экспорта · полный КПП" : "Настройки экспорта · краткий КПП";
 
@@ -218,11 +235,13 @@ function KppExportModal({
       multiUnit && unitScope !== "all" ? selectedUnit : unitScope;
 
     startTransition(async () => {
-      const save = await saveExportLayoutAction(projectId, layoutKey, columns, {
-        includeTechnicalBreaks: mode === "full" ? includeBreaks : undefined,
-        showWeekday: mode === "short" ? showWeekday : undefined,
-      });
-      if (save.error) toast.warning(save.error);
+      if (canSaveLayout) {
+        const save = await saveExportLayoutAction(projectId, layoutKey, columns, {
+          includeTechnicalBreaks: mode === "full" ? includeBreaks : undefined,
+          showWeekday: mode === "short" ? showWeekday : undefined,
+        });
+        if (save.error) toast.warning(save.error);
+      }
 
       try {
         await exportKppXls(bundle, {
@@ -247,9 +266,18 @@ function KppExportModal({
     <Modal open={open} onClose={onClose} title={title} wide>
       <p className="mb-3 text-sm text-[var(--muted-fg)]">
         {mode === "full"
-          ? "Подробная таблица по сценам смены. Столбцы настраиваются конструктором; раскладка сохраняется в проекте."
-          : "Сводка по съёмочным дням без детализации сцен. Раскладка сохраняется в проекте."}
+          ? canSaveLayout
+            ? "Подробная таблица по сценам смены. Столбцы настраиваются конструктором; раскладка сохраняется в проекте."
+            : "Подробная таблица по сценам смены. Столбцы настраиваются конструктором."
+          : canSaveLayout
+            ? "Сводка по съёмочным дням без детализации сцен. Раскладка сохраняется в проекте."
+            : "Сводка по съёмочным дням без детализации сцен."}
       </p>
+      {canSaveLayout ? null : (
+        <p className="mb-3 text-sm text-[var(--muted-fg)]">
+          {EXPORT_LAYOUT_NOT_SAVED_HINT}
+        </p>
+      )}
 
       <div className="mb-4 space-y-3">
         {mode === "full" ? (

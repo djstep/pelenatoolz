@@ -1,4 +1,5 @@
 import { requireProjectContext } from "@/features/projects/lib/project-context";
+import { exportLayoutPermission } from "@/features/exports/lib/column-utils";
 import { formatLocationTitle } from "@/features/locations/lib/format-location";
 import {
   listResourceCategories,
@@ -75,6 +76,12 @@ export default async function LibrettoPage({ params }: Props) {
           resourceCategories={sceneResourceCategories}
           exportResourceCategories={exportResourceCategories}
           canWrite={canWrite}
+          canSaveExportLayout={{
+            libretto: ctx.can(exportLayoutPermission("libretto", "write")),
+            directorsScript: ctx.can(
+              exportLayoutPermission("directorsScript", "write"),
+            ),
+          }}
         />
       </Card>
     </div>

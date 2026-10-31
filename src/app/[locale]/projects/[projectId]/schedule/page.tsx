@@ -1,5 +1,6 @@
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { getScheduleAvailabilityClientBundle } from "@/features/actor-availability/lib/serialize-bundle";
+import { exportLayoutPermission } from "@/features/exports/lib/column-utils";
 import { ClearScheduleButton } from "@/features/schedule/components/clear-schedule-button";
 import { KppExportMenu } from "@/features/schedule/components/kpp-export-modal";
 import { ScheduleDnDBoard } from "@/features/schedule/components/schedule-dnd-board";
@@ -48,6 +49,10 @@ export default async function SchedulePage({ params }: Props) {
           <KppExportMenu
             projectId={projectId}
             projectType={ctx.project.type}
+            canSaveLayout={{
+              kppFull: ctx.can(exportLayoutPermission("kppFull", "write")),
+              kppShort: ctx.can(exportLayoutPermission("kppShort", "write")),
+            }}
           />
         </div>
         <div className="flex flex-wrap items-end justify-between gap-3">

@@ -41,6 +41,10 @@ export type ExportSettings = Partial<Record<ExportLayoutKey, ExportLayout>> & {
 
 export const EXTRAS_BUCKET_HEADER = "Дополнительные ресурсы";
 
+/** Строка в окне выгрузки, когда нет права правки раздела: раскладка в проект не пишется. */
+export const EXPORT_LAYOUT_NOT_SAVED_HINT =
+  "Настройки колонок не сохранятся — нет права правки";
+
 /** Встроенные блоки ресурсов для настроек явочного листа. */
 export const ATTENDANCE_BUILTIN_SECTIONS = [
   { id: "scene:extras", label: "Массовка / групповка" },
