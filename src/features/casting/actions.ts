@@ -3,7 +3,13 @@
 import { CastingCandidateStatus, Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import {
+  castSnapshotClearedAuditMeta,
+  clearCastSnapshotAudited,
+  shouldClearCastSnapshot,
+} from "@/features/casting/lib/cast-snapshot-reject";
 import { approveCastingCandidate } from "@/features/preproduction/lib/approve-casting";
+import { fullNameFromParts } from "@/features/preproduction/lib/snapshots";
 import {
   assertInProject,
   isNotInProjectError,
@@ -222,7 +228,12 @@ export async function updateCastingCandidateStatusAction(
 
   const existing = await prisma.castingCandidate.findFirst({
     where: { id: candidateId, projectId },
-    select: { status: true, characterId: true },
+    select: {
+      status: true,
+      characterId: true,
+      character: { select: { name: true, sourceCastingCandidateId: true } },
+      person: { select: { lastName: true, firstName: true, middleName: true } },
+    },
   });
   if (!existing) return { error: "Заявка не найдена" };
 
@@ -232,20 +243,33 @@ export async function updateCastingCandidateStatusAction(
   });
 
   if (
-    existing.status === CastingCandidateStatus.APPROVED &&
-    status === CastingCandidateStatus.REJECTED
+    shouldClearCastSnapshot(status, candidateId, existing.character.sourceCastingCandidateId)
   ) {
-    await prisma.character.updateMany({
-      where: {
-        id: existing.characterId,
+    await clearCastSnapshotAudited(
+      ctx,
+      castSnapshotClearedAuditMeta({
         projectId,
-        sourceCastingCandidateId: candidateId,
+        candidateId,
+        characterId: existing.characterId,
+        characterName: existing.character.name,
+        personName: fullNameFromParts(existing.person),
+        previousStatus: existing.status,
+      }),
+      async () => {
+        const { count } = await prisma.character.updateMany({
+          where: {
+            id: existing.characterId,
+            projectId,
+            sourceCastingCandidateId: candidateId,
+          },
+          data: {
+            castSnapshot: Prisma.DbNull,
+            sourceCastingCandidateId: null,
+          },
+        });
+        return count;
       },
-      data: {
-        castSnapshot: Prisma.DbNull,
-        sourceCastingCandidateId: null,
-      },
-    });
+    );
   }
 
   revalidateCasting(projectId, existing.characterId);
