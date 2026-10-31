@@ -31,6 +31,7 @@ import {
   PRINT_HTML_CSP_META,
   safePrintUrl,
 } from "@/shared/lib/escape-html";
+import type { ExportImages } from "@/shared/lib/export-image";
 
 function appBaseUrl() {
   return (process.env.APP_URL ?? "http://localhost:3000").replace(/\/$/, "");
@@ -50,23 +51,6 @@ function auditionUrl(
   auditionId: string,
 ) {
   return `${appBaseUrl()}/${locale}/projects/${projectId}/preproduction/auditions/${auditionId}`;
-}
-
-async function fetchImageBytes(
-  url: string | null | undefined,
-): Promise<Uint8Array | null> {
-  if (!url) return null;
-  try {
-    const abs =
-      url.startsWith("http://") || url.startsWith("https://")
-        ? url
-        : `${appBaseUrl()}${url}`;
-    const res = await fetch(abs);
-    if (!res.ok) return null;
-    return new Uint8Array(await res.arrayBuffer());
-  } catch {
-    return null;
-  }
 }
 
 function sortCandidates(
@@ -166,7 +150,19 @@ function resolveTapes(
   return cfg?.tapes ?? [];
 }
 
-export async function buildCastListDocx(args: BuildCastListArgs): Promise<Buffer> {
+/** Адреса фото для Word («своё фото» или фото кандидата): загружает их действие (`loadExportImages`). */
+export function castListPhotoUrls(args: BuildCastListArgs): (string | null)[] {
+  if (!args.actorFieldIds.includes("photo")) return [];
+  const cfgById = new Map(args.candidateConfigs.map((c) => [c.candidateId, c]));
+  return args.bundle.candidates.map(
+    (c) => cfgById.get(c.id)?.photoOverrideUrl || c.person.photoUrl,
+  );
+}
+
+export async function buildCastListDocx(
+  args: BuildCastListArgs,
+  photos: ExportImages,
+): Promise<Buffer> {
   const { bundle, characterFieldIds, actorFieldIds, sort, candidateConfigs } =
     args;
   const cfgById = new Map(candidateConfigs.map((c) => [c.candidateId, c]));
@@ -240,15 +236,15 @@ export async function buildCastListDocx(args: BuildCastListArgs): Promise<Buffer
     );
 
     if (actorFieldIds.includes("photo") && photoUrl) {
-      const bytes = await fetchImageBytes(photoUrl);
-      if (bytes) {
+      const photo = photos.get(photoUrl);
+      if (photo) {
         body.push(
           new Paragraph({
             spacing: { after: 80 },
             children: [
               new ImageRun({
-                type: "jpg",
-                data: bytes,
+                type: photo.type,
+                data: photo.data,
                 transformation: { width: 96, height: 96 },
               }),
             ],

@@ -451,6 +451,7 @@ export function CastListExportModal({
       }
       if ("base64" in result && result.base64) {
         downloadBase64(result.base64, result.fileName, result.mime);
+        if ("warning" in result && result.warning) toast.warning(result.warning);
         toast.success("Файл сохранён");
         onClose();
         return;

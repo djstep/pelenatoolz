@@ -22,6 +22,7 @@ import {
   PRINT_HTML_CSP_META,
   safePrintUrl,
 } from "@/shared/lib/escape-html";
+import type { ExportImages } from "@/shared/lib/export-image";
 
 export type ScheduleExportField =
   | "time"
@@ -79,23 +80,6 @@ function buildDayTimeline(schedules: AuditionScheduleRow[]): Map<string, Timelin
   return byDate;
 }
 
-async function fetchImageBytes(
-  url: string | null | undefined,
-): Promise<Uint8Array | null> {
-  if (!url) return null;
-  try {
-    const abs =
-      url.startsWith("http://") || url.startsWith("https://")
-        ? url
-        : `${process.env.APP_URL ?? "http://localhost:3000"}${url}`;
-    const res = await fetch(abs);
-    if (!res.ok) return null;
-    return new Uint8Array(await res.arrayBuffer());
-  } catch {
-    return null;
-  }
-}
-
 function textCell(text: string, width: number) {
   return new TableCell({
     borders: thin,
@@ -108,10 +92,21 @@ function textCell(text: string, width: number) {
   });
 }
 
+/** Адреса фото для Word: загружает их действие (`loadExportImages`) — модуль сети и диска сюда не тянуть, файл импортирует окно. */
+export function schedulePhotoUrls(
+  schedules: AuditionScheduleRow[],
+  fields: ScheduleExportField[],
+): (string | null)[] {
+  return fields.includes("photo")
+    ? schedules.flatMap((s) => s.candidates.map((c) => c.person.photoUrl))
+    : [];
+}
+
 export async function buildScheduleDocx(
   projectName: string,
   schedules: AuditionScheduleRow[],
   fields: ScheduleExportField[],
+  photos: ExportImages,
 ): Promise<Buffer> {
   const body: (Paragraph | Table)[] = [
     new Paragraph({
@@ -131,7 +126,6 @@ export async function buildScheduleDocx(
   const bodyFields = fields.filter(
     (f) => f !== "time" && f !== "kind" && f !== "comment",
   );
-
   for (const [dateKey, dayItems] of byDate) {
     body.push(
       new Paragraph({
@@ -196,18 +190,18 @@ export async function buildScheduleDocx(
         const cells = [];
         for (const f of bodyFields) {
           if (f === "photo") {
-            const bytes = await fetchImageBytes(c.person.photoUrl);
+            const photo = photos.get(c.person.photoUrl);
             cells.push(
               new TableCell({
                 borders: thin,
                 width: { size: colW, type: WidthType.DXA },
                 children: [
-                  bytes
+                  photo
                     ? new Paragraph({
                         children: [
                           new ImageRun({
-                            type: "jpg",
-                            data: bytes,
+                            type: photo.type,
+                            data: photo.data,
                             transformation: { width: 48, height: 48 },
                           }),
                         ],

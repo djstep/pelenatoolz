@@ -1,5 +1,6 @@
 "use server";
 
+import { z } from "zod";
 import {
   addDays,
   parseDateKey,
@@ -8,6 +9,8 @@ import {
 import {
   buildScheduleDocx,
   buildSchedulePrintHtml,
+  scheduleExportFieldLabels,
+  schedulePhotoUrls,
   type ScheduleExportField,
 } from "@/features/auditions/lib/export-schedule";
 import {
@@ -15,6 +18,26 @@ import {
 } from "@/features/auditions/lib/schedule-queries";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { prisma } from "@/shared/db/prisma";
+import {
+  EXPORT_IMAGES_PARTIAL_WARNING,
+  loadExportImages,
+} from "@/shared/lib/export-image";
+
+const isValidDate = (value: string) => !Number.isNaN(Date.parse(value));
+
+const exportPayloadSchema = z.object({
+  scope: z.enum(["all", "week", "day"]),
+  weekAnchorIso: z.string().max(64).refine(isValidDate).optional(),
+  dayKey: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .refine(isValidDate)
+    .optional(),
+  format: z.enum(["docx", "pdf"]),
+  fields: z.array(
+    z.enum(Object.keys(scheduleExportFieldLabels) as ScheduleExportField[]),
+  ),
+});
 
 export async function exportAuditionScheduleAction(
   projectId: string,
@@ -29,17 +52,19 @@ export async function exportAuditionScheduleAction(
   const ctx = await requireProjectContext(projectId);
   if (!ctx.can("cast:read")) return { error: "Недостаточно прав" };
 
+  const parsed = exportPayloadSchema.safeParse(payload);
+  if (!parsed.success) return { error: "Некорректные настройки экспорта" };
+  const { scope, weekAnchorIso, dayKey, format } = parsed.data;
+
   let from: Date | undefined;
   let to: Date | undefined;
-  if (payload.scope === "week") {
-    const anchor = payload.weekAnchorIso
-      ? new Date(payload.weekAnchorIso)
-      : new Date();
+  if (scope === "week") {
+    const anchor = weekAnchorIso ? new Date(weekAnchorIso) : new Date();
     from = startOfWeekMonday(anchor);
     to = addDays(from, 6);
-  } else if (payload.scope === "day") {
-    if (!payload.dayKey) return { error: "Не выбрана дата" };
-    from = parseDateKey(payload.dayKey);
+  } else if (scope === "day") {
+    if (!dayKey) return { error: "Не выбрана дата" };
+    from = parseDateKey(dayKey);
     to = from;
   }
 
@@ -57,8 +82,8 @@ export async function exportAuditionScheduleAction(
 
   const projectName = project?.fullName || project?.name || "Проект";
   const fields =
-    payload.fields?.length > 0
-      ? payload.fields
+    parsed.data.fields.length > 0
+      ? parsed.data.fields
       : ([
           "time",
           "kind",
@@ -68,12 +93,17 @@ export async function exportAuditionScheduleAction(
           "notesBlank",
         ] as ScheduleExportField[]);
 
-  if (payload.format === "docx") {
-    const buf = await buildScheduleDocx(projectName, schedules, fields);
+  if (format === "docx") {
+    const photos = await loadExportImages(
+      projectId,
+      schedulePhotoUrls(schedules, fields),
+    );
+    const buf = await buildScheduleDocx(projectName, schedules, fields, photos);
     return {
       base64: buf.toString("base64"),
       fileName: `audition-schedule.docx`,
       mime: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      ...(photos.partial ? { warning: EXPORT_IMAGES_PARTIAL_WARNING } : {}),
     };
   }
 

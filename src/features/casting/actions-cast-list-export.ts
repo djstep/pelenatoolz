@@ -8,6 +8,7 @@ import {
 import {
   buildCastListDocx,
   buildCastListPrintHtml,
+  castListPhotoUrls,
 } from "@/features/casting/lib/export-cast-list";
 import type {
   CastListActorFieldId,
@@ -20,6 +21,10 @@ import { AuditEntityType } from "@/shared/audit/entity-types";
 import { recordAudit } from "@/shared/audit/with-audit";
 import { prisma } from "@/shared/db/prisma";
 import { isHttpUrl, safePrintUrl } from "@/shared/lib/escape-html";
+import {
+  EXPORT_IMAGES_PARTIAL_WARNING,
+  loadExportImages,
+} from "@/shared/lib/export-image";
 
 const tapeSchema = z.discriminatedUnion("kind", [
   z.object({
@@ -95,11 +100,13 @@ export async function exportCastListAction(
   };
 
   if (parsed.data.format === "docx") {
-    const buf = await buildCastListDocx(args);
+    const photos = await loadExportImages(projectId, castListPhotoUrls(args));
+    const buf = await buildCastListDocx(args, photos);
     return {
       base64: buf.toString("base64"),
       fileName: `cast-list-${bundle.character.name}.docx`,
       mime: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      ...(photos.partial ? { warning: EXPORT_IMAGES_PARTIAL_WARNING } : {}),
     };
   }
 
