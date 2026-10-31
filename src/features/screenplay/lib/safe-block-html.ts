@@ -167,6 +167,27 @@ export function safeBlockHtml(content: string, contentHtml?: string | null) {
   return contentHtml?.trim() ? serialize(parseBlockHtml(contentHtml)) : escapeText(content);
 }
 
+/** Есть ли форматирование: тег панели или `span`/`font` с допустимым цветом. */
+function hasFormatting(nodes: readonly SafeNode[]): boolean {
+  return nodes.some((node) => {
+    if ("text" in node) return false;
+    if (node.tag === "span" || node.tag === "font") {
+      return Boolean(node.colors.color || node.colors.backgroundColor) || hasFormatting(node.children);
+    }
+    return true;
+  });
+}
+
+/**
+ * `contentHtml` перед записью в базу: тот же разбор и тот же список, что у показа, — в базу
+ * попадает ровно то, что покажет редактор. Форматирования не осталось — `null` (блок — текст).
+ */
+export function sanitizeBlockHtml(html: string | null | undefined): string | null {
+  if (!html?.trim()) return null;
+  const nodes = parseBlockHtml(html);
+  return hasFormatting(nodes) ? serialize(nodes) : null;
+}
+
 /** Узлы блока для редактора: из `contentHtml` — только разрешённое, иначе текст. */
 export function blockNodes(doc: Document, content: string, contentHtml?: string | null): Node[] {
   if (!contentHtml?.trim()) return content ? [doc.createTextNode(content)] : [];
