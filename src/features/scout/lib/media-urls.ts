@@ -1,3 +1,4 @@
+import { safePrintUrl } from "@/shared/lib/escape-html";
 import { toOwnUploadPath } from "@/shared/lib/own-upload-url";
 
 /** Адреса из поля «по одному на строку» → `[{ url }]`, пустые строки пропускаются. */
@@ -10,7 +11,11 @@ export function parseMediaUrls(raw: string | undefined) {
     .map((url) => ({ url }));
 }
 
-/** То же для фото: своя загрузка с полным адресом своего сайта → путь `/uploads/...`. */
+/**
+ * То же для фото: сначала полный адрес своего сайта → путь `/uploads/...`, потом проверка —
+ * http(s) или путь сайта. Хоть одна строка не прошла — `null`.
+ */
 export function parsePhotoUrls(raw: string | undefined) {
-  return parseMediaUrls(raw).map(({ url }) => ({ url: toOwnUploadPath(url) }));
+  const photos = parseMediaUrls(raw).map(({ url }) => ({ url: toOwnUploadPath(url) }));
+  return photos.every(({ url }) => safePrintUrl(url) !== null) ? photos : null;
 }

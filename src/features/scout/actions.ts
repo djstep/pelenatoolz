@@ -12,6 +12,8 @@ import { prisma } from "@/shared/db/prisma";
 
 export type ScoutActionState = { error?: string; success?: string };
 
+const PHOTO_URL_ERROR = "Фото: только ссылки http(s) или загруженные файлы";
+
 const scoutSchema = z.object({
   locationIds: z.array(z.string().cuid()).min(1),
   title: z.string().trim().min(1).max(200),
@@ -68,6 +70,8 @@ export async function createScoutCandidateAction(
     videoUrls: formData.get("videoUrls") || undefined,
   });
   if (!parsed.success) return { error: "Проверьте данные" };
+  const photos = parsePhotoUrls(parsed.data.photoUrls);
+  if (!photos) return { error: PHOTO_URL_ERROR };
 
   if (!(await assertLocations(projectId, parsed.data.locationIds))) {
     return { error: "Одна или несколько локаций не найдены" };
@@ -82,7 +86,7 @@ export async function createScoutCandidateAction(
       contactName: parsed.data.contactName,
       contactPhone: parsed.data.contactPhone,
       notes: parsed.data.notes,
-      photos: parsePhotoUrls(parsed.data.photoUrls),
+      photos,
       videos: parseMediaUrls(parsed.data.videoUrls),
       locationLinks: {
         create: parsed.data.locationIds.map((locationId) => ({ locationId })),
@@ -125,6 +129,8 @@ export async function updateScoutCandidateAction(
     videoUrls: formData.get("videoUrls") || undefined,
   });
   if (!parsed.success) return { error: "Проверьте данные" };
+  const photos = parsePhotoUrls(parsed.data.photoUrls);
+  if (!photos) return { error: PHOTO_URL_ERROR };
 
   if (!(await assertLocations(projectId, parsed.data.locationIds))) {
     return { error: "Одна или несколько локаций не найдены" };
@@ -141,7 +147,7 @@ export async function updateScoutCandidateAction(
         contactName: parsed.data.contactName,
         contactPhone: parsed.data.contactPhone,
         notes: parsed.data.notes,
-        photos: parsePhotoUrls(parsed.data.photoUrls),
+        photos,
         videos: parseMediaUrls(parsed.data.videoUrls),
         locationLinks: {
           create: parsed.data.locationIds.map((locationId) => ({ locationId })),
