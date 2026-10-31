@@ -43,7 +43,6 @@ function parseSceneForm(formData: FormData) {
     title: formData.get("title") || undefined,
     summary: formData.get("summary") || undefined,
     description: formData.get("description") || undefined,
-    scriptContent: formData.get("scriptContent") || undefined,
     scriptDay: formData.get("scriptDay") || undefined,
     objectType: formData.get("objectType") || undefined,
     sceneKind: formData.get("sceneKind") || undefined,
@@ -226,7 +225,6 @@ export async function createSceneAction(
         title: parsed.data.title,
         summary: parsed.data.summary,
         description: parsed.data.description,
-        scriptContent: parsed.data.scriptContent,
         scriptDay: parsed.data.scriptDay,
         objectType: parsed.data.objectType,
         sceneKind: parsed.data.sceneKind,
@@ -350,9 +348,6 @@ export async function updateSceneAction(
           title: parsed.data.title ?? null,
           summary: parsed.data.summary ?? null,
           description: parsed.data.description ?? null,
-          ...(formData.has("scriptContent")
-            ? { scriptContent: parsed.data.scriptContent ?? null }
-            : {}),
           scriptDay: parsed.data.scriptDay ?? null,
           objectType: parsed.data.objectType ?? null,
           sceneKind: parsed.data.sceneKind,
