@@ -459,6 +459,13 @@ export function CastListExportModal({
         if (win) {
           win.document.write(result.html);
           win.document.close();
+          // Скрипты в странице печати запрещены (CSP) — печать вызывается отсюда, после загрузки фото.
+          const print = () => {
+            win.focus();
+            win.print();
+          };
+          if (win.document.readyState === "complete") print();
+          else win.addEventListener("load", print, { once: true });
         }
         toast.success("Открыто окно печати");
         onClose();

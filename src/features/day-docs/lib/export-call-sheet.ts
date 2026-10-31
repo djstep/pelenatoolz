@@ -21,6 +21,7 @@ import {
   shootDayTypeLabels,
 } from "@/shared/i18n/domain-labels";
 import { formatDateLong, formatDateShort } from "@/shared/i18n/format-date";
+import { escapeHtml, PRINT_HTML_CSP_META } from "@/shared/lib/escape-html";
 
 type NextDay = Awaited<ReturnType<typeof getNextShootDayBrief>>;
 
@@ -285,14 +286,6 @@ export function buildCallSheetExportModel(
   };
 }
 
-function escapeHtml(value: string) {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
 function htmlTable(
   headers: string[],
   rows: string[][],
@@ -477,6 +470,7 @@ export function buildCallSheetPrintHtml(model: CallSheetExportModel) {
   return `<!DOCTYPE html>
 <html lang="ru">
 <head>
+  ${PRINT_HTML_CSP_META}
   <meta charset="utf-8" />
   <title>${escapeHtml(model.documentTitle)}</title>
   <style>

@@ -17,6 +17,11 @@ import type {
 import { auditionKindLabels } from "@/features/auditions/lib/types";
 import { actorRoleTypeLabels } from "@/shared/i18n/domain-labels";
 import { formatDateShort } from "@/shared/i18n/format-date";
+import {
+  escapeHtml,
+  PRINT_HTML_CSP_META,
+  safePrintUrl,
+} from "@/shared/lib/escape-html";
 
 export type ScheduleExportField =
   | "time"
@@ -262,7 +267,7 @@ export function buildSchedulePrintHtml(
     (f) => f !== "time" && f !== "kind" && f !== "comment",
   );
 
-  let html = `<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"/><title>План проб — ${escapeHtml(projectName)}</title>
+  let html = `<!DOCTYPE html><html lang="ru"><head>${PRINT_HTML_CSP_META}<meta charset="utf-8"/><title>План проб — ${escapeHtml(projectName)}</title>
 <style>
   body{font-family:system-ui,sans-serif;padding:24px;color:#111}
   h1{font-size:20px} h2{font-size:16px;margin-top:24px}
@@ -272,9 +277,7 @@ export function buildSchedulePrintHtml(
   th{background:#f3f3f3;text-align:left}
   img{width:48px;height:48px;object-fit:cover;border-radius:999px}
   .notes{min-height:40px}
-  @media print{.noprint{display:none}}
 </style></head><body>
-<button class="noprint" onclick="window.print()">Печать / PDF</button>
 <h1>План кастинг-проб — ${escapeHtml(projectName)}</h1>`;
 
   for (const [dateKey, dayItems] of byDate) {
@@ -295,10 +298,9 @@ export function buildSchedulePrintHtml(
         html += `<tr>`;
         for (const f of bodyCols) {
           if (f === "photo") {
+            const photoSrc = safePrintUrl(c.person.photoUrl);
             html += `<td>${
-              c.person.photoUrl
-                ? `<img src="${escapeAttr(c.person.photoUrl)}" alt=""/>`
-                : "—"
+              photoSrc ? `<img src="${escapeHtml(photoSrc)}" alt=""/>` : "—"
             }</td>`;
           } else if (f === "name") {
             html += `<td>${escapeHtml(c.person.label)}</td>`;
@@ -311,7 +313,7 @@ export function buildSchedulePrintHtml(
                 : "—"
             }</td>`;
           } else if (f === "rating") {
-            html += `<td>${c.rating ?? "—"}</td>`;
+            html += `<td>${c.rating != null ? escapeHtml(String(c.rating)) : "—"}</td>`;
           } else if (f === "notesBlank") {
             html += `<td class="notes"></td>`;
           }
@@ -324,16 +326,4 @@ export function buildSchedulePrintHtml(
 
   html += `</body></html>`;
   return html;
-}
-
-function escapeHtml(s: string) {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
-function escapeAttr(s: string) {
-  return escapeHtml(s);
 }

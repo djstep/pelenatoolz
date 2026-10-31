@@ -19,6 +19,7 @@ import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { AuditEntityType } from "@/shared/audit/entity-types";
 import { recordAudit } from "@/shared/audit/with-audit";
 import { prisma } from "@/shared/db/prisma";
+import { isHttpUrl, safePrintUrl } from "@/shared/lib/escape-html";
 
 const tapeSchema = z.discriminatedUnion("kind", [
   z.object({
@@ -29,14 +30,18 @@ const tapeSchema = z.discriminatedUnion("kind", [
   z.object({
     id: z.string().min(1),
     kind: z.literal("external"),
-    url: z.string().url(),
+    url: z.string().url().refine(isHttpUrl),
     note: z.string().max(500),
   }),
 ]);
 
 const candidateConfigSchema = z.object({
   candidateId: z.string().min(1),
-  photoOverrideUrl: z.string().max(2000).nullable(),
+  photoOverrideUrl: z
+    .string()
+    .max(2000)
+    .nullable()
+    .refine((v) => v === null || safePrintUrl(v) !== null),
   tapes: z.array(tapeSchema),
   commentIds: z.array(z.string()).nullable(),
   commentsManual: z.boolean(),

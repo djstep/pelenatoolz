@@ -25,6 +25,12 @@ import {
 } from "@/features/casting/lib/cast-list-export-fields";
 import { castingStatusLabels } from "@/features/preproduction/lib/status-labels";
 import { formatDateShort } from "@/shared/i18n/format-date";
+import {
+  escapeHtml,
+  isSitePath,
+  PRINT_HTML_CSP_META,
+  safePrintUrl,
+} from "@/shared/lib/escape-html";
 
 function appBaseUrl() {
   return (process.env.APP_URL ?? "http://localhost:3000").replace(/\/$/, "");
@@ -373,7 +379,7 @@ export function buildCastListPrintHtml(args: BuildCastListArgs): string {
   const sorted = sortCandidates(bundle.candidates, sort);
   const projectName = bundle.project.fullName || bundle.project.name;
 
-  let html = `<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"/><title>Каст-лист — ${escapeHtml(projectName)}</title>
+  let html = `<!DOCTYPE html><html lang="ru"><head>${PRINT_HTML_CSP_META}<meta charset="utf-8"/><title>Каст-лист — ${escapeHtml(projectName)}</title>
 <style>
   body{font-family:system-ui,sans-serif;padding:24px;color:#111;max-width:800px;margin:0 auto}
   h1{font-size:20px} h2{font-size:16px;margin:24px 0 8px}
@@ -381,9 +387,7 @@ export function buildCastListPrintHtml(args: BuildCastListArgs): string {
   .card{border:1px solid #ccc;border-radius:10px;padding:14px;margin:16px 0}
   img.photo{width:96px;height:96px;object-fit:cover;border-radius:8px}
   a{color:#0563C1} ul{margin:6px 0 0;padding-left:18px}
-  @media print{.noprint{display:none}}
 </style></head><body>
-<button class="noprint" onclick="window.print()">Печать / PDF</button>
 <h1>Каст-лист — ${escapeHtml(projectName)}</h1>`;
 
   for (const fieldId of characterFieldIds) {
@@ -406,10 +410,11 @@ export function buildCastListPrintHtml(args: BuildCastListArgs): string {
       candidate.person.id,
     );
 
-    html += `<div class="card"><h2><a href="${escapeAttr(personHref)}">${escapeHtml(candidate.person.label)}</a></h2>`;
+    html += `<div class="card"><h2>${printLink(personHref, escapeHtml(candidate.person.label))}</h2>`;
 
-    if (actorFieldIds.includes("photo") && photoUrl) {
-      html += `<p><img class="photo" src="${escapeAttr(photoUrl.startsWith("http") ? photoUrl : `${appBaseUrl()}${photoUrl}`)}" alt=""/></p>`;
+    const photoSrc = actorFieldIds.includes("photo") ? printPhotoSrc(photoUrl) : null;
+    if (photoSrc) {
+      html += `<p><img class="photo" src="${escapeHtml(photoSrc)}" alt=""/></p>`;
     }
 
     for (const fieldId of actorFieldIds) {
@@ -433,10 +438,10 @@ export function buildCastListPrintHtml(args: BuildCastListArgs): string {
             bundle.project.id,
             tape.auditionId,
           );
-          html += `<li><a href="${escapeAttr(href)}">${escapeHtml(label)}</a></li>`;
+          html += `<li>${printLink(href, escapeHtml(label))}</li>`;
         } else {
           const note = tape.note?.trim();
-          html += `<li><a href="${escapeAttr(tape.url)}">${escapeHtml(note || tape.url)}</a>${note ? ` <span>${escapeHtml(tape.url)}</span>` : ""}</li>`;
+          html += `<li>${printLink(tape.url, escapeHtml(note || tape.url))}${note ? ` <span>${escapeHtml(tape.url)}</span>` : ""}</li>`;
         }
       }
       html += `</ul>`;
@@ -458,14 +463,15 @@ export function buildCastListPrintHtml(args: BuildCastListArgs): string {
   return html;
 }
 
-function escapeHtml(s: string) {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+/** Ссылка в печати; адрес не http(s) и не путь сайта — остаётся только текст. */
+function printLink(href: string, labelHtml: string) {
+  const safe = safePrintUrl(href);
+  return safe ? `<a href="${escapeHtml(safe)}">${labelHtml}</a>` : labelHtml;
 }
 
-function escapeAttr(s: string) {
-  return escapeHtml(s);
+/** Адрес фото в печати: проверка до склейки, `APP_URL` — только к пути сайта. */
+function printPhotoSrc(url: string | null | undefined) {
+  const safe = safePrintUrl(url);
+  if (!safe) return null;
+  return isSitePath(safe) ? `${appBaseUrl()}${safe}` : safe;
 }

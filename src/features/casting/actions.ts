@@ -24,6 +24,7 @@ import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { prisma } from "@/shared/db/prisma";
 import { AuditEntityType } from "@/shared/audit/entity-types";
 import { auditMutation, recordAudit } from "@/shared/audit/with-audit";
+import { safePrintUrl } from "@/shared/lib/escape-html";
 
 export type CastingActionState = { error?: string; success?: string };
 
@@ -48,7 +49,12 @@ const personSchema = z.object({
   proposedTerms: z.string().trim().max(5000).optional(),
   tags: z.string().trim().max(500).optional(),
   notes: z.string().trim().max(5000).optional(),
-  photoUrl: z.string().trim().max(2000).optional(),
+  photoUrl: z
+    .string()
+    .trim()
+    .max(2000)
+    .optional()
+    .refine((v) => !v || safePrintUrl(v) !== null),
   skills: z.string().trim().optional(),
   birthDate: z.string().optional(),
   education: z.string().trim().max(2000).optional(),
@@ -103,7 +109,12 @@ function personFromForm(formData: FormData) {
     education: formData.get("education") || undefined,
     filmography: formData.get("filmography") || undefined,
   });
-  if (!parsed.success) return { error: "Проверьте данные кандидата" as const };
+  if (!parsed.success) {
+    if (parsed.error.issues.some((issue) => issue.path[0] === "photoUrl")) {
+      return { error: "Фото: только ссылка http(s) или загруженный файл" as const };
+    }
+    return { error: "Проверьте данные кандидата" as const };
+  }
   const { birthDate: birthRaw, ...rest } = parsed.data;
   return {
     data: {
