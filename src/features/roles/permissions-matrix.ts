@@ -70,6 +70,14 @@ export function isSectionFlagAllowed(
 ): boolean {
   // «Снятие фиксации платежей» проверяется только у «Финансов» (finance:unlock).
   if (flag === "financeUnlock" && section !== "finance") return false;
+  // Фин. условия проверяются только у ставок (актёры, локации, ресурсы) и у «Финансов».
+  if (
+    (flag === "financeRead" || flag === "financeWrite") &&
+    section !== "finance" &&
+    !ENTITY_FINANCE_SECTIONS.includes(section)
+  ) {
+    return false;
+  }
   const allowed = RESTRICTED_SECTION_FLAGS[section];
   return !allowed || allowed.includes(flag);
 }

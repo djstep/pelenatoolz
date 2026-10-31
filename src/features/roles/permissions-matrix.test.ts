@@ -84,6 +84,50 @@ describe("normalizePermissionMatrix", () => {
   });
 });
 
+// Добивка задачи 1: фин. условия есть только у ставок и у «Финансов».
+
+const FINANCE_FLAG_SECTIONS = ["actors", "locations", "elements", "finance"];
+const NO_FINANCE_SECTIONS = PERMISSION_SECTIONS.filter(
+  (s) => !FINANCE_FLAG_SECTIONS.includes(s.id),
+);
+
+describe("normalizePermissionMatrix: фин. условия", () => {
+  test("financeRead/financeWrite остаются только у ставок и finance", () => {
+    const out = normalizePermissionMatrix(matrixWithUnlockEverywhere());
+    for (const id of ["actors", "locations", "elements", "finance"] as const) {
+      assert.equal(out[id].financeRead, true, id);
+      assert.equal(out[id].financeWrite, true, id);
+    }
+    for (const s of NO_FINANCE_SECTIONS) {
+      assert.equal(out[s.id].financeRead, false, s.id);
+      assert.equal(out[s.id].financeWrite, false, s.id);
+    }
+  });
+
+  test("старая роль в базе: фин. условия у договоров не читаются", () => {
+    const parsed = parsePermissionMatrix({
+      contracts: { access: true, read: true, financeRead: true, financeWrite: true },
+      actors: { access: true, financeRead: true },
+    });
+    assert.equal(parsed.contracts.financeRead, false);
+    assert.equal(parsed.contracts.financeWrite, false);
+    assert.equal(parsed.contracts.read, true);
+    assert.equal(parsed.actors.financeRead, true);
+  });
+
+  test("шаблоны: фин. условия вне ставок и finance выключены", () => {
+    for (const m of [buildFullMatrix(), buildViewerMatrix()]) {
+      for (const s of NO_FINANCE_SECTIONS) {
+        assert.equal(m[s.id].financeRead, false, s.id);
+        assert.equal(m[s.id].financeWrite, false, s.id);
+      }
+    }
+    assert.equal(buildFullMatrix().actors.financeWrite, true);
+    assert.equal(buildViewerMatrix().actors.financeRead, true);
+    assert.equal(buildViewerMatrix().finance.financeRead, true);
+  });
+});
+
 describe("шаблоны ролей", () => {
   test("продюсер: financeUnlock только у finance", () => {
     const full = buildFullMatrix();
@@ -134,6 +178,26 @@ describe("isPermissionSubset и financeUnlock", () => {
       isPermissionSubset(target, {
         ...actor,
         finance: { access: true, financeUnlock: true },
+      }),
+      true,
+    );
+  });
+
+  test("старые фин. условия у другого раздела в роли не мешают", () => {
+    const target = {
+      scenes: { access: true, read: true, financeRead: true },
+      contracts: { financeWrite: true },
+    };
+    assert.equal(isPermissionSubset(target, actor), true);
+  });
+
+  test("фин. условия актёров сравниваются как раньше", () => {
+    const target = { actors: { access: true, financeRead: true } };
+    assert.equal(isPermissionSubset(target, actor), false);
+    assert.equal(
+      isPermissionSubset(target, {
+        ...actor,
+        actors: { access: true, financeWrite: true },
       }),
       true,
     );
