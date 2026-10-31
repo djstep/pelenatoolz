@@ -28,7 +28,7 @@ type Props = {
   page: number;
   totalPages: number;
   entityTypes: string[];
-  users: { id: string; name: string; email: string }[];
+  users: { id: string; name: string }[];
   filters: {
     entityType: string;
     action: string;
@@ -197,7 +197,6 @@ export function AuditWorkspace({
                 </div>
                 <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--muted-fg)]">
                   <span>{log.user.name}</span>
-                  <span>{log.user.email}</span>
                   <span className="font-mono">{log.entityId}</span>
                 </div>
                 {diffs && diffs.length > 0 ? (
