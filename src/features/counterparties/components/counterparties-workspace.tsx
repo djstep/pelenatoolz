@@ -21,6 +21,7 @@ import type {
 } from "@/features/counterparties/queries";
 import { Button } from "@/shared/ui/button";
 import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
+import { submitKeepingFields } from "@/shared/ui/forms/submit-keeping-fields";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Modal } from "@/shared/ui/modal";
@@ -167,7 +168,7 @@ function CompanyModal({
         </div>
       }
     >
-      <form id="company-form" action={action} key={company?.id ?? "new"}>
+      <form id="company-form" onSubmit={submitKeepingFields(action)} key={company?.id ?? "new"}>
         <CompanyFormFields company={company} />
       </form>
     </Modal>
@@ -216,7 +217,7 @@ function CounterpartyModal({
     >
       <form
         id="counterparty-form"
-        action={action}
+        onSubmit={submitKeepingFields(action)}
         key={counterparty?.id ?? "new"}
       >
         <CounterpartyFormFields counterparty={counterparty} />

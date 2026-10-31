@@ -15,6 +15,7 @@ import {
   castingStatusOptions,
 } from "@/features/preproduction/lib/status-labels";
 import { StatusSelect } from "@/features/preproduction/components/status-select";
+import { submitKeepingFields } from "@/shared/ui/forms/submit-keeping-fields";
 import { useActionToast, useToast } from "@/shared/ui/toast";
 import { Button } from "@/shared/ui/button";
 import { Modal } from "@/shared/ui/modal";
@@ -73,7 +74,7 @@ function PersonModal({
         </div>
       }
     >
-      <form id="casting-person-form" action={action} key={person?.id ?? "new"}>
+      <form id="casting-person-form" onSubmit={submitKeepingFields(action)} key={person?.id ?? "new"}>
         <PersonFormFields
           projectId={projectId}
           person={person}

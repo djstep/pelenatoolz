@@ -10,6 +10,7 @@ import {
 import type { LocationEditSource } from "@/features/locations/queries";
 import { locationKindLabels } from "@/shared/i18n/domain-labels";
 import { Button } from "@/shared/ui/button";
+import { submitKeepingFields } from "@/shared/ui/forms/submit-keeping-fields";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Modal } from "@/shared/ui/modal";
@@ -81,7 +82,7 @@ export function LocationModal({
         </div>
       }
     >
-      <form id="location-form" action={action} className="space-y-4">
+      <form id="location-form" onSubmit={submitKeepingFields(action)} className="space-y-4">
         <div className="grid gap-4 md:grid-cols-2">
           <div>
             <Label htmlFor="loc-name">Название локации *</Label>

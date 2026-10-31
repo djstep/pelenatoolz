@@ -18,6 +18,7 @@ import {
 } from "@/features/roles/permissions-matrix";
 import { Button } from "@/shared/ui/button";
 import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
+import { submitKeepingFields } from "@/shared/ui/forms/submit-keeping-fields";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Modal } from "@/shared/ui/modal";
@@ -84,7 +85,7 @@ function RoleEditorModal({
         </div>
       }
     >
-      <form id="role-form" action={action} className="space-y-4">
+      <form id="role-form" onSubmit={submitKeepingFields(action)} className="space-y-4">
         <input
           type="hidden"
           name="resourceCategoryIds"

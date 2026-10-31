@@ -11,6 +11,7 @@ import { APPROVAL_STATUS_COLOR_PRESETS } from "@/features/finance/lib/approval-s
 import type { ApprovalStatusRow } from "@/features/finance/queries-approval-statuses";
 import { Button } from "@/shared/ui/button";
 import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
+import { submitKeepingFields } from "@/shared/ui/forms/submit-keeping-fields";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Modal } from "@/shared/ui/modal";
@@ -116,7 +117,7 @@ function StatusModal({
         </div>
       }
     >
-      <form id="approval-status-form" action={action} className="space-y-4">
+      <form id="approval-status-form" onSubmit={submitKeepingFields(action)} className="space-y-4">
         <div>
           <Label htmlFor="approval-name">Название</Label>
           <Input

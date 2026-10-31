@@ -12,6 +12,7 @@ import {
   seedOvertime,
 } from "@/features/payroll/components/financial-terms-block";
 import { formatMinutesHhMm } from "@/shared/i18n/domain-labels";
+import { submitKeepingFields } from "@/shared/ui/forms/submit-keeping-fields";
 import { useActionToast } from "@/shared/ui/toast";
 import { Button } from "@/shared/ui/button";
 import { HhMmInput } from "@/shared/ui/hh-mm-input";
@@ -197,7 +198,7 @@ export function ItemModal({
         </div>
       }
     >
-      <form id="resource-item-form" action={action} key={itemId ?? "new"}>
+      <form id="resource-item-form" onSubmit={submitKeepingFields(action)} key={itemId ?? "new"}>
         <ItemFormFields
           item={formItem}
           showFinance={canFinanceRead}

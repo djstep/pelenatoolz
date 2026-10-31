@@ -8,6 +8,7 @@ import {
 } from "@/features/characters/actions";
 import type { CharacterEditSource } from "@/features/characters/queries";
 import { formatMinutesHhMm, actorRoleTypeLabels } from "@/shared/i18n/domain-labels";
+import { submitKeepingFields } from "@/shared/ui/forms/submit-keeping-fields";
 import { HhMmInput } from "@/shared/ui/hh-mm-input";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
@@ -74,7 +75,7 @@ export function CharacterModal({
         </div>
       }
     >
-      <form id="character-form" action={action} className="space-y-4" key={character?.id ?? "new"}>
+      <form id="character-form" onSubmit={submitKeepingFields(action)} className="space-y-4" key={character?.id ?? "new"}>
         <div>
           <Label htmlFor="name">Имя персонажа *</Label>
           <Input id="name" name="name" required defaultValue={character?.name} />

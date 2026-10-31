@@ -11,6 +11,7 @@ import {
 } from "@/features/projects/actions";
 import { Button } from "@/shared/ui/button";
 import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
+import { submitKeepingFields } from "@/shared/ui/forms/submit-keeping-fields";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Modal } from "@/shared/ui/modal";
@@ -155,7 +156,7 @@ export function ProjectDangerZone({
           </div>
         }
       >
-        <form id="delete-project-form" action={deleteAction} className="space-y-4">
+        <form id="delete-project-form" onSubmit={submitKeepingFields(deleteAction)} className="space-y-4">
           <p className="text-sm text-[var(--muted-fg)]">
             Введите название проекта{" "}
             <strong className="text-[var(--foreground)]">{projectName}</strong>{" "}

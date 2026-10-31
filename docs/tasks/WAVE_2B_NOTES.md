@@ -88,3 +88,93 @@
 **Замечено, но не тронуто**
 - У Финансов «Фин. условия: редактирование» на деле даёт только просмотр. Правка финансов идёт по «Создание/Редактирование/Удаление» в основной таблице. Подпись флажка вводит в заблуждение.
 - Прямая правка роли запросом в журнал не попадает. Это ожидаемо: так ставился флажок для проверки.
+
+## Задача 2 — решения владельца
+
+- Чинить только окна, как в ТЗ. Формы на страницах — списком ниже, в отчёт волны в «замечено, не тронуто».
+- Общая функция — в `src/shared/ui/forms/` (не в `unsaved/`).
+
+## Задача 2 — итог
+
+**Коммит:** `wave 2b task 2: dialogs keep entered values after server refusal`.
+
+**Причина.** Не наш сброс и не `useOnChange`: в окне роли его нет. React 19 после отправки через `<form action={…}>` сам возвращает все поля без состояния (`defaultValue` / `defaultChecked`) к исходным, и при отказе сервера тоже. Проверено по исходникам `react-dom` 19.2.8: `startHostTransition` вызывает `requestFormReset` при каждой отправке. Если форма сама отменяет отправку (`preventDefault`) и запускает действие через `startTransition`, React поля не трогает.
+
+**Что сделано**
+- `src/shared/ui/forms/submit-keeping-fields.ts` — `submitKeepingFields(action)`, обработчик `onSubmit`: `preventDefault` → `new FormData(form, submitter)` → `startTransition(() => action(formData))`.
+- В 21 форме окон `action={action}` заменено на `onSubmit={submitKeepingFields(action)}`. Больше ничего в них не менялось.
+
+**Проверки до кода**
+- `useFormStatus` в `src` не используется нигде, в `Button` тоже. Во всех 21 формах кнопка блокируется и меняет надпись по `pending` из `useActionState` — он работает и при запуске через `startTransition`.
+- Кнопки с `name`/`value`: одна — «Сохранить и пересчитать хрон.» (`recalcTiming`) в окне новой сцены. Поэтому `FormData` собирается с `submitter`.
+- Двойная отправка: React её сам не запрещал, защищала кнопка с `disabled={pending}`. Она осталась. Проверено в браузере (ниже).
+- Окна с полями в состоянии и сохранением без формы (факт сцены, доплаты в отчёте смены, перенумерация либретто, слот проб): при отказе страница не обновляется, `useOnChange` не срабатывает. Правка не нужна.
+
+**Окна — проверены и исправлены (21 форма, 20 файлов)**
+
+| Файл | Окно |
+|---|---|
+| `roles/components/roles-manager.tsx` | роль (новая / правка) |
+| `accruals/components/accruals-workspace.tsx` | начисление |
+| `casting/components/casting-workspace.tsx` | новый кандидат кастинга |
+| `characters/components/character-modal.tsx` | персонаж |
+| `contracts/components/certificate-form-modal.tsx` | акт / справка |
+| `contracts/components/contract-form-modal.tsx` | договор |
+| `counterparties/components/counterparties-workspace.tsx` | компания; контрагент |
+| `departments/components/departments-workspace.tsx` | цех |
+| `finance/components/approval-statuses-workspace.tsx` | статус согласования |
+| `finance/components/finance-variables-workspace.tsx` | своя переменная финансов |
+| `finance/components/finance-workspace.tsx` | операция финансов |
+| `locations/components/location-modal.tsx` | локация |
+| `payments/components/payments-workspace.tsx` | платёж наличными |
+| `post/components/post-workspace.tsx` | задача поста |
+| `projects/components/project-danger-zone.tsx` | удаление проекта |
+| `resources/components/category-modal.tsx` | категория ресурсов |
+| `resources/components/item-modal.tsx` | позиция ресурсов |
+| `scout/components/scout-candidate-detail.tsx` | правка кандидата скаута |
+| `scout/components/scout-workspace.tsx` | новый кандидат скаута |
+| `script/components/scene-modal.tsx` | новая сцена |
+
+Все они при успехе закрываются или пересоздают форму (`key`, `formKey`), поэтому успешный путь не изменился.
+
+**Формы на страницах — та же потеря введённого после отказа, не тронуты**
+
+| Файл | Форма |
+|---|---|
+| `auth/components/forgot-password-form.tsx` | восстановление пароля |
+| `auth/components/login-form.tsx` | вход (почта восстанавливается сама, пароль очищается намеренно) |
+| `auth/components/register-form.tsx` | регистрация |
+| `auth/components/reset-password-form.tsx` | новый пароль |
+| `casting/components/casting-person-detail.tsx` | карточка кандидата кастинга |
+| `characters/components/character-detail-view.tsx` | требования к роли; снимок каста; гонорар актёра |
+| `day-docs/components/call-sheet-edit.tsx` | блоки вызывного (общий компонент); шапка вызывного |
+| `locations/components/location-detail-view.tsx` | требования; снимок объекта; фин. условия |
+| `memberships/components/accept-invite-form.tsx` | принятие приглашения |
+| `memberships/components/invite-form.tsx` | приглашение участника |
+| `projects/components/create-project-form.tsx` | новый проект |
+| `projects/components/project-settings-form.tsx` | настройки проекта |
+| `reports/components/production-report-workspace.tsx` | отчёт смены |
+| `schedule/components/shoot-day-form.tsx` | день съёмок |
+| `script/components/scene-editor.tsx` | страница сцены |
+| `script/components/scene-form.tsx` | форма сцены |
+| `smeta/components/default-budget-items-form.tsx` | статьи сметы по умолчанию |
+| `finance/components/finance-variables-workspace.tsx` | строка системной переменной финансов |
+
+На страницах после успеха React сейчас подставляет в поля сохранённые значения. С `submitKeepingFields` там остаётся введённое. Если сервер поправил значение (например, обрезал пробелы), разница видна до перезагрузки. Поэтому их нужно решать отдельно.
+
+**Проверено в браузере** (в «ТЕСТ импорт»)
+- test test, localhost, роль «ТЕСТ управление участниками» (участники — полные, сцены — доступ/просмотр/правка):
+  - новая роль «ТЕСТ отказ» + «Финансы: доступ/просмотр» → отказ «Нельзя выдать права шире ваших собственных». Название, примечание и все 4 флажка на месте. Снял «Финансы» → сохранилось, окно закрылось;
+  - правка «ТЕСТ отказ»: новое название + «Финансы» → отказ, введённое на месте. «Отмена» после отказа спрашивает «Есть несохранённые изменения».
+- Продюсер, 127.0.0.1:
+  - локация с названием из пробелов → отказ сервера. Подлокация, тип, декорация, описание, теги на месте;
+  - персонаж с именем из пробелов → «Укажите имя персонажа». Описание и требования на месте;
+  - новая сцена с занятым номером через «Сохранить и пересчитать хрон.» → `recalcTiming` есть в теле запроса, отказ «Сцена с таким номером уже существует», номер и локация на месте;
+  - персонаж «ТЕСТ двойной клик», двойной клик по «Сохранить» → один запрос, на кнопке «…» и `disabled` на время запроса, окно закрылось. В базе один персонаж и одна запись в журнале «Создан персонаж».
+- tsc 0. eslint по изменённым файлам — 0 ошибок, 2 старых предупреждения в `scene-modal.tsx` (строки 32–33, не тронуты). `npm test` 214/214. Сборка проходит.
+
+**Тестовые данные:** роли «ТЕСТ управление участниками», «ТЕСТ отказ», персонаж «ТЕСТ двойной клик» в «ТЕСТ импорт» созданы и удалены через интерфейс. test test временно получал первую роль, возвращён «Наблюдатель». Временный скрипт проверки удалён. Запросом проверено: в «ТЕСТ импорт» остались роли «Продюсер», «Наблюдатель», «ТЕСТ импорт» (последняя была до волны). В «Моей маленькой» нет новых записей журнала, test test там — «ТЕСТ роль». Ничего не оставлено.
+
+**Замечено, но не тронуто**
+- Окно локации показывает ошибку сервера по-английски: «Too small: expected string to have >=1 characters» (сообщение zod без перевода в `locations/schemas.ts`).
+- Формы на страницах — список выше.

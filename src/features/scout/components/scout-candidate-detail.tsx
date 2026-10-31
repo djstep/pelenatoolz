@@ -16,6 +16,7 @@ import {
 import type { ScoutCandidateDetail } from "@/features/scout/queries";
 import { scoutStatusOptions } from "@/features/preproduction/lib/status-labels";
 import { StatusSelect } from "@/features/preproduction/components/status-select";
+import { submitKeepingFields } from "@/shared/ui/forms/submit-keeping-fields";
 import { useActionToast, useToast } from "@/shared/ui/toast";
 import { Button } from "@/shared/ui/button";
 import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
@@ -227,7 +228,7 @@ export function ScoutCandidateDetail({
           </div>
         }
       >
-        <form id="scout-edit-form" action={action} key={candidate.updatedAt.toISOString()}>
+        <form id="scout-edit-form" onSubmit={submitKeepingFields(action)} key={candidate.updatedAt.toISOString()}>
           <ScoutFormFields candidate={candidate} locations={locations} />
         </form>
       </Modal>

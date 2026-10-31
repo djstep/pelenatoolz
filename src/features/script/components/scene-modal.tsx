@@ -12,6 +12,7 @@ import {
 } from "@/features/script/components/scene-form-fields";
 import type { SceneCategoryOption } from "@/features/script/components/scene-category-resource-block";
 import { Button } from "@/shared/ui/button";
+import { submitKeepingFields } from "@/shared/ui/forms/submit-keeping-fields";
 import { Modal } from "@/shared/ui/modal";
 import { useActionSuccess } from "@/shared/ui/unsaved/use-action-success";
 import { useOnChange } from "@/shared/hooks/use-on-change";
@@ -130,7 +131,7 @@ export function SceneModal({
         </div>
       }
     >
-      <form key={formKey} id="scene-form" action={action} className="space-y-5">
+      <form key={formKey} id="scene-form" onSubmit={submitKeepingFields(action)} className="space-y-5">
         <SceneFormFields
           projectId={projectId}
           locale={locale}

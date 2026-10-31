@@ -13,6 +13,7 @@ import { ScoutFormFields } from "@/features/scout/components/scout-form-fields";
 import type { ScoutCandidateRow } from "@/features/scout/queries";
 import { scoutStatusOptions } from "@/features/preproduction/lib/status-labels";
 import { StatusSelect } from "@/features/preproduction/components/status-select";
+import { submitKeepingFields } from "@/shared/ui/forms/submit-keeping-fields";
 import { useActionToast, useToast } from "@/shared/ui/toast";
 import { Button } from "@/shared/ui/button";
 import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
@@ -172,7 +173,7 @@ export function ScoutWorkspace({
           </div>
         }
       >
-        <form id="scout-form" action={action}>
+        <form id="scout-form" onSubmit={submitKeepingFields(action)}>
           <ScoutFormFields locations={locations} />
         </form>
       </Modal>

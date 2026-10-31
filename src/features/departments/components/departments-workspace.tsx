@@ -29,6 +29,7 @@ import { cn } from "@/shared/lib/cn";
 import { Button } from "@/shared/ui/button";
 import { Checkbox } from "@/shared/ui/checkbox";
 import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
+import { submitKeepingFields } from "@/shared/ui/forms/submit-keeping-fields";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Modal } from "@/shared/ui/modal";
@@ -84,7 +85,7 @@ function DepartmentModal({
         </div>
       }
     >
-      <form id="department-form" action={action} className="space-y-4">
+      <form id="department-form" onSubmit={submitKeepingFields(action)} className="space-y-4">
         <div className="grid gap-4 sm:grid-cols-[1fr_10rem]">
           <div>
             <Label htmlFor="department-name">Название *</Label>
