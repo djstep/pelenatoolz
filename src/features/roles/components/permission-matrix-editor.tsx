@@ -22,8 +22,9 @@ const FLAG_LABELS: Record<keyof SectionPermissions, string> = {
   financeUnlock: "Снятие фиксации платежей",
 };
 
+// Фин. флаги — в своих блоках ниже; «Снятие фиксации» есть только у «Финансов».
 const MAIN_FLAGS = PERMISSION_FLAGS.filter(
-  (f) => f !== "financeRead" && f !== "financeWrite",
+  (f) => f !== "financeRead" && f !== "financeWrite" && f !== "financeUnlock",
 );
 
 export type ResourceCategoryOption = {
@@ -292,11 +293,6 @@ export function PermissionMatrixEditor({
             type="checkbox"
             name={`${prefix}_${section.id}_financeWrite`}
             defaultChecked={matrix[section.id].financeWrite}
-          />
-          <input
-            type="checkbox"
-            name={`${prefix}_${section.id}_financeUnlock`}
-            defaultChecked={matrix[section.id].financeUnlock}
           />
         </div>
       ))}

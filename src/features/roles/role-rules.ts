@@ -34,6 +34,8 @@ export function isReservedRoleName(name: string): boolean {
  * Права target не шире прав actor: каждый включённый флаг target включён и у actor.
  * Сравниваются матрицы из базы и финансовые права по категориям ресурсов
  * (категория без своей настройки у actor берёт раздел «Прочие ресурсы»).
+ * Флаги, которых у раздела нет (financeUnlock вне «Финансов»), не сравниваются:
+ * parsePermissionMatrix их выключает, даже если старая роль в базе их хранит.
  */
 export function isPermissionSubset(
   targetPermissions: unknown,
