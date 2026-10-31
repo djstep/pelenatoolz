@@ -1,4 +1,4 @@
-import type { DayNight, IntExt } from "@prisma/client";
+import type { DayNight, IntExt, TimingMode } from "@prisma/client";
 import type {
   BlockTypingResult,
   ImportBlockType,
@@ -48,6 +48,7 @@ import {
   type VersionScene,
 } from "@/features/import/normalize/scene-match";
 import { parseTitlePage, type TitlePage } from "@/features/import/normalize/title-page";
+import { formatMmSs, previewTimings } from "@/features/import/review/timing";
 
 /**
  * Типы вопросов. Код постоянного вопроса — «тип:ключ», ключ из содержимого
@@ -82,6 +83,8 @@ export const QUESTION_TYPES = {
   /** Имя совпало с несколькими записями проекта (старые дубли): к какой привязать. */
   recordCharacter: "запись-персонажа",
   recordLocation: "запись-локации",
+  /** Совпавшая сцена с новым текстом и другим хронометражем: оставить или пересчитать (шаг 7). */
+  timing: "хронометраж",
   /** Сопоставление с прошлой версией (шаг 6). */
   ...SCENE_QUESTION_TYPES,
 } as const;
@@ -157,7 +160,19 @@ export type NormalizeContext = {
    * только ответом; вопрос «нет в строке Персонажи» не задаётся (меняет только текст).
    */
   sync?: boolean;
+  /**
+   * Режим хронометража проекта. Задан — у совпавших сцен с новым текстом хронометраж
+   * пересчитывается (`timingUpdates`): пустой заполняется, другой — только по ответу,
+   * в режиме «вручную» не трогается.
+   */
+  timing?: { mode: TimingMode; pageToMinuteRatio: number };
 };
+
+/**
+ * Хронометраж совпавшей сцены: `fill` — в либретто пусто, записать; `set` — ответ
+ * «пересчитать», записать вместо прежнего.
+ */
+export type TimingUpdate = { sceneIndex: number; seconds: number; mode: "fill" | "set" };
 
 /** Запись проекта, к которой привязано имя. У объекта — одна из строк локации с этим именем. */
 export type RecordRef = { id: string; name: string };
@@ -250,6 +265,8 @@ export type NormalizedScript = {
   sceneMatches: SceneMatch[];
   /** Сцены проекта, которых нет в новой версии. */
   missingScenes: MissingScene[];
+  /** Новый хронометраж совпавших сцен (только при заданном `timing`). */
+  timingUpdates: TimingUpdate[];
 };
 
 const TIME_OPTIONS = Object.keys(TIME_WORDS);
@@ -598,6 +615,14 @@ export function normalizeScript(
   const { matches, missing } = existing.scenes
     ? matchScenes(fileScenes, existing, (input) => book.ask(input as AskInput), { sync })
     : { matches: [], missing: [] };
+  const timingUpdates = matchedTimings(
+    { blocks, scenes: result },
+    fileScenes,
+    matches,
+    existing.scenes ?? [],
+    context.timing,
+    book,
+  );
 
   return {
     titlePage,
@@ -611,7 +636,53 @@ export function normalizeScript(
     staleRules: dictionary.stale,
     sceneMatches: matches,
     missingScenes: missing,
+    timingUpdates,
   };
+}
+
+/**
+ * Хронометраж совпавших сцен, у которых поменялся текст (решение 6а-3, шаг 7). Признака
+ * «задан руками» у сцены нет, поэтому прежнее значение молча не перезаписывается:
+ * пусто — записать новое; другое — вопрос «оставить / пересчитать» (по умолчанию «оставить»);
+ * то же — ничего. Режим «вручную» и сцены без изменений текста не трогаются.
+ */
+function matchedTimings(
+  script: Pick<NormalizedScript, "blocks" | "scenes">,
+  fileScenes: readonly { ref: string; key: string }[],
+  matches: readonly SceneMatch[],
+  existingScenes: readonly ExistingScene[],
+  timing: NormalizeContext["timing"],
+  book: QuestionBook,
+): TimingUpdate[] {
+  if (!timing || timing.mode === "MANUAL" || matches.length === 0) return [];
+  const estimates = previewTimings(script, timing.mode, timing.pageToMinuteRatio).scenes;
+  const byId = new Map(existingScenes.map((s) => [s.id, s]));
+  const updates: TimingUpdate[] = [];
+  for (const scene of script.scenes) {
+    const match = matches[scene.index];
+    if (!match?.existingId || match.pending || !match.contentChanged) continue;
+    const before = byId.get(match.existingId)?.planSeconds ?? null;
+    const seconds = estimates[scene.index]?.seconds ?? 0;
+    if (before == null) {
+      updates.push({ sceneIndex: scene.index, seconds, mode: "fill" });
+      continue;
+    }
+    if (before === seconds) continue;
+    const file = fileScenes[scene.index]!;
+    const answer = book.ask({
+      type: QUESTION_TYPES.timing,
+      scene: file.ref,
+      subject: file.key,
+      group: "scenes",
+      options: ["keep", "recalc"],
+      suggested: "keep",
+      acceptAll: false,
+      paragraphIndex: scene.paragraphIndex,
+      detail: `${formatMmSs(before)} → ${formatMmSs(seconds)}`,
+    });
+    if (answer === "recalc") updates.push({ sceneIndex: scene.index, seconds, mode: "set" });
+  }
+  return updates;
 }
 
 function blockType(

@@ -266,7 +266,9 @@ export function ScreenplayWorkspace({
     try {
       const result = await exportScreenplayPrintHtmlAction(projectId, version.id);
       if ("error" in result) return;
-      const printWindow = window.open("", "_blank", "noopener,noreferrer");
+      // Без noopener: с ним window.open возвращает null и печать не открывалась.
+      // В окно пишется только своя страница с экранированным текстом.
+      const printWindow = window.open("", "_blank");
       if (!printWindow) return;
       printWindow.document.write(result.html);
       printWindow.document.close();

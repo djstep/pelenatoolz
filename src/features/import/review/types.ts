@@ -3,8 +3,14 @@ import type { BlockTypingResult } from "@/features/import/normalize/block-types"
 import type { DictionaryRule } from "@/features/import/normalize/dictionary";
 import type { ExistingRecords } from "@/features/import/normalize/normalize-script";
 
-/** Файл сценария — не больше 3,5 МБ: запрос к серверу у Vercel — до 4,5 МБ. */
+/**
+ * Отправляемый на сервер (облегчённый) docx — не больше 3,5 МБ: запрос к серверу у Vercel —
+ * до 4,5 МБ. Проверка в браузере и на сервере.
+ */
 export const SCRIPT_IMPORT_MAX_BYTES = 3.5 * 1024 * 1024;
+
+/** Исходный файл в браузере — до 50 МБ: картинки на сервер не уходят (облегчённый docx). */
+export const SCRIPT_SOURCE_MAX_BYTES = 50 * 1024 * 1024;
 
 export function formatMegabytes(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1).replace(".", ",")} МБ`;
@@ -20,8 +26,9 @@ export function formatFileSize(bytes: number) {
  */
 export type ScriptReviewData = {
   fileName: string;
+  /** Размер присланного (облегчённого) docx — исходный сервер не видит. */
   fileSize: number;
-  /** sha256 файла: при «Импортировать» сервер сверит, что разбирает тот же файл. */
+  /** sha256 облегчённого docx: при «Импортировать» сервер сверит, что разбирает тот же файл. */
   fileHash: string;
   /** Текущая версия сценария на момент предпросмотра: сменилась — импорт отклоняется. */
   currentVersionId: string | null;

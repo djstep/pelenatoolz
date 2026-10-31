@@ -129,7 +129,7 @@ export function buildScreenplayPrintHtml(
 <html lang="ru">
 <head>
   <meta charset="utf-8" />
-  <title>${title}</title>
+  <title>${title.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</title>
   <style>
     @page { size: letter; margin: 1in 1in 1in 1.5in; }
     body { font-family: "Courier New", Courier, monospace; font-size: 12pt; line-height: 1.35; color: #000; }

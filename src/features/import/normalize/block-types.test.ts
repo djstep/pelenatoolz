@@ -12,7 +12,11 @@ import {
   readDocxParagraphs,
   type DocxParagraph,
 } from "@/features/import/normalize/docx-paragraphs";
-import { DOCX_LIMITS, DocxReadError } from "@/features/import/normalize/docx-zip";
+import {
+  DOCX_LIMITS,
+  DocxReadError,
+  SCRIPT_DOCUMENT_XML_MAX_BYTES,
+} from "@/features/import/normalize/docx-zip";
 import { buildDocx, buildZip, p } from "@/features/import/normalize/test-docx";
 
 // Ожидания — утверждённая таблица в docs/tasks/WAVE_4_NOTES.md (коды D*, R*, V*).
@@ -531,6 +535,16 @@ describe("лимиты распаковки и проверка по содер�
       },
     ]);
     assert.throws(() => readDocxParagraphs(docx), isCode("too_large"));
+  });
+
+  test("document.xml больше 3 МБ — отказ «сценарий слишком большой», меньше — читается", () => {
+    const heading = p("ИНТ. КУХНЯ — ДЕНЬ");
+    const big = buildDocx({ body: heading + p("а".repeat(SCRIPT_DOCUMENT_XML_MAX_BYTES / 2)) });
+    // Кириллица — 2 байта в UTF-8: текст абзаца уже 3 МБ, с разметкой — больше.
+    assert.throws(() => readDocxParagraphs(big), isCode("script_too_large"));
+
+    const fits = buildDocx({ body: heading + p("а".repeat(SCRIPT_DOCUMENT_XML_MAX_BYTES / 2 - 2048)) });
+    assert.equal(readDocxParagraphs(fits).length, 2);
   });
 
   test("слишком много файлов в архиве — отказ", () => {

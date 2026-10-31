@@ -75,6 +75,7 @@ export async function loadImportContext(
         dayNight: true,
         cutAt: true,
         scriptContent: true,
+        planSeconds: true,
         characters: { select: { characterId: true } },
         locations: { select: { locationId: true } },
         shootDayScenes: { select: { shootDay: { select: { dayNumber: true } } } },
@@ -148,6 +149,7 @@ export async function loadImportContext(
       characterIds: scene.characters.map((c) => c.characterId),
       locationIds: scene.locations.map((l) => l.locationId),
       contentHash: contentHash(scene.scriptContent ?? ""),
+      planSeconds: scene.planSeconds,
       shootDays: scene.shootDayScenes.map((d) => d.shootDay.dayNumber).sort((a, b) => a - b),
       reportFacts: scene._count.productionFacts,
     };

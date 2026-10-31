@@ -257,7 +257,8 @@ export async function writeScript(input: ScriptWriteInput): Promise<ScriptWriteR
     for (const s of plan.scenes) if (s.existingId) sceneIds.set(s.index, s.existingId);
 
     // Сцены проекта — одним запросом: порядок, ИНТ/НАТ и режим (пусто — как было),
-    // текст сцены у совпавших, «вырезана» / «вернуть» по ответу. Номера не меняются.
+    // текст сцены у совпавших, «вырезана» / «вернуть» по ответу, хронометраж по правилу
+    // шага 7 (`fill` — только если в либретто пусто). Номера не меняются.
     const now = new Date();
     const updates = [
       ...plan.scenes.flatMap((s) =>
@@ -271,6 +272,8 @@ export async function writeScript(input: ScriptWriteInput): Promise<ScriptWriteR
                 setContent: true,
                 content: s.scriptContent,
                 cut: s.restore ? "restore" : null,
+                planMode: s.planMode,
+                planSeconds: s.planMode ? s.planSeconds : null,
               },
             ]
           : [],
@@ -283,13 +286,15 @@ export async function writeScript(input: ScriptWriteInput): Promise<ScriptWriteR
         setContent: false,
         content: null,
         cut: m.cut ? "cut" : null,
+        planMode: null,
+        planSeconds: null,
       })),
     ];
     for (const part of chunks(updates, 500)) {
       const values = Prisma.join(
         part.map(
           (u) =>
-            Prisma.sql`(${u.id}, ${u.sortOrder}::int, ${u.intExt}::text, ${u.dayNight}::text, ${u.setContent}::boolean, ${u.content}::text, ${u.cut}::text)`,
+            Prisma.sql`(${u.id}, ${u.sortOrder}::int, ${u.intExt}::text, ${u.dayNight}::text, ${u.setContent}::boolean, ${u.content}::text, ${u.cut}::text, ${u.planMode}::text, ${u.planSeconds}::int)`,
         ),
       );
       await q(tx.$executeRaw`
@@ -302,8 +307,12 @@ export async function writeScript(input: ScriptWriteInput): Promise<ScriptWriteR
             WHEN 'cut' THEN COALESCE(s."cutAt", ${now}::timestamp(3))
             WHEN 'restore' THEN NULL
             ELSE s."cutAt" END,
+          "planSeconds" = CASE v.plan_mode
+            WHEN 'set' THEN v.plan_seconds
+            WHEN 'fill' THEN COALESCE(s."planSeconds", v.plan_seconds)
+            ELSE s."planSeconds" END,
           "updatedAt" = ${now}::timestamp(3)
-        FROM (VALUES ${values}) AS v(id, sort_order, int_ext, day_night, set_content, content, cut)
+        FROM (VALUES ${values}) AS v(id, sort_order, int_ext, day_night, set_content, content, cut, plan_mode, plan_seconds)
         WHERE s."id" = v.id AND s."projectId" = ${projectId}`);
     }
 

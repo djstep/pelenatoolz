@@ -5,7 +5,11 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { classifyParagraphs, type BlockTypingResult } from "@/features/import/normalize/block-types";
 import { readDocxParagraphs } from "@/features/import/normalize/docx-paragraphs";
-import { isDocxReadError, type DocxReadErrorCode } from "@/features/import/normalize/docx-zip";
+import {
+  isDocxReadError,
+  SCRIPT_DOCUMENT_XML_MAX_BYTES,
+  type DocxReadErrorCode,
+} from "@/features/import/normalize/docx-zip";
 import {
   normalizeScript,
   type NormalizedScript,
@@ -37,6 +41,7 @@ const DOCX_ERRORS: Record<DocxReadErrorCode, string> = {
   too_many_files: "Файл .docx устроен необычно: слишком много частей внутри. Пересохраните его в Word.",
   too_large: "Файл .docx после распаковки слишком большой. Уберите из него картинки или разделите сценарий.",
   unsupported: "Файл .docx сжат неподдерживаемым способом. Пересохраните его в Word.",
+  script_too_large: `Сценарий слишком большой для импорта: текст документа больше ${SCRIPT_DOCUMENT_XML_MAX_BYTES / (1024 * 1024)} МБ. Разделите сценарий на части.`,
 };
 
 const NO_RIGHTS = "Импорт сценария доступен только с правом правки сценария";
@@ -54,9 +59,14 @@ async function readScriptFile(formData: FormData): Promise<ReadFile> {
   if (!(file instanceof File) || file.size === 0) {
     return { error: "Выберите файл сценария .docx" };
   }
+  // Только .docx: по имени здесь, по содержимому — при разборе.
+  if (!file.name.toLowerCase().endsWith(".docx")) {
+    return { error: "Нужен файл Word .docx. Другие форматы не поддерживаются." };
+  }
+  // Браузер присылает облегчённый docx (без картинок) — лимит на него.
   if (file.size > SCRIPT_IMPORT_MAX_BYTES) {
     return {
-      error: `Файл ${formatMegabytes(file.size)}, а можно не больше ${formatMegabytes(SCRIPT_IMPORT_MAX_BYTES)}. Уберите из него картинки или разделите сценарий.`,
+      error: `Текст сценария в файле — ${formatMegabytes(file.size)}, а можно не больше ${formatMegabytes(SCRIPT_IMPORT_MAX_BYTES)}. Разделите сценарий на части.`,
     };
   }
 
@@ -156,6 +166,7 @@ export async function importScriptAction(
   const result = normalizeScript(read.typing, answers, {
     dictionary: context.dictionary,
     existing: context.existing,
+    timing: context.timing,
   });
   const blocking = blockingQuestions(result);
   if (blocking > 0) {
@@ -228,6 +239,11 @@ function writeChanges(result: NormalizedScript, r: ScriptWriteResult) {
       linked: result.locations.filter((l) => l.existing).length,
     },
     linksRemoved: r.linksRemoved,
+    // Хронометраж совпавших сцен: заполнен пустой / пересчитан по ответу.
+    timing: {
+      filled: result.timingUpdates.filter((u) => u.mode === "fill").length,
+      recalculated: result.timingUpdates.filter((u) => u.mode === "set").length,
+    },
     dictionaryRules: r.rules,
   };
 }
@@ -279,6 +295,7 @@ export async function syncScriptAction(
     dictionary: context.dictionary,
     existing: context.existing,
     sync: true,
+    timing: context.timing,
   });
   const blocking = blockingQuestions(result);
   if (blocking > 0) {

@@ -10,12 +10,21 @@ export const DOCX_LIMITS = {
   maxDocumentXml: 20 * 1024 * 1024,
 } as const;
 
+/**
+ * Распакованный `word/document.xml` сценария — не больше 3 МБ. Это не защита от zip-бомбы
+ * (она — `DOCX_LIMITS`), а предел импорта: ответ предпросмотра ≈ 1,3 × `document.xml`,
+ * у Vercel потолок ответа — 4,5 МБ.
+ */
+export const SCRIPT_DOCUMENT_XML_MAX_BYTES = 3 * 1024 * 1024;
+
 export type DocxReadErrorCode =
   | "not_zip"
   | "not_docx"
   | "too_many_files"
   | "too_large"
-  | "unsupported";
+  | "unsupported"
+  /** `document.xml` больше `SCRIPT_DOCUMENT_XML_MAX_BYTES`. */
+  | "script_too_large";
 
 export class DocxReadError extends Error {
   constructor(public readonly code: DocxReadErrorCode) {
@@ -149,6 +158,9 @@ export function readDocxParts(buffer: Buffer): DocxParts {
   };
 
   const documentXml = read(document, DOCX_LIMITS.maxDocumentXml);
+  if (Buffer.byteLength(documentXml, "utf8") > SCRIPT_DOCUMENT_XML_MAX_BYTES) {
+    throw new DocxReadError("script_too_large");
+  }
   return {
     documentXml,
     stylesXml: optional("word/styles.xml"),

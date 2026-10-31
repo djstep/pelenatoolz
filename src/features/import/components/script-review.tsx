@@ -30,7 +30,7 @@ import {
   ruleText,
   visibleOptions,
 } from "@/features/import/review/question-text";
-import { previewTimings } from "@/features/import/review/timing";
+import { formatMmSs, previewTimings } from "@/features/import/review/timing";
 import {
   formatFileSize,
   type ScriptImportState,
@@ -57,12 +57,13 @@ const TITLE_FIELDS: { key: keyof Omit<TitlePage, "other" | "contacts">; label: s
 
 type TitleEdits = Partial<Record<(typeof TITLE_FIELDS)[number]["key"], string>>;
 
-/** Групповые ответы «да» там, где предложено «нет»: вырезать, вернуть, убрать связь. */
+/** Групповые ответы «да» там, где предложено «нет»: вырезать, вернуть, убрать связь, пересчитать. */
 const BULK_ANSWERS: { type: string; answer: string; label: string }[] = [
   { type: QUESTION_TYPES.cutScene, answer: "cut", label: "Вырезать все" },
   { type: QUESTION_TYPES.restoreScene, answer: "restore", label: "Вернуть все" },
   { type: QUESTION_TYPES.unlinkCharacter, answer: "remove", label: "Убрать все связи" },
   { type: QUESTION_TYPES.unlinkLocation, answer: "remove", label: "Убрать все связи" },
+  { type: QUESTION_TYPES.timing, answer: "recalc", label: "Пересчитать все" },
 ];
 
 const initialImport: ScriptImportState = {};
@@ -126,9 +127,12 @@ export function ScriptReview({
 
   const result = useMemo(
     () =>
+      // Те же настройки, что на сервере: иначе вопросы и предложенные ответы разойдутся.
       normalizeScript(data.typing, answers, {
         dictionary: data.dictionary,
         existing: data.existing,
+        sync: Boolean(data.sync),
+        timing: data.timing,
       }),
     [data, answers],
   );
@@ -136,6 +140,17 @@ export function ScriptReview({
     () => previewTimings(result, data.timing.mode, data.timing.pageToMinuteRatio),
     [result, data.timing],
   );
+  /** Хронометраж совпавшей сцены с новым текстом — как его запишет «Импортировать». */
+  const timingNote = (index: number) => {
+    const match = result.sceneMatches[index];
+    if (!match?.existingId || match.pending || !match.contentChanged) return null;
+    if (data.timing.mode === "MANUAL") return "текст изменился; хронометраж ручной — не меняется";
+    const update = result.timingUpdates.find((u) => u.sceneIndex === index);
+    if (!update) return "текст изменился; хронометраж в либретто остаётся";
+    return update.mode === "fill"
+      ? `хронометраж будет записан: ${formatMmSs(update.seconds)}`
+      : `хронометраж пересчитан: ${formatMmSs(update.seconds)}`;
+  };
   const fileKeys = useMemo(
     () =>
       new Set([
@@ -258,7 +273,7 @@ export function ScriptReview({
         <p className="text-sm text-[var(--muted-fg)]">
           {data.sync
             ? `Обновление либретто из версии «${data.sync.label}». Текст версии не меняется.`
-            : `${data.fileName} · ${formatFileSize(data.fileSize)}`}
+            : `${data.fileName} · отправлено ${formatFileSize(data.fileSize)}`}
         </p>
         <div className="flex flex-wrap gap-2 text-sm">
           <Badge>Сцен: {result.scenes.length}</Badge>
@@ -375,6 +390,7 @@ export function ScriptReview({
                             <SceneMatchCell
                               match={result.sceneMatches[scene.index]}
                               fileNumber={scene.number}
+                              timingNote={timingNote(scene.index)}
                             />
                           </td>
                           <td className="px-3 py-2">{scene.characters.join(", ")}</td>

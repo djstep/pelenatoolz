@@ -3,7 +3,7 @@ import type { NormalizedScript } from "@/features/import/normalize/normalize-scr
 import type { ScreenplayBlock } from "@/features/screenplay/lib/block-types";
 import { estimateSceneTiming } from "@/features/screenplay/lib/timing";
 
-function formatMmSs(seconds: number) {
+export function formatMmSs(seconds: number) {
   const m = Math.floor(seconds / 60);
   const s = Math.round(seconds % 60);
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
@@ -14,7 +14,7 @@ function formatMmSs(seconds: number) {
  * сценарий → либретто (`estimateSceneTiming`), по нормализованным блокам сцены.
  */
 export function previewTimings(
-  result: NormalizedScript,
+  result: Pick<NormalizedScript, "blocks" | "scenes">,
   mode: TimingMode,
   pageToMinuteRatio: number,
 ) {

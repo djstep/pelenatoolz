@@ -121,9 +121,12 @@ export function QuestionCard({
 export function SceneMatchCell({
   match,
   fileNumber,
+  timingNote,
 }: {
   match: SceneMatch | undefined;
   fileNumber: string | null;
+  /** Что будет с хронометражем совпавшей сцены с новым текстом. */
+  timingNote?: string | null;
 }) {
   if (!match) return null;
   if (!match.existingId) {
@@ -153,9 +156,7 @@ export function SceneMatchCell({
       {match.headingChanged && match.previousHeading ? (
         <p className="text-[var(--muted-fg)]">было: {match.previousHeading}</p>
       ) : null}
-      {match.contentChanged ? (
-        <p className="text-[var(--tone-warning)]">хронометраж мог устареть</p>
-      ) : null}
+      {timingNote ? <p className="text-[var(--tone-warning)]">{timingNote}</p> : null}
       {match.removeCharacterIds.length + match.removeLocationIds.length > 0 ? (
         <p className="text-[var(--muted-fg)]">
           связей убрать: {match.removeCharacterIds.length + match.removeLocationIds.length}

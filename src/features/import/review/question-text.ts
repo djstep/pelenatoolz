@@ -109,6 +109,10 @@ export function questionTitle(q: NormalizeQuestion, existing?: ExistingRecords):
       return `«${q.subject}» совпало с несколькими персонажами проекта — к какому привязать?`;
     case QUESTION_TYPES.recordLocation:
       return `«${q.subject}» совпало с несколькими объектами проекта — к какому привязать?`;
+    case QUESTION_TYPES.timing: {
+      const [before, after] = (q.occurrences.find((o) => o.detail)?.detail ?? "").split(" → ");
+      return `${sceneRef(q)} «${q.subject}»: текст изменился — хронометраж в либретто ${before ?? "—"}, по новому тексту ${after ?? "—"}`;
+    }
     default:
       return q.code;
   }
@@ -147,6 +151,10 @@ export function optionLabel(
     }
     case QUESTION_TYPES.cutScene:
       return option === "cut" ? "Пометить вырезанной" : "Оставить как есть";
+    case QUESTION_TYPES.timing: {
+      const [before, after] = (detail ?? "").split(" → ");
+      return option === "recalc" ? `Пересчитать: ${after ?? "—"}` : `Оставить ${before ?? "—"}`;
+    }
     case QUESTION_TYPES.numberTaken:
       return `Номер ${detail ?? "—"}`;
     case QUESTION_TYPES.unlinkCharacter:

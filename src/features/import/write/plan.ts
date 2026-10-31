@@ -27,8 +27,13 @@ export type PlanScene = {
   intExt: IntExt | null;
   dayNight: DayNight | null;
   scriptContent: string | null;
-  /** Только у новой сцены: хронометраж совпавших не пересчитывается. */
+  /**
+   * У новой — хронометраж по режиму проекта. У совпавшей — только из `timingUpdates`
+   * (`planMode`): пусто — хронометраж в либретто не меняется.
+   */
   planSeconds: number | null;
+  /** У совпавшей: `fill` — записать, только если в либретто пусто; `set` — записать. */
+  planMode: "fill" | "set" | null;
   sortOrder: number;
   restore: boolean;
   characters: PlanRef[];
@@ -122,10 +127,12 @@ export function planImport(
     sceneBlocks.set(b.sceneIndex, [...(sceneBlocks.get(b.sceneIndex) ?? []), b]);
   }
 
+  const timingUpdates = new Map(result.timingUpdates.map((u) => [u.sceneIndex, u]));
   const scenes: PlanScene[] = result.scenes.map((scene) => {
     const match = result.sceneMatches[scene.index]!;
     const { number, postfix } = splitSceneNumber(match.number ?? "");
     const isNew = !match.existingId;
+    const update = isNew ? undefined : timingUpdates.get(scene.index);
     return {
       index: scene.index,
       existingId: match.existingId,
@@ -134,8 +141,12 @@ export function planImport(
       intExt: scene.intExt,
       dayNight: scene.dayNight,
       scriptContent: sceneContent(sceneBlocks.get(scene.index) ?? []) || null,
-      planSeconds:
-        isNew && timing.mode !== "MANUAL" ? (timings.scenes[scene.index]?.seconds ?? null) : null,
+      planSeconds: isNew
+        ? timing.mode !== "MANUAL"
+          ? (timings.scenes[scene.index]?.seconds ?? null)
+          : null
+        : (update?.seconds ?? null),
+      planMode: update?.mode ?? null,
       sortOrder: 0,
       restore: match.restore,
       characters: scene.characters.flatMap((key) => {

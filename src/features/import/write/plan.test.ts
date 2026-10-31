@@ -468,3 +468,91 @@ describe("план записи", () => {
     assert.ok(plan.blocks.every((b) => !/<[a-z]/i.test(b.content)));
   });
 });
+
+describe("хронометраж совпавших сцен с новым текстом (шаг 7, решение владельца)", () => {
+  const body =
+    p("1. ИНТ. А — ДЕНЬ") +
+    p("Новый текст сцены, заметно длиннее прежнего, чтобы хронометраж поменялся. ".repeat(20)) +
+    p("2. ИНТ. Б — ДЕНЬ") +
+    p("Два.");
+  const typing = classifyParagraphs(readDocxParagraphs(buildDocx({ body })));
+  const project = (planSeconds: number | null): ExistingRecords => ({
+    characters: [],
+    locations: [],
+    scenes: [
+      scene({ id: "a", number: "1", heading: "ИНТ. А — ДЕНЬ", contentHash: contentHash("Старый."), planSeconds }),
+      // Текст сцены 2 не менялся — её хронометраж не трогается при любом значении.
+      scene({ id: "b", number: "2", heading: "ИНТ. Б — ДЕНЬ", contentHash: contentHash("Два."), planSeconds: 7 }),
+    ],
+  });
+  const timed = (
+    existing: ExistingRecords,
+    answers: Answers = {},
+    timing: { mode: "PAGES" | "MANUAL"; pageToMinuteRatio: number } = TIMING,
+  ) =>
+    normalizeScript(typing, answers, { existing, timing });
+
+  test("в либретто пусто — новый записывается без вопроса", () => {
+    const existing = project(null);
+    const result = timed(existing);
+    assert.deepEqual(codesOf(result, QUESTION_TYPES.timing), []);
+    assert.equal(result.timingUpdates.length, 1);
+    assert.equal(result.timingUpdates[0]!.mode, "fill");
+    const plan = planImport(result, {}, existing, TIMING);
+    assert.equal(plan.scenes[0]!.planMode, "fill");
+    assert.ok((plan.scenes[0]!.planSeconds ?? 0) > 0);
+    assert.equal(plan.scenes[1]!.planMode, null);
+    assert.equal(plan.scenes[1]!.planSeconds, null);
+  });
+
+  test("другой хронометраж — вопрос, по умолчанию «оставить»; «пересчитать» — записывается", () => {
+    const existing = project(5);
+    const result = timed(existing);
+    const [question] = result.questions.filter((q) => q.type === QUESTION_TYPES.timing);
+    assert.ok(question, "нет вопроса о хронометраже");
+    assert.equal(question.scene, "1");
+    assert.equal(question.required, false);
+    assert.equal(question.suggested, "keep");
+    assert.equal(question.persistent, false);
+    assert.equal(blockingQuestions(result), 0);
+    assert.deepEqual(result.timingUpdates, []);
+    const kept = planImport(result, {}, existing, TIMING);
+    assert.equal(kept.scenes[0]!.planMode, null);
+    assert.equal(kept.scenes[0]!.planSeconds, null);
+
+    const answers = { [question.code]: "recalc" };
+    const recalc = timed(existing, answers);
+    assert.equal(recalc.timingUpdates.length, 1);
+    assert.equal(recalc.timingUpdates[0]!.mode, "set");
+    const plan = planImport(recalc, answers, existing, TIMING);
+    assert.equal(plan.scenes[0]!.planMode, "set");
+    assert.equal(plan.scenes[0]!.planSeconds, recalc.timingUpdates[0]!.seconds);
+    assert.notEqual(plan.scenes[0]!.planSeconds, 5);
+  });
+
+  test("тот же хронометраж — ни вопроса, ни записи", () => {
+    const seconds = timed(project(null)).timingUpdates[0]!.seconds;
+    const result = timed(project(seconds));
+    assert.deepEqual(codesOf(result, QUESTION_TYPES.timing), []);
+    assert.deepEqual(result.timingUpdates, []);
+  });
+
+  test("режим «вручную» — совпавшие сцены не трогаются, вопроса нет", () => {
+    const manual = { mode: "MANUAL" as const, pageToMinuteRatio: 1 };
+    for (const before of [null, 5]) {
+      const existing = project(before);
+      const result = timed(existing, {}, manual);
+      assert.deepEqual(codesOf(result, QUESTION_TYPES.timing), []);
+      assert.deepEqual(result.timingUpdates, []);
+      const plan = planImport(result, {}, existing, manual);
+      assert.ok(plan.scenes.every((s) => s.planMode === null && s.planSeconds === null));
+    }
+  });
+
+  test("синхронизация с либретто — то же правило", () => {
+    const existing = project(5);
+    const result = normalizeScript(typing, {}, { existing, timing: TIMING, sync: true });
+    assert.equal(codesOf(result, QUESTION_TYPES.timing).length, 1);
+    assert.deepEqual(result.timingUpdates, []);
+  });
+});

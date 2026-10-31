@@ -35,6 +35,8 @@ export type ExistingScene = {
   locationIds: string[];
   /** Хэш текста сцены в либретто — понять, поменялся ли текст. */
   contentHash: string;
+  /** Хронометраж (план) в либретто, секунды; пусто — не задан. */
+  planSeconds?: number | null;
   /** Номера дней КПП, где стоит сцена. */
   shootDays: number[];
   /** Фактов сцены в отчётах смен. */
@@ -85,7 +87,7 @@ export type SceneMatch = {
   /** Шапка в проекте до импорта. */
   previousHeading: string | null;
   headingChanged: boolean;
-  /** Текст сцены поменялся — хронометраж мог устареть. */
+  /** Текст сцены поменялся — хронометраж пересчитывается по правилу шага 7 (`timingUpdates`). */
   contentChanged: boolean;
   /** Вырезанная сцена возвращается. */
   restore: boolean;
