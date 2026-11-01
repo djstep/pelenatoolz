@@ -1,17 +1,6 @@
 import { createHash } from "crypto";
 import { yandexEndpoints } from "@/features/cloud/lib/endpoints";
 import { CloudApiError, CloudReconnectRequiredError } from "@/features/cloud/lib/errors";
-import type { CloudEntry } from "@/features/cloud/lib/types";
-
-type YandexItem = {
-  name: string;
-  path: string;
-  type: "dir" | "file";
-  mime_type?: string;
-  size?: number;
-  modified?: string;
-  public_url?: string;
-};
 
 export type YandexTokenResponse = {
   access_token: string;
@@ -19,42 +8,6 @@ export type YandexTokenResponse = {
   refresh_token?: string;
   scope?: string;
 };
-
-export async function listYandexDiskFolder(
-  accessToken: string,
-  path = "/",
-): Promise<CloudEntry[]> {
-  const diskPath = path === "/" ? "disk:/" : path.startsWith("disk:") ? path : `disk:${path}`;
-  const url = new URL(`${yandexEndpoints().diskApi}/resources`);
-  url.searchParams.set("path", diskPath);
-  url.searchParams.set("limit", "100");
-  url.searchParams.set("sort", "name");
-
-  const res = await fetch(url, {
-    headers: { Authorization: `OAuth ${accessToken}` },
-  });
-  if (res.status === 401) {
-    throw new CloudReconnectRequiredError("YANDEX_DISK");
-  }
-  if (!res.ok) {
-    throw new CloudApiError("YANDEX_DISK", res.status, "Не удалось прочитать Яндекс Диск");
-  }
-
-  const data = (await res.json()) as {
-    _embedded?: { items?: YandexItem[] };
-  };
-
-  return (data._embedded?.items ?? []).map((item) => ({
-    id: item.path,
-    name: item.name,
-    kind: item.type === "dir" ? "folder" : "file",
-    mimeType: item.mime_type ?? null,
-    sizeBytes: item.size ?? null,
-    modifiedAt: item.modified ?? null,
-    webUrl: item.public_url ?? null,
-    path: item.path,
-  }));
-}
 
 /**
  * Id «устройства» для окна согласия Яндекса: токен, выданный под device_id, можно отозвать

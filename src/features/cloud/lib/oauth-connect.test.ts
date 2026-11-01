@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import nodeModule from "node:module";
+import path from "node:path";
 import { afterEach, before, describe, test } from "node:test";
-import { parseCloudLink, safeExternalHref } from "@/features/cloud/lib/cloud-link";
+import { linkSiteLabel, parseCloudLink, safeExternalHref } from "@/features/cloud/lib/cloud-link";
 import { isCloudApiError, isCloudReconnectRequiredError } from "@/features/cloud/lib/errors";
 import {
   parseGoogleIdToken,
@@ -258,12 +260,35 @@ describe("«Вставить ссылку»", () => {
     assert.equal(link.url, "https://disk.yandex.ru/i/AbCd123");
   });
 
-  test("не https, чужой сайт, javascript: — отказ", () => {
+  test("любой другой https-сайт — без источника, в колонке — имя сайта", () => {
+    const link = parseCloudLink("https://www.dropbox.com/s/abc/file.pdf?dl=0");
+    assert.ok(!("error" in link));
+    assert.equal(link.provider, null);
+    assert.equal(link.externalId, "https://www.dropbox.com/s/abc/file.pdf?dl=0");
+    assert.equal(linkSiteLabel(link.url), "dropbox.com");
+    // Похожий на Google адрес — не Google.
+    const fake = parseCloudLink("https://drive.google.com.evil.example/file/d/1AbCdEfGhIjKlMnOp");
+    assert.ok(!("error" in fake) && fake.provider === null);
+    assert.equal(linkSiteLabel(null), "Ссылка");
+  });
+
+  test("http, javascript:, data:, ftp, без адреса, с логином — отказ", () => {
     assert.ok("error" in parseCloudLink("http://drive.google.com/file/d/1AbCdEfGhIjKlMnOp"));
-    assert.ok("error" in parseCloudLink("https://drive.google.com.evil.example/file/d/1AbCdEfGhIjKlMnOp"));
+    assert.ok("error" in parseCloudLink("http://example.com/x"));
     assert.ok("error" in parseCloudLink("javascript:alert(1)"));
+    assert.ok("error" in parseCloudLink("JavaScript:alert(1)"));
+    assert.ok("error" in parseCloudLink("data:text/html,<script>alert(1)</script>"));
+    assert.ok("error" in parseCloudLink("ftp://example.com/file"));
+    assert.ok("error" in parseCloudLink("//example.com/x"));
+    assert.ok("error" in parseCloudLink("example.com/x"));
     assert.ok("error" in parseCloudLink("https://user:pass@drive.google.com/x"));
+    assert.ok("error" in parseCloudLink(`https://example.com/${"a".repeat(2000)}`));
     assert.ok("error" in parseCloudLink(""));
+  });
+
+  test("проверка — на сервере: действие прикрепления вызывает parseCloudLink", () => {
+    const source = readFileSync(path.join(process.cwd(), "src/features/cloud/actions.ts"), "utf8");
+    assert.match(source, /export async function attachCloudLinkAction[\s\S]*?parseCloudLink\(/);
   });
 
   test("в href старых ссылок — только http(s)", () => {

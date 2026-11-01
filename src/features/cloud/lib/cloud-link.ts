@@ -7,15 +7,16 @@ const GOOGLE_HOSTS = new Set(["drive.google.com", "docs.google.com"]);
 const YANDEX_HOSTS = new Set(["disk.yandex.ru", "disk.yandex.com", "disk.360.yandex.ru", "yadi.sk"]);
 
 export type ParsedCloudLink = {
-  provider: CloudProvider;
-  /** Id файла Google из адреса; если не нашёлся (и для Яндекса) — сам адрес. */
+  /** Google Диск / Яндекс Диск по адресу; ссылка на другой сайт — null. */
+  provider: CloudProvider | null;
+  /** Id файла Google из адреса; если не нашёлся (и для остальных) — сам адрес. */
   externalId: string;
   url: string;
 };
 
 /**
- * «Вставить ссылку» на «Файлах»: только https-ссылки Google Диска / Документов и Яндекс Диска.
- * Иначе — текст ошибки для человека.
+ * «Вставить ссылку» на «Файлах»: любой https-адрес. http, javascript:, data: и прочее — отказ
+ * (адрес потом стоит в href у всех участников). Иначе — текст ошибки для человека.
  */
 export function parseCloudLink(raw: string): ParsedCloudLink | { error: string } {
   const value = raw.trim();
@@ -28,7 +29,7 @@ export function parseCloudLink(raw: string): ParsedCloudLink | { error: string }
     return { error: "Это не адрес ссылки" };
   }
   if (url.protocol !== "https:") return { error: "Адрес должен начинаться с https://" };
-  if (url.username || url.password) return { error: "Это не адрес ссылки" };
+  if (url.username || url.password || !url.hostname) return { error: "Это не адрес ссылки" };
 
   const host = url.hostname.toLowerCase();
   if (GOOGLE_HOSTS.has(host)) {
@@ -41,7 +42,17 @@ export function parseCloudLink(raw: string): ParsedCloudLink | { error: string }
   if (YANDEX_HOSTS.has(host)) {
     return { provider: "YANDEX_DISK", externalId: url.toString(), url: url.toString() };
   }
-  return { error: "Поддерживаются ссылки Google Диска и Яндекс Диска" };
+  return { provider: null, externalId: url.toString(), url: url.toString() };
+}
+
+/** Колонка «Источник» для ссылки на другой сайт: имя сайта без «www.». */
+export function linkSiteLabel(url: string | null | undefined): string {
+  if (!url) return "Ссылка";
+  try {
+    return new URL(url).hostname.replace(/^www\./, "") || "Ссылка";
+  } catch {
+    return "Ссылка";
+  }
 }
 
 /** Старые ссылки в базе могли прийти без проверки: в href — только http(s). */

@@ -12,7 +12,7 @@ import {
   CloudReconnectNotice,
   type CloudConnectionView,
 } from "@/features/cloud/components/cloud-file-picker";
-import { safeExternalHref } from "@/features/cloud/lib/cloud-link";
+import { linkSiteLabel, safeExternalHref } from "@/features/cloud/lib/cloud-link";
 import {
   cloudProviderLabels,
   formatFileSize,
@@ -27,7 +27,7 @@ import { useToast } from "@/shared/ui/toast";
 
 type FileLink = {
   id: string;
-  provider: CloudProvider;
+  provider: CloudProvider | null;
   name: string;
   mimeType: string | null;
   sizeBytes: number | null;
@@ -159,7 +159,7 @@ export function FilesWorkspace({
         <div>
           <h2 className="font-display text-2xl font-semibold">Файлы</h2>
           <p className="mt-1 text-sm text-[var(--muted-fg)]">
-            Загрузка с устройства · ссылки на Google Диск и Яндекс Диск
+            Загрузка с устройства · ссылки на Google Диск, Яндекс Диск и другие сайты
           </p>
         </div>
         {canWrite ? (
@@ -299,12 +299,12 @@ export function FilesWorkspace({
       <section className="glass-card overflow-hidden">
         <div className="border-b border-[var(--border)] px-4 py-3">
           <h3 className="font-display text-lg font-semibold">
-            Прикреплённые из облака
+            Ссылки
           </h3>
         </div>
         {files.length === 0 ? (
           <p className="p-4 text-sm text-[var(--muted-fg)]">
-            Пока нет прикреплённых файлов из облака.
+            Пока нет прикреплённых ссылок. Нажмите «Вставить ссылку».
           </p>
         ) : (
           <div className="overflow-x-auto">
@@ -338,7 +338,9 @@ export function FilesWorkspace({
                       )}
                     </td>
                     <td className="px-4 py-3 text-[var(--muted-fg)]">
-                      {cloudProviderLabels[file.provider]}
+                      {file.provider
+                        ? cloudProviderLabels[file.provider]
+                        : linkSiteLabel(file.webUrl)}
                     </td>
                     <td className="px-4 py-3 text-[var(--muted-fg)]">
                       {formatFileSize(
@@ -412,11 +414,12 @@ export function FilesWorkspace({
               type="url"
               value={linkUrl}
               onChange={(e) => setLinkUrl(e.target.value)}
-              placeholder="https://drive.google.com/… или https://disk.yandex.ru/…"
+              placeholder="https://…"
             />
           </div>
           <p className="text-xs text-[var(--muted-fg)]">
-            Ссылки Google Диска, Google Документов и Яндекс Диска. Доступ к самому файлу выдаётся в диске.
+            Любая ссылка, начинающаяся с https:// — Google Диск, Яндекс Диск и другие сайты. Доступ к самому
+            файлу выдаётся там, где он лежит.
           </p>
           {linkError ? (
             <p className="text-sm text-[var(--danger)]">{linkError}</p>

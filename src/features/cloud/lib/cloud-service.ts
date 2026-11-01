@@ -1,17 +1,15 @@
 import type { CloudConnection, CloudProvider } from "@prisma/client";
 import {
   downloadGoogleFile,
-  listGoogleDriveFolder,
   refreshGoogleToken,
   revokeGoogleToken,
 } from "@/features/cloud/lib/google-drive";
 import { CloudReconnectRequiredError, isCloudReconnectRequiredError } from "@/features/cloud/lib/errors";
 import { connectionReconnectReason } from "@/features/cloud/lib/scopes";
 import { decryptSecret, encryptSecret } from "@/features/cloud/lib/token-crypto";
-import { cloudProviderLabels, type CloudEntry } from "@/features/cloud/lib/types";
+import { cloudProviderLabels } from "@/features/cloud/lib/types";
 import {
   downloadYandexFile,
-  listYandexDiskFolder,
   refreshYandexToken,
   revokeYandexToken,
 } from "@/features/cloud/lib/yandex-disk";
@@ -251,19 +249,6 @@ export async function saveCloudConnection(input: {
     },
   );
   return saved;
-}
-
-export async function browseCloudFolder(
-  userId: string,
-  provider: CloudProvider,
-  folderKey: string,
-): Promise<CloudEntry[]> {
-  return withCloudAccessToken(userId, provider, (token) => {
-    if (provider === "GOOGLE_DRIVE") {
-      return listGoogleDriveFolder(token, folderKey || "root");
-    }
-    return listYandexDiskFolder(token, folderKey || "/");
-  });
 }
 
 export async function downloadCloudFileForUser(

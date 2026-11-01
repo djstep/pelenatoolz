@@ -1,8 +1,5 @@
 import { googleEndpoints } from "@/features/cloud/lib/endpoints";
 import { CloudApiError, CloudReconnectRequiredError } from "@/features/cloud/lib/errors";
-import type { CloudEntry } from "@/features/cloud/lib/types";
-
-const GOOGLE_FOLDER = "application/vnd.google-apps.folder";
 
 export type GoogleTokenResponse = {
   access_token: string;
@@ -12,48 +9,6 @@ export type GoogleTokenResponse = {
   scope?: string;
   id_token?: string;
 };
-
-export async function listGoogleDriveFolder(
-  accessToken: string,
-  folderId = "root",
-): Promise<CloudEntry[]> {
-  const q = encodeURIComponent(
-    `'${folderId}' in parents and trashed = false`,
-  );
-  const fields = encodeURIComponent(
-    "files(id,name,mimeType,size,modifiedTime,webViewLink)",
-  );
-  const res = await fetch(
-    `${googleEndpoints().driveApi}/files?q=${q}&fields=${fields}&orderBy=folder,name&pageSize=100`,
-    { headers: { Authorization: `Bearer ${accessToken}` } },
-  );
-  if (res.status === 401) {
-    throw new CloudReconnectRequiredError("GOOGLE_DRIVE");
-  }
-  if (!res.ok) {
-    throw new CloudApiError("GOOGLE_DRIVE", res.status, "Не удалось прочитать Google Диск");
-  }
-  const data = (await res.json()) as {
-    files?: Array<{
-      id: string;
-      name: string;
-      mimeType?: string;
-      size?: string;
-      modifiedTime?: string;
-      webViewLink?: string;
-    }>;
-  };
-
-  return (data.files ?? []).map((file) => ({
-    id: file.id,
-    name: file.name,
-    kind: file.mimeType === GOOGLE_FOLDER ? "folder" : "file",
-    mimeType: file.mimeType ?? null,
-    sizeBytes: file.size ? Number(file.size) : null,
-    modifiedAt: file.modifiedTime ?? null,
-    webUrl: file.webViewLink ?? null,
-  }));
-}
 
 async function postGoogleToken(body: URLSearchParams) {
   try {

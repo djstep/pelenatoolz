@@ -6,7 +6,11 @@ import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { AuditEntityType } from "@/shared/audit/entity-types";
 import { recordAudit } from "@/shared/audit/with-audit";
 import { revokeCloudConnectionTokens } from "@/features/cloud/lib/cloud-service";
-import { MAX_LINK_NAME_LENGTH, parseCloudLink } from "@/features/cloud/lib/cloud-link";
+import {
+  linkSiteLabel,
+  MAX_LINK_NAME_LENGTH,
+  parseCloudLink,
+} from "@/features/cloud/lib/cloud-link";
 import { cloudProviderLabels } from "@/features/cloud/lib/types";
 import { prisma } from "@/shared/db/prisma";
 
@@ -46,7 +50,7 @@ export async function disconnectCloudAction(
   };
 }
 
-/** «Вставить ссылку» на «Файлах»: название + адрес Google / Яндекс Диска, без обращения к API. */
+/** «Вставить ссылку» на «Файлах»: название + любой https-адрес, без обращения к API дисков. */
 export async function attachCloudLinkAction(
   projectId: string,
   input: { name: string; url: string },
@@ -79,7 +83,7 @@ export async function attachCloudLinkAction(
     entityType: AuditEntityType.cloudFileLink,
     entityId: created.id,
     action: "CREATE",
-    summary: `Прикреплена ссылка «${name}» (${cloudProviderLabels[link.provider]})`,
+    summary: `Прикреплена ссылка «${name}» (${link.provider ? cloudProviderLabels[link.provider] : linkSiteLabel(link.url)})`,
   });
 
   revalidatePath(`/ru/projects/${projectId}/files`);

@@ -2469,7 +2469,8 @@ model CloudFileLink {
   id           String        @id @default(cuid())
   projectId    String
   connectionId String?
-  provider     CloudProvider
+  /// Пусто — ссылка на другой сайт («Вставить ссылку» принимает любой https-адрес).
+  provider     CloudProvider?
   externalId   String
   path         String?
   name         String
