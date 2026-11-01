@@ -156,7 +156,7 @@ export async function saveCallSheetElementsAction(
   if (!source) return { error: DAY_NOT_FOUND };
 
   const planned = planElementsSave({
-    autoRows: buildAutoRows(source.scenes),
+    autoRows: buildAutoRows(source.scenes, source.shiftResources),
     saved: sheet.elements,
     sections,
     data: checked.data,

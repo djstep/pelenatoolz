@@ -81,9 +81,10 @@ describe("раздел вызывного у категории ресурсов
       await checkCategorySection(value, "auto", { ...creating, name: "Пиротехника" }),
       { section: { kind: "none" } },
     );
+    // Посменная категория — тоже по названию: посменные ресурсы дня идут в элементы площадки.
     assert.deepEqual(
       await checkCategorySection(value, null, { ...creating, name: "Групповка", perShift: true }),
-      { section: { kind: "none" } },
+      { section: { kind: "key", key: "GROUP" } },
     );
   });
 

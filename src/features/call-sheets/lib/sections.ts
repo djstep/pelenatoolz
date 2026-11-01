@@ -6,7 +6,9 @@ export const DEFAULT_CALL_SHEET_SECTIONS = [
   { key: "GAME_TRANSPORT", name: "Игровой транспорт" },
   { key: "PROPS", name: "Реквизит" },
   { key: "COSTUME", name: "Костюм" },
+  { key: "MAKEUP", name: "Грим" },
   { key: "STUNTS", name: "Трюки" },
+  { key: "SFX", name: "Спецэффекты" },
   { key: "CAMERA", name: "Опер. техника" },
   { key: "CG", name: "CG" },
   { key: "SPECIAL_TRANSPORT", name: "Спецтранспорт" },
@@ -33,7 +35,7 @@ export function defaultSectionName(key: string | null): string | null {
 
 // ---- Соответствие типов разделам ----
 
-/** Ресурс сцены из либретто → раздел. Грим и «своё» — в «Прочее». */
+/** Ресурс сцены из либретто → раздел. «Своё» — в «Прочее». */
 export function sectionForSceneResource(category: SceneResourceCategory): SectionKey {
   switch (category) {
     case "EXTRAS":
@@ -47,6 +49,8 @@ export function sectionForSceneResource(category: SceneResourceCategory): Sectio
       return "GAME_TRANSPORT";
     case "COSTUME":
       return "COSTUME";
+    case "MAKEUP":
+      return "MAKEUP";
     case "CAMERA":
       return "CAMERA";
     default:
@@ -54,7 +58,7 @@ export function sectionForSceneResource(category: SceneResourceCategory): Sectio
   }
 }
 
-/** Элемент разбора сцены → раздел. Пиро/SFX, грим, прочее — в «Прочее». */
+/** Элемент разбора сцены → раздел. SFX — «Спецэффекты», грим — «Грим», прочее — «Прочее». */
 export function sectionForElement(type: ElementType): SectionKey {
   switch (type) {
     case "PROP":
@@ -64,6 +68,10 @@ export function sectionForElement(type: ElementType): SectionKey {
     case "WARDROBE":
     case "COSTUME":
       return "COSTUME";
+    case "MAKEUP":
+      return "MAKEUP";
+    case "SFX":
+      return "SFX";
     default:
       return OTHER_SECTION_KEY;
   }
@@ -72,8 +80,9 @@ export function sectionForElement(type: ElementType): SectionKey {
 /**
  * Названия категорий каталога, которым раздел ставится по умолчанию. Только точное совпадение
  * (без регистра, «ё» = «е», лишние пробелы не важны), не по части слова: «Пиротехника» не
- * попадёт в «Опер. технику». Тот же список — в миграции данных
- * 20261101121045_resource_category_call_sheet_section (тест сверяет).
+ * попадёт в «Опер. технику». Миграция данных 20261101121045_resource_category_call_sheet_section
+ * разметила существующие категории по этому списку без «Грима» и «Спецэффектов» (их тогда не
+ * было); каждая её пара есть здесь — тест сверяет.
  */
 export const CATEGORY_DEFAULT_NAMES: Record<
   Exclude<SectionKey, "SPECIAL_TRANSPORT" | "OTHER">,
@@ -83,7 +92,9 @@ export const CATEGORY_DEFAULT_NAMES: Record<
   GAME_TRANSPORT: ["игровой транспорт", "игровые машины"],
   PROPS: ["реквизит", "игровой реквизит"],
   COSTUME: ["костюм", "костюмы"],
+  MAKEUP: ["грим"],
   STUNTS: ["трюки", "трюк", "каскадеры"],
+  SFX: ["спецэффекты", "спецэффект", "спец. эффекты", "sfx"],
   CAMERA: ["опер. техника", "операторская техника", "опер техника"],
   CG: ["cg", "графика", "компьютерная графика"],
 };
@@ -93,15 +104,11 @@ export function normalizeCategoryName(name: string): string {
 }
 
 /**
- * Раздел по умолчанию для новой категории — по точному названию. Посменные категории —
- * без раздела (в элементы площадки они не попадают). null — без раздела («Прочее»).
- * Вызывается только при создании категории; дальше раздел меняют руками.
+ * Раздел по умолчанию для новой категории — по точному названию (посменной тоже).
+ * null — без раздела («Прочее»). Вызывается только при создании категории; дальше раздел
+ * меняют руками.
  */
-export function defaultSectionKeyForCategory(category: {
-  name: string;
-  perShift: boolean;
-}): SectionKey | null {
-  if (category.perShift) return null;
+export function defaultSectionKeyForCategory(category: { name: string }): SectionKey | null {
   const name = normalizeCategoryName(category.name);
   for (const [key, names] of Object.entries(CATEGORY_DEFAULT_NAMES)) {
     if (names.includes(name)) return key as SectionKey;
@@ -113,14 +120,12 @@ export function defaultSectionKeyForCategory(category: {
 export type AutoRowSection = { key: SectionKey } | { id: string };
 
 /**
- * Позиция каталога → раздел по настройке её категории. Посменные — не в элементах (null).
+ * Позиция каталога (из сцен или посменная) → раздел по настройке её категории.
  * Раздел не выбран (или выбран спецтранспорт, который правится в своём блоке) — «Прочее».
  */
 export function sectionForResourceCategory(category: {
-  perShift: boolean;
   callSheetSection: { id: string; key: string | null } | null;
-}): AutoRowSection | null {
-  if (category.perShift) return null;
+}): AutoRowSection {
   const section = category.callSheetSection;
   if (!section || section.key === SPECIAL_TRANSPORT_KEY) return { key: OTHER_SECTION_KEY };
   return { id: section.id };
@@ -141,12 +146,21 @@ export type AutoSourceScene = {
     quantity: number;
     item: {
       name: string;
-      category: {
-        perShift: boolean;
-        callSheetSection: { id: string; key: string | null } | null;
-      };
+      category: { callSheetSection: { id: string; key: string | null } | null };
     };
   }[];
+};
+
+/** Посменный ресурс, добавленный в день (ShootDayResourceUsage), с его временем. */
+export type AutoSourceShiftResource = {
+  itemId: string;
+  arrivalTime: string | null;
+  readyTime: string | null;
+  wrapTime: string | null;
+  item: {
+    name: string;
+    category: { callSheetSection: { id: string; key: string | null } | null };
+  };
 };
 
 /** Авто-строка раздела: что, сколько, в каких сценах. */
@@ -156,8 +170,12 @@ export type AutoElementRow = {
   name: string;
   /** Наибольшее количество по сценам; null — количества нет (элемент разбора). */
   quantity: string | null;
-  /** Номера сцен через запятую. */
+  /** Номера сцен через запятую ("" — посменный ресурс, не из сцен). */
   scenes: string;
+  /** Время из дня: у посменного ресурса — подача, готов, конец; иначе null. */
+  arrivalTime: string | null;
+  readyTime: string | null;
+  wrapTime: string | null;
 };
 
 /** Номер сцены как в документах дня: «серия-номер+постфикс». */
@@ -209,7 +227,10 @@ type Accumulator = {
   name: string;
   quantity: number | null;
   scenes: Set<string>;
+  times: { arrivalTime: string | null; readyTime: string | null; wrapTime: string | null };
 };
+
+const NO_TIMES = { arrivalTime: null, readyTime: null, wrapTime: null };
 
 function add(
   map: Map<string, Accumulator>,
@@ -226,7 +247,7 @@ function add(
     existing.scenes.add(sceneNumber);
     return;
   }
-  map.set(autoKey, { section, name, quantity, scenes: new Set([sceneNumber]) });
+  map.set(autoKey, { section, name, quantity, scenes: new Set([sceneNumber]), times: NO_TIMES });
 }
 
 const SECTION_ORDER = new Map<string, number>(
@@ -240,9 +261,13 @@ function sectionOrder(section: AutoRowSection): number {
 /**
  * Авто-строки элементов площадки из сцен дня. Вырезанные сцены строк не дают.
  * Одинаковое из разных сцен — одна строка: количество — наибольшее, сцены — список номеров.
+ * Посменные ресурсы дня — тоже строки (в разделе своей категории), с их временем подачи.
  * Порядок: системные разделы по порядку по умолчанию, потом разделы проекта, внутри — по названию.
  */
-export function buildAutoRows(scenes: AutoSourceScene[]): AutoElementRow[] {
+export function buildAutoRows(
+  scenes: AutoSourceScene[],
+  shiftResources: AutoSourceShiftResource[] = [],
+): AutoElementRow[] {
   const map = new Map<string, Accumulator>();
   for (const scene of scenes) {
     if (scene.cutAt) continue;
@@ -262,8 +287,29 @@ export function buildAutoRows(scenes: AutoSourceScene[]): AutoElementRow[] {
     for (const link of scene.resourceItems) {
       const section = sectionForResourceCategory(link.item.category);
       const name = link.item.name.trim();
-      if (!section || !name) continue;
+      if (!name) continue;
       add(map, itemAutoKey(link.itemId), section, name, link.quantity, num);
+    }
+  }
+  for (const usage of shiftResources) {
+    const name = usage.item.name.trim();
+    if (!name) continue;
+    const times = {
+      arrivalTime: usage.arrivalTime || null,
+      readyTime: usage.readyTime || null,
+      wrapTime: usage.wrapTime || null,
+    };
+    const key = itemAutoKey(usage.itemId);
+    const existing = map.get(key);
+    if (existing) existing.times = times;
+    else {
+      map.set(key, {
+        section: sectionForResourceCategory(usage.item.category),
+        name,
+        quantity: null,
+        scenes: new Set(),
+        times,
+      });
     }
   }
   return [...map.entries()]
@@ -275,6 +321,7 @@ export function buildAutoRows(scenes: AutoSourceScene[]): AutoElementRow[] {
       scenes: [...entry.scenes]
         .sort((a, b) => a.localeCompare(b, "ru", { numeric: true }))
         .join(", "),
+      ...entry.times,
     }))
     .sort(
       (a, b) =>
@@ -330,9 +377,9 @@ export function applyOverride(
     name: override?.name || auto.name,
     quantity: override?.quantity ?? auto.quantity ?? "",
     scenes: override?.scenes ?? auto.scenes,
-    arrivalTime: override?.arrivalTime ?? "",
-    readyTime: override?.readyTime ?? "",
-    wrapTime: override?.wrapTime ?? "",
+    arrivalTime: override?.arrivalTime ?? auto.arrivalTime ?? "",
+    readyTime: override?.readyTime ?? auto.readyTime ?? "",
+    wrapTime: override?.wrapTime ?? auto.wrapTime ?? "",
     notes: override?.notes ?? "",
     secondUnit: override?.secondUnit ?? false,
   };
@@ -365,14 +412,16 @@ export function overrideFromEdit(
   edit: ElementValues & { hidden: boolean },
 ): Omit<SavedElement, "sectionId" | "autoKey" | "sortOrder"> | null {
   const orNull = (v: string) => (v === "" ? null : v);
+  // Время как в дне — не правка (null); стёрли время, которое было в дне, — "".
+  const time = (v: string, fromDay: string | null) => (v === (fromDay ?? "") ? null : v);
   const row = {
     hidden: edit.hidden,
     name: edit.name === "" || edit.name === auto.name ? "" : edit.name,
     quantity: edit.quantity === (auto.quantity ?? "") ? null : edit.quantity,
     scenes: edit.scenes === auto.scenes ? null : edit.scenes,
-    arrivalTime: orNull(edit.arrivalTime),
-    readyTime: orNull(edit.readyTime),
-    wrapTime: orNull(edit.wrapTime),
+    arrivalTime: time(edit.arrivalTime, auto.arrivalTime),
+    readyTime: time(edit.readyTime, auto.readyTime),
+    wrapTime: time(edit.wrapTime, auto.wrapTime),
     notes: orNull(edit.notes),
     secondUnit: edit.secondUnit,
   };
@@ -394,49 +443,81 @@ export function overrideFromEdit(
 export type SectionRecord = { id: string; key: string | null; name: string };
 
 /**
- * Разделы для экрана: из базы по порядку, недостающие системные — из кода (id null) в конце.
- * Пока у проекта разделов в базе нет, это ровно разделы по умолчанию.
+ * Куда встают недостающие системные разделы: сразу после ближайшего предыдущего раздела из
+ * списка по умолчанию, который у проекта есть (так «Грим» встаёт после «Костюма», даже если
+ * разделы переставляли); «Прочее» — всегда в конец. `rows` — разделы проекта по порядку.
+ */
+export function placeMissingSections<T extends { key: string | null }>(
+  rows: T[],
+): ({ row: T } | { missing: (typeof DEFAULT_CALL_SHEET_SECTIONS)[number] })[] {
+  const list: ({ row: T } | { missing: (typeof DEFAULT_CALL_SHEET_SECTIONS)[number] })[] =
+    rows.map((row) => ({ row }));
+  const keyAt = (index: number) => {
+    const item = list[index]!;
+    return "row" in item ? item.row.key : item.missing.key;
+  };
+  const present = new Set(rows.map((row) => row.key));
+  for (const [order, section] of DEFAULT_CALL_SHEET_SECTIONS.entries()) {
+    if (present.has(section.key)) continue;
+    let at = 0;
+    if (section.key === OTHER_SECTION_KEY) at = list.length;
+    else {
+      for (let prev = order - 1; prev >= 0; prev--) {
+        const prevKey = DEFAULT_CALL_SHEET_SECTIONS[prev]!.key;
+        const index = list.findIndex((_item, i) => keyAt(i) === prevKey);
+        if (index >= 0) {
+          at = index + 1;
+          break;
+        }
+      }
+    }
+    list.splice(at, 0, { missing: section });
+    present.add(section.key);
+  }
+  return list;
+}
+
+/**
+ * Разделы для экрана: из базы по порядку, недостающие системные — из кода (id null) на своих
+ * местах. Пока у проекта разделов в базе нет, это ровно разделы по умолчанию.
  */
 export function effectiveSections(
   dbRows: SectionRecord[],
 ): { id: string | null; key: string | null; name: string }[] {
-  const keys = new Set(dbRows.map((row) => row.key));
-  return [
-    ...dbRows.map((row) => ({ id: row.id, key: row.key, name: row.name })),
-    ...DEFAULT_CALL_SHEET_SECTIONS.filter((s) => !keys.has(s.key)).map((s) => ({
-      id: null,
-      key: s.key,
-      name: s.name,
-    })),
-  ];
+  return placeMissingSections(dbRows).map((item) =>
+    "row" in item
+      ? { id: item.row.id, key: item.row.key, name: item.row.name }
+      : { id: null, key: item.missing.key, name: item.missing.name },
+  );
 }
 
 /** Что нужно базе для создания недостающих системных разделов. */
 export type SectionsStore = {
-  listKeys: () => Promise<{ key: string | null; sortOrder: number }[]>;
+  /** Разделы проекта по порядку. */
+  list: () => Promise<{ id: string; key: string | null; sortOrder: number }[]>;
   /** Создать строки, пропуская уже существующие по [projectId, key]. Вернуть число созданных. */
   createManySkipDuplicates: (
     rows: { projectId: string; key: string; name: string; sortOrder: number }[],
   ) => Promise<number>;
+  /** Новый порядок разделов, которые сдвинулись из-за вставки. */
+  setSortOrders: (rows: { id: string; sortOrder: number }[]) => Promise<void>;
 };
 
 /**
- * Создаёт недостающие системные разделы проекта. Повторный и одновременный вызов безопасны:
- * уникальный ключ [projectId, key] и пропуск дублей.
+ * Создаёт недостающие системные разделы проекта на своих местах (см. placeMissingSections),
+ * сдвигая порядок остальных. Повторный и одновременный вызов безопасны: уникальный ключ
+ * [projectId, key] и пропуск дублей.
  */
 export async function ensureSectionsIn(store: SectionsStore, projectId: string): Promise<number> {
-  const existing = await store.listKeys();
-  const keys = new Set(existing.map((row) => row.key));
-  const missing = DEFAULT_CALL_SHEET_SECTIONS.filter((s) => !keys.has(s.key));
-  if (missing.length === 0) return 0;
-  const base =
-    existing.length === 0 ? 0 : Math.max(...existing.map((row) => row.sortOrder)) + 1;
-  return store.createManySkipDuplicates(
-    missing.map((s, index) => ({
-      projectId,
-      key: s.key,
-      name: s.name,
-      sortOrder: base + index,
-    })),
+  const existing = [...(await store.list())].sort((a, b) => a.sortOrder - b.sortOrder);
+  const placed = placeMissingSections(existing);
+  const missing = placed.flatMap((item, index) =>
+    "missing" in item ? [{ projectId, key: item.missing.key, name: item.missing.name, sortOrder: index }] : [],
   );
+  if (missing.length === 0) return 0;
+  const moved = placed.flatMap((item, index) =>
+    "row" in item && item.row.sortOrder !== index ? [{ id: item.row.id, sortOrder: index }] : [],
+  );
+  if (moved.length > 0) await store.setSortOrders(moved);
+  return store.createManySkipDuplicates(missing);
 }

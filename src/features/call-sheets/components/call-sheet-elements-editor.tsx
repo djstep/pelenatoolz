@@ -263,13 +263,19 @@ function AutoRowView({
       </div>
     );
   }
+  // Посменный ресурс дня (не из сцен) — сцен у строки нет, время — из дня.
+  const perShift = row.auto.scenes === "";
   return (
     <div className="flex flex-wrap items-start gap-2 rounded-lg border border-[var(--border)]/60 bg-[var(--surface-1)] px-3 py-2.5 text-sm">
       <span
         className="mt-2 rounded bg-[var(--accent)]/15 px-1.5 text-[0.65rem] font-semibold uppercase tracking-wide text-[var(--accent)]"
-        title="Строка из разбора сцен дня. Пустое поле — значение из сцен."
+        title={
+          perShift
+            ? "Посменный ресурс, добавленный в день. Время подачи — из дня; поправить можно здесь."
+            : "Строка из разбора сцен дня. Пустое поле — значение из сцен."
+        }
       >
-        сцены
+        {perShift ? "смена" : "сцены"}
       </span>
       <ElementFields
         label={`${sectionName}, строка из сцен ${index + 1}`}
@@ -349,7 +355,8 @@ export function CallSheetElementsEditor({
       <input type="hidden" name="payload" value={payload} />
       <p className="text-xs text-[var(--muted-fg)]">
         Строки с пометкой «сцены» — из разбора сцен дня (вырезанные сцены не учитываются). Их можно
-        поправить или убрать из этого вызывного; пустое поле — значение из сцен. Ручные строки
+        поправить или убрать из этого вызывного; пустое поле — значение из сцен. Строки «смена» —
+        посменные ресурсы, добавленные в день, с их временем подачи. Ручные строки
         добавляются кнопкой «+ Строка», порядок — перетаскиванием за ⠿.
       </p>
 

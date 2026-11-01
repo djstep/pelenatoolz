@@ -9,6 +9,7 @@ import {
   mergeAutoRows,
   parseAutoKey,
   type AutoSourceScene,
+  type AutoSourceShiftResource,
   type ElementValues,
   type SavedElement,
 } from "@/features/call-sheets/lib/sections";
@@ -80,7 +81,11 @@ export async function loadElementsAutoSource(
   db: Pick<Tx, "shootDay">,
   projectId: string,
   shootDayId: string,
-): Promise<{ scenes: AutoSourceScene[]; transports: SpecialTransportRow[] } | null> {
+): Promise<{
+  scenes: AutoSourceScene[];
+  shiftResources: AutoSourceShiftResource[];
+  transports: SpecialTransportRow[];
+} | null> {
   const day = await db.shootDay.findFirst({
     where: { id: shootDayId, projectId },
     select: {
@@ -103,14 +108,30 @@ export async function loadElementsAutoSource(
                     select: {
                       name: true,
                       category: {
-                        select: {
-                          perShift: true,
-                          callSheetSection: { select: { id: true, key: true } },
-                        },
+                        select: { callSheetSection: { select: { id: true, key: true } } },
                       },
                     },
                   },
                 },
+              },
+            },
+          },
+        },
+      },
+      // Посменные ресурсы, добавленные в день, — с их временем подачи.
+      resourceUsages: {
+        where: { isUsed: true, item: { category: { projectId, perShift: true } } },
+        orderBy: { item: { name: "asc" } },
+        select: {
+          itemId: true,
+          arrivalTime: true,
+          readyTime: true,
+          wrapTime: true,
+          item: {
+            select: {
+              name: true,
+              category: {
+                select: { callSheetSection: { select: { id: true, key: true } } },
               },
             },
           },
@@ -123,7 +144,11 @@ export async function loadElementsAutoSource(
     },
   });
   if (!day) return null;
-  return { scenes: day.scenes.map((row) => row.scene), transports: day.transports };
+  return {
+    scenes: day.scenes.map((row) => row.scene),
+    shiftResources: day.resourceUsages,
+    transports: day.transports,
+  };
 }
 
 export const savedElementSelect = {
@@ -249,7 +274,7 @@ export async function getCallSheetElementsEditor(
   );
   const nameById = new Map(dbSections.map((row) => [row.id, row.name]));
 
-  const merged = mergeAutoRows(buildAutoRows(source?.scenes ?? []), sheet.elements);
+  const merged = mergeAutoRows(buildAutoRows(source?.scenes ?? [], source?.shiftResources ?? []), sheet.elements);
   const nameOf = await orphanNames(projectId, merged.orphans);
 
   return {

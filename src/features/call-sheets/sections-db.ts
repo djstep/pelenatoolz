@@ -15,11 +15,20 @@ export async function ensureCallSheetSections(
 ): Promise<void> {
   await ensureSectionsIn(
     {
-      listKeys: () =>
+      list: () =>
         tx.callSheetSection.findMany({
           where: { projectId },
-          select: { key: true, sortOrder: true },
+          orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+          select: { id: true, key: true, sortOrder: true },
         }),
+      setSortOrders: async (rows) => {
+        for (const row of rows) {
+          await tx.callSheetSection.update({
+            where: { id: row.id },
+            data: { sortOrder: row.sortOrder },
+          });
+        }
+      },
       createManySkipDuplicates: async (rows) =>
         (await tx.callSheetSection.createMany({ data: rows, skipDuplicates: true })).count,
     },

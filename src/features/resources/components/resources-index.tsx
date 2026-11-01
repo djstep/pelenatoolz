@@ -107,11 +107,9 @@ export function ResourcesIndex({
                     {flagsSummary(c)}
                   </td>
                   <td className="px-3 py-3 text-[var(--muted-fg)]">
-                    {c.perShift
-                      ? "—"
-                      : c.callSheetSectionId
-                        ? (sectionName.get(c.callSheetSectionId) ?? "Прочее")
-                        : "Прочее"}
+                    {c.callSheetSectionId
+                      ? (sectionName.get(c.callSheetSectionId) ?? "Прочее")
+                      : "Прочее"}
                   </td>
                   {canWrite ? (
                     <td className="px-3 py-3 text-right">
