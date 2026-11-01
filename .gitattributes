@@ -1,0 +1,22 @@
+# Переводы строк: в репозитории и на диске — LF на любой системе (core.autocrlf не влияет).
+# Тесты читают исходники и ищут в них многострочный текст; Prisma считает контрольные
+# суммы миграций по байтам файла.
+* text=auto eol=lf
+
+# Бинарные файлы — без преобразований и без текстового diff.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.pdf binary
+*.docx binary
+*.doc binary
+*.xlsx binary
+*.xls binary
+*.zip binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
