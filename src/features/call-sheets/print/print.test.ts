@@ -560,7 +560,7 @@ describe("шрифт листа по адресу (просмотр на стр�
     const route = readFileSync(
       path.join(process.cwd(), "src/app/api/projects/[projectId]/call-sheets/[dayId]/sheet/route.ts"),
       "utf8",
-    );
+    ).replace(/\r\n/g, "\n");
     assert.ok(
       route.includes(
         `return callSheetSheetResponse(
