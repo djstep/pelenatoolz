@@ -221,9 +221,6 @@ export function PermissionMatrixEditor({
                   {FLAG_LABELS.financeRead}
                 </th>
                 <th className="px-2 py-2 text-center font-medium">
-                  {FLAG_LABELS.financeWrite}
-                </th>
-                <th className="px-2 py-2 text-center font-medium">
                   {FLAG_LABELS.financeUnlock}
                 </th>
               </tr>
@@ -244,14 +241,6 @@ export function PermissionMatrixEditor({
                         type="checkbox"
                         name={`${prefix}_${sectionId}_financeRead`}
                         defaultChecked={matrix[sectionId].financeRead}
-                        className="h-4 w-4 accent-[var(--accent)]"
-                      />
-                    </td>
-                    <td className="px-2 py-2 text-center">
-                      <input
-                        type="checkbox"
-                        name={`${prefix}_${sectionId}_financeWrite`}
-                        defaultChecked={matrix[sectionId].financeWrite}
                         className="h-4 w-4 accent-[var(--accent)]"
                       />
                     </td>

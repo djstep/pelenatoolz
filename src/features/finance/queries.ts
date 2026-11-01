@@ -31,7 +31,6 @@ export async function listActorsBrief(projectId: string) {
       lastName: true,
       firstName: true,
       middleName: true,
-      shiftRate: true,
     },
     orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
   });

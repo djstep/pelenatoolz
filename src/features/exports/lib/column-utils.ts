@@ -1,6 +1,8 @@
 import {
+  ATTENDANCE_BUILTIN_SECTIONS,
   EXTRAS_BUCKET_HEADER,
   EXPORT_LAYOUT_KEYS,
+  parseAttendanceCategorySectionId,
   type AttendanceSheetSettings,
   type ExportColumn,
   type ExportFieldDef,
@@ -47,6 +49,12 @@ const EXPORT_LAYOUT_PERMISSIONS: Record<
   kppFull: { read: "schedule:read", write: "schedule:write" },
   kppShort: { read: "schedule:read", write: "schedule:write" },
 };
+
+/**
+ * «Настройка явочного листа» — настройка раздела «КПП и вызывные»: сохраняет только участник
+ * с правкой этого раздела. Открыть окно и выгрузить явочный лист можно и без неё.
+ */
+export const ATTENDANCE_SHEET_WRITE_PERMISSION: Permission = "schedule:write";
 
 export function exportLayoutPermission(
   key: ExportLayoutKey,
@@ -100,6 +108,23 @@ export function normalizeAttendanceSheetSettings(
       (id): id is string => typeof id === "string" && id.trim().length > 0,
     ),
   };
+}
+
+/**
+ * Id блоков явочного листа, которые можно сохранить: встроенные блоки и категории ресурсов
+ * этого проекта (`projectCategoryIds`). Прочие id и повторы отбрасываются.
+ */
+export function keepProjectAttendanceSectionIds(
+  ids: readonly string[],
+  projectCategoryIds: ReadonlySet<string>,
+): string[] {
+  const builtin = new Set<string>(ATTENDANCE_BUILTIN_SECTIONS.map((s) => s.id));
+  const kept = new Set<string>();
+  for (const id of ids) {
+    const categoryId = parseAttendanceCategorySectionId(id);
+    if (builtin.has(id) || (categoryId && projectCategoryIds.has(categoryId))) kept.add(id);
+  }
+  return [...kept];
 }
 
 export function parseExportSettings(raw: unknown): ExportSettings {

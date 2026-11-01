@@ -12,8 +12,11 @@ type AuditInput = {
   changes?: Record<string, unknown>;
 };
 
-export async function writeAuditLog(input: AuditInput) {
-  await prisma.auditLog.create({
+/** Клиент базы или транзакция: запись журнала откатится вместе с действием. */
+export type AuditDb = Pick<typeof prisma, "auditLog">;
+
+export async function writeAuditLog(input: AuditInput, db: AuditDb = prisma) {
+  await db.auditLog.create({
     data: {
       projectId: input.projectId,
       userId: input.userId,

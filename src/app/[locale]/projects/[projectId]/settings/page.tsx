@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
+import { canOpenProjectSettings } from "@/features/projects/lib/project-list-access";
 import { ProjectDangerZone } from "@/features/projects/components/project-danger-zone";
 import { ProjectSettingsForm } from "@/features/projects/components/project-settings-form";
 import { Card } from "@/shared/ui/card";
@@ -16,7 +17,7 @@ export default async function ProjectSettingsPage({ params }: Props) {
   const canWrite = ctx.can("project:write");
   const canManage = ctx.can("project:archive");
 
-  if (!canWrite && !canManage) {
+  if (!canOpenProjectSettings(ctx.can)) {
     return <p className="text-sm text-[var(--danger)]">Нет доступа к настройкам</p>;
   }
 
@@ -47,6 +48,7 @@ export default async function ProjectSettingsPage({ params }: Props) {
             projectId={projectId}
             projectName={ctx.project.name}
             status={ctx.project.status}
+            canDelete={ctx.project.ownerUserId === ctx.user.id}
           />
         </Card>
       ) : null}

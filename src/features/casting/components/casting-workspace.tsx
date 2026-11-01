@@ -28,6 +28,7 @@ import { submitKeepingFields } from "@/shared/ui/forms/submit-keeping-fields";
 import { useActionToast, useToast } from "@/shared/ui/toast";
 import { Button } from "@/shared/ui/button";
 import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
+import type { FinanceAccess } from "@/shared/lib/finance-fields";
 import { Modal } from "@/shared/ui/modal";
 import { Select } from "@/shared/ui/select";
 import { useActionSuccess } from "@/shared/ui/unsaved/use-action-success";
@@ -44,12 +45,14 @@ function PersonModal({
   projectId,
   person,
   characters,
+  finance,
   open,
   onClose,
 }: {
   projectId: string;
   person?: PersonRow;
   characters: CharacterOpt[];
+  finance: FinanceAccess;
   open: boolean;
   onClose: () => void;
 }) {
@@ -91,6 +94,7 @@ function PersonModal({
           person={person}
           characters={characters}
           showCharacterPicker={!isEdit}
+          finance={finance}
         />
       </form>
     </Modal>
@@ -103,6 +107,7 @@ export function CastingWorkspace({
   people,
   characters,
   canWrite,
+  finance,
   characterFilter,
 }: {
   projectId: string;
@@ -110,6 +115,8 @@ export function CastingWorkspace({
   people: PersonRow[];
   characters: CharacterOpt[];
   canWrite: boolean;
+  /** Колонка «Ставка» и поля ставки в форме — фин. условия актёров. */
+  finance: FinanceAccess;
   /** `?character=` из адреса: id персонажа или «none»; неизвестное значение — «Все». */
   characterFilter?: string;
 }) {
@@ -119,6 +126,7 @@ export function CastingWorkspace({
   const [pending, startTransition] = useTransition();
   const toast = useToast();
   const confirmDelete = useConfirm();
+  const showRate = finance !== "none";
 
   const { groups, charactersWithoutCandidates } = useMemo(
     () => groupCastingPeople(people, characters),
@@ -210,7 +218,7 @@ export function CastingWorkspace({
                 <th className="py-2 px-3">Кандидат</th>
                 <th className="py-2 px-3">Контакты</th>
                 <th className="py-2 px-3">Статус</th>
-                <th className="py-2 px-3">Ставка</th>
+                {showRate ? <th className="py-2 px-3">Ставка</th> : null}
                 {canWrite ? <th className="py-2 px-3" /> : null}
               </tr>
             </thead>
@@ -218,7 +226,7 @@ export function CastingWorkspace({
               <tbody key={group.key}>
                 <tr className="border-b border-[var(--border)]">
                   <th
-                    colSpan={canWrite ? 5 : 4}
+                    colSpan={3 + (showRate ? 1 : 0) + (canWrite ? 1 : 0)}
                     className="py-2 px-3 pt-4 text-sm font-semibold"
                   >
                     {group.character ? (
@@ -279,9 +287,11 @@ export function CastingWorkspace({
                         <span className="text-[var(--muted-fg)]">—</span>
                       )}
                     </td>
-                    <td className="py-3 px-3 whitespace-nowrap">
-                      {person.proposedRate?.toString() ?? "—"}
-                    </td>
+                    {showRate ? (
+                      <td className="py-3 px-3 whitespace-nowrap">
+                        {person.proposedRate?.toString() ?? "—"}
+                      </td>
+                    ) : null}
                     {canWrite ? (
                       <td className="py-3 px-3 text-right whitespace-nowrap">
                         <div className="flex justify-end gap-2">
@@ -330,6 +340,7 @@ export function CastingWorkspace({
       <PersonModal
         projectId={projectId}
         characters={characters}
+        finance={finance}
         open={creating}
         onClose={() => setCreating(false)}
       />
@@ -337,6 +348,7 @@ export function CastingWorkspace({
         projectId={projectId}
         person={editing ?? undefined}
         characters={characters}
+        finance={finance}
         open={editing != null}
         onClose={() => setEditing(null)}
       />

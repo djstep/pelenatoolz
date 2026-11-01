@@ -16,7 +16,11 @@ export default async function SettingsResourceCategoryPage({ params }: Props) {
     return <p className="text-sm text-[var(--danger)]">Нет доступа</p>;
   }
 
-  const category = await getResourceCategory(projectId, categoryId);
+  const category = await getResourceCategory(
+    projectId,
+    categoryId,
+    ctx.canFinanceRead({ categoryId }),
+  );
   if (!category) notFound();
 
   return (

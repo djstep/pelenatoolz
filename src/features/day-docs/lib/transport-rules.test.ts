@@ -6,8 +6,6 @@ import {
   checkTransportSave,
   DAY_NOT_FOUND,
   editorRowsPayload,
-  FINANCE_BUDGET_ITEM,
-  FINANCE_KM_RATE,
   NO_RIGHTS,
   parseTransportPayload,
   planTransportSave,
@@ -195,42 +193,52 @@ describe("проверки сохранения (действие вызывае
     assert.deepEqual(calls, ["inProject:ShootDay:day1", "load:day1"]);
   });
 
-  test("сменить статью без фин. права — отказ всего сохранения", async () => {
-    const { deps } = fakeDeps({ canEditFinance: false });
+  test("правило волны 2в: без фин. права присланная статья отбрасывается, остальное сохраняется", async () => {
+    const { deps, calls } = fakeDeps({ canEditFinance: false });
     const result = await checkTransportSave(
       deps,
       "day1",
       payload([{ id: "t1", name: "Кран переименован", budgetItemId: "b2" }]),
     );
-    assert.deepEqual(result, { error: FINANCE_BUDGET_ITEM });
+    assert.ok("plan" in result, JSON.stringify(result));
+    assert.equal(result.plan.update[0]!.data.name, "Кран переименован");
+    assert.equal(result.plan.update[0]!.data.budgetItemId, "b1", "прежняя статья");
+    assert.deepEqual(result.plan.changedBudgetItemIds, []);
+    assert.deepEqual(result.plan.financeChanged, { budgetItem: false, kmRate: false });
+    assert.ok(calls.includes("items:"), "чужая статья не проверяется — её нет в плане");
   });
 
-  test("новая строка со статьёй без фин. права — отказ; убрать статью без права — тоже отказ", async () => {
+  test("без фин. права: новая строка — без статьи и ставки; убрать статью нельзя — остаётся прежняя", async () => {
     const { deps } = fakeDeps({ canEditFinance: false });
-    assert.deepEqual(
-      await checkTransportSave(
-        deps,
-        "day1",
-        payload([{ id: "t1", name: "Кран" }, { name: "Новый", budgetItemId: "b1" }]),
-      ),
-      { error: FINANCE_BUDGET_ITEM },
+    const added = await checkTransportSave(
+      deps,
+      "day1",
+      payload([{ id: "t1", name: "Кран" }, { name: "Новый", budgetItemId: "b1", kmRate: 10 }]),
     );
-    assert.deepEqual(
-      await checkTransportSave(deps, "day1", payload([{ id: "t1", name: "Кран", budgetItemId: "" }])),
-      { error: FINANCE_BUDGET_ITEM },
+    assert.ok("plan" in added, JSON.stringify(added));
+    assert.equal(added.plan.create[0]!.name, "Новый");
+    assert.equal(added.plan.create[0]!.budgetItemId, null);
+    assert.equal(added.plan.create[0]!.kmRate, null);
+
+    const cleared = await checkTransportSave(
+      deps,
+      "day1",
+      payload([{ id: "t1", name: "Кран", callTime: "07:00", budgetItemId: "", kmRate: null }]),
     );
+    assert.ok("plan" in cleared, JSON.stringify(cleared));
+    assert.deepEqual(cleared.plan.update, [], "статья и ставка прежние — менять нечего");
   });
 
-  test("сменить ставку км без фин. права — отказ", async () => {
+  test("без фин. права присланная ставка км отбрасывается, прежняя остаётся", async () => {
     const { deps } = fakeDeps({ canEditFinance: false });
-    assert.deepEqual(
-      await checkTransportSave(deps, "day1", payload([{ id: "t1", name: "Кран", kmRate: 60 }])),
-      { error: FINANCE_KM_RATE },
+    const result = await checkTransportSave(
+      deps,
+      "day1",
+      payload([{ id: "t1", name: "Кран", callTime: "09:00", kmRate: 60 }]),
     );
-    assert.deepEqual(
-      await checkTransportSave(deps, "day1", payload([{ name: "Новый", kmRate: 10 }])),
-      { error: FINANCE_KM_RATE },
-    );
+    assert.ok("plan" in result, JSON.stringify(result));
+    assert.equal(result.plan.update[0]!.data.callTime, "09:00");
+    assert.equal(result.plan.update[0]!.data.kmRate, 50);
   });
 
   test("без фин. права оставить статью и ставку как были — можно (присланы те же или не присланы)", async () => {

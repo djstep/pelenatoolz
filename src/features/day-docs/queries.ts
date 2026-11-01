@@ -1,4 +1,11 @@
+import {
+  SCENE_ACTOR_SELECT,
+  SCENE_CHARACTER_SELECT,
+} from "@/features/characters/lib/character-fields";
+import { SCENE_LOCATION_SELECT } from "@/features/locations/lib/location-fields";
+import { SCENE_RESOURCE_ITEM_SELECT } from "@/features/resources/lib/item-fields";
 import { prisma } from "@/shared/db/prisma";
+import { selectFields } from "@/shared/lib/finance-fields";
 import { serializeForClient } from "@/shared/db/serialize-decimal";
 import {
   computeActorTimingBaselines,
@@ -8,6 +15,27 @@ import {
 } from "@/features/day-docs/lib/compute-call-timings";
 
 export type { ActorTimingBaselines, ResourceTimingBaselines };
+
+/**
+ * Ресурс либретто — без устаревших `unitPrice` / `total` (деньги): вызывной, явочный лист и
+ * пересчёт таймингов берут только категорию, название и количество.
+ */
+const SCENE_RESOURCE_SELECT = selectFields(["id", "sceneId", "category", "name", "quantity"]);
+
+/**
+ * Спецтранспорт дня — без ставки за км и статьи сметы: пакет дня уходит в браузер (правка,
+ * планер) и в лист. Ставку и статью редактор спецтранспорта грузит сам, по фин. правам.
+ */
+const DAY_TRANSPORT_SELECT = selectFields([
+  "id",
+  "shootDayId",
+  "name",
+  "callTime",
+  "wrapTime",
+  "scenes",
+  "notes",
+  "sortOrder",
+]);
 
 const sceneSelect = {
   id: true,
@@ -24,13 +52,14 @@ const sceneSelect = {
   scriptDay: true,
   /** Вырезана — в план, счётчики и хронометраж не идёт. */
   cutAt: true,
-  locations: { include: { location: true } },
-  characters: { include: { character: true } },
-  resources: true,
+  locations: { include: { location: { select: SCENE_LOCATION_SELECT } } },
+  characters: { include: { character: { select: SCENE_CHARACTER_SELECT } } },
+  resources: { select: SCENE_RESOURCE_SELECT },
   resourceItems: {
     include: {
       item: {
-        include: {
+        select: {
+          ...SCENE_RESOURCE_ITEM_SELECT,
           category: { select: { id: true, name: true, perShift: true } },
         },
       },
@@ -44,7 +73,7 @@ const shootDayInclude = {
     include: { scene: { select: sceneSelect } },
     orderBy: { sortOrder: "asc" as const },
   },
-  transports: { orderBy: { sortOrder: "asc" as const } },
+  transports: { select: DAY_TRANSPORT_SELECT, orderBy: { sortOrder: "asc" as const } },
   timeSlots: {
     include: { scene: { select: sceneSelect } },
     orderBy: { sortOrder: "asc" as const },
@@ -54,7 +83,8 @@ const shootDayInclude = {
   resourceUsages: {
     include: {
       item: {
-        include: {
+        select: {
+          ...SCENE_RESOURCE_ITEM_SELECT,
           category: {
             select: {
               id: true,
@@ -105,7 +135,7 @@ export async function getShootDayDocument(projectId: string, shootDayId: string)
     }),
     prisma.actor.findMany({
       where: { projectId },
-      include: { character: true },
+      select: { ...SCENE_ACTOR_SELECT, character: { select: SCENE_CHARACTER_SELECT } },
       orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
     }),
     prisma.scene.findMany({
@@ -140,7 +170,7 @@ export async function getNextShootDayBrief(
               postfix: true,
               episodeNumber: true,
               dayNight: true,
-              locations: { include: { location: true } },
+              locations: { include: { location: { select: SCENE_LOCATION_SELECT } } },
             },
           },
         },
@@ -331,7 +361,9 @@ export async function listPerShiftCatalogForDay(
 ): Promise<PerShiftCatalogOption[]> {
   const items = await prisma.resourceItem.findMany({
     where: { category: { projectId, perShift: true } },
-    include: {
+    select: {
+      id: true,
+      name: true,
       category: { select: { name: true } },
       shiftUsages: { where: { shootDayId }, select: { id: true } },
     },

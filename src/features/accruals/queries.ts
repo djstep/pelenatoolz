@@ -7,6 +7,7 @@ import {
 } from "@/features/accruals/lib/counterparty-hint";
 import { prisma } from "@/shared/db/prisma";
 import { serializeForClient } from "@/shared/db/serialize-decimal";
+import type { EntityFinanceTarget } from "@/features/roles/permissions-matrix";
 
 export type AccrualFilters = {
   q?: string;
@@ -136,11 +137,14 @@ export type ShiftEntryRow = {
 /**
  * «Ввод по сменам»: актёры, позиции ресурсов и объекты, у которых статья по умолчанию —
  * из смет, которые пользователь видит. Сумма — ставка смены, контрагент — подсказка.
+ * Ставка и налог — только с фин. просмотром источника (актёры / категория / объекты),
+ * как в отчёте смены; без него сумма 0 — вводится вручную.
  */
 export async function listShiftEntryRows(
   projectId: string,
   shootDayId: string | null,
   visibleItemIds: ReadonlySet<string>,
+  canFinanceRead: (target: EntityFinanceTarget) => boolean,
 ): Promise<ShiftEntryRow[]> {
   const ids = [...visibleItemIds];
   if (ids.length === 0) return [];
@@ -167,6 +171,7 @@ export async function listShiftEntryRows(
         defaultBudgetItemId: true,
         shiftRate: true,
         taxPercent: true,
+        categoryId: true,
         category: { select: { name: true } },
       },
       orderBy: [{ name: "asc" }],
@@ -217,6 +222,8 @@ export async function listShiftEntryRows(
   }
 
   const num = (v: Prisma.Decimal | null) => (v != null ? Number(v) : null);
+  const actorsFinance = canFinanceRead("actors");
+  const locationsFinance = canFinanceRead("locations");
   const rows: ShiftEntryRow[] = [];
   for (const a of actors) {
     const key = `actor:${a.id}`;
@@ -227,14 +234,15 @@ export async function listShiftEntryRows(
       hint: null,
       budgetItemId: a.defaultBudgetItemId!,
       counterpartyId: pickCounterparty({ actorId: a.id, names: actorNames(a) }, hints),
-      amount: num(a.shiftRate) ?? 0,
-      taxPercent: num(a.taxPercent),
+      amount: actorsFinance ? (num(a.shiftRate) ?? 0) : 0,
+      taxPercent: actorsFinance ? num(a.taxPercent) : null,
       onDay: onDay.has(key),
       accruedFromReport: accrued.has(key),
     });
   }
   for (const i of items) {
     const key = `resource:${i.id}`;
+    const itemFinance = canFinanceRead({ categoryId: i.categoryId });
     rows.push({
       key,
       kind: "resource",
@@ -242,8 +250,8 @@ export async function listShiftEntryRows(
       hint: i.category.name,
       budgetItemId: i.defaultBudgetItemId!,
       counterpartyId: pickCounterparty({ resourceItemId: i.id, names: [i.name] }, hints),
-      amount: num(i.shiftRate) ?? 0,
-      taxPercent: num(i.taxPercent),
+      amount: itemFinance ? (num(i.shiftRate) ?? 0) : 0,
+      taxPercent: itemFinance ? num(i.taxPercent) : null,
       onDay: onDay.has(key),
       accruedFromReport: accrued.has(key),
     });
@@ -257,8 +265,8 @@ export async function listShiftEntryRows(
       hint: null,
       budgetItemId: l.defaultBudgetItemId!,
       counterpartyId: pickCounterparty({ locationId: l.id, names: [l.name] }, hints),
-      amount: num(l.shiftRate) ?? 0,
-      taxPercent: num(l.taxPercent),
+      amount: locationsFinance ? (num(l.shiftRate) ?? 0) : 0,
+      taxPercent: locationsFinance ? num(l.taxPercent) : null,
       onDay: onDay.has(key),
       accruedFromReport: accrued.has(key),
     });

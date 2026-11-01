@@ -3,6 +3,7 @@ import { listProjectRoles } from "@/features/memberships/queries";
 import { listResourceCategories } from "@/features/resources/queries";
 import { RolesManager } from "@/features/roles/components/roles-manager";
 import { canManageMembers } from "@/features/memberships/permissions";
+import { MEMBERS_PAGES_PERMISSION } from "@/features/memberships/lib/members-pages-access";
 import { Card } from "@/shared/ui/card";
 
 type Props = {
@@ -13,7 +14,7 @@ export default async function ProjectRolesPage({ params }: Props) {
   const { projectId } = await params;
   const ctx = await requireProjectContext(projectId);
 
-  if (!ctx.can("members:read")) {
+  if (!ctx.can(MEMBERS_PAGES_PERMISSION)) {
     return <p className="text-sm text-[var(--danger)]">Нет доступа</p>;
   }
 

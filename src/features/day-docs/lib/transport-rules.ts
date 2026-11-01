@@ -103,10 +103,6 @@ export const NO_RIGHTS = "Недостаточно прав";
 export const DAY_NOT_FOUND = "Съёмочный день не найден";
 /** id строки не из этого дня (или строку уже удалили). */
 export const TRANSPORT_NOT_FOUND = "Объект не найден";
-export const FINANCE_BUDGET_ITEM =
-  "Статью сметы у спецтранспорта ставит и меняет только тот, у кого есть право «Финансы: правка». Ничего не сохранено — верните статью как было.";
-export const FINANCE_KM_RATE =
-  "Ставку за км у спецтранспорта меняет только тот, у кого есть право «Финансы: правка». Ничего не сохранено — верните ставку как было.";
 
 /** Строка спецтранспорта, как она лежит в базе (ставка — числом). */
 export type StoredTransport = {
@@ -228,8 +224,9 @@ export type TransportSaveDeps = {
 
 /**
  * Все проверки сохранения спецтранспорта до записи, по порядку: право правки вызывного
- * (до базы), день этого проекта, данные, id строк — этого дня, фин. право на смену статьи
- * и ставки км, статьи — из видимых смет. Любой отказ — ничего не пишется.
+ * (до базы), день этого проекта, данные, id строк — этого дня, статьи — из видимых смет.
+ * Без «Финансы: правка» статья и ставка км из браузера не берутся (остаются прежние).
+ * Любой отказ — ничего не пишется.
  */
 export async function checkTransportSave(
   deps: TransportSaveDeps,
@@ -248,20 +245,26 @@ export async function checkTransportSave(
   const parsed = parseTransportPayload(raw);
   if ("error" in parsed) return parsed;
 
+  // Правило волны 2в: без «Финансы: правка» присланные ставка км и статья отбрасываются —
+  // у сохранённых строк остаются прежние, у новых их нет; остальное сохраняется.
+  const data: TransportSaveData = deps.canEditFinance
+    ? parsed.data
+    : { rows: parsed.data.rows.map(withoutFinanceFields) };
+
   const existing = await deps.loadDayTransports(dayId);
-  const planned = planTransportSave(existing, parsed.data.rows);
+  const planned = planTransportSave(existing, data.rows);
   if ("error" in planned) return planned;
   const { plan } = planned;
-
-  if (!deps.canEditFinance) {
-    if (plan.financeChanged.budgetItem) return { error: FINANCE_BUDGET_ITEM };
-    if (plan.financeChanged.kmRate) return { error: FINANCE_KM_RATE };
-  }
 
   const itemError = await deps.budgetItemsUsable(plan.changedBudgetItemIds);
   if (itemError) return { error: itemError };
 
-  return { dayId, existing, data: parsed.data, plan };
+  return { dayId, existing, data, plan };
+}
+
+/** Строка без фин. полей: `planTransportSave` возьмёт сохранённые значения (у новой — пусто). */
+function withoutFinanceFields(row: TransportRowInput): TransportRowInput {
+  return { ...row, kmRate: undefined, budgetItemId: undefined };
 }
 
 /**

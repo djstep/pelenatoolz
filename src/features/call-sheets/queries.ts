@@ -3,6 +3,7 @@ import "server-only";
 import { MembershipStatus } from "@prisma/client";
 import type { TemplateForCopy } from "@/features/call-sheets/lib/template-rules";
 import { memberLabel } from "@/features/departments/queries";
+import { CALL_SHEET_SCHEME_LOCATION_SELECT } from "@/features/locations/lib/location-fields";
 import { prisma } from "@/shared/db/prisma";
 
 type TransactionCallback = Extract<
@@ -215,16 +216,9 @@ export async function getCallSheetForDay(
       actorRestrictions: true,
       schemeLocationId: true,
       schemeLocation: {
+        // Только открытые поля объекта (ставки объекта в вызывной не идут).
         select: {
-          id: true,
-          name: true,
-          sublocation: true,
-          latitude: true,
-          longitude: true,
-          address: true,
-          directions: true,
-          parking: true,
-          onSiteNotes: true,
+          ...CALL_SHEET_SCHEME_LOCATION_SELECT,
           points: {
             orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
             select: { number: true, name: true, description: true },

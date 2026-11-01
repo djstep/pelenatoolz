@@ -9,6 +9,7 @@ import {
 import type { DayAstro } from "@/features/day-docs/lib/city-astro";
 import type { DayDocBundle } from "@/features/day-docs/lib/build-day-doc";
 import { NO_RIGHTS, DAY_NOT_FOUND } from "@/features/call-sheets/lib/template-rules";
+import { formatFileDate } from "@/shared/i18n/format-date";
 
 /**
  * Данные страницы вызывного → вход модели листа. Одна сборка для просмотра на странице,
@@ -74,20 +75,18 @@ export async function checkCallSheetRead(
 
 // ---- Имя файла ----
 
-/** «Вызывной ИРП 11.09.2026 смена 40» — без символов, запрещённых в именах файлов. */
-export function callSheetFileBaseName(model: Pick<CallSheetPrintModel, "projectName" | "numericDate" | "shiftNumber">) {
-  const name = [
-    "Вызывной",
-    model.projectName,
-    model.numericDate,
-    model.shiftNumber ? `смена ${model.shiftNumber}` : null,
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .replace(/[\\/:*?"<>|\u0000-\u001f\u007f]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-  return name.slice(0, 150) || "Вызывной";
+/**
+ * Имя файла вызывного — формат волны 2в, как у явочного листа: `call-sheet-day-12-2026-09-11`
+ * (дата дня — `ГГГГ-ММ-ДД` по часовому поясу проекта). Утверждённая версия — `…-v2`.
+ */
+export function callSheetFileBaseName(
+  day: { dayNumber: number; date: Date | string },
+  timezone: string | null,
+  version?: number,
+) {
+  return `call-sheet-day-${day.dayNumber}-${formatFileDate(day.date, timezone)}${
+    version ? `-v${version}` : ""
+  }`;
 }
 
 /**

@@ -4,10 +4,17 @@ import { revalidatePath } from "next/cache";
 import { Prisma, type SceneStatus } from "@prisma/client";
 import { sumExtrasPay } from "@/features/payroll/lib/parse-extra-payments";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
+import { cutSceneFactRefusal } from "@/features/reports/lib/cut-scene-fact";
+import { formatSceneNumber } from "@/features/script/lib/libretto-display";
 import { syncShootDayResourceUsages } from "@/features/schedule/lib/sync-shoot-day-resources";
 import { AuditEntityType } from "@/shared/audit/entity-types";
 import { recordAudit } from "@/shared/audit/with-audit";
 import { prisma } from "@/shared/db/prisma";
+import {
+  workRowAccess,
+  type ReportViewer,
+  type WorkRowSource,
+} from "@/features/reports/lib/report-access";
 import {
   saveProductionSceneFactSchema,
   updateProductionDayMetricsSchema,
@@ -29,6 +36,13 @@ function revalidateReports(projectId: string, dayId: string, sceneId?: string) {
     revalidatePath(`/ru/projects/${projectId}/libretto/${sceneId}`);
   }
   revalidatePath(`/ru/projects/${projectId}/call-sheets/${dayId}`);
+}
+
+function workRowAccessOf(
+  viewer: ReportViewer,
+  row: { kind: WorkRowSource["kind"]; item: { categoryId: string } | null },
+) {
+  return workRowAccess(viewer, { kind: row.kind, categoryId: row.item?.categoryId ?? null });
 }
 
 async function assertReportWrite(projectId: string, shootDayId: string) {
@@ -61,7 +75,23 @@ export async function refreshProductionReportAction(
   const create = options.create === true;
   const updateRates = options.updateRates === true;
 
-  const { refreshProductionReport } = await import("@/features/reports/queries");
+  const { canUpdateReportRates, refreshProductionReport } = await import(
+    "@/features/reports/queries"
+  );
+  if (updateRates) {
+    // «Обновить ставки» — только с фин. правкой источника каждой строки, где ставки расходятся.
+    const report = await prisma.productionReport.findUnique({
+      where: { shootDayId },
+      select: { id: true },
+    });
+    if (report) {
+      const { planWorkRowSync } = await import("@/features/reports/lib/sync-work-rows");
+      const plan = await planWorkRowSync(projectId, shootDayId, report.id);
+      if (plan && !(await canUpdateReportRates(report.id, plan.rateChanges, gate.ctx))) {
+        return { error: "Нет прав на фин. условия всех строк — ставки не обновлены" };
+      }
+    }
+  }
   let result: Awaited<ReturnType<typeof refreshProductionReport>>;
   try {
     result = await refreshProductionReport(gate.ctx, projectId, shootDayId, {
@@ -202,19 +232,29 @@ export async function saveProductionSceneFactAction(
       number: true,
       postfix: true,
       title: true,
+      cutAt: true,
     },
   });
   if (!scene) return { error: "Сцена не найдена" };
+
+  const dayLink = await prisma.shootDayScene.findFirst({
+    where: { shootDayId, sceneId: data.sceneId },
+    select: { id: true, sortOrder: true },
+  });
+
+  const cutRefusal = (cut: boolean) =>
+    cutSceneFactRefusal({
+      cut,
+      inDay: dayLink !== null,
+      label: formatSceneNumber(scene, gate.ctx.project.type),
+    });
+  const refusal = cutRefusal(scene.cutAt !== null);
+  if (refusal) return { error: refusal };
 
   const report = await prisma.productionReport.upsert({
     where: { shootDayId },
     create: { shootDayId },
     update: {},
-  });
-
-  const dayLink = await prisma.shootDayScene.findFirst({
-    where: { shootDayId, sceneId: data.sceneId },
-    select: { id: true, sortOrder: true },
   });
 
   const ep = scene.episodeNumber > 0 ? `${scene.episodeNumber}-` : "";
@@ -229,7 +269,13 @@ export async function saveProductionSceneFactAction(
 
   const sceneStatus = mapFactStatusToSceneStatus(data.status);
 
-  await prisma.$transaction(async (tx) => {
+  const lockedRefusal = await prisma.$transaction(async (tx) => {
+    // Строка сцены под блокировкой: «Вырезать» в другой вкладке ждёт конца записи.
+    const [locked] = await tx.$queryRaw<{ cutAt: Date | null }[]>`
+      SELECT "cutAt" FROM "Scene" WHERE "id" = ${scene.id} FOR UPDATE`;
+    const late = cutRefusal(locked?.cutAt != null);
+    if (late) return late;
+
     const fact = await tx.productionReportSceneFact.upsert({
       where: {
         reportId_sceneId: { reportId: report.id, sceneId: data.sceneId },
@@ -329,7 +375,9 @@ export async function saveProductionSceneFactAction(
         },
       });
     }
+    return null;
   });
+  if (lockedRefusal) return { error: lockedRefusal };
 
   if (shouldReturnToPool || (!shouldReturnToPool && !dayLink)) {
     await syncShootDayResourceUsages(shootDayId);
@@ -417,8 +465,10 @@ export async function updateProductionWorkRowAction(
 
   const row = await prisma.productionReportWorkRow.findFirst({
     where: { id: parsed.data.workRowId, reportId: report.id },
+    include: { item: { select: { categoryId: true } } },
   });
-  if (!row) return { error: "Строка не найдена" };
+  // Строку, которую пользователь не видит (нет права источника), он и не правит.
+  if (!row || !workRowAccessOf(gate.ctx, row).visible) return { error: "Строка не найдена" };
 
   await prisma.productionReportWorkRow.update({
     where: { id: row.id },
@@ -476,8 +526,13 @@ export async function saveProductionWorkExtrasAction(
 
   const row = await prisma.productionReportWorkRow.findFirst({
     where: { id: parsed.data.workRowId, reportId: report.id },
+    include: { item: { select: { categoryId: true } } },
   });
   if (!row) return { error: "Строка не найдена" };
+  const access = workRowAccessOf(gate.ctx, row);
+  if (!access.visible) return { error: "Строка не найдена" };
+  // Доп. выплаты — деньги строки: только с фин. правкой её источника.
+  if (!access.financeWrite) return { error: "Недостаточно прав" };
 
   await prisma.$transaction(async (tx) => {
     await tx.productionReportWorkExtra.deleteMany({

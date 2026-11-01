@@ -1,6 +1,7 @@
 "use client";
 
 import type { ScoutCandidateDetail } from "@/features/scout/queries";
+import type { FinanceAccess } from "@/shared/lib/finance-fields";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { MultiSelect } from "@/shared/ui/multi-select";
@@ -27,9 +28,12 @@ function mediaUrlsFromJson(value: unknown): string {
 export function ScoutFormFields({
   candidate,
   locations,
+  finance,
 }: {
   candidate?: ScoutCandidateDetail;
   locations: LocationOpt[];
+  /** Стоимость площадки — фин. условие объектов. */
+  finance: FinanceAccess;
 }) {
   const selectedLocationIds =
     candidate?.locationLinks.map((l) => l.locationId) ?? [];
@@ -60,16 +64,25 @@ export function ScoutFormFields({
         <Input id="address" name="address" defaultValue={candidate?.address ?? ""} />
       </div>
       <div className="grid gap-3 md:grid-cols-2">
-        <div>
-          <Label htmlFor="cost">Стоимость</Label>
-          <Input
-            id="cost"
-            name="cost"
-            type="number"
-            min={0}
-            defaultValue={candidate?.cost ?? undefined}
-          />
-        </div>
+        {finance === "edit" ? (
+          <div>
+            <Label htmlFor="cost">Стоимость</Label>
+            <Input
+              id="cost"
+              name="cost"
+              type="number"
+              min={0}
+              defaultValue={candidate?.cost ?? undefined}
+            />
+          </div>
+        ) : finance === "view" ? (
+          <div>
+            <span className="text-sm text-[var(--muted-fg)]">Стоимость</span>
+            <p className="text-sm">
+              {candidate?.cost ?? "—"} (нет прав на редактирование фин. условий объектов)
+            </p>
+          </div>
+        ) : null}
         <div>
           <Label htmlFor="contactPhone">Телефон контакта</Label>
           <Input

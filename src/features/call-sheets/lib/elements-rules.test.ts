@@ -180,7 +180,7 @@ describe("соответствие типов разделам", () => {
     const sql = fs.readFileSync(
       path.join(
         process.cwd(),
-        "prisma/migrations/20261101121045_resource_category_call_sheet_section/migration.sql",
+        "prisma/migrations/20261101140300_resource_category_call_sheet_section/migration.sql",
       ),
       "utf8",
     );

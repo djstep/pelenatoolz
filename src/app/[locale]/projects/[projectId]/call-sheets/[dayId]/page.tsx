@@ -28,6 +28,7 @@ import {
 } from "@/features/call-sheets/components/call-sheet-status-panel";
 import { CallSheetView } from "@/features/day-docs/components/call-sheet-view";
 import { fetchDayAstro } from "@/features/day-docs/lib/city-astro";
+import { ATTENDANCE_SHEET_WRITE_PERMISSION } from "@/features/exports/lib/column-utils";
 import {
   getNextShootDayBrief,
   getShootDayDocument,
@@ -200,6 +201,7 @@ export default async function CallSheetDayPage({ params }: Props) {
         nextDay={nextDay}
         nextDayAstro={nextDayAstro}
         canEdit={canEdit}
+        canSaveAttendanceSettings={ctx.can(ATTENDANCE_SHEET_WRITE_PERMISSION)}
         sheetSrc={sheetSrc}
         editBlocks={
           <>

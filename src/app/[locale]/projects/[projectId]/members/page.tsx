@@ -1,6 +1,9 @@
+import { MembershipStatus } from "@prisma/client";
 import { getTranslations } from "next-intl/server";
+import { isProducerRole } from "@/features/roles/role-rules";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { canManageMembers } from "@/features/memberships/permissions";
+import { MEMBERS_PAGES_PERMISSION } from "@/features/memberships/lib/members-pages-access";
 import { InviteForm } from "@/features/memberships/components/invite-form";
 import { inviteOrigin } from "@/features/memberships/lib/invite-origin";
 import { InvitesList } from "@/features/memberships/components/invites-list";
@@ -21,7 +24,7 @@ export default async function ProjectMembersPage({ params }: Props) {
   const ctx = await requireProjectContext(projectId);
   const t = await getTranslations("members");
 
-  if (!ctx.can("members:read")) {
+  if (!ctx.can(MEMBERS_PAGES_PERMISSION)) {
     return <p className="text-sm text-[var(--danger)]">Нет доступа</p>;
   }
 
@@ -34,6 +37,8 @@ export default async function ProjectMembersPage({ params }: Props) {
 
   const roleOptions = roles.map((r) => ({ id: r.id, name: r.name }));
   const appUrl = await inviteOrigin();
+  const ownerUserId = ctx.project.ownerUserId;
+  const viewerIsOwner = ownerUserId === ctx.user.id;
 
   return (
     <div className="space-y-6">
@@ -52,6 +57,13 @@ export default async function ProjectMembersPage({ params }: Props) {
               id: m.id,
               role: { id: m.role.id, name: m.role.name },
               user: m.user,
+              isOwner: m.userId === ownerUserId,
+              // Кому можно передать владение — считается только для владельца.
+              canReceiveOwnership:
+                viewerIsOwner &&
+                m.userId !== ownerUserId &&
+                m.status === MembershipStatus.ACTIVE &&
+                isProducerRole(m.role),
             }))}
             roles={roleOptions}
             currentUserId={ctx.user.id!}

@@ -147,6 +147,8 @@ export async function updateActorAction(
     pickupOffsetMin,
     overtimeMode,
     unpaidOvertimeMode,
+    // Копия условий кандидата при утверждении — фин. условие, в браузер без права не уходит.
+    specialConditions,
     ...profile
   } = parsed.data;
 
@@ -164,6 +166,7 @@ export async function updateActorAction(
         where: { id: actorId },
         data: {
           ...profile,
+          specialConditions,
           shiftRate,
           shiftHoursMin,
           unpaidOvertimeMin,

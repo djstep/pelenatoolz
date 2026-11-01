@@ -37,11 +37,14 @@ export function DayDocsExportMenu({
   dayId,
   resourceCategories,
   showCallSheetExports = true,
+  canSaveAttendanceSettings,
 }: {
   projectId: string;
   dayId: string;
   resourceCategories: DayDocsExportResourceCategory[];
   showCallSheetExports?: boolean;
+  /** Сохранение настройки явочного листа — правка «КПП и вызывные» (`ATTENDANCE_SHEET_WRITE_PERMISSION`). */
+  canSaveAttendanceSettings: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -173,6 +176,7 @@ export function DayDocsExportMenu({
         onClose={() => setSettingsOpen(false)}
         projectId={projectId}
         resourceCategories={resourceCategories}
+        canSave={canSaveAttendanceSettings}
       />
     </>
   );
@@ -183,11 +187,13 @@ function AttendanceSheetSettingsModal({
   onClose,
   projectId,
   resourceCategories,
+  canSave,
 }: {
   open: boolean;
   onClose: () => void;
   projectId: string;
   resourceCategories: DayDocsExportResourceCategory[];
+  canSave: boolean;
 }) {
   const toast = useToast();
   const [pending, startTransition] = useTransition();
@@ -247,16 +253,18 @@ function AttendanceSheetSettingsModal({
       title="Настройка явочного листа"
       footer={
         <div className="flex gap-2">
-          <Button type="button" disabled={pending || loading} onClick={save}>
-            {pending ? "…" : "Сохранить"}
-          </Button>
+          {canSave ? (
+            <Button type="button" disabled={pending || loading} onClick={save}>
+              {pending ? "…" : "Сохранить"}
+            </Button>
+          ) : null}
           <Button
             type="button"
             variant="secondary"
             data-modal-cancel
             onClick={onClose}
           >
-            Отмена
+            {canSave ? "Отмена" : "Закрыть"}
           </Button>
         </div>
       }
@@ -267,6 +275,12 @@ function AttendanceSheetSettingsModal({
           (участники группы из вызывного). Отметьте дополнительные ресурсы —
           каждый выбранный блок станет отдельной вкладкой Excel.
         </p>
+        {canSave ? null : (
+          <p className="text-[var(--muted-fg)]">
+            Только просмотр: менять настройку может участник с правкой «КПП и вызывные».
+            Явочный лист выгружается по этим настройкам.
+          </p>
+        )}
 
         <div>
           <p className="mb-2 font-medium">Блоки сцены / вызывного</p>
@@ -276,7 +290,7 @@ function AttendanceSheetSettingsModal({
                 <Checkbox
                   checked={selected.has(s.id)}
                   onChange={() => toggle(s.id)}
-                  disabled={loading}
+                  disabled={loading || !canSave}
                   label={s.label}
                 />
               </li>
@@ -299,7 +313,7 @@ function AttendanceSheetSettingsModal({
                     <Checkbox
                       checked={selected.has(id)}
                       onChange={() => toggle(id)}
-                      disabled={loading}
+                      disabled={loading || !canSave}
                       label={
                         <>
                           {c.name}

@@ -6,6 +6,7 @@ import type { ProductionReportBundle } from "@/features/reports/types";
 import {
   applyWorkRowSync,
   planWorkRowSync,
+  type WorkRowRateChange,
   type WorkRowSyncPlan,
 } from "@/features/reports/lib/sync-work-rows";
 import {
@@ -13,6 +14,13 @@ import {
   type AccrualSyncCounts,
 } from "@/features/reports/lib/sync-accruals";
 import type { AuditContext } from "@/shared/audit/with-audit";
+import { pickFinanceFields } from "@/shared/lib/finance-fields";
+import {
+  RATE_CHANGE_FIELDS,
+  workRowAccess,
+  workRowsForViewer,
+  type ReportViewer,
+} from "@/features/reports/lib/report-access";
 
 export type { ProductionReportBundle };
 export { formatFactDuration, factSecondsLabel } from "@/features/reports/types";
@@ -113,9 +121,13 @@ export async function getShootDayBrief(projectId: string, shootDayId: string) {
 
 /**
  * Отчёт дня — только чтение. null — отчёта ещё нет (создаётся кнопкой «Создать из КПП»)
- * или нет такого дня.
+ * или нет такого дня. Строки и деньги в них — по правам `viewer` (`workRowsForViewer`).
  */
-export async function getProductionReport(projectId: string, shootDayId: string) {
+export async function getProductionReport(
+  projectId: string,
+  shootDayId: string,
+  viewer: ReportViewer,
+) {
   const day = await loadDay(projectId, shootDayId);
   if (!day) return null;
 
@@ -143,12 +155,16 @@ export async function getProductionReport(projectId: string, shootDayId: string)
         orderBy: [{ returnedToPool: "asc" }, { sortOrder: "asc" }],
       },
       workRows: {
-        include: { extras: { orderBy: { createdAt: "asc" } } },
+        include: {
+          extras: { orderBy: { createdAt: "asc" } },
+          item: { select: { categoryId: true } },
+        },
         orderBy: { sortOrder: "asc" },
       },
     },
   });
   if (!full) return null;
+  const report = { ...full, workRows: workRowsForViewer(full.workRows, viewer) };
 
   return serializeForClient({
     day: {
@@ -164,7 +180,7 @@ export async function getProductionReport(projectId: string, shootDayId: string)
     },
     project: day.project,
     cameraCount: Math.max(1, day.project.cameraCount ?? 1),
-    report: full,
+    report,
     factDuration: formatFactDuration(full.factShiftStart, full.factShiftEnd),
   }) as unknown as ProductionReportBundle;
 }
@@ -198,6 +214,74 @@ export type ReportStaleness = {
   /** Ставки в карточках отличаются от строк — тихая строка (сама по себе не плашка) */
   ratesDiffer: boolean;
 };
+
+/** Сравнение для браузера: «было → стало» — только по строкам с фин. просмотром источника. */
+export type ReportStalenessForViewer = Omit<ReportStaleness, "rows"> & {
+  rows: Omit<WorkRowSyncPlan, "rateChanges"> & {
+    rateChanges: Array<
+      Pick<WorkRowRateChange, "rowId" | "name"> & Partial<Pick<WorkRowRateChange, "fields" | "pay">>
+    >;
+  };
+  /** Галочка «Обновить ставки»: фин. правка источников всех строк с расхождением. */
+  canUpdateRates: boolean;
+};
+
+/** Права на строки отчёта по их источнику (id строки → доступ). */
+async function workRowAccessById(reportId: string, viewer: ReportViewer) {
+  const rows = await prisma.productionReportWorkRow.findMany({
+    where: { reportId },
+    select: { id: true, kind: true, item: { select: { categoryId: true } } },
+  });
+  return new Map(
+    rows.map((row) => [
+      row.id,
+      workRowAccess(viewer, { kind: row.kind, categoryId: row.item?.categoryId ?? null }),
+    ]),
+  );
+}
+
+/**
+ * Можно ли «Обновить ставки из карточек»: у каждой строки с расхождением ставок — фин. правка
+ * её источника. Проверяет сервер перед записью, тем же правилом показывается галочка.
+ */
+export async function canUpdateReportRates(
+  reportId: string,
+  rateChanges: Pick<WorkRowRateChange, "rowId">[],
+  viewer: ReportViewer,
+) {
+  if (rateChanges.length === 0) return true;
+  const access = await workRowAccessById(reportId, viewer);
+  return rateChanges.every((change) => access.get(change.rowId)?.financeWrite === true);
+}
+
+/** `getReportStaleness` для браузера: невидимые строки убраны, значения ставок — по праву. */
+export async function getReportStalenessForViewer(
+  projectId: string,
+  shootDayId: string,
+  viewer: ReportViewer,
+): Promise<ReportStalenessForViewer | null> {
+  const staleness = await getReportStaleness(projectId, shootDayId);
+  if (!staleness) return null;
+  const report = await prisma.productionReport.findUnique({
+    where: { shootDayId },
+    select: { id: true },
+  });
+  if (!report) return null;
+  const access = await workRowAccessById(report.id, viewer);
+  const rateChanges = staleness.rows.rateChanges.flatMap((change) => {
+    const rowAccess = access.get(change.rowId);
+    if (!rowAccess?.visible) return [];
+    return [pickFinanceFields(change, RATE_CHANGE_FIELDS, rowAccess.financeRead)];
+  });
+  return {
+    ...staleness,
+    rows: { ...staleness.rows, rateChanges },
+    ratesDiffer: rateChanges.length > 0,
+    canUpdateRates: staleness.rows.rateChanges.every(
+      (change) => access.get(change.rowId)?.financeWrite === true,
+    ),
+  };
+}
 
 /**
  * Что изменит «Обновить из КПП»: сцены, строки работы, ставки (только с галочкой),

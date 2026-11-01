@@ -17,9 +17,22 @@ import { syncShootDaysForScene } from "@/features/schedule/lib/sync-shoot-day-re
 import { AuditEntityType } from "@/shared/audit/entity-types";
 import { recordAudit } from "@/shared/audit/with-audit";
 import { formatSceneNumber } from "@/features/script/lib/libretto-display";
-import { countOf, impactLines } from "@/shared/lib/plural";
+import {
+  applySceneNumberChanges,
+  planAutoRenumber,
+  planManualRenumber,
+  sceneNumbersAccessRefusal,
+} from "@/features/script/lib/scene-numbers";
+import { scenesDeleteRefusal } from "@/features/script/lib/scene-delete";
+import { impactLines } from "@/shared/lib/plural";
 
 export type ActionState = { error?: string; success?: string; keepOpen?: boolean };
+
+type TransactionCallback = Extract<
+  Parameters<typeof prisma.$transaction>[0],
+  (client: never) => Promise<unknown>
+>;
+type Tx = TransactionCallback extends (client: infer T) => Promise<unknown> ? T : never;
 
 function revalidateScript(projectId: string, sceneId?: string) {
   revalidatePath(`/ru/projects/${projectId}/libretto`);
@@ -594,14 +607,26 @@ export async function bulkDeleteScenesAction(
   if (!ctx.can("script:write")) {
     return { error: "Недостаточно прав" };
   }
+  if (!Array.isArray(sceneIds) || sceneIds.some((id) => typeof id !== "string")) {
+    return { error: "Некорректные данные" };
+  }
   if (sceneIds.length === 0) return {};
 
-  const refusal = await shotScenesRefusal(projectId, ctx.project.type, sceneIds);
-  if (refusal) return { error: refusal };
-
-  await prisma.scene.deleteMany({
-    where: { projectId, id: { in: sceneIds } },
+  // Та же проверка, что в окне, — повторно, под блокировкой строк сцен: сцену нельзя
+  // поставить в день или записать по ней факт, пока идёт удаление.
+  const refusal = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`
+      SELECT "id" FROM "Scene"
+      WHERE "projectId" = ${projectId} AND "id" = ANY(${sceneIds}::text[])
+      FOR UPDATE`;
+    const lines = await scenesDeleteRefusalLines(tx, projectId, ctx.project.type, sceneIds);
+    if (lines.length > 0) return lines.join(". ");
+    await tx.scene.deleteMany({
+      where: { projectId, id: { in: sceneIds } },
+    });
+    return null;
   });
+  if (refusal) return { error: refusal };
 
   await recordAudit(ctx, {
     projectId,
@@ -615,94 +640,103 @@ export async function bulkDeleteScenesAction(
   return {};
 }
 
-export async function renumberScenesAction(projectId: string) {
-  const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:write")) {
-    throw new Error("FORBIDDEN");
-  }
-
-  const scenes = await prisma.scene.findMany({
+/** Сцены проекта для перенумерации — под блокировкой строки проекта (как импорт). */
+async function lockSceneNumbers(tx: Tx, projectId: string) {
+  await tx.$queryRaw`SELECT "id" FROM "Project" WHERE "id" = ${projectId} FOR UPDATE`;
+  const scenes = await tx.scene.findMany({
     where: { projectId },
     orderBy: [{ episodeNumber: "asc" }, { sortOrder: "asc" }, { number: "asc" }],
-    select: { id: true, episodeNumber: true },
+    select: {
+      id: true,
+      episodeNumber: true,
+      number: true,
+      postfix: true,
+      sortOrder: true,
+      cutAt: true,
+    },
   });
+  return scenes.map(({ cutAt, ...s }) => ({ ...s, cut: cutAt !== null }));
+}
 
-  const counters = new Map<number, number>();
-  await prisma.$transaction(
-    scenes.map((scene) => {
-      const next = (counters.get(scene.episodeNumber) ?? 0) + 1;
-      counters.set(scene.episodeNumber, next);
-      return prisma.scene.update({
-        where: { id: scene.id },
-        data: {
-          number: String(next),
-          postfix: "",
-          sortOrder: next,
-        },
-      });
-    }),
-  );
+/** Авто-перенумерация (кнопки в интерфейсе нет). Номера вырезанных сцен не меняются и пропускаются. */
+export async function renumberScenesAction(projectId: string): Promise<ActionState> {
+  const ctx = await requireProjectContext(projectId);
+  const refusal = sceneNumbersAccessRefusal(ctx.can);
+  if (refusal) return { error: refusal };
+
+  let changed: number;
+  try {
+    changed = await prisma.$transaction(async (tx) => {
+      const scenes = await lockSceneNumbers(tx, projectId);
+      const changes = planAutoRenumber(scenes);
+      await applySceneNumberChanges(tx, projectId, changes, scenes);
+      return changes.length;
+    });
+  } catch {
+    return { error: "Конфликт номеров — попробуйте ещё раз" };
+  }
 
   await recordAudit(ctx, {
     projectId,
     entityType: AuditEntityType.scene,
     entityId: projectId,
     action: "UPDATE",
-    summary: `Перенумерация ${scenes.length} сцен`,
+    summary: `Перенумерация: изменено ${changed} сцен, номера вырезанных не менялись`,
   });
 
   await refreshAllSluglines(projectId).catch(() => {});
 
   revalidateScript(projectId);
+  return { success: "Нумерация обновлена" };
 }
 
 /**
- * Сцены с историей съёмок (факт сохраняли в отчёте смены) не удаляются: вместе со сценой
- * пропали бы история и факт отчётов. Возвращает текст отказа или null.
+ * Почему выбранные сцены нельзя удалить (пусто — можно): сцена стоит в дне КПП, есть строка
+ * отчёта смены или попытка съёмки. Каскад стёр бы их вместе со сценой. Слот дня — не в счёт.
  */
-async function shotScenesRefusal(
+async function scenesDeleteRefusalLines(
+  db: Pick<Tx, "scene" | "shootDayScene" | "productionReportSceneFact" | "sceneShootAttempt">,
   projectId: string,
   projectType: ProjectType,
   sceneIds: string[],
-): Promise<string | null> {
-  const attempts = await prisma.sceneShootAttempt.findMany({
-    where: { sceneId: { in: sceneIds }, scene: { projectId } },
-    select: {
-      shootDayId: true,
-      scene: { select: { id: true, number: true, postfix: true, episodeNumber: true } },
-    },
-  });
-  if (attempts.length === 0) return null;
-
-  const scenes = new Map(attempts.map((a) => [a.scene.id, a.scene]));
-  const labels = [...scenes.values()].map((s) => formatSceneNumber(s, projectType));
-  const days = countOf(new Set(attempts.map((a) => a.shootDayId)).size, ["день", "дня", "дней"]);
-  if (sceneIds.length === 1) {
-    return `Сцена ${labels[0]} есть в отчётах смены (${days}) — удалить нельзя, пропадёт история съёмок`;
-  }
-  return `${labels.length === 1 ? "Сцена" : "Сцены"} ${labels.join(", ")} есть в отчётах смены (${days}) — удалить нельзя, пропадёт история съёмок. Уберите ${labels.length === 1 ? "её" : "их"} из выбора`;
+): Promise<string[]> {
+  const scene = { id: { in: sceneIds }, projectId };
+  const [scenes, dayLinks, facts, attempts] = await Promise.all([
+    db.scene.findMany({
+      where: scene,
+      orderBy: [{ episodeNumber: "asc" }, { sortOrder: "asc" }, { number: "asc" }],
+      select: { id: true, number: true, postfix: true, episodeNumber: true, cutAt: true },
+    }),
+    db.shootDayScene.findMany({ where: { scene }, select: { sceneId: true } }),
+    db.productionReportSceneFact.findMany({
+      where: { scene },
+      select: { sceneId: true, report: { select: { shootDayId: true } } },
+    }),
+    db.sceneShootAttempt.findMany({ where: { scene }, select: { sceneId: true, shootDayId: true } }),
+  ]);
+  const reportDays = (id: string) =>
+    new Set([
+      ...facts.filter((f) => f.sceneId === id).map((f) => f.report.shootDayId),
+      ...attempts.filter((a) => a.sceneId === id).map((a) => a.shootDayId),
+    ]);
+  return scenesDeleteRefusal(
+    scenes.map((s) => ({
+      label: formatSceneNumber(s, projectType),
+      cut: s.cutAt !== null,
+      shootDays: dayLinks.filter((l) => l.sceneId === s.id).length,
+      reportDays: reportDays(s.id),
+    })),
+  );
 }
 
-/** Что произойдёт при удалении сцен — для окна подтверждения. */
+/** Можно ли удалить сцены — для окна подтверждения, до нажатия. Строки отказа или пусто. */
 export async function getScenesDeleteImpactAction(
   projectId: string,
   sceneIds: string[],
 ): Promise<string[]> {
   const ctx = await requireProjectContext(projectId);
   if (!ctx.can("script:write") || sceneIds.length === 0) return [];
-  const scene = { id: { in: sceneIds }, projectId };
-  const [dayLinks, reportRows] = await Promise.all([
-    prisma.shootDayScene.findMany({
-      where: { scene },
-      select: { shootDayId: true },
-      distinct: ["shootDayId"],
-    }),
-    prisma.productionReportSceneFact.count({ where: { scene } }),
-  ]);
-  return impactLines([
-    [dayLinks.length, "Сцены уберутся из дней КПП"],
-    [reportRows, "Удалятся незаполненные строки отчётов смены"],
-  ]);
+  return scenesDeleteRefusalLines(prisma, projectId, ctx.project.type, sceneIds);
 }
 
 /** Где используется сцена — для окна «Вырезать сцену?». Только чтение. */
@@ -780,9 +814,8 @@ export async function manualRenumberScenesAction(
   rowsJson: string,
 ): Promise<ActionState> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:write")) {
-    return { error: "Недостаточно прав" };
-  }
+  const refusal = sceneNumbersAccessRefusal(ctx.can);
+  if (refusal) return { error: refusal };
 
   let rows: unknown;
   try {
@@ -795,23 +828,28 @@ export async function manualRenumberScenesAction(
   if (!parsed.success) {
     return { error: "Проверьте номера сцен" };
   }
+  const input = parsed.data.rows.map((row) => ({ ...row, postfix: row.postfix ?? "" }));
 
   try {
-    await prisma.$transaction(
-      parsed.data.rows.map((row) =>
-        prisma.scene.update({
-          where: { id: row.id, projectId },
-          data: {
-            episodeNumber: row.episodeNumber,
-            number: row.number,
-            postfix: row.postfix ?? "",
-          },
-        }),
-      ),
-    );
+    await assertInProject("Scene", input.map((row) => row.id), projectId);
+  } catch (error) {
+    if (isNotInProjectError(error)) return { error: "Сцена не найдена" };
+    throw error;
+  }
+
+  let planError: string | null;
+  try {
+    planError = await prisma.$transaction(async (tx) => {
+      const scenes = await lockSceneNumbers(tx, projectId);
+      const plan = planManualRenumber(scenes, input, ctx.project.type);
+      if ("error" in plan) return plan.error;
+      await applySceneNumberChanges(tx, projectId, plan.changes, scenes);
+      return null;
+    });
   } catch {
     return { error: "Конфликт номеров — проверьте уникальность" };
   }
+  if (planError) return { error: planError };
 
   await recordAudit(ctx, {
     projectId,

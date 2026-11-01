@@ -108,10 +108,18 @@ export async function loadCallSheetPrintModel(
   const requested = parseVersionParam(version);
   if (requested === null) return { error: VERSION_NOT_FOUND, status: 404 };
 
-  const sheet = await prisma.callSheet.findFirst({
-    where: { projectId, shootDayId: gate.dayId },
-    select: { id: true, status: true, version: true, project: { select: { timezone: true } } },
+  const day = await prisma.shootDay.findFirst({
+    where: { id: gate.dayId, projectId },
+    select: {
+      dayNumber: true,
+      date: true,
+      project: { select: { timezone: true } },
+      callSheet: { select: { id: true, status: true, version: true } },
+    },
   });
+  if (!day) return { error: "Съёмочный день не найден", status: 404 };
+  const sheet = day.callSheet;
+  const timezone = day.project.timezone;
 
   const from = choosePrintSource(sheet, requested);
   if (from.kind === "snapshot") {
@@ -125,11 +133,11 @@ export async function loadCallSheetPrintModel(
     if (!row || !model) return { error: VERSION_NOT_FOUND, status: 404 };
     return {
       model,
-      fileBaseName: `${callSheetFileBaseName(model)} версия ${snapshotVersion}`,
+      fileBaseName: callSheetFileBaseName(day, timezone, snapshotVersion),
       stamp: {
         status: "APPROVED",
         version: snapshotVersion,
-        approvedAtLabel: formatApprovedAt(row.approvedAt, sheet.project.timezone),
+        approvedAtLabel: formatApprovedAt(row.approvedAt, timezone),
       },
     };
   }
@@ -138,7 +146,7 @@ export async function loadCallSheetPrintModel(
   if (!live) return { error: "Съёмочный день не найден", status: 404 };
   return {
     model: live.model,
-    fileBaseName: callSheetFileBaseName(live.model),
+    fileBaseName: callSheetFileBaseName(day, timezone),
     stamp: {
       status: sheet?.status === "IN_REVIEW" ? "IN_REVIEW" : "DRAFT",
       version: sheet?.version ?? null,

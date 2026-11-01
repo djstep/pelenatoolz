@@ -245,6 +245,7 @@ model User {
 
   memberships              ProjectMembership[]
   createdProjects          Project[]                 @relation("ProjectCreator")
+  ownedProjects            Project[]                 @relation("ProjectOwner")
   createdInvites           ProjectInvite[]           @relation("InviteCreator")
   auditLogs                AuditLog[]
   cloudConnections         CloudConnection[]
@@ -294,10 +295,13 @@ model Project {
   exportSettings Json?
 
   createdById String
+  /// Владелец проекта: продюсер, которого нельзя понизить или удалить; меняется только передачей владения.
+  ownerUserId String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   createdBy                  User                        @relation("ProjectCreator", fields: [createdById], references: [id])
+  owner                      User                        @relation("ProjectOwner", fields: [ownerUserId], references: [id])
   memberships                ProjectMembership[]
   invites                    ProjectInvite[]
   roles                      ProjectRoleDefinition[]
@@ -343,6 +347,7 @@ model Project {
   callSheetSections          CallSheetSection[]
 
   @@index([createdById])
+  @@index([ownerUserId])
   @@index([status])
 }
 

@@ -14,8 +14,9 @@ const nextConfig: NextConfig = {
     ],
     "/api/fonts/**": ["./node_modules/medeo-font/dist/fonts/medeo-sans/MedeoSansVariable.woff2"],
   },
-  // Только для `next dev`: второй аккаунт открывается на 127.0.0.1 (отдельные куки входа).
-  allowedDevOrigins: ["127.0.0.1"],
+  // Только для `next dev`: второй и третий аккаунты открываются на 127.0.0.1 и 127.0.0.2
+  // (отдельные куки входа).
+  allowedDevOrigins: ["127.0.0.1", "127.0.0.2"],
   experimental: {
     serverActions: {
       // Смета больше 1 МБ и импорт Excel (раздел 6 аудита). Не выше 4,5 МБ — потолок

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { DayDocsExportMenu } from "@/features/day-docs/components/day-docs-export-menu";
+import { ATTENDANCE_SHEET_WRITE_PERMISSION } from "@/features/exports/lib/column-utils";
 import { ProductionReportWorkspace } from "@/features/reports/components/production-report-workspace";
 import {
   ReportCreatePanel,
@@ -9,7 +10,7 @@ import {
 } from "@/features/reports/components/report-refresh-panel";
 import {
   getProductionReport,
-  getReportStaleness,
+  getReportStalenessForViewer,
   getShootDayBrief,
 } from "@/features/reports/queries";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
@@ -32,8 +33,8 @@ export default async function ProductionReportDayPage({ params }: Props) {
 
   const [day, bundle, staleness, resourceCategories] = await Promise.all([
     getShootDayBrief(projectId, dayId),
-    getProductionReport(projectId, dayId),
-    getReportStaleness(projectId, dayId),
+    getProductionReport(projectId, dayId, ctx),
+    getReportStalenessForViewer(projectId, dayId, ctx),
     listResourceCategories(projectId),
   ]);
   if (!day) notFound();
@@ -91,6 +92,7 @@ export default async function ProductionReportDayPage({ params }: Props) {
               perShift: c.perShift,
             }))}
             showCallSheetExports={false}
+            canSaveAttendanceSettings={ctx.can(ATTENDANCE_SHEET_WRITE_PERMISSION)}
           />
         }
       />

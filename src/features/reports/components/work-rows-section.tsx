@@ -122,14 +122,15 @@ function WorkRowEditor({
   }
 
   const otLabel = formatOvertimeCell(row.factOvertimeMin, row.payableOvertimeMin);
-  const otTitle =
-    row.overtimePay != null
+  const otTitle = !row.canSeePay
+    ? "Переработка: факт / к оплате"
+    : row.overtimePay != null
       ? `К оплате за переработку: ${formatMoney(row.overtimePay)} ₽`
       : row.shiftRate != null
         ? "Переработка рассчитана; сумма — по ставкам гонорара"
         : "Задайте финансовые условия в карточке актёра/ресурса";
 
-  const hasExtras = row.extras.length > 0;
+  const hasExtras = (row.extras?.length ?? 0) > 0;
   const liveKm = factKm.trim() === "" ? null : Number(factKm);
   const liveMileagePay = mileageEnabled
     ? computeMileagePay(
@@ -211,9 +212,11 @@ function WorkRowEditor({
                 value={factKm}
                 placeholder="км"
                 title={
-                  row.kmRate != null
-                    ? `Ставка: ${formatMoney(row.kmRate)} ₽/км`
-                    : "Ставка за км не задана"
+                  !row.canSeePay
+                    ? "Фактический километраж"
+                    : row.kmRate != null
+                      ? `Ставка: ${formatMoney(row.kmRate)} ₽/км`
+                      : "Ставка за км не задана"
                 }
                 onChange={(e) => setFactKm(e.target.value)}
                 onBlur={() => {
@@ -230,22 +233,26 @@ function WorkRowEditor({
           </td>
         ) : null}
         <td className="py-2 pr-2 align-middle">
-          <button
-            type="button"
-            className={cn(
-              "inline-flex h-8 w-8 items-center justify-center rounded-lg border border-transparent",
-              "hover:border-[var(--border)] hover:bg-[rgb(var(--tint-rgb)/0.05)]",
-              hasExtras && "border-[var(--accent)]/40 bg-[var(--accent)]/10",
-            )}
-            title={
-              hasExtras
-                ? `Доп. выплаты: ${formatMoney(row.extrasPay)} ₽`
-                : "Дополнительные выплаты"
-            }
-            onClick={onOpenExtras}
-          >
-            <ExtraPayIcon active={hasExtras} />
-          </button>
+          {row.canSeePay ? (
+            <button
+              type="button"
+              className={cn(
+                "inline-flex h-8 w-8 items-center justify-center rounded-lg border border-transparent",
+                "hover:border-[var(--border)] hover:bg-[rgb(var(--tint-rgb)/0.05)]",
+                hasExtras && "border-[var(--accent)]/40 bg-[var(--accent)]/10",
+              )}
+              title={
+                hasExtras
+                  ? `Доп. выплаты: ${formatMoney(row.extrasPay)} ₽`
+                  : "Дополнительные выплаты"
+              }
+              onClick={onOpenExtras}
+            >
+              <ExtraPayIcon active={hasExtras} />
+            </button>
+          ) : (
+            <span className="text-[var(--muted-fg)]">—</span>
+          )}
         </td>
         <td className="py-2 align-middle tabular-nums text-[var(--muted-fg)]">
           {workPayWithoutMileage != null
@@ -260,7 +267,11 @@ function WorkRowEditor({
             className="py-1.5 pl-6 pr-3 text-xs text-[var(--muted-fg)]"
           >
             Километраж
-            {row.kmRate != null || liveKm != null ? (
+            {!row.canSeePay ? (
+              <span className="ml-2 tabular-nums">
+                {(Number.isFinite(liveKm as number) ? liveKm : row.factKm) ?? 0} км
+              </span>
+            ) : row.kmRate != null || liveKm != null ? (
               <span className="ml-2 tabular-nums">
                 {(Number.isFinite(liveKm as number) ? liveKm : row.factKm) ?? 0}{" "}
                 км × {formatMoney(row.kmRate ?? 0)} ₽/км
@@ -270,9 +281,11 @@ function WorkRowEditor({
             )}
           </td>
           <td className="py-1.5 align-middle tabular-nums text-xs">
-            {liveMileagePay !== 0 || row.mileagePay
-              ? `${formatMoney(liveMileagePay || Number(row.mileagePay ?? 0))} ₽`
-              : "—"}
+            {!row.canSeePay
+              ? "—"
+              : liveMileagePay !== 0 || row.mileagePay
+                ? `${formatMoney(liveMileagePay || Number(row.mileagePay ?? 0))} ₽`
+                : "—"}
           </td>
         </tr>
       ) : null}
@@ -408,7 +421,7 @@ export function WorkRowsSection({
         workRowId={extrasRow?.id ?? ""}
         projectId={projectId}
         dayId={dayId}
-        canEdit={canEdit}
+        canEdit={canEdit && Boolean(extrasRow?.canEditPay)}
         defaultTaxPercent={
           extrasRow?.taxPercent != null ? Number(extrasRow.taxPercent) : 0
         }

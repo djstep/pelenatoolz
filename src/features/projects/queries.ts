@@ -1,11 +1,22 @@
 import { MembershipStatus, ProjectStatus } from "@prisma/client";
+import {
+  projectCardAccess,
+  projectIdsForMembersCount,
+  type ProjectCardAccess,
+} from "@/features/projects/lib/project-list-access";
+import { parsePermissionMatrix } from "@/features/roles/permissions-matrix";
 import { prisma } from "@/shared/db/prisma";
 
+/**
+ * Проекты пользователя для списка. Число участников (`membersCount`) и «Настройки»
+ * (`canOpenSettings`) — по правам роли в проекте (`projectCardAccess`); без права
+ * «Участники: просмотр» число участников из базы не запрашивается (`null`).
+ */
 export async function listUserProjects(
   userId: string,
   options?: { includeArchived?: boolean },
 ) {
-  return prisma.project.findMany({
+  const projects = await prisma.project.findMany({
     where: {
       memberships: {
         some: {
@@ -23,16 +34,34 @@ export async function listUserProjects(
         take: 1,
         include: { role: true },
       },
-      _count: {
-        select: {
-          memberships: {
-            where: { status: MembershipStatus.ACTIVE },
-          },
-        },
-      },
     },
     orderBy: { updatedAt: "desc" },
   });
+
+  const rows = projects.map((project) => {
+    const role = project.memberships[0]?.role;
+    const access: ProjectCardAccess = role
+      ? projectCardAccess(parsePermissionMatrix(role.permissions))
+      : { membersCount: false, settings: false };
+    return { id: project.id, project, access };
+  });
+
+  const countIds = projectIdsForMembersCount(rows);
+  const counts =
+    countIds.length > 0
+      ? await prisma.projectMembership.groupBy({
+          by: ["projectId"],
+          where: { projectId: { in: countIds }, status: MembershipStatus.ACTIVE },
+          _count: { _all: true },
+        })
+      : [];
+  const countById = new Map(counts.map((c) => [c.projectId, c._count._all]));
+
+  return rows.map(({ project, access }) => ({
+    ...project,
+    membersCount: access.membersCount ? (countById.get(project.id) ?? 0) : null,
+    canOpenSettings: access.settings,
+  }));
 }
 
 export async function getProjectForUser(projectId: string, userId: string) {

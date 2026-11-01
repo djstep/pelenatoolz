@@ -20,7 +20,7 @@ export default async function LocationDetailPage({ params }: Props) {
   }
 
   const [location, addresses] = await Promise.all([
-    getLocationDetail(projectId, locationId),
+    getLocationDetail(projectId, locationId, ctx.canFinanceRead("locations")),
     listProjectAddresses(projectId),
   ]);
 
@@ -44,8 +44,8 @@ export default async function LocationDetailPage({ params }: Props) {
           target="location"
           entityId={location.id}
           values={{
-            defaultBudgetItemId: location.defaultBudgetItemId,
-            overtimeBudgetItemId: location.overtimeBudgetItemId,
+            defaultBudgetItemId: location.defaultBudgetItemId ?? null,
+            overtimeBudgetItemId: location.overtimeBudgetItemId ?? null,
           }}
           canEdit={ctx.can("script:write") && ctx.canFinanceWrite("locations")}
         />

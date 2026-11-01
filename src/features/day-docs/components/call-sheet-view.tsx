@@ -36,6 +36,7 @@ export function CallSheetView({
   canEdit,
   sheetSrc,
   editBlocks = null,
+  canSaveAttendanceSettings,
   timingBaselines = {},
   resourceTimingBaselines = {},
   perShiftCatalog = [],
@@ -53,6 +54,8 @@ export function CallSheetView({
   sheetSrc: string;
   /** Блоки правки вызывного (поля листа, элементы площадки) — под шапкой страницы. */
   editBlocks?: React.ReactNode;
+  /** Сохранение настройки явочного листа (правка «КПП и вызывные»). */
+  canSaveAttendanceSettings: boolean;
   timingBaselines?: ActorTimingBaselines;
   resourceTimingBaselines?: ResourceTimingBaselines;
   perShiftCatalog?: import("@/features/day-docs/queries").PerShiftCatalogOption[];
@@ -130,6 +133,7 @@ export function CallSheetView({
             projectId={projectId}
             dayId={day.id}
             resourceCategories={resourceCategories}
+            canSaveAttendanceSettings={canSaveAttendanceSettings}
           />
         </div>
       </div>

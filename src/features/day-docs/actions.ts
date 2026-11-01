@@ -908,7 +908,7 @@ export async function exportAttendanceSheetXlsxAction(
   const { parseExportSettings } = await import(
     "@/features/exports/lib/column-utils"
   );
-  const { buildAttendanceSheetModel } = await import(
+  const { buildAttendanceSheetModel, pickOtherUnitDayIds } = await import(
     "@/features/day-docs/lib/export-attendance-sheet"
   );
   const { buildAttendanceSheetXlsx } = await import(
@@ -931,6 +931,19 @@ export async function exportAttendanceSheetXlsxAction(
   if (!bundle) return { error: "Съёмочный день не найден" };
   if (!project) return { error: "Проект не найден" };
 
+  // Другие группы съёмки (2-й юнит) в ту же дату — своими листами актёров.
+  const sameDateDays = await prisma.shootDay.findMany({
+    where: { projectId, date: bundle.day.date, id: { not: dayId } },
+    select: { id: true, unit: true, dayNumber: true },
+  });
+  const otherUnitBundles = (
+    await Promise.all(
+      pickOtherUnitDayIds(bundle.day.unit, sameDateDays).map((id) =>
+        getShootDayDocument(projectId, id),
+      ),
+    )
+  ).filter((b): b is NonNullable<typeof b> => b != null);
+
   const settings = parseExportSettings(project.exportSettings);
   const model = buildAttendanceSheetModel(
     bundle,
@@ -941,9 +954,17 @@ export async function exportAttendanceSheetXlsxAction(
       perShift: c.perShift,
     })),
     callSheet,
+    otherUnitBundles,
   );
 
-  const buffer = await buildAttendanceSheetXlsx(model);
+  // Логотип в угол актёрского листа; не прочитался — выгрузка без него.
+  const { readFile } = await import("node:fs/promises");
+  const path = await import("node:path");
+  const logoPng = await readFile(
+    path.join(process.cwd(), "public", "brand", "pelena-black.png"),
+  ).catch(() => null);
+
+  const buffer = await buildAttendanceSheetXlsx(model, logoPng);
   return {
     base64: Buffer.from(buffer).toString("base64"),
     fileName: `${model.fileBaseName}.xlsx`,

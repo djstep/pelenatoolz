@@ -109,15 +109,15 @@ describe("право на печать и Excel вызывного", () => {
 });
 
 describe("имя файла вызывного", () => {
-  test("проект, дата, смена; запрещённые символы убраны", () => {
-    assert.equal(
-      callSheetFileBaseName({ projectName: "ИРП", numericDate: "11.09.2026", shiftNumber: 40 }),
-      "Вызывной ИРП 11.09.2026 смена 40",
-    );
-    assert.equal(
-      callSheetFileBaseName({ projectName: 'А/Б: "В"\n<Г>', numericDate: "01.11.2026", shiftNumber: null }),
-      "Вызывной А Б В Г 01.11.2026",
-    );
+  test("формат волны 2в: call-sheet-day-N-ГГГГ-ММ-ДД по поясу проекта, версия — -vN", () => {
+    // День хранится полночью по поясу проекта: в UTC это ещё вечер предыдущего дня.
+    const day = { dayNumber: 12, date: new Date("2026-09-10T21:00:00Z") };
+    assert.equal(callSheetFileBaseName(day, "Europe/Moscow"), "call-sheet-day-12-2026-09-11");
+    assert.equal(callSheetFileBaseName(day, null), "call-sheet-day-12-2026-09-11");
+    assert.equal(callSheetFileBaseName(day, "Europe/Moscow", 2), "call-sheet-day-12-2026-09-11-v2");
+    const loader = source("src/features/call-sheets/print/load-print-model.ts");
+    assert.ok(loader.includes("callSheetFileBaseName(day, timezone, snapshotVersion)"));
+    assert.ok(loader.includes("callSheetFileBaseName(day, timezone)"));
   });
 
   test("Content-Disposition: attachment, кириллица — filename*=UTF-8''", () => {
