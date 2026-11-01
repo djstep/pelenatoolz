@@ -253,3 +253,58 @@ export async function getCallSheetForDay(
     },
   });
 }
+
+export type CallSheetStatusData = {
+  status: "DRAFT" | "IN_REVIEW" | "APPROVED";
+  version: number;
+  revision: number;
+  approvedAt: Date | null;
+  approvedByName: string | null;
+  /** Утверждённые версии, новые сверху; снимки не загружаются. */
+  versions: {
+    version: number;
+    approvedAt: Date;
+    approvedByName: string | null;
+    modelHash: string;
+  }[];
+};
+
+/** Статус, версия, номер правки и утверждённые версии вызывного дня. Только чтение. */
+export async function getCallSheetStatus(
+  projectId: string,
+  shootDayId: string,
+): Promise<CallSheetStatusData | null> {
+  const row = await prisma.callSheet.findFirst({
+    where: { projectId, shootDayId },
+    select: {
+      status: true,
+      version: true,
+      revision: true,
+      approvedAt: true,
+      approvedBy: { select: { name: true, email: true } },
+      approvedVersions: {
+        orderBy: { version: "desc" },
+        select: {
+          version: true,
+          approvedAt: true,
+          modelHash: true,
+          approvedBy: { select: { name: true, email: true } },
+        },
+      },
+    },
+  });
+  if (!row) return null;
+  return {
+    status: row.status,
+    version: row.version,
+    revision: row.revision,
+    approvedAt: row.approvedAt,
+    approvedByName: row.approvedBy ? memberLabel(row.approvedBy) : null,
+    versions: row.approvedVersions.map((v) => ({
+      version: v.version,
+      approvedAt: v.approvedAt,
+      approvedByName: v.approvedBy ? memberLabel(v.approvedBy) : null,
+      modelHash: v.modelHash,
+    })),
+  };
+}

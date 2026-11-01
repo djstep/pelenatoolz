@@ -2,6 +2,7 @@ import { PassThrough, Readable } from "node:stream";
 import type { CallSheetPrintModel } from "@/features/call-sheets/print/print-model";
 import { buildCallSheetHtml, callSheetCsp } from "@/features/call-sheets/print/print-html";
 import { attachmentDisposition } from "@/features/call-sheets/print/print-source";
+import type { CallSheetStamp } from "@/features/call-sheets/print/stamp";
 import { writeCallSheetXlsx } from "@/features/call-sheets/print/print-xlsx";
 
 /**
@@ -13,7 +14,7 @@ export const CALL_SHEET_CACHE_CONTROL = "private, no-store";
 const XLSX_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
 type Loaded =
-  | { model: CallSheetPrintModel; fileBaseName: string }
+  | { model: CallSheetPrintModel; fileBaseName: string; stamp?: CallSheetStamp }
   | { error: string; status: 403 | 404 };
 
 /** Лист для просмотра на странице (`…/sheet`): HTML со шрифтом по адресу. */
@@ -24,7 +25,7 @@ export function callSheetSheetResponse(result: Loaded): Response {
       headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": CALL_SHEET_CACHE_CONTROL },
     });
   }
-  return new Response(buildCallSheetHtml(result.model, { font: "url" }), {
+  return new Response(buildCallSheetHtml(result.model, { font: "url", stamp: result.stamp }), {
     headers: {
       "Content-Type": "text/html; charset=utf-8",
       "Cache-Control": CALL_SHEET_CACHE_CONTROL,
@@ -46,7 +47,7 @@ export function callSheetXlsxResponse(result: Loaded): Response {
   }
 
   const output = new PassThrough();
-  writeCallSheetXlsx(result.model, output).catch((err: unknown) => {
+  writeCallSheetXlsx(result.model, output, result.stamp).catch((err: unknown) => {
     output.destroy(err instanceof Error ? err : new Error(String(err)));
   });
 

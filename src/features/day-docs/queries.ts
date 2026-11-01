@@ -167,6 +167,8 @@ export async function listShootDaysBrief(projectId: string) {
       isLocked: true,
       // Счётчик сцен — без вырезанных.
       _count: { select: { scenes: { where: { scene: { cutAt: null } } } } },
+      // Статус и версия вызывного — колонка в списке вызывных.
+      callSheet: { select: { status: true, version: true } },
     },
     orderBy: { dayNumber: "asc" },
   });

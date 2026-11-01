@@ -13,6 +13,7 @@ import {
   withKeys,
 } from "@/features/call-sheets/components/call-sheet-template-editor";
 import type { CallSheetBlocks, TemplateMemberOption } from "@/features/call-sheets/queries";
+import { useRevisionAction } from "@/features/call-sheets/components/revision-context";
 import { Button } from "@/shared/ui/button";
 import { Checkbox } from "@/shared/ui/checkbox";
 import { submitKeepingFields } from "@/shared/ui/forms/submit-keeping-fields";
@@ -69,7 +70,7 @@ export function CallSheetSheetEditor({
   onSaved: () => void;
 }) {
   const bound = saveCallSheetSheetAction.bind(null, projectId, dayId);
-  const [state, action, pending] = useActionState(bound, initial);
+  const [state, action, pending] = useActionState(useRevisionAction(bound), initial);
   useActionToast(state);
   const { ref, markClean } = useFormGuard<HTMLFormElement>(true, undefined, state);
   useActionSuccess(state, () => {

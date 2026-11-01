@@ -11,6 +11,7 @@ import {
 } from "@/features/day-docs/lib/transport-rules";
 import type { CallSheetTransportEditorData } from "@/features/day-docs/transport-queries";
 import { BudgetItemSelect } from "@/features/smeta/components/budget-item-select";
+import { useRevisionAction } from "@/features/call-sheets/components/revision-context";
 import { Button } from "@/shared/ui/button";
 import { submitKeepingFields } from "@/shared/ui/forms/submit-keeping-fields";
 import { HhMmInput } from "@/shared/ui/hh-mm-input";
@@ -50,7 +51,7 @@ export function CallSheetTransportEditor({
   data: CallSheetTransportEditorData;
 }) {
   const bound = saveCallSheetTransportsAction.bind(null, projectId, dayId);
-  const [state, action, pending] = useActionState(bound, initial);
+  const [state, action, pending] = useActionState(useRevisionAction(bound), initial);
   useActionToast(state);
   const { ref, markClean } = useFormGuard<HTMLFormElement>(true, undefined, state);
   useActionSuccess(state, markClean);

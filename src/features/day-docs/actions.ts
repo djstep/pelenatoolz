@@ -2,6 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 import {
+  isCallSheetEditRefused,
+  parseExpectedRevision,
+  REVISION_FIELD,
+} from "@/features/call-sheets/lib/revision";
+import { withCallSheetRevision } from "@/features/call-sheets/revision-db";
+import {
   saveResourceCallsSchema,
   saveResourceUsagesSchema,
   updateCallSheetHeaderSchema,
@@ -23,11 +29,22 @@ import { AuditEntityType } from "@/shared/audit/entity-types";
 import { auditMutation, recordAudit } from "@/shared/audit/with-audit";
 import { prisma } from "@/shared/db/prisma";
 
-export type CallSheetActionState = { error?: string; success?: string };
+export type CallSheetActionState = {
+  error?: string;
+  success?: string;
+  /** Номер правки вызывного после сохранения (null — вызывной ещё не создан). */
+  revision?: number | null;
+};
 
 function revalidateCallSheet(projectId: string, dayId: string) {
   revalidatePath(`/ru/projects/${projectId}/call-sheets/${dayId}`);
   revalidatePath(`/ru/projects/${projectId}/call-sheets`);
+}
+
+/** Отказ по номеру правки или утверждённому вызывному — текстом; остальное — дальше. */
+function refusedState(error: unknown): CallSheetActionState {
+  if (isCallSheetEditRefused(error)) return { error: error.message };
+  throw error;
 }
 
 /** Все id — этого проекта (assertInProject без исключения). */
@@ -108,29 +125,40 @@ export async function updateCallSheetHeaderAction(
   }
 
   const d = parsed.data;
-  await prisma.shootDay.update({
-    where: { id: shootDayId },
-    data: {
-      shiftNumber: d.shiftNumber ?? null,
-      callTime: emptyToNull(d.callTime),
-      wrapTime: emptyToNull(d.wrapTime),
-      shiftStartTime: emptyToNull(d.shiftStartTime),
-      rehearsalTime: emptyToNull(d.rehearsalTime),
-      motorOnTime: emptyToNull(d.motorOnTime),
-      motorOffTime: emptyToNull(d.motorOffTime),
-      crewMeetAddress: emptyToNull(d.crewMeetAddress),
-      crewMeetTime: emptyToNull(d.crewMeetTime),
-      weatherNote: emptyToNull(d.weatherNote),
-      weatherPrecip: emptyToNull(d.weatherPrecip),
-      notes: emptyToNull(d.notes),
-      comment: emptyToNull(d.comment),
-    },
-  });
+  let saved;
+  try {
+    saved = await withCallSheetRevision(
+      projectId,
+      shootDayId,
+      parseExpectedRevision(formData.get(REVISION_FIELD)),
+      (tx) =>
+        tx.shootDay.update({
+          where: { id: shootDayId },
+          data: {
+            shiftNumber: d.shiftNumber ?? null,
+            callTime: emptyToNull(d.callTime),
+            wrapTime: emptyToNull(d.wrapTime),
+            shiftStartTime: emptyToNull(d.shiftStartTime),
+            rehearsalTime: emptyToNull(d.rehearsalTime),
+            motorOnTime: emptyToNull(d.motorOnTime),
+            motorOffTime: emptyToNull(d.motorOffTime),
+            crewMeetAddress: emptyToNull(d.crewMeetAddress),
+            crewMeetTime: emptyToNull(d.crewMeetTime),
+            weatherNote: emptyToNull(d.weatherNote),
+            weatherPrecip: emptyToNull(d.weatherPrecip),
+            notes: emptyToNull(d.notes),
+            comment: emptyToNull(d.comment),
+          },
+        }),
+    );
+  } catch (error) {
+    return refusedState(error);
+  }
 
   await auditCallSheet(gate.ctx, projectId, shootDayId, "Обновлён вызывной (шапка)");
 
   revalidateCallSheet(projectId, shootDayId);
-  return { success: "Шапка сохранена" };
+  return { success: "Шапка сохранена", revision: saved.revision };
 }
 
 export async function saveTimeSlotsAction(
@@ -164,35 +192,43 @@ export async function saveTimeSlotsAction(
     String(formData.get("rows") ?? "[]"),
   );
   if ("error" in checked) return { error: checked.error };
+  const expected = parseExpectedRevision(formData.get(REVISION_FIELD));
 
-  await auditMutation(
-    gate.ctx,
-    (rows: typeof checked.rows) =>
-      prisma.$transaction([
-        prisma.shootDayTimeSlot.deleteMany({ where: { shootDayId } }),
-        ...rows.map((row) => prisma.shootDayTimeSlot.create({ data: { shootDayId, ...row } })),
-        prisma.shootDay.update({
-          where: { id: shootDayId },
-          data: { callSheetSavedAt: new Date() },
+  let saved;
+  try {
+    saved = await auditMutation(
+      gate.ctx,
+      (rows: typeof checked.rows) =>
+        withCallSheetRevision(projectId, shootDayId, expected, async (tx) => {
+          await tx.shootDayTimeSlot.deleteMany({ where: { shootDayId } });
+          for (const row of rows) {
+            await tx.shootDayTimeSlot.create({ data: { shootDayId, ...row } });
+          }
+          await tx.shootDay.update({
+            where: { id: shootDayId },
+            data: { callSheetSavedAt: new Date() },
+          });
         }),
-      ]),
-    checked.rows,
-    {
-      projectId,
-      entityType: AuditEntityType.callSheet,
-      entityId: shootDayId,
-      action: "UPDATE",
-      summary: "Сохранено расписание дня",
-      changes: (rows) => ({
-        rows: rows.length,
-        secondUnit: rows.filter((row) => row.unit === "SECOND").length,
-        continuations: rows.filter((row) => row.isContinuation).length,
-      }),
-    },
-  );
+      checked.rows,
+      {
+        projectId,
+        entityType: AuditEntityType.callSheet,
+        entityId: shootDayId,
+        action: "UPDATE",
+        summary: "Сохранено расписание дня",
+        changes: (rows) => ({
+          rows: rows.length,
+          secondUnit: rows.filter((row) => row.unit === "SECOND").length,
+          continuations: rows.filter((row) => row.isContinuation).length,
+        }),
+      },
+    );
+  } catch (error) {
+    return refusedState(error);
+  }
 
   revalidateCallSheet(projectId, shootDayId);
-  return { success: "Расписание сохранено" };
+  return { success: "Расписание сохранено", revision: saved.revision };
 }
 
 export async function saveActorCallsAction(
@@ -215,31 +251,39 @@ export async function saveActorCallsAction(
   );
   if ("error" in checked) return { error: checked.error };
   const withData = checked.rows;
+  const expected = parseExpectedRevision(formData.get(REVISION_FIELD));
 
-  await auditMutation(
-    ctx,
-    (data: typeof withData) =>
-      prisma.$transaction([
-        prisma.shootDayActorCall.deleteMany({ where: { shootDayId } }),
-        ...data.map((row) => prisma.shootDayActorCall.create({ data: { shootDayId, ...row } })),
-      ]),
-    withData,
-    {
-      projectId,
-      entityType: AuditEntityType.callSheet,
-      entityId: shootDayId,
-      action: "UPDATE",
-      summary: "Сохранены тайминги актёров",
-      changes: (data) => ({
-        rows: data.length,
-        transport: data.filter((row) => row.transportMode).length,
-        carPickup: data.filter((row) => row.carPickupTime).length,
-      }),
-    },
-  );
+  let saved;
+  try {
+    saved = await auditMutation(
+      ctx,
+      (data: typeof withData) =>
+        withCallSheetRevision(projectId, shootDayId, expected, async (tx) => {
+          await tx.shootDayActorCall.deleteMany({ where: { shootDayId } });
+          for (const row of data) {
+            await tx.shootDayActorCall.create({ data: { shootDayId, ...row } });
+          }
+        }),
+      withData,
+      {
+        projectId,
+        entityType: AuditEntityType.callSheet,
+        entityId: shootDayId,
+        action: "UPDATE",
+        summary: "Сохранены тайминги актёров",
+        changes: (data) => ({
+          rows: data.length,
+          transport: data.filter((row) => row.transportMode).length,
+          carPickup: data.filter((row) => row.carPickupTime).length,
+        }),
+      },
+    );
+  } catch (error) {
+    return refusedState(error);
+  }
 
   revalidateCallSheet(projectId, shootDayId);
-  return { success: "Тайминги актёров сохранены" };
+  return { success: "Тайминги актёров сохранены", revision: saved.revision };
 }
 
 export async function saveResourceCallsAction(
@@ -272,28 +316,38 @@ export async function saveResourceCallsAction(
       r.wrapTime,
   );
 
-  await prisma.$transaction([
-    prisma.shootDayResourceCall.deleteMany({ where: { shootDayId } }),
-    ...withData.map((row) =>
-      prisma.shootDayResourceCall.create({
-        data: {
-          shootDayId,
-          category: row.category,
-          name: row.name,
-          arrivalTime: emptyToNull(row.arrivalTime),
-          costumeTime: emptyToNull(row.costumeTime),
-          makeupTime: emptyToNull(row.makeupTime),
-          readyTime: emptyToNull(row.readyTime),
-          wrapTime: emptyToNull(row.wrapTime),
-        },
-      }),
-    ),
-  ]);
+  let saved;
+  try {
+    saved = await withCallSheetRevision(
+      projectId,
+      shootDayId,
+      parseExpectedRevision(formData.get(REVISION_FIELD)),
+      async (tx) => {
+        await tx.shootDayResourceCall.deleteMany({ where: { shootDayId } });
+        for (const row of withData) {
+          await tx.shootDayResourceCall.create({
+            data: {
+              shootDayId,
+              category: row.category,
+              name: row.name,
+              arrivalTime: emptyToNull(row.arrivalTime),
+              costumeTime: emptyToNull(row.costumeTime),
+              makeupTime: emptyToNull(row.makeupTime),
+              readyTime: emptyToNull(row.readyTime),
+              wrapTime: emptyToNull(row.wrapTime),
+            },
+          });
+        }
+      },
+    );
+  } catch (error) {
+    return refusedState(error);
+  }
 
   await auditCallSheet(gate.ctx, projectId, shootDayId, "Сохранены тайминги ресурсов");
 
   revalidateCallSheet(projectId, shootDayId);
-  return { success: "Тайминги ресурсов сохранены" };
+  return { success: "Тайминги ресурсов сохранены", revision: saved.revision };
 }
 
 export async function saveResourceUsagesAction(
@@ -325,33 +379,44 @@ export async function saveResourceUsagesAction(
     throw error;
   }
 
-  await prisma.$transaction(
-    parsed.data.rows.map((row) =>
-      prisma.shootDayResourceUsage.updateMany({
-        where: {
-          shootDayId,
-          itemId: row.itemId,
-          item: { category: { projectId, perShift: true } },
-        },
-        data: {
-          arrivalTime: emptyToNull(row.arrivalTime),
-          readyTime: emptyToNull(row.readyTime),
-          wrapTime: emptyToNull(row.wrapTime),
-        },
-      }),
-    ),
-  );
+  let saved;
+  try {
+    saved = await withCallSheetRevision(
+      projectId,
+      shootDayId,
+      parseExpectedRevision(formData.get(REVISION_FIELD)),
+      async (tx) => {
+        for (const row of parsed.data.rows) {
+          await tx.shootDayResourceUsage.updateMany({
+            where: {
+              shootDayId,
+              itemId: row.itemId,
+              item: { category: { projectId, perShift: true } },
+            },
+            data: {
+              arrivalTime: emptyToNull(row.arrivalTime),
+              readyTime: emptyToNull(row.readyTime),
+              wrapTime: emptyToNull(row.wrapTime),
+            },
+          });
+        }
+      },
+    );
+  } catch (error) {
+    return refusedState(error);
+  }
 
   await auditCallSheet(gate.ctx, projectId, shootDayId, "Сохранены посменные ресурсы");
 
   revalidateCallSheet(projectId, shootDayId);
-  return { success: "Посменные ресурсы сохранены" };
+  return { success: "Посменные ресурсы сохранены", revision: saved.revision };
 }
 
 export async function addPerShiftResourceAction(
   projectId: string,
   shootDayId: string,
   itemId: string,
+  revision: unknown,
 ): Promise<CallSheetActionState> {
   const gate = await assertCallSheetWrite(projectId, shootDayId);
   if ("error" in gate) return gate;
@@ -367,9 +432,20 @@ export async function addPerShiftResourceAction(
   });
   if (existing) return { success: "Ресурс уже в списке" };
 
-  await prisma.shootDayResourceUsage.create({
-    data: { shootDayId, itemId, isUsed: true },
-  });
+  let saved;
+  try {
+    saved = await withCallSheetRevision(
+      projectId,
+      shootDayId,
+      parseExpectedRevision(revision),
+      (tx) =>
+        tx.shootDayResourceUsage.create({
+          data: { shootDayId, itemId, isUsed: true },
+        }),
+    );
+  } catch (error) {
+    return refusedState(error);
+  }
 
   await auditCallSheet(
     gate.ctx,
@@ -378,42 +454,66 @@ export async function addPerShiftResourceAction(
     `Добавлен посменный ресурс «${item.name}»`,
   );
   revalidateCallSheet(projectId, shootDayId);
-  return { success: "Ресурс добавлен" };
+  return { success: "Ресурс добавлен", revision: saved.revision };
 }
 
 export async function removePerShiftResourceAction(
   projectId: string,
   shootDayId: string,
   itemId: string,
+  revision: unknown,
 ): Promise<CallSheetActionState> {
   const gate = await assertCallSheetWrite(projectId, shootDayId);
   if ("error" in gate) return gate;
 
-  await prisma.shootDayResourceUsage.deleteMany({
-    where: {
+  let saved;
+  try {
+    saved = await withCallSheetRevision(
+      projectId,
       shootDayId,
-      itemId,
-      item: { category: { projectId, perShift: true } },
-    },
-  });
+      parseExpectedRevision(revision),
+      (tx) =>
+        tx.shootDayResourceUsage.deleteMany({
+          where: {
+            shootDayId,
+            itemId,
+            item: { category: { projectId, perShift: true } },
+          },
+        }),
+    );
+  } catch (error) {
+    return refusedState(error);
+  }
 
   await auditCallSheet(gate.ctx, projectId, shootDayId, "Удалён посменный ресурс");
   revalidateCallSheet(projectId, shootDayId);
-  return { success: "Ресурс убран из дня" };
+  return { success: "Ресурс убран из дня", revision: saved.revision };
 }
 
 export async function toggleCallSheetPlanLockAction(
   projectId: string,
   shootDayId: string,
   locked: boolean,
+  revision: unknown,
 ): Promise<CallSheetActionState> {
   const gate = await assertCallSheetWrite(projectId, shootDayId);
   if ("error" in gate) return gate;
 
-  await prisma.shootDay.update({
-    where: { id: shootDayId },
-    data: { callSheetPlanLocked: locked },
-  });
+  let saved;
+  try {
+    saved = await withCallSheetRevision(
+      projectId,
+      shootDayId,
+      parseExpectedRevision(revision),
+      (tx) =>
+        tx.shootDay.update({
+          where: { id: shootDayId },
+          data: { callSheetPlanLocked: locked },
+        }),
+    );
+  } catch (error) {
+    return refusedState(error);
+  }
 
   await auditCallSheet(
     gate.ctx,
@@ -423,7 +523,10 @@ export async function toggleCallSheetPlanLockAction(
   );
 
   revalidateCallSheet(projectId, shootDayId);
-  return { success: locked ? "План зафиксирован" : "План разблокирован" };
+  return {
+    success: locked ? "План зафиксирован" : "План разблокирован",
+    revision: saved.revision,
+  };
 }
 
 export async function previewRecalculateActorTimingsAction(
@@ -516,6 +619,7 @@ export async function applyRecalculateActorTimingsAction(
   projectId: string,
   shootDayId: string,
   actorIds: string[],
+  revision: unknown,
 ): Promise<CallSheetActionState> {
   const preview = await previewRecalculateActorTimingsAction(projectId, shootDayId);
   if ("error" in preview) return { error: preview.error };
@@ -536,33 +640,46 @@ export async function applyRecalculateActorTimingsAction(
     throw error;
   }
 
-  for (const proposal of toApply) {
-    const existing = await prisma.shootDayActorCall.findUnique({
-      where: { shootDayId_actorId: { shootDayId, actorId: proposal.actorId } },
-    });
+  let saved;
+  try {
+    saved = await withCallSheetRevision(
+      projectId,
+      shootDayId,
+      parseExpectedRevision(revision),
+      async (tx) => {
+        for (const proposal of toApply) {
+          const existing = await tx.shootDayActorCall.findUnique({
+            where: { shootDayId_actorId: { shootDayId, actorId: proposal.actorId } },
+          });
 
-    const patch = {
-      pickupTime: proposal.fields.pickupTime?.proposed ?? existing?.pickupTime ?? null,
-      makeupTime: proposal.fields.makeupTime?.proposed ?? existing?.makeupTime ?? null,
-      costumeTime: proposal.fields.costumeTime?.proposed ?? existing?.costumeTime ?? null,
-      readyTime: proposal.fields.readyTime?.proposed ?? existing?.readyTime ?? null,
-      wrapTime: proposal.fields.wrapTime?.proposed ?? existing?.wrapTime ?? null,
-    };
+          const patch = {
+            pickupTime: proposal.fields.pickupTime?.proposed ?? existing?.pickupTime ?? null,
+            makeupTime: proposal.fields.makeupTime?.proposed ?? existing?.makeupTime ?? null,
+            costumeTime:
+              proposal.fields.costumeTime?.proposed ?? existing?.costumeTime ?? null,
+            readyTime: proposal.fields.readyTime?.proposed ?? existing?.readyTime ?? null,
+            wrapTime: proposal.fields.wrapTime?.proposed ?? existing?.wrapTime ?? null,
+          };
 
-    const hasData = Object.values(patch).some(Boolean);
-    if (!hasData) continue;
+          const hasData = Object.values(patch).some(Boolean);
+          if (!hasData) continue;
 
-    await prisma.shootDayActorCall.upsert({
-      where: { shootDayId_actorId: { shootDayId, actorId: proposal.actorId } },
-      create: { shootDayId, actorId: proposal.actorId, ...patch },
-      update: patch,
-    });
+          await tx.shootDayActorCall.upsert({
+            where: { shootDayId_actorId: { shootDayId, actorId: proposal.actorId } },
+            create: { shootDayId, actorId: proposal.actorId, ...patch },
+            update: patch,
+          });
+        }
+
+        await tx.shootDay.update({
+          where: { id: shootDayId },
+          data: { callSheetSavedAt: new Date() },
+        });
+      },
+    );
+  } catch (error) {
+    return refusedState(error);
   }
-
-  await prisma.shootDay.update({
-    where: { id: shootDayId },
-    data: { callSheetSavedAt: new Date() },
-  });
 
   await auditCallSheet(
     gate.ctx,
@@ -572,7 +689,7 @@ export async function applyRecalculateActorTimingsAction(
   );
 
   revalidateCallSheet(projectId, shootDayId);
-  return { success: `Обновлено таймингов: ${toApply.length}` };
+  return { success: `Обновлено таймингов: ${toApply.length}`, revision: saved.revision };
 }
 
 export async function previewRecalculateResourceTimingsAction(
@@ -667,6 +784,7 @@ export async function applyRecalculateResourceTimingsAction(
   projectId: string,
   shootDayId: string,
   resourceKeys: string[],
+  revision: unknown,
 ): Promise<CallSheetActionState> {
   const preview = await previewRecalculateResourceTimingsAction(
     projectId,
@@ -683,69 +801,81 @@ export async function applyRecalculateResourceTimingsAction(
   const gate = await assertCallSheetWrite(projectId, shootDayId);
   if ("error" in gate) return gate;
 
-  for (const proposal of toApply) {
-    const [category, ...nameParts] = proposal.key.split("::");
-    const name = nameParts.join("::");
-    if (!category || !name) continue;
+  let saved;
+  try {
+    saved = await withCallSheetRevision(
+      projectId,
+      shootDayId,
+      parseExpectedRevision(revision),
+      async (tx) => {
+        for (const proposal of toApply) {
+          const [category, ...nameParts] = proposal.key.split("::");
+          const name = nameParts.join("::");
+          if (!category || !name) continue;
 
-    const perShiftUsage = await prisma.shootDayResourceUsage.findFirst({
-      where: {
-        shootDayId,
-        item: { name, category: { name: category, projectId, perShift: true } },
-      },
-    });
+          const perShiftUsage = await tx.shootDayResourceUsage.findFirst({
+            where: {
+              shootDayId,
+              item: { name, category: { name: category, projectId, perShift: true } },
+            },
+          });
 
-    if (perShiftUsage) {
-      const patch = {
-        arrivalTime:
-          proposal.fields.arrivalTime?.proposed ?? perShiftUsage.arrivalTime ?? null,
-        readyTime:
-          proposal.fields.readyTime?.proposed ?? perShiftUsage.readyTime ?? null,
-        wrapTime:
-          proposal.fields.wrapTime?.proposed ?? perShiftUsage.wrapTime ?? null,
-      };
-      if (Object.values(patch).some(Boolean)) {
-        await prisma.shootDayResourceUsage.update({
-          where: { id: perShiftUsage.id },
-          data: patch,
+          if (perShiftUsage) {
+            const patch = {
+              arrivalTime:
+                proposal.fields.arrivalTime?.proposed ?? perShiftUsage.arrivalTime ?? null,
+              readyTime:
+                proposal.fields.readyTime?.proposed ?? perShiftUsage.readyTime ?? null,
+              wrapTime:
+                proposal.fields.wrapTime?.proposed ?? perShiftUsage.wrapTime ?? null,
+            };
+            if (Object.values(patch).some(Boolean)) {
+              await tx.shootDayResourceUsage.update({
+                where: { id: perShiftUsage.id },
+                data: patch,
+              });
+            }
+            continue;
+          }
+
+          const existing = await tx.shootDayResourceCall.findUnique({
+            where: {
+              shootDayId_category_name: {
+                shootDayId,
+                category,
+                name,
+              },
+            },
+          });
+
+          const patch = {
+            arrivalTime:
+              proposal.fields.arrivalTime?.proposed ?? existing?.arrivalTime ?? null,
+            readyTime: proposal.fields.readyTime?.proposed ?? existing?.readyTime ?? null,
+            wrapTime: proposal.fields.wrapTime?.proposed ?? existing?.wrapTime ?? null,
+          };
+
+          const hasData = Object.values(patch).some(Boolean);
+          if (!hasData) continue;
+
+          await tx.shootDayResourceCall.upsert({
+            where: {
+              shootDayId_category_name: { shootDayId, category, name },
+            },
+            create: { shootDayId, category, name, ...patch },
+            update: patch,
+          });
+        }
+
+        await tx.shootDay.update({
+          where: { id: shootDayId },
+          data: { callSheetSavedAt: new Date() },
         });
-      }
-      continue;
-    }
-
-    const existing = await prisma.shootDayResourceCall.findUnique({
-      where: {
-        shootDayId_category_name: {
-          shootDayId,
-          category,
-          name,
-        },
       },
-    });
-
-    const patch = {
-      arrivalTime:
-        proposal.fields.arrivalTime?.proposed ?? existing?.arrivalTime ?? null,
-      readyTime: proposal.fields.readyTime?.proposed ?? existing?.readyTime ?? null,
-      wrapTime: proposal.fields.wrapTime?.proposed ?? existing?.wrapTime ?? null,
-    };
-
-    const hasData = Object.values(patch).some(Boolean);
-    if (!hasData) continue;
-
-    await prisma.shootDayResourceCall.upsert({
-      where: {
-        shootDayId_category_name: { shootDayId, category, name },
-      },
-      create: { shootDayId, category, name, ...patch },
-      update: patch,
-    });
+    );
+  } catch (error) {
+    return refusedState(error);
   }
-
-  await prisma.shootDay.update({
-    where: { id: shootDayId },
-    data: { callSheetSavedAt: new Date() },
-  });
 
   await auditCallSheet(
     gate.ctx,
@@ -755,7 +885,7 @@ export async function applyRecalculateResourceTimingsAction(
   );
 
   revalidateCallSheet(projectId, shootDayId);
-  return { success: `Обновлено ресурсов: ${toApply.length}` };
+  return { success: `Обновлено ресурсов: ${toApply.length}`, revision: saved.revision };
 }
 
 export async function exportAttendanceSheetXlsxAction(

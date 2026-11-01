@@ -6,6 +6,12 @@ import type {
   CallSheetPrintModel,
   CallSheetPrintPlanRow,
 } from "@/features/call-sheets/print/print-model";
+import {
+  stampFooter,
+  stampMark,
+  stampVersion,
+  type CallSheetStamp,
+} from "@/features/call-sheets/print/stamp";
 import { excelSafe } from "@/shared/lib/excel-safe";
 
 /**
@@ -159,8 +165,10 @@ function sceneWord(n: number) {
   return "сцен";
 }
 
-function headBlock(w: SheetWriter, model: CallSheetPrintModel) {
+function headBlock(w: SheetWriter, model: CallSheetPrintModel, stamp: CallSheetStamp | undefined) {
   w.title("ВЫЗЫВНОЙ ЛИСТ");
+  const mark = stampMark(stamp);
+  if (mark) w.text(mark).getCell(1).font = { bold: true, size: 12, color: { argb: "FFD24A0C" } };
   const name = w.text(model.projectName);
   name.getCell(1).font = { bold: true, size: 16 };
   w.text(model.dateLabel).getCell(1).font = { bold: true, size: 11 };
@@ -170,8 +178,10 @@ function headBlock(w: SheetWriter, model: CallSheetPrintModel) {
     model.dayOfTotalLabel,
     model.totals.sceneCount ? `${model.totals.sceneCount} ${sceneWord(model.totals.sceneCount)}` : null,
     model.totals.dayTiming ? `хронометраж дня ${model.totals.dayTiming}` : null,
+    stampVersion(stamp),
   ].filter(Boolean);
   if (meta.length) w.text(meta.join(" · "));
+  if (stamp?.status === "APPROVED") w.text(stampFooter(stamp)!);
   if (model.crewCall.time) w.text(model.crewCall.time, "Сбор группы");
   if (model.crewCall.address) {
     w.text(`${model.crewCall.address}${model.scheme ? " (схема — в конце)" : ""}`, "Место сбора");
@@ -444,8 +454,11 @@ function schemeBlock(w: SheetWriter, model: CallSheetPrintModel) {
   for (const [label, value] of texts) if (value) w.text(value, label);
 }
 
-/** Чистая функция: модель листа → книга Excel с одним листом «Вызывной». */
-export function buildCallSheetWorkbook(model: CallSheetPrintModel): ExcelJS.Workbook {
+/** Чистая функция: модель листа (и статус) → книга Excel с одним листом «Вызывной». */
+export function buildCallSheetWorkbook(
+  model: CallSheetPrintModel,
+  stamp?: CallSheetStamp,
+): ExcelJS.Workbook {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = "PELENA";
   const sheet = workbook.addWorksheet(CALL_SHEET_XLSX_SHEET_NAME, {
@@ -458,7 +471,7 @@ export function buildCallSheetWorkbook(model: CallSheetPrintModel): ExcelJS.Work
     },
   });
   const w = new SheetWriter(sheet);
-  headBlock(w, model);
+  headBlock(w, model, stamp);
   timesBlock(w, model);
   weatherBlock(w, model);
   locationsBlock(w, model);
@@ -480,8 +493,12 @@ export function buildCallSheetWorkbook(model: CallSheetPrintModel): ExcelJS.Work
  * Пишет книгу в поток и закрывает его. Книга собирается сразу (ошибка сборки — исключением
  * до записи); ошибка записи — отклонённым обещанием, поток вызывающий закрывает с ошибкой.
  */
-export function writeCallSheetXlsx(model: CallSheetPrintModel, stream: Writable): Promise<void> {
-  const workbook = buildCallSheetWorkbook(model);
+export function writeCallSheetXlsx(
+  model: CallSheetPrintModel,
+  stream: Writable,
+  stamp?: CallSheetStamp,
+): Promise<void> {
+  const workbook = buildCallSheetWorkbook(model, stamp);
   return workbook.xlsx.write(stream).then(() => {
     stream.end();
   });

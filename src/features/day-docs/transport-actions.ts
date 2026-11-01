@@ -1,7 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import {
+  isCallSheetEditRefused,
+  parseExpectedRevision,
+  REVISION_FIELD,
+} from "@/features/call-sheets/lib/revision";
 import { canEditCallSheets } from "@/features/call-sheets/lib/template-rules";
+import { withCallSheetRevision } from "@/features/call-sheets/revision-db";
 import {
   canEditTransportFinance,
   canSeeTransportKmRate,
@@ -21,13 +27,14 @@ import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { checkBudgetItemsUsable } from "@/features/smeta/budget-item-access";
 import { AuditEntityType } from "@/shared/audit/entity-types";
 import { auditMutation } from "@/shared/audit/with-audit";
-import { prisma } from "@/shared/db/prisma";
 
 export type TransportSaveState = {
   error?: string;
   success?: string;
   /** Строки после сохранения (с id новых строк) — редактор берёт их вместо своих */
   rows?: TransportEditorRow[];
+  /** Номер правки вызывного после сохранения. */
+  revision?: number | null;
 };
 
 const CHANGED_ELSEWHERE = "Спецтранспорт изменили в другом окне — обновите страницу";
@@ -80,13 +87,15 @@ export async function saveCallSheetTransportsAction(
   if ("error" in checked) return { error: checked.error };
   const { plan, existing } = checked;
   const shootDayId = checked.dayId;
+  const expected = parseExpectedRevision(formData.get(REVISION_FIELD));
+  let revision: number | null | undefined;
 
   if (!isEmptyPlan(plan)) {
     try {
-      await auditMutation(
+      const saved = await auditMutation(
         ctx,
         (next: TransportSavePlan) =>
-          prisma.$transaction(async (tx) => {
+          withCallSheetRevision(projectId, shootDayId, expected, async (tx) => {
             if (next.remove.length > 0) {
               await tx.shootDayTransport.deleteMany({
                 where: { shootDayId, id: { in: next.remove } },
@@ -121,7 +130,9 @@ export async function saveCallSheetTransportsAction(
           changes: transportAuditChanges(existing, plan),
         },
       );
+      revision = saved.revision;
     } catch (error) {
+      if (isCallSheetEditRefused(error)) return { error: error.message };
       if (error instanceof TransportChangedError) return { error: CHANGED_ELSEWHERE };
       throw error;
     }
@@ -131,5 +142,9 @@ export async function saveCallSheetTransportsAction(
 
   const showKmRate = canSeeTransportKmRate(ctx);
   const saved = await loadDayTransports(shootDayId);
-  return { success: SAVED, rows: saved.map((row) => toEditorRow(row, showKmRate)) };
+  return {
+    success: SAVED,
+    rows: saved.map((row) => toEditorRow(row, showKmRate)),
+    ...(revision === undefined ? {} : { revision }),
+  };
 }

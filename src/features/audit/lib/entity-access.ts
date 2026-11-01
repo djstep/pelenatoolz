@@ -56,6 +56,7 @@ const AUDIT_ENTITY_VISIBILITY: Record<AuditEntityTypeValue, AuditVisibility> = {
   [AuditEntityType.shootDay]: schedule,
   [AuditEntityType.callSheet]: anyOf("callsheet:read", "schedule:read"),
   [AuditEntityType.callSheetTemplate]: anyOf("callsheet:read", "schedule:read"),
+  [AuditEntityType.callSheetStatus]: anyOf("callsheet:read", "schedule:read"),
   // Профиль пишется без проекта и в журнал проекта не попадает. Условие — самое строгое.
   [AuditEntityType.userProfile]: anyOf("members:manage"),
   [AuditEntityType.availabilityRow]: anyOf("schedule:read", "cast:read"),

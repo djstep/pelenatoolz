@@ -13,6 +13,11 @@ import {
   updateCallSheetHeaderAction,
   type CallSheetActionState,
 } from "@/features/day-docs/actions";
+import {
+  RevisionField,
+  useCallSheetRevision,
+  useRevisionAction,
+} from "@/features/call-sheets/components/revision-context";
 import { SheetBlock } from "@/features/call-sheets/components/sheet-block";
 import { CallSheetTransportEditor } from "@/features/day-docs/components/call-sheet-transport-editor";
 import type { CallSheetTransportEditorData } from "@/features/day-docs/transport-queries";
@@ -36,7 +41,7 @@ import { timeSlotTypeLabels } from "@/features/day-docs/lib/slot-labels";
 import { Button } from "@/shared/ui/button";
 import { HhMmInput } from "@/shared/ui/hh-mm-input";
 import { Input } from "@/shared/ui/input";
-import { useActionToast } from "@/shared/ui/toast";
+import { toast, useActionToast } from "@/shared/ui/toast";
 import { cn } from "@/shared/lib/cn";
 import { useActionSuccess } from "@/shared/ui/unsaved/use-action-success";
 import { useFormGuard } from "@/shared/ui/unsaved/use-form-guard";
@@ -73,13 +78,14 @@ function JsonRowsForm({
   rowsJson: string;
   label: string;
 }) {
-  const [state, formAction, pending] = useActionState(action, {});
+  const [state, formAction, pending] = useActionState(useRevisionAction(action), {});
   // Строки таблицы лежат в скрытом поле этой формы — по нему видно несохранённое.
   const { ref: formRef, markClean: markFormClean } = useFormGuard();
   useActionSuccess(state, markFormClean);
   return (
     <form ref={formRef} action={formAction} className="space-y-2">
       <input type="hidden" name="rows" value={rowsJson} />
+      <RevisionField />
       <ActionMessage state={state} />
       <Button type="submit" variant="secondary" disabled={pending}>
         {pending ? "Сохранение…" : label}
@@ -211,8 +217,9 @@ export function CallSheetEditor({
   const resourceAction = saveResourceCallsAction.bind(null, projectId, dayId);
   const perShiftAction = saveResourceUsagesAction.bind(null, projectId, dayId);
 
+  const { revision, track } = useCallSheetRevision();
   const [headerState, headerFormAction, headerPending] = useActionState(
-    headerAction,
+    useRevisionAction(headerAction),
     {},
   );
   const { ref: headerFormRef, markClean: markHeaderClean } = useFormGuard(open);
@@ -252,6 +259,7 @@ export function CallSheetEditor({
     >
       <div className="space-y-8">
         <form ref={headerFormRef} action={headerFormAction} className="space-y-3">
+          <RevisionField />
           <h4 className="sheet-subhead">Шапка дня</h4>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <label className="space-y-1 text-xs">
@@ -716,7 +724,13 @@ export function CallSheetEditor({
                 onClick={() => {
                   if (!selectedToAdd) return;
                   startAddTransition(async () => {
-                    await addPerShiftResourceAction(projectId, dayId, selectedToAdd);
+                    const result = track(
+                      await addPerShiftResourceAction(projectId, dayId, selectedToAdd, revision),
+                    );
+                    if (result.error) {
+                      toast.error(result.error);
+                      return;
+                    }
                     setSelectedToAdd("");
                     router.refresh();
                   });
@@ -749,7 +763,18 @@ export function CallSheetEditor({
                     disabled={addPending}
                     onClick={() => {
                       startAddTransition(async () => {
-                        await removePerShiftResourceAction(projectId, dayId, row.itemId);
+                        const result = track(
+                          await removePerShiftResourceAction(
+                            projectId,
+                            dayId,
+                            row.itemId,
+                            revision,
+                          ),
+                        );
+                        if (result.error) {
+                          toast.error(result.error);
+                          return;
+                        }
                         router.refresh();
                       });
                     }}

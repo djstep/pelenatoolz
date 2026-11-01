@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { CALL_SHEET_STATUS_LABELS } from "@/features/call-sheets/print/stamp";
 import {
   shootDayStatusLabels,
   shootDayTypeLabels,
@@ -17,6 +18,8 @@ type DayBrief = {
   wrapTime: string | null;
   isNightShift: boolean;
   _count: { scenes: number };
+  /** Вызывной дня: статус и версия; null — ещё не создан. */
+  callSheet?: { status: keyof typeof CALL_SHEET_STATUS_LABELS; version: number } | null;
 };
 
 export function DayDocsIndex({
@@ -67,6 +70,12 @@ export function DayDocsIndex({
                 <th className="px-4 py-3">Тип</th>
                 <th className="px-4 py-3">Сцены</th>
                 <th className="px-4 py-3">Сбор / конец</th>
+                {kind === "call-sheets" ? (
+                  <>
+                    <th className="px-4 py-3">Статус</th>
+                    <th className="px-4 py-3">Версия</th>
+                  </>
+                ) : null}
                 <th className="px-4 py-3" />
               </tr>
             </thead>
@@ -89,6 +98,20 @@ export function DayDocsIndex({
                     {[day.callTime, day.wrapTime].filter(Boolean).join(" – ") ||
                       "—"}
                   </td>
+                  {kind === "call-sheets" ? (
+                    <>
+                      <td className="px-4 py-3">
+                        {day.callSheet ? (
+                          <Badge>{CALL_SHEET_STATUS_LABELS[day.callSheet.status]}</Badge>
+                        ) : (
+                          <span className="text-[var(--muted-fg)]">не создан</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 tabular-nums">
+                        {day.callSheet ? day.callSheet.version : "—"}
+                      </td>
+                    </>
+                  ) : null}
                   <td className="px-4 py-3 text-right">
                     <Link href={`${base}/${day.id}`}>
                       <Button type="button" variant="secondary">

@@ -116,7 +116,9 @@ describe("тайминги актёров: проверки сохранения
     const body = source.slice(start, source.indexOf("export async function", start + 10));
     const check = body.indexOf("checkActorCallsSave(");
     assert.ok(check > 0);
-    assert.ok(check < body.indexOf("prisma."), "проверка — до первой записи");
+    // Запись — только в транзакции с номером правки вызывного (шаг 4).
+    assert.ok(check < body.indexOf("withCallSheetRevision("), "проверка — до первой записи");
+    assert.ok(!/prisma\.\w+\.(create|update|upsert|delete)/.test(body), "мимо транзакции не пишет");
     assert.ok(body.includes(`ctx.can("callsheet:write") || ctx.can("schedule:write")`));
     assert.ok(body.includes("auditMutation("));
   });

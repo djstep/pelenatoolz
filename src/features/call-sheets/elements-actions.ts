@@ -22,7 +22,13 @@ import {
   type SectionsPayload,
 } from "@/features/call-sheets/lib/elements-rules";
 import { buildAutoRows } from "@/features/call-sheets/lib/sections";
+import {
+  isCallSheetEditRefused,
+  parseExpectedRevision,
+  REVISION_FIELD,
+} from "@/features/call-sheets/lib/revision";
 import { canEditCallSheets } from "@/features/call-sheets/lib/template-rules";
+import { withCallSheetRevision } from "@/features/call-sheets/revision-db";
 import { ensureCallSheetSections } from "@/features/call-sheets/sections-db";
 import {
   assertInProject,
@@ -33,7 +39,12 @@ import { AuditEntityType } from "@/shared/audit/entity-types";
 import { auditMutation } from "@/shared/audit/with-audit";
 import { prisma } from "@/shared/db/prisma";
 
-export type CallSheetElementsActionState = { error?: string; success?: string };
+export type CallSheetElementsActionState = {
+  error?: string;
+  success?: string;
+  /** Номер правки вызывного после сохранения элементов. */
+  revision?: number | null;
+};
 
 const CHANGED_ELSEWHERE = "Данные изменили в другом окне — обновите страницу";
 
@@ -169,11 +180,13 @@ export async function saveCallSheetElementsAction(
   }
 
   const callSheetId = sheet.id;
+  const expected = parseExpectedRevision(formData.get(REVISION_FIELD));
+  let saved;
   try {
-    await auditMutation(
+    saved = await auditMutation(
       ctx,
       (rows: ElementWrite[]) =>
-        prisma.$transaction(async (tx) => {
+        withCallSheetRevision(projectId, checked.dayId, expected, async (tx) => {
           await ensureCallSheetSections(tx, projectId);
           const fresh = await tx.callSheetSection.findMany({
             where: { projectId },
@@ -201,11 +214,12 @@ export async function saveCallSheetElementsAction(
       },
     );
   } catch (error) {
+    if (isCallSheetEditRefused(error)) return { error: error.message };
     if (error instanceof SaveRefused) return { error: error.message };
     if (isUniqueError(error)) return { error: CHANGED_ELSEWHERE };
     throw error;
   }
 
   revalidatePath(`/ru/projects/${projectId}/call-sheets/${checked.dayId}`);
-  return { success: "Элементы площадки сохранены" };
+  return { success: "Элементы площадки сохранены", revision: saved.revision };
 }

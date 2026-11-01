@@ -29,6 +29,7 @@ import {
 } from "@/features/call-sheets/lib/elements-rules";
 import { SPECIAL_TRANSPORT_KEY, type ElementValues } from "@/features/call-sheets/lib/sections";
 import { cn } from "@/shared/lib/cn";
+import { useRevisionAction } from "@/features/call-sheets/components/revision-context";
 import { Button } from "@/shared/ui/button";
 import { Checkbox } from "@/shared/ui/checkbox";
 import { submitKeepingFields } from "@/shared/ui/forms/submit-keeping-fields";
@@ -314,7 +315,7 @@ export function CallSheetElementsEditor({
   canEdit: boolean;
 }) {
   const bound = saveCallSheetElementsAction.bind(null, projectId, dayId);
-  const [state, action, pending] = useActionState(bound, initial);
+  const [state, action, pending] = useActionState(useRevisionAction(bound), initial);
   useActionToast(state);
   const { ref, markClean } = useFormGuard<HTMLFormElement>(canEdit, undefined, state);
   useActionSuccess(state, markClean);

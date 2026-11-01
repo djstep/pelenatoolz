@@ -13,6 +13,7 @@ import {
 } from "@/features/call-sheets/components/call-sheet-sheet-editor";
 import type { CallSheetBlocks, TemplateMemberOption } from "@/features/call-sheets/queries";
 import { Button } from "@/shared/ui/button";
+import { useCallSheetRevision } from "@/features/call-sheets/components/revision-context";
 import { SheetBlock } from "@/features/call-sheets/components/sheet-block";
 import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
 import { toast } from "@/shared/ui/toast";
@@ -36,6 +37,7 @@ function Empty() {
 /** «Обновить из КПП»: ресурсы смены заново из сцен дня. Открытие страницы ничего не пишет. */
 function RefreshFromScheduleButton({ projectId, dayId }: { projectId: string; dayId: string }) {
   const confirm = useConfirm();
+  const { revision, track } = useCallSheetRevision();
   return (
     <Button
       type="button"
@@ -50,7 +52,9 @@ function RefreshFromScheduleButton({ projectId, dayId }: { projectId: string; da
           ],
           confirmLabel: "Обновить",
           action: async () => {
-            const result = await refreshCallSheetFromScheduleAction(projectId, dayId);
+            const result = track(
+              await refreshCallSheetFromScheduleAction(projectId, dayId, revision),
+            );
             if (result.error) return result.error;
             toast.success("Вызывной обновлён из КПП");
           },
@@ -101,6 +105,7 @@ export function CallSheetTemplateBlocks({
   const [pending, startTransition] = useTransition();
   const [editing, setEditing] = useState(false);
   const confirm = useConfirm();
+  const { revision, track } = useCallSheetRevision();
   const unsaved = useUnsavedChanges();
   const templateHref = `/${locale}/projects/${projectId}/settings/call-sheet-template`;
 
@@ -117,7 +122,7 @@ export function CallSheetTemplateBlocks({
               disabled={pending}
               onClick={() =>
                 startTransition(async () => {
-                  const result = await createCallSheetAction(projectId, dayId);
+                  const result = track(await createCallSheetAction(projectId, dayId));
                   if (result.error) toast.error(result.error);
                   else toast.success("Вызывной создан");
                 })
@@ -190,7 +195,9 @@ export function CallSheetTemplateBlocks({
                   ],
                   confirmLabel: "Обновить",
                   action: async () => {
-                    const result = await refreshCallSheetFromTemplateAction(projectId, dayId);
+                    const result = track(
+                      await refreshCallSheetFromTemplateAction(projectId, dayId, revision),
+                    );
                     if (result.error) return result.error;
                     setEditing(false);
                     toast.success("Вызывной обновлён из шаблона");

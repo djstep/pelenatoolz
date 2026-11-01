@@ -5,6 +5,12 @@ import type {
   CallSheetPrintPlanRow,
 } from "@/features/call-sheets/print/print-model";
 import { loadMedeoFontCss, medeoFontUrlCss } from "@/features/call-sheets/print/medeo-font";
+import {
+  stampFooter,
+  stampMark,
+  stampVersion,
+  type CallSheetStamp,
+} from "@/features/call-sheets/print/stamp";
 import { escapeHtml } from "@/shared/lib/escape-html";
 
 /**
@@ -66,7 +72,8 @@ function sceneWord(n: number) {
 
 // ---- Шапка, времена, сведения ----
 
-function headHtml(model: CallSheetPrintModel) {
+function headHtml(model: CallSheetPrintModel, stamp: CallSheetStamp | undefined) {
+  const version = stampVersion(stamp);
   const meta = [
     model.shiftNumber ? `<b>Смена №${model.shiftNumber}</b>` : null,
     model.nightShift ? "ночная смена" : null,
@@ -75,7 +82,9 @@ function headHtml(model: CallSheetPrintModel) {
       ? `${model.totals.sceneCount}&nbsp;${sceneWord(model.totals.sceneCount)}`
       : null,
     model.totals.dayTiming ? `хронометраж дня ${t(model.totals.dayTiming)}` : null,
+    version ? e(version) : null,
   ].filter(Boolean);
+  const mark = stampMark(stamp);
 
   const { crewCall } = model;
   const dark = crewCall.time
@@ -89,7 +98,7 @@ function headHtml(model: CallSheetPrintModel) {
 
   return `<div class="head">
   <div>
-    <div class="kicker">Вызывной лист</div>
+    <div class="kicker">Вызывной лист${mark ? ` <span class="stamp">${e(mark)}</span>` : ""}</div>
     <h1>${e(model.projectName)}</h1>
     <div class="date">${e(model.dateLabel)}</div>
     ${meta.length ? `<div class="meta">${meta.join(" · ")}</div>` : ""}
@@ -450,7 +459,7 @@ function schemeHtml(model: CallSheetPrintModel) {
 
 // ---- Страница ----
 
-function pageCss(model: CallSheetPrintModel) {
+function pageCss(model: CallSheetPrintModel, stamp: CallSheetStamp | undefined) {
   const shift = model.shiftNumber ? `смена ${model.shiftNumber}` : null;
   const scenes = model.totals.sceneCount
     ? `${model.totals.sceneCount} ${sceneWord(model.totals.sceneCount)}`
@@ -475,6 +484,8 @@ function pageCss(model: CallSheetPrintModel) {
   const footLeft = [model.projectName, `вызывной на ${model.numericDate}`, shift]
     .filter(Boolean)
     .join(" · ");
+  const footer = stampFooter(stamp);
+  const footRight = `${footer ? `${cssString(`${footer} · `)} ` : ""}"лист " counter(page) " из " counter(pages)`;
   const rule = `vertical-align:bottom; border-bottom:2.4pt solid #121212;`;
   const font = `"Medeo Sans",Arial,sans-serif`;
   return `@page{ size:A4; margin:17mm 9mm 12mm;
@@ -482,7 +493,7 @@ function pageCss(model: CallSheetPrintModel) {
   @top-center{ content:""; ${rule} }
   @top-right{ content:${cssString(runRight)}; font:600 7.4pt ${font}; color:#3a3a3a; padding-bottom:1.7mm; text-align:right; ${rule} }
   @bottom-left{ content:${cssString(footLeft)}; font:7pt ${font}; color:#6e6e6a; }
-  @bottom-right{ content:"лист " counter(page) " из " counter(pages); font:7pt ${font}; color:#6e6e6a; text-align:right; }
+  @bottom-right{ content:${footRight}; font:7pt ${font}; color:#6e6e6a; text-align:right; }
 }
 @page :first{ margin-top:9mm;
   @top-left{ content:none; border:0; } @top-center{ content:none; border:0; } @top-right{ content:none; border:0; }
@@ -520,6 +531,7 @@ h1,h2,p{ margin:0; }
 /* шапка */
 .head{ display:grid; grid-template-columns:1fr auto; gap:6mm; align-items:start; padding-bottom:3mm; break-inside:avoid; }
 .head .kicker{ font-size:7pt; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:var(--mute); }
+.head .stamp{ display:inline-block; margin-left:2mm; padding:.6mm 2mm; border:1.2pt solid var(--acc); border-radius:1mm; color:var(--acc); background:var(--acc-bg); font-size:9pt; font-weight:700; letter-spacing:.06em; vertical-align:middle; }
 .head h1{ font-size:26pt; line-height:1; margin:1.2mm 0 1mm; font-weight:700; letter-spacing:-.01em; }
 .head .date{ font-size:11pt; font-weight:600; }
 .head .meta{ margin-top:1mm; color:var(--ink2); }
@@ -690,14 +702,18 @@ function fontCss(font: CallSheetFontMode): string {
   return "";
 }
 
-/** Модель → HTML листа. Без скриптов и обработчиков; шрифт — см. `CallSheetFontMode`. */
+/**
+ * Модель → HTML листа. Без скриптов и обработчиков; шрифт — см. `CallSheetFontMode`.
+ * `stamp` — статус и версия (шапка и подвал); без него — лист без статуса.
+ */
 export function buildCallSheetHtml(
   model: CallSheetPrintModel,
-  options: { font?: CallSheetFontMode } = {},
+  options: { font?: CallSheetFontMode; stamp?: CallSheetStamp } = {},
 ): string {
   const font = options.font ?? "none";
+  const { stamp } = options;
   const body = [
-    headHtml(model),
+    headHtml(model, stamp),
     timesHtml(model),
     infoHtml(model),
     importantHtml(model),
@@ -719,7 +735,7 @@ export function buildCallSheetHtml(
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${e(model.documentTitle)}</title>
 <style>${fontCss(font)}
-${pageCss(model)}
+${pageCss(model, stamp)}
 ${SHEET_CSS}</style>
 </head><body><main class="sheet">
 ${body}

@@ -1,9 +1,10 @@
 import { createHash } from "node:crypto";
 import type { CallSheetBlocks } from "@/features/call-sheets/queries";
 import type { ElementsEditorData } from "@/features/call-sheets/elements-queries";
-import type {
-  CallSheetPrintModel,
-  CallSheetPrintSource,
+import {
+  buildCallSheetPrintModel,
+  type CallSheetPrintModel,
+  type CallSheetPrintSource,
 } from "@/features/call-sheets/print/print-model";
 import type { DayAstro } from "@/features/day-docs/lib/city-astro";
 import type { DayDocBundle } from "@/features/day-docs/lib/build-day-doc";
@@ -102,13 +103,76 @@ export function attachmentDisposition(fileName: string): string {
   return `attachment; filename="${ascii}"; filename*=UTF-8''${encoded}`;
 }
 
+// ---- Снимок утверждения и отпечаток данных дня ----
+
+/** JSON с ключами по алфавиту на всех уровнях: тот же отпечаток при любом порядке ключей. */
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter(([, v]) => v !== undefined)
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+    return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${stableJson(v)}`).join(",")}}`;
+  }
+  return JSON.stringify(value ?? null);
+}
+
+/**
+ * Отпечаток данных дня для плашки «данные дня изменились после утверждения». Модель листа
+ * строится без прогноза погоды и солнца (`astro`): их меняет прогноз, а не группа — иначе
+ * плашка появлялась бы от каждого обновления прогноза. Руками введённые t днём / ночью,
+ * описание погоды дня и всё остальное — в отпечатке.
+ */
+export function callSheetDataHash(source: CallSheetPrintSource): string {
+  const model = buildCallSheetPrintModel({ ...source, astro: null });
+  return createHash("sha256").update(stableJson(model)).digest("hex");
+}
+
+/** Снимок из базы → модель листа; не та форма — null (печатать нечего). */
+export function parseSnapshotModel(snapshot: unknown): CallSheetPrintModel | null {
+  if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) return null;
+  const model = snapshot as Partial<CallSheetPrintModel>;
+  if (model.modelVersion !== 1 || typeof model.projectName !== "string") return null;
+  return model as CallSheetPrintModel;
+}
+
+/** Номер версии из адреса (`?version=N`): нет — undefined, не число ≥ 1 — null (отказ). */
+export function parseVersionParam(raw: unknown): number | null | undefined {
+  if (raw === undefined || raw === null || raw === "") return undefined;
+  const text = typeof raw === "number" ? String(raw) : raw;
+  if (typeof text !== "string" || !/^[1-9]\d{0,5}$/.test(text)) return null;
+  return Number(text);
+}
+
+/**
+ * Откуда печатать: версия из адреса — её снимок; утверждённый — снимок своей версии
+ * (не живые данные, даже если КПП потом поменяли); черновик и «на согласовании» — живые данные.
+ */
+export function choosePrintSource(
+  sheet: { status: string; version: number } | null,
+  requested: number | undefined,
+): { kind: "snapshot"; version: number } | { kind: "live" } {
+  if (requested !== undefined) return { kind: "snapshot", version: requested };
+  if (sheet?.status === "APPROVED") return { kind: "snapshot", version: sheet.version };
+  return { kind: "live" };
+}
+
 // ---- Адрес просмотра ----
 
 /**
  * Адрес листа для просмотра на странице. `v` — отпечаток модели: правки и «Обновить из КПП»
  * меняют модель → меняется адрес → iframe перезагружается; без правок — тот же адрес.
  */
-export function callSheetPreviewSrc(projectId: string, dayId: string, model: CallSheetPrintModel) {
-  const version = createHash("sha256").update(JSON.stringify(model)).digest("hex").slice(0, 16);
+export function callSheetPreviewSrc(
+  projectId: string,
+  dayId: string,
+  model: CallSheetPrintModel,
+  /** Статус и версия: утверждение и «Внести изменения» меняют лист без правки данных. */
+  state: { status: string; version: number } | null = null,
+) {
+  const version = createHash("sha256")
+    .update(JSON.stringify(state ? [model, state.status, state.version] : model))
+    .digest("hex")
+    .slice(0, 16);
   return `/api/projects/${encodeURIComponent(projectId)}/call-sheets/${encodeURIComponent(dayId)}/sheet?v=${version}`;
 }

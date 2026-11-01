@@ -54,6 +54,8 @@ import {
 import { timeSlotTypeLabels } from "@/features/day-docs/lib/slot-labels";
 import { scenePrimaryAddress } from "@/features/day-docs/lib/travel-time";
 import { normalizeHhMm } from "@/features/day-docs/lib/time-utils";
+import { useCallSheetRevision } from "@/features/call-sheets/components/revision-context";
+import { REVISION_FIELD } from "@/features/call-sheets/lib/revision";
 import { CallSheetToolbar } from "@/features/day-docs/components/call-sheet-toolbar";
 import { reorderScenesAction } from "@/features/schedule/actions";
 import { Button } from "@/shared/ui/button";
@@ -612,6 +614,7 @@ export function CallSheetPlanner({
   const [presetsOpen, setPresetsOpen] = useState(false);
   const [message, setMessage] = useState<CallSheetActionState>({});
   const [pending, startTransition] = useTransition();
+  const { revision, track } = useCallSheetRevision();
   const [travelPending, setTravelPending] = useState(false);
   const [dndReady, setDndReady] = useState(false);
 
@@ -790,15 +793,6 @@ export function CallSheetPlanner({
         )
         .map((item) => item.assignmentId);
 
-      if (assignmentIds.length > 0) {
-        try {
-          await reorderScenesAction(projectId, dayId, assignmentIds);
-        } catch {
-          setMessage({ error: "Не удалось сохранить порядок сцен" });
-          return;
-        }
-      }
-
       const normalizedPlan = plan.map((item) => ({
         ...item,
         duration: normalizeHhMm(item.duration),
@@ -823,7 +817,19 @@ export function CallSheetPlanner({
         ),
       );
 
-      const result = await saveTimeSlotsAction(projectId, dayId, {}, fd);
+      fd.set(REVISION_FIELD, revision === null ? "" : String(revision));
+
+      // Сначала план — он сверяет номер правки и не пишет утверждённый вызывной; порядок сцен
+      // в КПП — только после него, иначе отказ плана оставил бы новый порядок сцен.
+      const result = track(await saveTimeSlotsAction(projectId, dayId, {}, fd));
+      if (!result.error && assignmentIds.length > 0) {
+        try {
+          await reorderScenesAction(projectId, dayId, assignmentIds);
+        } catch {
+          setMessage({ error: "План сохранён, но не удалось сохранить порядок сцен" });
+          return;
+        }
+      }
       setMessage(result);
       if (!result.error) {
         setShiftStart(normalizedShift);

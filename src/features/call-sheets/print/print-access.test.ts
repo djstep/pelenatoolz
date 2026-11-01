@@ -68,7 +68,7 @@ describe("право на печать и Excel вызывного", () => {
     const loader = source("src/features/call-sheets/print/load-print-model.ts");
     const ctxAt = loader.indexOf("await requireProjectContext(projectId)");
     const gateAt = loader.indexOf("await checkCallSheetRead(");
-    const loadAt = loader.indexOf("getShootDayDocument(projectId, gate.dayId)");
+    const loadAt = loader.indexOf("buildLiveCallSheet(projectId, gate.dayId)");
     assert.ok(ctxAt > 0 && ctxAt < gateAt && gateAt < loadAt, "requireProjectContext → checkCallSheetRead → данные");
     assert.match(loader, /callsheet:read"\) \|\| ctx\.can\("schedule:read"\)/);
     assert.match(loader, /where: \{ id, projectId \}/, "день ищется только в своём проекте");
@@ -77,10 +77,15 @@ describe("право на печать и Excel вызывного", () => {
     const action = source("src/features/call-sheets/print-actions.ts");
     assert.match(action, /^"use server";/);
     assert.equal((action.match(/^export /gm) ?? []).length, 1, "одна публичная функция");
-    assert.match(action, /await loadCallSheetPrintModel\(projectId, dayId\)/);
+    assert.match(action, /await loadCallSheetPrintModel\(projectId, dayId, version\)/);
 
     const route = source("src/app/api/projects/[projectId]/call-sheets/[dayId]/xlsx/route.ts");
-    assert.ok(route.includes("return callSheetXlsxResponse(await loadCallSheetPrintModel(projectId, dayId))"));
+    assert.ok(
+      route.includes(
+        `return callSheetXlsxResponse(
+    await loadCallSheetPrintModel(projectId, dayId, new URL(request.url).searchParams.get("version")),`,
+      ),
+    );
   });
 
   test("старого формата нет: PDF через pdfkit, печать FilmToolz, base64-экспорт", () => {

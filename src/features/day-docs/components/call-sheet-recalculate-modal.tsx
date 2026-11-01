@@ -8,6 +8,7 @@ import {
   previewRecalculateResourceTimingsAction,
   type CallSheetActionState,
 } from "@/features/day-docs/actions";
+import { useCallSheetRevision } from "@/features/call-sheets/components/revision-context";
 import type { ActorTimingProposal } from "@/features/day-docs/lib/compute-call-timings";
 import type { ResourceTimingProposal } from "@/features/day-docs/lib/compute-call-timings";
 import { Button } from "@/shared/ui/button";
@@ -85,6 +86,7 @@ export function CallSheetRecalculateModal({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [message, setMessage] = useState<CallSheetActionState>({});
   const [pending, startTransition] = useTransition();
+  const { revision, track } = useCallSheetRevision();
 
   useActionToast(message);
 
@@ -128,18 +130,21 @@ export function CallSheetRecalculateModal({
 
   function apply() {
     startTransition(async () => {
-      const result =
+      const result = track(
         tab === "actors"
           ? await applyRecalculateActorTimingsAction(
               projectId,
               dayId,
               Array.from(selectedActors),
+              revision,
             )
           : await applyRecalculateResourceTimingsAction(
               projectId,
               dayId,
               Array.from(selectedResources),
-            );
+              revision,
+            ),
+      );
       setMessage(result);
       if (!result.error) onClose();
     });

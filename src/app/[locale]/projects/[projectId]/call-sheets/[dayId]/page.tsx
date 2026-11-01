@@ -11,11 +11,21 @@ import {
 } from "@/features/call-sheets/print/load-print-model";
 import { buildCallSheetPrintModel } from "@/features/call-sheets/print/print-model";
 import {
+  callSheetDataHash,
   callSheetPreviewSrc,
   dayLocationsOf,
   printSourceFromPageData,
 } from "@/features/call-sheets/print/print-source";
-import { getCallSheetForDay, listTemplateMemberOptions } from "@/features/call-sheets/queries";
+import {
+  getCallSheetForDay,
+  getCallSheetStatus,
+  listTemplateMemberOptions,
+} from "@/features/call-sheets/queries";
+import { CallSheetRevisionProvider } from "@/features/call-sheets/components/revision-context";
+import {
+  CallSheetStatusPanel,
+  type CallSheetStatusPanelData,
+} from "@/features/call-sheets/components/call-sheet-status-panel";
 import { CallSheetView } from "@/features/day-docs/components/call-sheet-view";
 import { fetchDayAstro } from "@/features/day-docs/lib/city-astro";
 import {
@@ -71,10 +81,11 @@ export default async function CallSheetDayPage({ params }: Props) {
     );
   }
 
-  const canEdit =
+  const canEditCallSheet =
     ctx.can("callsheet:write") || ctx.can("schedule:write");
 
   const [
+    status,
     callSheet,
     nextDay,
     timingBaselines,
@@ -87,14 +98,15 @@ export default async function CallSheetDayPage({ params }: Props) {
     elements,
     workingDay,
   ] = await Promise.all([
+    getCallSheetStatus(projectId, dayId),
     getCallSheetForDay(projectId, dayId),
     getNextShootDayBrief(projectId, bundle.day.dayNumber),
     getActorTimingBaselines(projectId, dayId),
     getResourceTimingBaselines(projectId, dayId),
     listPerShiftCatalogForDay(projectId, dayId),
     listResourceCategories(projectId),
-    canEdit ? listTemplateMemberOptions(projectId) : Promise.resolve([]),
-    canEdit ? listDepartmentsForSmeta(projectId, null) : Promise.resolve([]),
+    canEditCallSheet ? listTemplateMemberOptions(projectId) : Promise.resolve([]),
+    canEditCallSheet ? listDepartmentsForSmeta(projectId, null) : Promise.resolve([]),
     getCallSheetTransportEditor(ctx, projectId, dayId),
     getCallSheetElementsEditor(projectId, dayId),
     getWorkingDayPosition(projectId, bundle.day),
@@ -128,73 +140,114 @@ export default async function CallSheetDayPage({ params }: Props) {
   ]);
 
   // Просмотр — тот же лист, что уходит в печать: iframe берёт его маршрутом (HTML в данные
-  // страницы не попадает). Модель здесь — только для отпечатка в адресе.
+  // страницы не попадает; утверждённый — из снимка). Модель здесь — только для отпечатка.
+  const printSource = printSourceFromPageData(bundle, callSheet, elements, astro, workingDay);
   const sheetSrc = callSheetPreviewSrc(
     projectId,
     dayId,
-    buildCallSheetPrintModel(
-      printSourceFromPageData(bundle, callSheet, elements, astro, workingDay),
-    ),
+    buildCallSheetPrintModel(printSource),
+    status,
   );
 
-  const appliedAtLabel = callSheet
-    ? callSheet.templateAppliedAt.toLocaleString("ru-RU", {
-        timeZone: bundle.project.timezone,
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      })
+  const timeZone = bundle.project.timezone;
+  const dateTime = (date: Date) =>
+    date.toLocaleString("ru-RU", {
+      timeZone,
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  const appliedAtLabel = callSheet ? dateTime(callSheet.templateAppliedAt) : null;
+
+  // Утверждённый — только просмотр (сервер тоже отклоняет правки до «Внести изменения»).
+  const approved = status?.status === "APPROVED";
+  const canEdit = canEditCallSheet && !approved;
+  const approvedSnapshot = approved
+    ? status.versions.find((v) => v.version === status.version)
+    : undefined;
+  const statusPanel: CallSheetStatusPanelData | null = status
+    ? {
+        status: status.status,
+        version: status.version,
+        approvedLabel:
+          approved && status.approvedAt
+            ? [`утверждён ${dateTime(status.approvedAt)}`, status.approvedByName]
+                .filter(Boolean)
+                .join(" · ")
+            : null,
+        // КПП, либретто и актёры правятся и после утверждения — тогда плашка.
+        dataChanged: approvedSnapshot
+          ? approvedSnapshot.modelHash !== callSheetDataHash(printSource)
+          : false,
+        versions: status.versions.map((v) => ({
+          version: v.version,
+          label: [`Версия ${v.version}`, dateTime(v.approvedAt), v.approvedByName]
+            .filter(Boolean)
+            .join(" · "),
+        })),
+      }
     : null;
 
   return (
-    <CallSheetView
-      locale={locale}
-      projectId={projectId}
-      bundle={bundle}
-      astro={astro}
-      nextDay={nextDay}
-      nextDayAstro={nextDayAstro}
-      canEdit={canEdit}
-      sheetSrc={sheetSrc}
-      editBlocks={
-        <>
-          <CallSheetTemplateBlocks
-            locale={locale}
-            projectId={projectId}
-            dayId={dayId}
-            callSheet={callSheet}
-            appliedAtLabel={appliedAtLabel}
-            canEdit={canEdit}
-            members={members}
-            departments={departments.map((d) => ({ id: d.id, name: d.name }))}
-            locations={dayLocations.map((l) => ({
-              id: l.id,
-              label: [l.name, l.sublocation].filter(Boolean).join(". "),
-            }))}
-          />
-          {elements ? (
-            <SheetBlock title="Элементы площадки">
-              <CallSheetElementsEditor
+    <CallSheetRevisionProvider revision={status?.revision ?? null}>
+      <CallSheetView
+        locale={locale}
+        projectId={projectId}
+        bundle={bundle}
+        astro={astro}
+        nextDay={nextDay}
+        nextDayAstro={nextDayAstro}
+        canEdit={canEdit}
+        sheetSrc={sheetSrc}
+        editBlocks={
+          <>
+            {statusPanel ? (
+              <CallSheetStatusPanel
                 projectId={projectId}
                 dayId={dayId}
-                data={elements}
-                canEdit={canEdit}
+                data={statusPanel}
+                canEdit={canEditCallSheet}
+                canApprove={ctx.can("callsheet:approve")}
               />
-            </SheetBlock>
-          ) : null}
-        </>
-      }
-      timingBaselines={timingBaselines}
-      resourceTimingBaselines={resourceTimingBaselines}
-      perShiftCatalog={perShiftCatalog}
-      resourceCategories={resourceCategories.map((c) => ({
-        id: c.id,
-        name: c.name,
-        perShift: c.perShift,
-      }))}
-      transportEditor={transportEditor}
-    />
+            ) : null}
+            <CallSheetTemplateBlocks
+              locale={locale}
+              projectId={projectId}
+              dayId={dayId}
+              callSheet={callSheet}
+              appliedAtLabel={appliedAtLabel}
+              canEdit={canEdit}
+              members={members}
+              departments={departments.map((d) => ({ id: d.id, name: d.name }))}
+              locations={dayLocations.map((l) => ({
+                id: l.id,
+                label: [l.name, l.sublocation].filter(Boolean).join(". "),
+              }))}
+            />
+            {elements ? (
+              <SheetBlock title="Элементы площадки">
+                <CallSheetElementsEditor
+                  projectId={projectId}
+                  dayId={dayId}
+                  data={elements}
+                  canEdit={canEdit}
+                />
+              </SheetBlock>
+            ) : null}
+          </>
+        }
+        timingBaselines={timingBaselines}
+        resourceTimingBaselines={resourceTimingBaselines}
+        perShiftCatalog={perShiftCatalog}
+        resourceCategories={resourceCategories.map((c) => ({
+          id: c.id,
+          name: c.name,
+          perShift: c.perShift,
+        }))}
+        transportEditor={transportEditor}
+      />
+    </CallSheetRevisionProvider>
   );
 }

@@ -5,6 +5,8 @@ export const AuditEntityType = {
   shootDay: "shoot_day",
   callSheet: "call_sheet",
   callSheetTemplate: "call_sheet_template",
+  /** Переходы статуса вызывного: на согласование, утверждение, возврат, «Внести изменения». */
+  callSheetStatus: "call_sheet_status",
   userProfile: "user_profile",
   character: "character",
   actor: "actor",
@@ -70,6 +72,7 @@ export const auditEntityLabels: Record<string, string> = {
   [AuditEntityType.shootDay]: "Съёмочный день",
   [AuditEntityType.callSheet]: "Вызывной",
   [AuditEntityType.callSheetTemplate]: "Шаблон вызывного",
+  [AuditEntityType.callSheetStatus]: "Статус вызывного",
   [AuditEntityType.userProfile]: "Профиль",
   [AuditEntityType.character]: "Персонаж",
   [AuditEntityType.actor]: "Актёр",

@@ -26,6 +26,12 @@ import {
   loadTemplateForCopy,
   type Tx,
 } from "@/features/call-sheets/queries";
+import {
+  isCallSheetEditRefused,
+  parseExpectedRevision,
+  REVISION_FIELD,
+} from "@/features/call-sheets/lib/revision";
+import { withCallSheetRevision } from "@/features/call-sheets/revision-db";
 import { ensureCallSheetSections } from "@/features/call-sheets/sections-db";
 import { memberLabelsById } from "@/features/departments/queries";
 import {
@@ -39,7 +45,15 @@ import { AuditEntityType } from "@/shared/audit/entity-types";
 import { auditMutation } from "@/shared/audit/with-audit";
 import { prisma } from "@/shared/db/prisma";
 
-export type CallSheetTemplateActionState = { error?: string; success?: string };
+export type CallSheetTemplateActionState = {
+  error?: string;
+  success?: string;
+  /** Номер правки вызывного после сохранения — браузер шлёт его со следующим. */
+  revision?: number | null;
+};
+
+/** Ответ команд вызывного; `revision` — новый номер правки. */
+export type CallSheetCommandResult = { error?: string; revision?: number | null };
 
 const ALREADY_EXISTS = "Вызывной этого дня уже создан";
 const NOT_CREATED = "Вызывной этого дня ещё не создан";
@@ -174,7 +188,7 @@ function revalidateDay(projectId: string, dayId: string) {
 export async function createCallSheetAction(
   projectId: string,
   dayId: string,
-): Promise<{ error?: string }> {
+): Promise<CallSheetCommandResult> {
   const ctx = await requireProjectContext(projectId);
   const checked = await checkCallSheetCommand(
     { canEdit: canEditCallSheets(ctx), inProject: inProjectCheck(projectId) },
@@ -222,14 +236,15 @@ export async function createCallSheetAction(
   }
 
   revalidateDay(projectId, checked.dayId);
-  return {};
+  return { revision: 0 };
 }
 
 /** «Обновить из шаблона»: руководители, цеха и база вызывного заменяются копией шаблона. */
 export async function refreshCallSheetFromTemplateAction(
   projectId: string,
   dayId: string,
-): Promise<{ error?: string }> {
+  revision: unknown,
+): Promise<CallSheetCommandResult> {
   const ctx = await requireProjectContext(projectId);
   const checked = await checkCallSheetCommand(
     { canEdit: canEditCallSheets(ctx), inProject: inProjectCheck(projectId) },
@@ -247,41 +262,52 @@ export async function refreshCallSheetFromTemplateAction(
   });
   if (!sheet) return { error: NOT_CREATED };
 
-  await auditMutation(
-    ctx,
-    (callSheetId: string) =>
-      prisma.$transaction(async (tx) => {
-        const copies = buildCallSheetCopies(await loadTemplateForCopy(tx, projectId));
-        await tx.callSheetLeader.deleteMany({ where: { callSheetId } });
-        await tx.callSheetCrewCall.deleteMany({ where: { callSheetId } });
-        await tx.callSheetBaseItem.deleteMany({ where: { callSheetId } });
-        await writeCopies(tx, callSheetId, copies);
-        await tx.callSheet.update({
-          where: { id: callSheetId },
-          data: { templateAppliedAt: new Date() },
-        });
-        return copies;
-      }),
-    sheet.id,
-    {
-      projectId,
-      entityType: AuditEntityType.callSheet,
-      action: "UPDATE",
-      entityId: sheet.id,
-      summary: `Вызывной дня ${sheet.shootDay.dayNumber} обновлён из шаблона`,
-      changes: (_input, copies) => ({
-        from: {
-          leaders: sheet._count.leaders,
-          crewCalls: sheet._count.crewCalls,
-          baseItems: sheet._count.baseItems,
-        },
-        to: copiesCount(copies),
-      }),
-    },
-  );
+  let saved;
+  try {
+    saved = await auditMutation(
+      ctx,
+      (callSheetId: string) =>
+        withCallSheetRevision(
+          projectId,
+          checked.dayId,
+          parseExpectedRevision(revision),
+          async (tx) => {
+            const copies = buildCallSheetCopies(await loadTemplateForCopy(tx, projectId));
+            await tx.callSheetLeader.deleteMany({ where: { callSheetId } });
+            await tx.callSheetCrewCall.deleteMany({ where: { callSheetId } });
+            await tx.callSheetBaseItem.deleteMany({ where: { callSheetId } });
+            await writeCopies(tx, callSheetId, copies);
+            await tx.callSheet.update({
+              where: { id: callSheetId },
+              data: { templateAppliedAt: new Date() },
+            });
+            return copies;
+          },
+        ),
+      sheet.id,
+      {
+        projectId,
+        entityType: AuditEntityType.callSheet,
+        action: "UPDATE",
+        entityId: sheet.id,
+        summary: `Вызывной дня ${sheet.shootDay.dayNumber} обновлён из шаблона`,
+        changes: (_input, { result: copies }) => ({
+          from: {
+            leaders: sheet._count.leaders,
+            crewCalls: sheet._count.crewCalls,
+            baseItems: sheet._count.baseItems,
+          },
+          to: copiesCount(copies),
+        }),
+      },
+    );
+  } catch (error) {
+    if (isCallSheetEditRefused(error)) return { error: error.message };
+    throw error;
+  }
 
   revalidateDay(projectId, checked.dayId);
-  return {};
+  return { revision: saved.revision };
 }
 
 /** Руководители, цеха, база и поля листа — как они в вызывном сейчас (для журнала). */
@@ -309,6 +335,7 @@ export async function saveCallSheetSheetAction(
   const deps = { canEdit: canEditCallSheets(ctx), inProject: inProjectCheck(projectId) };
   const command = await checkCallSheetCommand(deps, dayId);
   if ("error" in command) return { error: command.error };
+  const expected = parseExpectedRevision(formData.get(REVISION_FIELD));
 
   const sheet: StoredSheet | null = await prisma.callSheet.findFirst({
     where: { projectId, shootDayId: command.dayId },
@@ -383,40 +410,46 @@ export async function saveCallSheetSheetAction(
     return { success: "Вызывной сохранён" };
   }
 
-  await auditMutation(
-    ctx,
-    (callSheetId: string) =>
-      prisma.$transaction(async (tx) => {
-        await tx.callSheet.update({
-          where: { id: callSheetId },
-          data: {
-            tempDay: data.tempDay,
-            tempNight: data.tempNight,
-            importantNote: data.importantNote,
-            actorRestrictions: data.actorRestrictions,
-            schemeLocationId: data.schemeLocationId,
-          },
-        });
-        // Копии шаблона в вызывном: на их строки ничего не ссылается.
-        await tx.callSheetLeader.deleteMany({ where: { callSheetId } });
-        await tx.callSheetCrewCall.deleteMany({ where: { callSheetId } });
-        await tx.callSheetBaseItem.deleteMany({ where: { callSheetId } });
-        await writeCopies(tx, callSheetId, rows);
-      }),
-    sheet.id,
-    {
-      projectId,
-      entityType: AuditEntityType.callSheet,
-      action: "UPDATE",
-      entityId: sheet.id,
-      summary: `Изменён вызывной дня ${sheet.shootDay.dayNumber}`,
-      // Телефоны в журнал не пишем.
-      changes: { from: before, to: after },
-    },
-  );
+  let saved;
+  try {
+    saved = await auditMutation(
+      ctx,
+      (callSheetId: string) =>
+        withCallSheetRevision(projectId, command.dayId, expected, async (tx) => {
+          await tx.callSheet.update({
+            where: { id: callSheetId },
+            data: {
+              tempDay: data.tempDay,
+              tempNight: data.tempNight,
+              importantNote: data.importantNote,
+              actorRestrictions: data.actorRestrictions,
+              schemeLocationId: data.schemeLocationId,
+            },
+          });
+          // Копии шаблона в вызывном: на их строки ничего не ссылается.
+          await tx.callSheetLeader.deleteMany({ where: { callSheetId } });
+          await tx.callSheetCrewCall.deleteMany({ where: { callSheetId } });
+          await tx.callSheetBaseItem.deleteMany({ where: { callSheetId } });
+          await writeCopies(tx, callSheetId, rows);
+        }),
+      sheet.id,
+      {
+        projectId,
+        entityType: AuditEntityType.callSheet,
+        action: "UPDATE",
+        entityId: sheet.id,
+        summary: `Изменён вызывной дня ${sheet.shootDay.dayNumber}`,
+        // Телефоны в журнал не пишем.
+        changes: { from: before, to: after },
+      },
+    );
+  } catch (error) {
+    if (isCallSheetEditRefused(error)) return { error: error.message };
+    throw error;
+  }
 
   revalidateDay(projectId, command.dayId);
-  return { success: "Вызывной сохранён" };
+  return { success: "Вызывной сохранён", revision: saved.revision };
 }
 
 /**
@@ -426,7 +459,8 @@ export async function saveCallSheetSheetAction(
 export async function refreshCallSheetFromScheduleAction(
   projectId: string,
   dayId: string,
-): Promise<{ error?: string }> {
+  revision: unknown,
+): Promise<CallSheetCommandResult> {
   const ctx = await requireProjectContext(projectId);
   const checked = await checkCallSheetCommand(
     { canEdit: canEditCallSheets(ctx), inProject: inProjectCheck(projectId) },
@@ -441,27 +475,41 @@ export async function refreshCallSheetFromScheduleAction(
   if (!day) return { error: DAY_NOT_FOUND };
   if (!isWorkingShootDay(day.dayType)) return { error: NOT_WORKING_DAY };
 
-  const countUsages = (shootDayId: string) =>
-    prisma.shootDayResourceUsage.count({ where: { shootDayId } });
-  const before = await countUsages(checked.dayId);
+  const before = await prisma.shootDayResourceUsage.count({
+    where: { shootDayId: checked.dayId },
+  });
 
-  await auditMutation(
-    ctx,
-    async (shootDayId: string) => {
-      await syncShootDayResourceUsages(shootDayId);
-      return countUsages(shootDayId);
-    },
-    checked.dayId,
-    {
-      projectId,
-      entityType: AuditEntityType.callSheet,
-      action: "UPDATE",
-      entityId: checked.dayId,
-      summary: `Вызывной дня ${day.dayNumber} обновлён из КПП`,
-      changes: (_input, after) => ({ resourceUsages: { from: before, to: after } }),
-    },
-  );
+  let saved;
+  try {
+    saved = await auditMutation(
+      ctx,
+      (shootDayId: string) =>
+        withCallSheetRevision(
+          projectId,
+          shootDayId,
+          parseExpectedRevision(revision),
+          async (tx) => {
+            await syncShootDayResourceUsages(shootDayId, tx);
+            return tx.shootDayResourceUsage.count({ where: { shootDayId } });
+          },
+        ),
+      checked.dayId,
+      {
+        projectId,
+        entityType: AuditEntityType.callSheet,
+        action: "UPDATE",
+        entityId: checked.dayId,
+        summary: `Вызывной дня ${day.dayNumber} обновлён из КПП`,
+        changes: (_input, { result: after }) => ({
+          resourceUsages: { from: before, to: after },
+        }),
+      },
+    );
+  } catch (error) {
+    if (isCallSheetEditRefused(error)) return { error: error.message };
+    throw error;
+  }
 
   revalidateDay(projectId, checked.dayId);
-  return {};
+  return { revision: saved.revision };
 }

@@ -260,6 +260,8 @@ model User {
   lockedCashPayments       CashPayment[]             @relation("CashPaymentLocker")
   createdAuditions         Audition[]                @relation("AuditionCreator")
   uploadedFiles            ProjectFile[]             @relation("FileUploader")
+  approvedCallSheets       CallSheet[]               @relation("CallSheetApprover")
+  approvedCallSheetVersions CallSheetApprovedVersion[] @relation("CallSheetVersionApprover")
 }
 
 model Project {
@@ -1148,18 +1150,54 @@ model CallSheet {
   actorRestrictions String?
   /// Объект, чья схема идёт в вызывной.
   schemeLocationId  String?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  /// Черновик → на согласовании → утверждён. Утверждённый правится только после «Внести изменения».
+  status            CallSheetStatus @default(DRAFT)
+  /// Номер версии листа: 1, после «Внести изменения» у утверждённого — +1.
+  version           Int             @default(1)
+  /// Номер правки: +1 на каждое сохранение вызывного и данных дня из вызывного.
+  revision          Int             @default(0)
+  /// Текущее утверждение (у черновика — пусто; история — в CallSheetApprovedVersion).
+  approvedAt        DateTime?
+  approvedById      String?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
 
-  project        Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  shootDay       ShootDay            @relation(fields: [shootDayId], references: [id], onDelete: Cascade)
-  schemeLocation Location?           @relation(fields: [schemeLocationId], references: [id], onDelete: SetNull)
-  leaders        CallSheetLeader[]
-  crewCalls      CallSheetCrewCall[]
-  baseItems      CallSheetBaseItem[]
-  elements       CallSheetElement[]
+  project          Project                    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  shootDay         ShootDay                   @relation(fields: [shootDayId], references: [id], onDelete: Cascade)
+  schemeLocation   Location?                  @relation(fields: [schemeLocationId], references: [id], onDelete: SetNull)
+  approvedBy       User?                      @relation("CallSheetApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  leaders          CallSheetLeader[]
+  crewCalls        CallSheetCrewCall[]
+  baseItems        CallSheetBaseItem[]
+  elements         CallSheetElement[]
+  approvedVersions CallSheetApprovedVersion[]
 
   @@index([projectId])
+}
+
+enum CallSheetStatus {
+  DRAFT
+  IN_REVIEW
+  APPROVED
+}
+
+/// Утверждённая версия вызывного: снимок модели листа (CallSheetPrintModel) на момент
+/// утверждения. Пишется при каждом утверждении и больше не меняется.
+model CallSheetApprovedVersion {
+  id           String   @id @default(cuid())
+  callSheetId  String
+  version      Int
+  approvedAt   DateTime @default(now())
+  approvedById String?
+  /// Модель листа целиком — из неё печать и Excel «версии N».
+  snapshot     Json
+  /// Отпечаток модели без прогноза погоды — для плашки «данные дня изменились».
+  modelHash    String
+
+  callSheet  CallSheet @relation(fields: [callSheetId], references: [id], onDelete: Cascade)
+  approvedBy User?     @relation("CallSheetVersionApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+
+  @@unique([callSheetId, version])
 }
 
 /// Руководитель в вызывном — копия строки шаблона: ФИ и телефон участника скопированы.
