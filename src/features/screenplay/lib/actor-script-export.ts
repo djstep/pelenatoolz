@@ -9,6 +9,7 @@ import {
 import { getCurrentScriptVersion } from "@/features/screenplay/lib/versions";
 import { listScenes } from "@/features/script/queries";
 import { prisma } from "@/shared/db/prisma";
+import { formatFileDate } from "@/shared/i18n/format-date";
 
 export type ActorScriptExportFormat = "docx" | "pdf";
 export type ActorScriptGrouping = "script_order" | "shoot_date";
@@ -338,7 +339,7 @@ export async function exportMultiCharacterScriptsAction(
   }
 
   const zipBuf = await zip.generateAsync({ type: "nodebuffer" });
-  const dayTag = new Date().toISOString().slice(0, 10);
+  const dayTag = formatFileDate(new Date(), ctx.project.timezone);
   return {
     type: "zip",
     base64: zipBuf.toString("base64"),

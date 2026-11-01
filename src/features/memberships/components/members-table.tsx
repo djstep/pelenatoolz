@@ -4,8 +4,10 @@ import { useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import {
   removeMemberAction,
+  transferOwnershipAction,
   updateMemberRoleAction,
 } from "@/features/projects/actions";
+import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
 import { Select } from "@/shared/ui/select";
@@ -17,6 +19,10 @@ type MemberRow = {
   id: string;
   role: RoleOption;
   user: { id: string; name: string; email: string };
+  /** Владелец проекта: его роль не меняется и он не удаляется. */
+  isOwner: boolean;
+  /** Смотрит владелец, а это активный продюсер — ему можно передать владение. */
+  canReceiveOwnership: boolean;
 };
 
 export function MembersTable({
@@ -54,9 +60,24 @@ export function MembersTable({
     });
   }
 
+  function transferOwnership(member: MemberRow) {
+    void confirmDelete({
+      title: `Передать владение «${member.user.name}»?`,
+      details: ["Вы останетесь продюсером, но вас смогут понизить."],
+      confirmLabel: "Передать",
+      action: async () => {
+        const result = await transferOwnershipAction(projectId, member.id);
+        if (result.success) toast.success(result.success);
+        return result.error;
+      },
+    });
+  }
+
   if (members.length === 0) {
     return <p className="text-sm text-[var(--muted-fg)]">{t("noMembers")}</p>;
   }
+
+  const showActions = canManage || members.some((m) => m.canReceiveOwnership);
 
   return (
     <div className="overflow-x-auto">
@@ -66,18 +87,25 @@ export function MembersTable({
             <th className="py-2 pr-3 font-medium">Имя</th>
             <th className="py-2 pr-3 font-medium">Email</th>
             <th className="py-2 pr-3 font-medium">{t("role")}</th>
-            {canManage ? <th className="py-2 font-medium" /> : null}
+            {showActions ? <th className="py-2 font-medium" /> : null}
           </tr>
         </thead>
         <tbody>
           {members.map((member) => (
             <tr key={member.id} className="border-b border-[var(--border)]/70">
-              <td className="py-3 pr-3 font-medium">{member.user.name}</td>
+              <td className="py-3 pr-3 font-medium">
+                {member.user.name}
+                {member.isOwner ? (
+                  <Badge className="ml-2" title="Владельца нельзя понизить или удалить — только передать владение">
+                    Владелец
+                  </Badge>
+                ) : null}
+              </td>
               <td className="py-3 pr-3 text-[var(--muted-fg)]">
                 {member.user.email}
               </td>
               <td className="py-3 pr-3 align-middle">
-                {canManage && member.user.id !== currentUserId ? (
+                {canManage && member.user.id !== currentUserId && !member.isOwner ? (
                   <Select
                     key={`${member.id}-${member.role.id}-${resetVersion}`}
                     name="roleId"
@@ -96,9 +124,19 @@ export function MembersTable({
                   member.role.name
                 )}
               </td>
-              {canManage ? (
-                <td className="py-3 text-right">
-                  {member.user.id !== currentUserId ? (
+              {showActions ? (
+                <td className="space-x-2 whitespace-nowrap py-3 text-right">
+                  {member.canReceiveOwnership ? (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      disabled={pending}
+                      onClick={() => transferOwnership(member)}
+                    >
+                      Передать владение
+                    </Button>
+                  ) : null}
+                  {canManage && member.user.id !== currentUserId && !member.isOwner ? (
                     <Button
                       type="button"
                       variant="danger"

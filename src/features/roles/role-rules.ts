@@ -75,9 +75,12 @@ export function canGrantPermissions(
   return isPermissionSubset(targetPermissions, actorRole.permissions);
 }
 
-/** Сколько активных участников с системной ролью «Продюсер» в проекте. */
-export async function countActiveProducers(projectId: string): Promise<number> {
-  return prisma.projectMembership.count({
+/** Сколько активных участников с системной ролью «Продюсер» в проекте. `db` — транзакция, если считать под блокировкой. */
+export async function countActiveProducers(
+  projectId: string,
+  db: Pick<typeof prisma, "projectMembership"> = prisma,
+): Promise<number> {
+  return db.projectMembership.count({
     where: {
       projectId,
       status: MembershipStatus.ACTIVE,

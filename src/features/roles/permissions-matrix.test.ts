@@ -92,12 +92,14 @@ const NO_FINANCE_SECTIONS = PERMISSION_SECTIONS.filter(
 );
 
 describe("normalizePermissionMatrix: фин. условия", () => {
-  test("financeRead/financeWrite остаются только у ставок и finance", () => {
+  test("financeRead/financeWrite остаются только у ставок; у finance — только просмотр", () => {
     const out = normalizePermissionMatrix(matrixWithUnlockEverywhere());
-    for (const id of ["actors", "locations", "elements", "finance"] as const) {
+    for (const id of ["actors", "locations", "elements"] as const) {
       assert.equal(out[id].financeRead, true, id);
       assert.equal(out[id].financeWrite, true, id);
     }
+    assert.equal(out.finance.financeRead, true);
+    assert.equal(out.finance.financeWrite, false);
     for (const s of NO_FINANCE_SECTIONS) {
       assert.equal(out[s.id].financeRead, false, s.id);
       assert.equal(out[s.id].financeWrite, false, s.id);
@@ -206,5 +208,45 @@ describe("isPermissionSubset и financeUnlock", () => {
   test("прочие права шире своих — по-прежнему отказ", () => {
     const target = { scenes: { access: true, delete: true } };
     assert.equal(isPermissionSubset(target, actor), false);
+  });
+});
+
+describe("«Финансы»: фин. условия — только просмотр", () => {
+  function withFinance(flags: Partial<ReturnType<typeof fullSectionPermissions>>) {
+    const m = buildEmptyMatrix();
+    m.finance = { ...m.finance, access: true, read: true, ...flags };
+    return m;
+  }
+
+  test("присланное «редактирование» при сохранении роли становится просмотром", () => {
+    const out = normalizePermissionMatrix(withFinance({ financeWrite: true }));
+    assert.equal(out.finance.financeRead, true);
+    assert.equal(out.finance.financeWrite, false);
+  });
+
+  test("просмотр без «редактирования» не меняется, без флажков — не появляется", () => {
+    assert.equal(normalizePermissionMatrix(withFinance({ financeRead: true })).finance.financeRead, true);
+    const none = normalizePermissionMatrix(withFinance({}));
+    assert.equal(none.finance.financeRead, false);
+    assert.equal(none.finance.financeWrite, false);
+  });
+
+  test("роль в базе с «редактированием» читается как просмотр, права те же", () => {
+    const raw = { finance: { access: true, read: true, financeRead: true, financeWrite: true } };
+    const parsed = parsePermissionMatrix(raw);
+    assert.equal(parsed.finance.financeWrite, false);
+    assert.equal(can(parsed, "finance", "finance"), true);
+  });
+
+  test("правка модуля «Финансы» по-прежнему от «Создания» / «Редактирования»", () => {
+    const out = normalizePermissionMatrix(withFinance({ update: true, financeWrite: true }));
+    assert.equal(can(out, "finance", "write"), true);
+    assert.equal(can(normalizePermissionMatrix(withFinance({ financeWrite: true })), "finance", "write"), false);
+  });
+
+  test("у ставок «редактирование» остаётся", () => {
+    const m = buildEmptyMatrix();
+    m.actors = { ...m.actors, access: true, financeWrite: true };
+    assert.equal(normalizePermissionMatrix(m).actors.financeWrite, true);
   });
 });

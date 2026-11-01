@@ -5,6 +5,7 @@ import {
   PHYSICAL_PARAM_LABELS,
   STANDARD_PHYSICAL_PARAM_KEYS,
 } from "@/features/preproduction/lib/snapshots";
+import type { FinanceAccess } from "@/shared/lib/finance-fields";
 import { ImageUpload } from "@/shared/ui/image-upload";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
@@ -37,11 +38,14 @@ export function PersonFormFields({
   person,
   characters,
   showCharacterPicker,
+  finance,
 }: {
   projectId: string;
   person?: PersonLike;
   characters?: CharacterOpt[];
   showCharacterPicker?: boolean;
+  /** Ставка и условия — фин. условия актёров. */
+  finance: FinanceAccess;
 }) {
   const [photoUrl, setPhotoUrl] = useState(person?.photoUrl ?? "");
   const physical =
@@ -189,22 +193,29 @@ export function PersonFormFields({
         />
       </div>
 
-      <div className="grid gap-3 md:grid-cols-2">
-        <div>
-          <Label htmlFor="proposedRate">Ставка за смену (заявленная)</Label>
-          <Input
-            id="proposedRate"
-            name="proposedRate"
-            type="number"
-            min={0}
-            defaultValue={person?.proposedRate ? Number(person.proposedRate) : undefined}
-          />
+      {finance === "edit" ? (
+        <div className="grid gap-3 md:grid-cols-2">
+          <div>
+            <Label htmlFor="proposedRate">Ставка за смену (заявленная)</Label>
+            <Input
+              id="proposedRate"
+              name="proposedRate"
+              type="number"
+              min={0}
+              defaultValue={person?.proposedRate ? Number(person.proposedRate) : undefined}
+            />
+          </div>
+          <div>
+            <Label htmlFor="proposedTerms">Условия / примечания</Label>
+            <Input id="proposedTerms" name="proposedTerms" defaultValue={person?.proposedTerms ?? ""} />
+          </div>
         </div>
-        <div>
-          <Label htmlFor="proposedTerms">Условия / примечания</Label>
-          <Input id="proposedTerms" name="proposedTerms" defaultValue={person?.proposedTerms ?? ""} />
-        </div>
-      </div>
+      ) : finance === "view" ? (
+        <p className="text-sm text-[var(--muted-fg)]">
+          Ставка: {person?.proposedRate?.toString() ?? "—"} · Условия:{" "}
+          {person?.proposedTerms ?? "—"} (нет прав на редактирование фин. условий актёров)
+        </p>
+      ) : null}
 
       <div>
         <Label htmlFor="notes">Заметки</Label>

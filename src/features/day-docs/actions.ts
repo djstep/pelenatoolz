@@ -185,6 +185,26 @@ export async function saveTransportsAction(
     return { error: parsed.error.issues[0]?.message ?? "Проверьте транспорт" };
   }
 
+  const { resolveTransportKmRates } = await import(
+    "@/features/day-docs/lib/transport-km-rate"
+  );
+  const canWriteFinance = gate.ctx.can("finance:write");
+  const existing = canWriteFinance
+    ? []
+    : await prisma.shootDayTransport.findMany({
+        where: { shootDayId },
+        select: { name: true, kmRate: true },
+        orderBy: { sortOrder: "asc" },
+      });
+  const kmRates = resolveTransportKmRates(
+    parsed.data.rows,
+    existing.map((e) => ({
+      name: e.name,
+      kmRate: e.kmRate == null ? null : Number(e.kmRate),
+    })),
+    canWriteFinance,
+  );
+
   await prisma.$transaction([
     prisma.shootDayTransport.deleteMany({ where: { shootDayId } }),
     ...parsed.data.rows.map((row, index) =>
@@ -194,7 +214,7 @@ export async function saveTransportsAction(
           name: row.name,
           callTime: emptyToNull(row.callTime),
           notes: emptyToNull(row.notes),
-          kmRate: row.kmRate ?? null,
+          kmRate: kmRates[index],
           sortOrder: index,
         },
       }),
@@ -952,7 +972,7 @@ export async function exportAttendanceSheetXlsxAction(
   const { parseExportSettings } = await import(
     "@/features/exports/lib/column-utils"
   );
-  const { buildAttendanceSheetModel } = await import(
+  const { buildAttendanceSheetModel, pickOtherUnitDayIds } = await import(
     "@/features/day-docs/lib/export-attendance-sheet"
   );
   const { buildAttendanceSheetXlsx } = await import(
@@ -971,6 +991,19 @@ export async function exportAttendanceSheetXlsxAction(
   if (!bundle) return { error: "Съёмочный день не найден" };
   if (!project) return { error: "Проект не найден" };
 
+  // Другие группы съёмки (2-й юнит) в ту же дату — своими листами актёров.
+  const sameDateDays = await prisma.shootDay.findMany({
+    where: { projectId, date: bundle.day.date, id: { not: dayId } },
+    select: { id: true, unit: true, dayNumber: true },
+  });
+  const otherUnitBundles = (
+    await Promise.all(
+      pickOtherUnitDayIds(bundle.day.unit, sameDateDays).map((id) =>
+        getShootDayDocument(projectId, id),
+      ),
+    )
+  ).filter((b): b is NonNullable<typeof b> => b != null);
+
   const settings = parseExportSettings(project.exportSettings);
   const model = buildAttendanceSheetModel(
     bundle,
@@ -980,9 +1013,17 @@ export async function exportAttendanceSheetXlsxAction(
       name: c.name,
       perShift: c.perShift,
     })),
+    otherUnitBundles,
   );
 
-  const buffer = await buildAttendanceSheetXlsx(model);
+  // Логотип в угол актёрского листа; не прочитался — выгрузка без него.
+  const { readFile } = await import("node:fs/promises");
+  const path = await import("node:path");
+  const logoPng = await readFile(
+    path.join(process.cwd(), "public", "brand", "pelena-black.png"),
+  ).catch(() => null);
+
+  const buffer = await buildAttendanceSheetXlsx(model, logoPng);
   return {
     base64: Buffer.from(buffer).toString("base64"),
     fileName: `${model.fileBaseName}.xlsx`,

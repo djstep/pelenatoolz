@@ -18,6 +18,19 @@ export function formatDateShort(
   });
 }
 
+/**
+ * Дата для имени файла: «2026-03-03» по часовому поясу проекта (по умолчанию Москва).
+ * Дни съёмок хранятся полночью по поясу проекта — по UTC это вчерашняя дата.
+ */
+export function formatFileDate(value: DateInput, timezone?: string | null): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone || "Europe/Moscow",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(toDate(value));
+}
+
 /** Длинная дата с годом: «вторник, 3 марта 2026 г.» */
 export function formatDateLong(value: DateInput): string {
   const d = toDate(value);

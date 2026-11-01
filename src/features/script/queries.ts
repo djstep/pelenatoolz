@@ -1,14 +1,18 @@
+import { SCENE_CHARACTER_SELECT } from "@/features/characters/lib/character-fields";
+import { SCENE_LOCATION_SELECT } from "@/features/locations/lib/location-fields";
+import { SCENE_RESOURCE_ITEM_SELECT } from "@/features/resources/lib/item-fields";
 import { prisma } from "@/shared/db/prisma";
 
 export async function listScenes(projectId: string) {
   return prisma.scene.findMany({
     where: { projectId },
     include: {
-      locations: { include: { location: true } },
+      locations: { include: { location: { select: SCENE_LOCATION_SELECT } } },
       characters: {
         include: {
           character: {
-            include: {
+            select: {
+              ...SCENE_CHARACTER_SELECT,
               actors: {
                 select: {
                   id: true,
@@ -25,7 +29,12 @@ export async function listScenes(projectId: string) {
       resources: true,
       resourceItems: {
         include: {
-          item: { include: { category: { select: { id: true, name: true } } } },
+          item: {
+            select: {
+              ...SCENE_RESOURCE_ITEM_SELECT,
+              category: { select: { id: true, name: true } },
+            },
+          },
         },
       },
       shootDayScenes: {
@@ -57,13 +66,18 @@ export async function getSceneForEdit(projectId: string, sceneId: string) {
   return prisma.scene.findFirst({
     where: { id: sceneId, projectId },
     include: {
-      locations: { include: { location: true } },
-      characters: { include: { character: true } },
+      locations: { include: { location: { select: SCENE_LOCATION_SELECT } } },
+      characters: { include: { character: { select: SCENE_CHARACTER_SELECT } } },
       elements: { include: { element: true } },
       resources: true,
       resourceItems: {
         include: {
-          item: { include: { category: { select: { id: true, name: true } } } },
+          item: {
+            select: {
+              ...SCENE_RESOURCE_ITEM_SELECT,
+              category: { select: { id: true, name: true } },
+            },
+          },
         },
       },
       shootAttempts: {
@@ -101,6 +115,7 @@ export async function getSceneNeighbors(projectId: string, sceneId: string) {
 export async function listLocations(projectId: string) {
   return prisma.location.findMany({
     where: { projectId },
+    select: SCENE_LOCATION_SELECT,
     orderBy: { name: "asc" },
   });
 }
@@ -108,6 +123,7 @@ export async function listLocations(projectId: string) {
 export async function listCharacters(projectId: string) {
   return prisma.character.findMany({
     where: { projectId },
+    select: SCENE_CHARACTER_SELECT,
     orderBy: { name: "asc" },
   });
 }

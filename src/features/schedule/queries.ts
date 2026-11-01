@@ -1,3 +1,5 @@
+import { SCENE_CHARACTER_SELECT } from "@/features/characters/lib/character-fields";
+import { SCENE_LOCATION_SELECT } from "@/features/locations/lib/location-fields";
 import { prisma } from "@/shared/db/prisma";
 
 const sceneDetailSelect = {
@@ -15,8 +17,8 @@ const sceneDetailSelect = {
   status: true,
   cutAt: true,
   scriptDay: true,
-  locations: { include: { location: true } },
-  characters: { include: { character: true } },
+  locations: { include: { location: { select: SCENE_LOCATION_SELECT } } },
+  characters: { include: { character: { select: SCENE_CHARACTER_SELECT } } },
 } as const;
 
 export async function listShootDays(projectId: string) {

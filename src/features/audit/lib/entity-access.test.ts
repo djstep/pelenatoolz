@@ -12,6 +12,7 @@ import {
   buildFullMatrix,
   buildViewerMatrix,
   canEntityFinance,
+  canReadAnyEntityFinance,
   type PermissionMatrix,
   type PermissionSectionId,
 } from "@/features/roles/permissions-matrix";
@@ -23,6 +24,7 @@ function viewer(matrix: PermissionMatrix, isProducer = false): AuditViewer {
     matrix,
     isProducer,
     headDepartmentIds: [],
+    anyEntityFinanceRead: canReadAnyEntityFinance(matrix, {}),
     canFinanceRead: (target) => canEntityFinance(matrix, {}, target, "read"),
   };
 }

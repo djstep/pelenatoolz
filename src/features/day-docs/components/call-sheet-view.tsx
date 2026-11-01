@@ -53,6 +53,7 @@ export function CallSheetView({
   nextDay,
   nextDayAstro,
   canEdit,
+  canSaveAttendanceSettings,
   timingBaselines = {},
   resourceTimingBaselines = {},
   perShiftCatalog = [],
@@ -65,6 +66,8 @@ export function CallSheetView({
   nextDay: Awaited<ReturnType<typeof getNextShootDayBrief>>;
   nextDayAstro: DayAstro | null;
   canEdit: boolean;
+  /** Сохранение настройки явочного листа (правка «КПП и вызывные»). */
+  canSaveAttendanceSettings: boolean;
   timingBaselines?: ActorTimingBaselines;
   resourceTimingBaselines?: ResourceTimingBaselines;
   perShiftCatalog?: import("@/features/day-docs/queries").PerShiftCatalogOption[];
@@ -140,6 +143,7 @@ export function CallSheetView({
             projectId={projectId}
             dayId={day.id}
             resourceCategories={resourceCategories}
+            canSaveAttendanceSettings={canSaveAttendanceSettings}
           />
           <PrintButton />
         </div>

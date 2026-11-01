@@ -36,6 +36,7 @@ export default async function ShiftEntryPage({ params, searchParams }: Props) {
     projectId,
     shootDayId,
     new Set(items.map((i) => i.id)),
+    ctx.canFinanceRead,
   );
 
   return (

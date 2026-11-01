@@ -7,8 +7,9 @@ const nextConfig: NextConfig = {
   // Next.js 16.3 + standalone breaks Vercel onBuildComplete; keep standalone for Docker.
   output: process.env.VERCEL ? undefined : "standalone",
   serverExternalPackages: ["sql.js"],
-  // Только для `next dev`: второй аккаунт открывается на 127.0.0.1 (отдельные куки входа).
-  allowedDevOrigins: ["127.0.0.1"],
+  // Только для `next dev`: второй и третий аккаунты открываются на 127.0.0.1 и 127.0.0.2
+  // (отдельные куки входа).
+  allowedDevOrigins: ["127.0.0.1", "127.0.0.2"],
   experimental: {
     serverActions: {
       // Смета больше 1 МБ и импорт Excel (раздел 6 аудита). Не выше 4,5 МБ — потолок

@@ -3,6 +3,7 @@ import { isWorkingShootDay } from "@/features/schedule/lib/shoot-day-type";
 import { syncShootDayResourceUsages } from "@/features/schedule/lib/sync-shoot-day-resources";
 import { CallSheetView } from "@/features/day-docs/components/call-sheet-view";
 import { fetchCityAstro } from "@/features/day-docs/lib/city-astro";
+import { ATTENDANCE_SHEET_WRITE_PERMISSION } from "@/features/exports/lib/column-utils";
 import {
   getNextShootDayBrief,
   getShootDayDocument,
@@ -101,6 +102,7 @@ export default async function CallSheetDayPage({ params }: Props) {
       nextDay={nextDay}
       nextDayAstro={nextDayAstro}
       canEdit={canEdit}
+      canSaveAttendanceSettings={ctx.can(ATTENDANCE_SHEET_WRITE_PERMISSION)}
       timingBaselines={timingBaselines}
       resourceTimingBaselines={resourceTimingBaselines}
       perShiftCatalog={perShiftCatalog}

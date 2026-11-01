@@ -7,6 +7,7 @@ import {
 } from "@/features/finance/lib/export-reports-xls";
 import { getCashFlowReport } from "@/features/finance/queries-reports";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
+import { formatFileDate } from "@/shared/i18n/format-date";
 
 export type ReportExportResult =
   | { error: string; success?: undefined; base64?: undefined; fileName?: undefined }
@@ -44,7 +45,7 @@ export async function exportCashFlowReportAction(
     periodLabel: periodLabel(filters.dateFrom, filters.dateTo),
   });
   const base64 = await workbookToBase64(workbook);
-  const stamp = new Date().toISOString().slice(0, 10);
+  const stamp = formatFileDate(new Date(), ctx.project.timezone);
   return {
     success: "Экспорт готов",
     base64,

@@ -23,7 +23,7 @@ export default async function CharacterDetailPage({ params }: Props) {
   }
 
   const [character, availability, castBundle] = await Promise.all([
-    getCharacterDetail(projectId, characterId),
+    getCharacterDetail(projectId, characterId, ctx.canFinanceRead("actors")),
     getAvailabilityMiniBundle(projectId),
     loadCastListExportBundle(projectId, characterId, locale),
   ]);
@@ -65,8 +65,8 @@ export default async function CharacterDetailPage({ params }: Props) {
           target="actor"
           entityId={actor.id}
           values={{
-            defaultBudgetItemId: actor.defaultBudgetItemId,
-            overtimeBudgetItemId: actor.overtimeBudgetItemId,
+            defaultBudgetItemId: actor.defaultBudgetItemId ?? null,
+            overtimeBudgetItemId: actor.overtimeBudgetItemId ?? null,
           }}
           canEdit={ctx.can("cast:write") && ctx.canFinanceWrite("actors")}
         />

@@ -9,11 +9,14 @@ import { Input } from "@/shared/ui/input";
 import { Modal } from "@/shared/ui/modal";
 import { useOnChange } from "@/shared/hooks/use-on-change";
 
+const CUT_HINT = "Сцена вырезана — её номер не меняется";
+
 type Row = {
   id: string;
   episodeNumber: number;
   number: string;
   postfix: string;
+  cut: boolean;
   locationLabel: string;
   characters: string;
 };
@@ -49,6 +52,7 @@ export function LibrettoRenumberModal({
         episodeNumber: s.episodeNumber,
         number: s.number,
         postfix: s.postfix,
+        cut: s.cutAt !== null,
         locationLabel:
           s.locations[0]?.location.sublocation
             ? `${s.locations[0].location.name}.${s.locations[0].location.sublocation}`
@@ -68,6 +72,7 @@ export function LibrettoRenumberModal({
         episodeNumber: s.episodeNumber,
         number: s.number,
         postfix: s.postfix,
+        cut: s.cutAt !== null,
         locationLabel:
           s.locations[0]?.location.sublocation
             ? `${s.locations[0].location.name}.${s.locations[0].location.sublocation}`
@@ -140,6 +145,8 @@ export function LibrettoRenumberModal({
                   <td className="py-2 pr-2">
                     <Input
                       value={row.number}
+                      disabled={row.cut}
+                      title={row.cut ? CUT_HINT : undefined}
                       onChange={(e) =>
                         setRows((p) =>
                           p.map((r) =>
@@ -152,6 +159,8 @@ export function LibrettoRenumberModal({
                   <td className="py-2 pr-2">
                     <Input
                       value={row.postfix}
+                      disabled={row.cut}
+                      title={row.cut ? CUT_HINT : undefined}
                       onChange={(e) =>
                         setRows((p) =>
                           p.map((r) =>
@@ -161,7 +170,10 @@ export function LibrettoRenumberModal({
                       }
                     />
                   </td>
-                  <td className="py-2 pr-2 text-[var(--muted-fg)]">{row.locationLabel}</td>
+                  <td className="py-2 pr-2 text-[var(--muted-fg)]">
+                    {row.cut ? <span className="mr-1 text-xs">(вырезана)</span> : null}
+                    {row.locationLabel}
+                  </td>
                   <td className="py-2 text-[var(--muted-fg)]">{row.characters}</td>
                 </tr>
               ))}

@@ -114,10 +114,14 @@ export async function getKppExportBundle(
                     character: { select: { id: true, name: true } },
                   },
                 },
+                // Только то, что нужно выгрузке: ставка, км и налог позиции не берутся.
                 resourceItems: {
-                  include: {
+                  select: {
+                    quantity: true,
                     item: {
-                      include: {
+                      select: {
+                        id: true,
+                        name: true,
                         category: { select: { id: true, name: true } },
                       },
                     },

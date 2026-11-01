@@ -1,5 +1,7 @@
 import { prisma } from "@/shared/db/prisma";
 import { dec } from "@/shared/db/serialize-decimal";
+import { SCOUT_CANDIDATE_FIELDS } from "@/features/scout/lib/scout-fields";
+import { pickFinanceFields } from "@/shared/lib/finance-fields";
 
 const scoutInclude = {
   locationLinks: {
@@ -9,26 +11,31 @@ const scoutInclude = {
   },
 } as const;
 
-export async function listScoutCandidates(projectId: string) {
+/** `canFinanceRead` — фин. просмотр объектов (`ctx.canFinanceRead("locations")`). */
+export async function listScoutCandidates(projectId: string, canFinanceRead: boolean) {
   const rows = await prisma.scoutCandidate.findMany({
     where: { projectId },
     include: scoutInclude,
     orderBy: [{ updatedAt: "desc" }],
   });
 
-  return rows.map((r) => ({
-    ...r,
-    cost: dec(r.cost),
-  }));
+  return rows.map((r) =>
+    pickFinanceFields({ ...r, cost: dec(r.cost) }, SCOUT_CANDIDATE_FIELDS, canFinanceRead),
+  );
 }
 
-export async function getScoutCandidate(projectId: string, candidateId: string) {
+/** `canFinanceRead` — фин. просмотр объектов (`ctx.canFinanceRead("locations")`). */
+export async function getScoutCandidate(
+  projectId: string,
+  candidateId: string,
+  canFinanceRead: boolean,
+) {
   const row = await prisma.scoutCandidate.findFirst({
     where: { id: candidateId, projectId },
     include: scoutInclude,
   });
   if (!row) return null;
-  return { ...row, cost: dec(row.cost) };
+  return pickFinanceFields({ ...row, cost: dec(row.cost) }, SCOUT_CANDIDATE_FIELDS, canFinanceRead);
 }
 
 export async function listLocationsForScout(projectId: string) {

@@ -4,6 +4,7 @@ import {
   listCharactersForCasting,
 } from "@/features/casting/queries";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
+import { financeAccess } from "@/shared/lib/finance-fields";
 import { Card } from "@/shared/ui/card";
 
 type Props = {
@@ -21,7 +22,7 @@ export default async function CastingPage({ params, searchParams }: Props) {
   }
 
   const [people, characters] = await Promise.all([
-    listCastingPeople(projectId),
+    listCastingPeople(projectId, ctx.canFinanceRead("actors")),
     listCharactersForCasting(projectId),
   ]);
 
@@ -40,6 +41,7 @@ export default async function CastingPage({ params, searchParams }: Props) {
           people={people}
           characters={characters}
           canWrite={ctx.can("cast:write")}
+          finance={financeAccess(ctx.canFinanceRead("actors"), ctx.canFinanceWrite("actors"))}
           characterFilter={typeof character === "string" ? character : undefined}
         />
       </Card>

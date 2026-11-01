@@ -1,3 +1,9 @@
+import {
+  SCENE_ACTOR_SELECT,
+  SCENE_CHARACTER_SELECT,
+} from "@/features/characters/lib/character-fields";
+import { SCENE_LOCATION_SELECT } from "@/features/locations/lib/location-fields";
+import { SCENE_RESOURCE_ITEM_SELECT } from "@/features/resources/lib/item-fields";
 import { prisma } from "@/shared/db/prisma";
 import { serializeForClient } from "@/shared/db/serialize-decimal";
 import {
@@ -22,13 +28,14 @@ const sceneSelect = {
   dayNight: true,
   status: true,
   scriptDay: true,
-  locations: { include: { location: true } },
-  characters: { include: { character: true } },
+  locations: { include: { location: { select: SCENE_LOCATION_SELECT } } },
+  characters: { include: { character: { select: SCENE_CHARACTER_SELECT } } },
   resources: true,
   resourceItems: {
     include: {
       item: {
-        include: {
+        select: {
+          ...SCENE_RESOURCE_ITEM_SELECT,
           category: { select: { id: true, name: true, perShift: true } },
         },
       },
@@ -53,7 +60,8 @@ const shootDayInclude = {
   resourceUsages: {
     include: {
       item: {
-        include: {
+        select: {
+          ...SCENE_RESOURCE_ITEM_SELECT,
           category: {
             select: {
               id: true,
@@ -87,7 +95,7 @@ export async function getShootDayDocument(projectId: string, shootDayId: string)
     }),
     prisma.actor.findMany({
       where: { projectId },
-      include: { character: true },
+      select: { ...SCENE_ACTOR_SELECT, character: { select: SCENE_CHARACTER_SELECT } },
       orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
     }),
   ]);
@@ -117,7 +125,7 @@ export async function getNextShootDayBrief(
               postfix: true,
               episodeNumber: true,
               dayNight: true,
-              locations: { include: { location: true } },
+              locations: { include: { location: { select: SCENE_LOCATION_SELECT } } },
             },
           },
         },
@@ -295,7 +303,9 @@ export async function listPerShiftCatalogForDay(
 ): Promise<PerShiftCatalogOption[]> {
   const items = await prisma.resourceItem.findMany({
     where: { category: { projectId, perShift: true } },
-    include: {
+    select: {
+      id: true,
+      name: true,
       category: { select: { name: true } },
       shiftUsages: { where: { shootDayId }, select: { id: true } },
     },

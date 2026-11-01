@@ -230,17 +230,19 @@ export function LocationDetailView({
                 disabled={!canWrite}
               />
             </div>
-            <div>
-              <Label htmlFor="snapCost">Стоимость</Label>
-              <Input
-                id="snapCost"
-                name="cost"
-                type="number"
-                min={0}
-                defaultValue={scoutSnapshot.cost ?? undefined}
-                disabled={!canWrite}
-              />
-            </div>
+            {canFinanceRead ? (
+              <div>
+                <Label htmlFor="snapCost">Стоимость</Label>
+                <Input
+                  id="snapCost"
+                  name="cost"
+                  type="number"
+                  min={0}
+                  defaultValue={scoutSnapshot.cost ?? undefined}
+                  disabled={!canWrite || !canFinanceWrite}
+                />
+              </div>
+            ) : null}
             <div>
               <Label htmlFor="snapContactName">Контакт</Label>
               <Input
@@ -312,7 +314,7 @@ export function LocationDetailView({
                 unpaidOvertimeMin={location.unpaidOvertimeMin}
                 overtimeMode={location.overtimeMode}
                 unpaidOvertimeMode={location.unpaidOvertimeMode}
-                overtime={seedOvertime(location.overtimeRates)}
+                overtime={seedOvertime(location.overtimeRates ?? [])}
                 showExtras={false}
               />
               <Button type="submit" disabled={finPending}>

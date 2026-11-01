@@ -1,4 +1,6 @@
 import { prisma } from "@/shared/db/prisma";
+import { pickFinanceFields } from "@/shared/lib/finance-fields";
+import { RESOURCE_ITEM_FIELDS } from "@/features/resources/lib/item-fields";
 import { dec } from "@/shared/db/serialize-decimal";
 
 export async function listResourceCategoriesForScenes(projectId: string) {
@@ -24,8 +26,13 @@ export async function listResourceCategories(projectId: string) {
   });
 }
 
-export async function getResourceCategory(projectId: string, categoryId: string) {
-  return prisma.resourceCategory.findFirst({
+/** `canFinanceRead` — фин. просмотр категории (`ctx.canFinanceRead({ categoryId })`). */
+export async function getResourceCategory(
+  projectId: string,
+  categoryId: string,
+  canFinanceRead: boolean,
+) {
+  const category = await prisma.resourceCategory.findFirst({
     where: { id: categoryId, projectId },
     include: {
       items: {
@@ -53,12 +60,20 @@ export async function getResourceCategory(projectId: string, categoryId: string)
       },
     },
   });
+  if (!category) return null;
+  return {
+    ...category,
+    items: category.items.map((item) =>
+      pickFinanceFields(item, RESOURCE_ITEM_FIELDS, canFinanceRead),
+    ),
+  };
 }
 
 export async function getResourceItem(
   projectId: string,
   categoryId: string,
   itemId: string,
+  canFinanceRead: boolean,
 ) {
   const item = await prisma.resourceItem.findFirst({
     where: { id: itemId, categoryId, category: { projectId } },
@@ -100,16 +115,20 @@ export async function getResourceItem(
     0,
   );
 
-  return {
-    ...item,
-    shiftRate: dec(item.shiftRate),
-    taxPercent: dec(item.taxPercent),
-    kmRate: dec(item.kmRate),
-    sceneCount: item.sceneLinks.length,
-    unshotSceneCount: unshotLinks.length,
-    planSeconds,
-    unshotSeconds,
-  };
+  return pickFinanceFields(
+    {
+      ...item,
+      shiftRate: dec(item.shiftRate),
+      taxPercent: dec(item.taxPercent),
+      kmRate: dec(item.kmRate),
+      sceneCount: item.sceneLinks.length,
+      unshotSceneCount: unshotLinks.length,
+      planSeconds,
+      unshotSeconds,
+    },
+    RESOURCE_ITEM_FIELDS,
+    canFinanceRead,
+  );
 }
 
 export type ResourceCategoryRow = Awaited<

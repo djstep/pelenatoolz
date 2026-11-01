@@ -1,5 +1,5 @@
 import type { AuditAction } from "@prisma/client";
-import { writeAuditLog } from "@/shared/audit/log";
+import { writeAuditLog, type AuditDb } from "@/shared/audit/log";
 import type { AuditEntityTypeValue } from "@/shared/audit/entity-types";
 
 export type AuditContext = {
@@ -32,12 +32,14 @@ function resolve<TInput, TResult, TValue>(
 /**
  * Wraps a mutating operation and records an audit log after success.
  * If `fn` throws, no log is written.
+ * `options.db` — транзакция: запись журнала идёт в ней и откатывается вместе с действием.
  */
 export async function auditMutation<TInput, TResult>(
   ctx: AuditContext,
   fn: (input: TInput) => Promise<TResult>,
   input: TInput,
   meta: AuditMeta<TInput, TResult>,
+  options?: { db?: AuditDb },
 ): Promise<TResult> {
   const result = await fn(input);
   await writeAuditLog({
@@ -48,7 +50,7 @@ export async function auditMutation<TInput, TResult>(
     action: meta.action,
     summary: resolve(meta.summary, input, result),
     changes: resolve(meta.changes ?? undefined, input, result),
-  });
+  }, options?.db);
   return result;
 }
 

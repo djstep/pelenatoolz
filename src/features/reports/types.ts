@@ -100,18 +100,23 @@ export type ProductionReportWorkRow = {
   payableOvertimeMin: number | null;
   shiftHoursMin: number | null;
   unpaidOvertimeMin: number | null;
-  shiftRate: number | null;
-  taxPercent: number | null;
-  shiftPay: number | null;
-  overtimePay: number | null;
-  extrasPay: number | null;
   tracksMileage: boolean;
   factKm: number | null;
-  kmRate: number | null;
-  mileagePay: number | null;
-  totalPay: number | null;
   sortOrder: number;
-  extras: ProductionReportWorkExtra[];
+  /** Деньги строки — только с фин. просмотром её источника, иначе сервер их не присылает. */
+  shiftRate?: number | null;
+  taxPercent?: number | null;
+  shiftPay?: number | null;
+  overtimePay?: number | null;
+  extrasPay?: number | null;
+  kmRate?: number | null;
+  mileagePay?: number | null;
+  totalPay?: number | null;
+  extras?: ProductionReportWorkExtra[];
+  /** Фин. просмотр источника строки (`workRowAccess`). */
+  canSeePay: boolean;
+  /** Фин. правка источника: доп. выплаты строки. */
+  canEditPay: boolean;
 };
 
 export type ProductionReportBundle = {

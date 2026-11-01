@@ -13,6 +13,7 @@ import { ScoutFormFields } from "@/features/scout/components/scout-form-fields";
 import type { ScoutCandidateRow } from "@/features/scout/queries";
 import { scoutStatusOptions } from "@/features/preproduction/lib/status-labels";
 import { StatusSelect } from "@/features/preproduction/components/status-select";
+import type { FinanceAccess } from "@/shared/lib/finance-fields";
 import { submitKeepingFields } from "@/shared/ui/forms/submit-keeping-fields";
 import { useActionToast, useToast } from "@/shared/ui/toast";
 import { Button } from "@/shared/ui/button";
@@ -34,12 +35,15 @@ export function ScoutWorkspace({
   candidates,
   locations,
   canWrite,
+  finance,
 }: {
   projectId: string;
   locale: string;
   candidates: ScoutCandidateRow[];
   locations: LocationOpt[];
   canWrite: boolean;
+  /** Стоимость площадки — фин. условие объектов. */
+  finance: FinanceAccess;
 }) {
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -83,7 +87,7 @@ export function ScoutWorkspace({
                 <th className="py-2 px-3">Место</th>
                 <th className="py-2 px-3">Игровые объекты</th>
                 <th className="py-2 px-3">Адрес</th>
-                <th className="py-2 px-3">Стоимость</th>
+                {finance !== "none" ? <th className="py-2 px-3">Стоимость</th> : null}
                 <th className="py-2 px-3">Статус</th>
                 {canWrite ? <th className="py-2 px-3" /> : null}
               </tr>
@@ -108,7 +112,9 @@ export function ScoutWorkspace({
                       .join(" · ") || "—"}
                   </td>
                   <td className="py-3 px-3">{row.address ?? "—"}</td>
-                  <td className="py-3 px-3">{row.cost?.toString() ?? "—"}</td>
+                  {finance !== "none" ? (
+                    <td className="py-3 px-3">{row.cost?.toString() ?? "—"}</td>
+                  ) : null}
                   <td className="py-3 px-3">
                     <StatusSelect
                       value={row.status}
@@ -174,7 +180,7 @@ export function ScoutWorkspace({
         }
       >
         <form id="scout-form" onSubmit={submitKeepingFields(action)}>
-          <ScoutFormFields locations={locations} />
+          <ScoutFormFields locations={locations} finance={finance} />
         </form>
       </Modal>
     </div>

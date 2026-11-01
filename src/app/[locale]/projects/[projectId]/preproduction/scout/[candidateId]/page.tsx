@@ -5,6 +5,7 @@ import {
   listLocationsForScout,
 } from "@/features/scout/queries";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
+import { financeAccess } from "@/shared/lib/finance-fields";
 import { Card } from "@/shared/ui/card";
 
 type Props = {
@@ -20,7 +21,7 @@ export default async function ScoutCandidatePage({ params }: Props) {
   }
 
   const [candidate, locations] = await Promise.all([
-    getScoutCandidate(projectId, candidateId),
+    getScoutCandidate(projectId, candidateId, ctx.canFinanceRead("locations")),
     listLocationsForScout(projectId),
   ]);
 
@@ -35,6 +36,7 @@ export default async function ScoutCandidatePage({ params }: Props) {
           candidate={candidate}
           locations={locations}
           canWrite={ctx.can("script:write")}
+          finance={financeAccess(ctx.canFinanceRead("locations"), ctx.canFinanceWrite("locations"))}
         />
       </Card>
     </div>

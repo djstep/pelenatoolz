@@ -3,6 +3,7 @@
 import { MembershipStatus } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
+import { OWNER_ROLE_ERROR } from "@/features/projects/lib/owner";
 import {
   buildEmptyMatrix,
   buildPermissionsDocument,
@@ -39,6 +40,18 @@ function revalidateRoles(projectId: string) {
   revalidatePath(`/ru/projects/${projectId}/settings/resources`);
   revalidatePath(`/ru/projects/${projectId}/characters`);
   revalidatePath(`/ru/projects/${projectId}/locations`);
+}
+
+/**
+ * Роль назначена владельцу проекта. Владелец — «Продюсер», а системные роли и так
+ * не правятся и не удаляются; проверка на случай, если это когда-то изменится.
+ */
+async function isOwnerRole(projectId: string, ownerUserId: string, roleId: string) {
+  const owner = await prisma.projectMembership.findFirst({
+    where: { projectId, userId: ownerUserId, roleId },
+    select: { id: true },
+  });
+  return owner != null;
 }
 
 function matrixFromFormData(formData: FormData): PermissionMatrix {
@@ -175,6 +188,9 @@ export async function updateRoleAction(
   if (role.id === ctx.membership.roleId) {
     return { error: "Нельзя изменить роль, которая назначена вам" };
   }
+  if (await isOwnerRole(projectId, ctx.project.ownerUserId, roleId)) {
+    return { error: OWNER_ROLE_ERROR };
+  }
   // Роль с правами шире ваших менять нельзя — ни расширять, ни урезать.
   if (!canGrantPermissions(ctx.role, role.permissions)) {
     return { error: WIDER_ROLE_EDIT_ERROR };
@@ -243,6 +259,9 @@ export async function deleteRoleAction(
   });
   if (!role) return { error: "Роль не найдена" };
   if (role.isSystem) return { error: "Системную роль удалить нельзя" };
+  if (await isOwnerRole(projectId, ctx.project.ownerUserId, roleId)) {
+    return { error: OWNER_ROLE_ERROR };
+  }
   if (!canGrantPermissions(ctx.role, role.permissions)) {
     return { error: WIDER_ROLE_DELETE_ERROR };
   }

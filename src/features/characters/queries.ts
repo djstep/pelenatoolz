@@ -1,6 +1,13 @@
 import { prisma } from "@/shared/db/prisma";
 import { dec } from "@/shared/db/serialize-decimal";
 import { parseCastSnapshot } from "@/features/preproduction/lib/snapshots";
+import { CASTING_PERSON_FIELDS } from "@/features/casting/lib/casting-person-fields";
+import {
+  ACTOR_FIELDS,
+  CAST_SNAPSHOT_FIELDS,
+  CHARACTER_FIELDS,
+} from "@/features/characters/lib/character-fields";
+import { pickFinanceFields } from "@/shared/lib/finance-fields";
 
 const sceneBriefSelect = {
   id: true,
@@ -58,6 +65,7 @@ export async function listCharactersWithCasting(projectId: string) {
     orderBy: { name: "asc" },
   });
 
+  // Снимок утверждённого актёра списку не нужен (только «утверждён» и имя) — в браузер не уходит.
   return characters.map((c) => {
     const snapshot = parseCastSnapshot(c.castSnapshot);
     // Хронометраж — без вырезанных сцен
@@ -78,8 +86,7 @@ export async function listCharactersWithCasting(projectId: string) {
         : null;
 
     return {
-      ...c,
-      snapshot,
+      ...pickFinanceFields(c, CHARACTER_FIELDS, false),
       sceneCount: c._count.scenes,
       candidateCount: c._count.castingCandidates,
       planSeconds,
@@ -104,7 +111,12 @@ export type CharacterEditSource = Pick<
   | "costumeOffsetMin"
 >;
 
-export async function getCharacterDetail(projectId: string, characterId: string) {
+/** `canFinanceRead` — фин. просмотр актёров (`ctx.canFinanceRead("actors")`). */
+export async function getCharacterDetail(
+  projectId: string,
+  characterId: string,
+  canFinanceRead: boolean,
+) {
   const character = await prisma.character.findFirst({
     where: { id: characterId, projectId },
     include: {
@@ -112,7 +124,11 @@ export async function getCharacterDetail(projectId: string, characterId: string)
         include: {
           scene: {
             include: {
-              locations: { include: { location: true } },
+              locations: {
+                include: {
+                  location: { select: { id: true, name: true, sublocation: true } },
+                },
+              },
             },
           },
         },
@@ -146,13 +162,14 @@ export async function getCharacterDetail(projectId: string, characterId: string)
   );
 
   return {
-    ...character,
+    ...pickFinanceFields(character, CHARACTER_FIELDS, false),
     castingCandidates: character.castingCandidates.map((c) => ({
       ...c,
-      person: {
-        ...c.person,
-        proposedRate: dec(c.person.proposedRate),
-      },
+      person: pickFinanceFields(
+        { ...c.person, proposedRate: dec(c.person.proposedRate) },
+        CASTING_PERSON_FIELDS,
+        canFinanceRead,
+      ),
       comments: c.comments.map((cm) => ({
         id: cm.id,
         body: cm.body,
@@ -161,27 +178,35 @@ export async function getCharacterDetail(projectId: string, characterId: string)
         authorId: cm.author.id,
       })),
     })),
-    actors: character.actors.map((a) => ({
-      ...a,
-      shiftRate: dec(a.shiftRate),
-      taxPercent: dec(a.taxPercent),
-      overtimeRates: a.overtimeRates.map((r) => ({
-        ...r,
-        percentRate: dec(r.percentRate),
-        amount: dec(r.amount),
-        taxPercent: dec(r.taxPercent),
-        taxAmount: dec(r.taxAmount),
-        totalWithTax: dec(r.totalWithTax),
-      })),
-      extraPayments: a.extraPayments.map((p) => ({
-        ...p,
-        amount: dec(p.amount) ?? 0,
-        taxPercent: dec(p.taxPercent),
-        taxAmount: dec(p.taxAmount),
-        totalWithTax: dec(p.totalWithTax),
-      })),
-    })),
-    snapshot,
+    actors: character.actors.map((a) =>
+      pickFinanceFields(
+        {
+          ...a,
+          shiftRate: dec(a.shiftRate),
+          taxPercent: dec(a.taxPercent),
+          overtimeRates: a.overtimeRates.map((r) => ({
+            ...r,
+            percentRate: dec(r.percentRate),
+            amount: dec(r.amount),
+            taxPercent: dec(r.taxPercent),
+            taxAmount: dec(r.taxAmount),
+            totalWithTax: dec(r.totalWithTax),
+          })),
+          extraPayments: a.extraPayments.map((p) => ({
+            ...p,
+            amount: dec(p.amount) ?? 0,
+            taxPercent: dec(p.taxPercent),
+            taxAmount: dec(p.taxAmount),
+            totalWithTax: dec(p.totalWithTax),
+          })),
+        },
+        ACTOR_FIELDS,
+        canFinanceRead,
+      ),
+    ),
+    snapshot: snapshot
+      ? pickFinanceFields(snapshot, CAST_SNAPSHOT_FIELDS, canFinanceRead)
+      : null,
     planSeconds,
   };
 }

@@ -21,6 +21,7 @@ import {
 } from "@/features/preproduction/lib/status-labels";
 import { StatusSelect } from "@/features/preproduction/components/status-select";
 import { AvailabilityMiniPreview } from "@/features/actor-availability/components/availability-mini-preview";
+import type { FinanceAccess } from "@/shared/lib/finance-fields";
 import { useActionToast, useToast } from "@/shared/ui/toast";
 import { Button } from "@/shared/ui/button";
 import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
@@ -45,6 +46,7 @@ export function CastingPersonDetail({
   person,
   characters,
   canWrite,
+  finance,
   availabilityMini,
   auditionsSlot,
 }: {
@@ -53,6 +55,8 @@ export function CastingPersonDetail({
   person: PersonDetail;
   characters: CharacterOpt[];
   canWrite: boolean;
+  /** Ставка и условия — фин. условия актёров; без права сервер их не присылает. */
+  finance: FinanceAccess;
   availabilityMini?: {
     rowId?: string;
     manualDays: Record<string, Record<string, { status: string; comment: string | null }>>;
@@ -223,14 +227,18 @@ export function CastingPersonDetail({
           <p className="text-[var(--muted-fg)]">Умения</p>
           <p>{person.skills?.join(", ") || "—"}</p>
         </div>
-        <div>
-          <p className="text-[var(--muted-fg)]">Ставка (заявленная)</p>
-          <p>{person.proposedRate?.toString() ?? "—"}</p>
-        </div>
-        <div>
-          <p className="text-[var(--muted-fg)]">Условия</p>
-          <p>{person.proposedTerms ?? "—"}</p>
-        </div>
+        {finance !== "none" ? (
+          <>
+            <div>
+              <p className="text-[var(--muted-fg)]">Ставка (заявленная)</p>
+              <p>{person.proposedRate?.toString() ?? "—"}</p>
+            </div>
+            <div>
+              <p className="text-[var(--muted-fg)]">Условия</p>
+              <p>{person.proposedTerms ?? "—"}</p>
+            </div>
+          </>
+        ) : null}
         {person.notes ? (
           <div className="md:col-span-2">
             <p className="text-[var(--muted-fg)]">Заметки</p>
@@ -304,7 +312,7 @@ export function CastingPersonDetail({
         <div className="glass-card space-y-4 p-5">
           <h2 className="font-semibold">Редактирование</h2>
           <form ref={formRef} action={action} className="space-y-4">
-            <PersonFormFields projectId={projectId} person={person} />
+            <PersonFormFields projectId={projectId} person={person} finance={finance} />
             <div className="flex gap-3">
               <Button type="submit" disabled={formPending}>
                 {formPending ? "…" : "Сохранить"}
