@@ -4,8 +4,9 @@ import {
   ATTENDANCE_SHEET_WRITE_PERMISSION,
   exportLayoutPermission,
   isExportLayoutKey,
+  keepProjectAttendanceSectionIds,
 } from "@/features/exports/lib/column-utils";
-import { EXPORT_LAYOUT_KEYS } from "@/features/exports/types";
+import { attendanceCategorySectionId, EXPORT_LAYOUT_KEYS } from "@/features/exports/types";
 import { hasPermission } from "@/features/memberships/permissions";
 import {
   buildEmptyMatrix,
@@ -66,5 +67,31 @@ describe("настройка явочного листа", () => {
     assert.equal(canSave(withSection("project_settings", true)), false);
     assert.equal(canSave(withSection("schedule", false)), false);
     assert.equal(canSave(buildViewerMatrix()), false);
+  });
+});
+
+describe("явочный лист: сохраняются только id этого проекта", () => {
+  const own = attendanceCategorySectionId("cat-own");
+  const foreign = attendanceCategorySectionId("cat-foreign");
+
+  test("встроенные блоки и категории проекта остаются, порядок прежний", () => {
+    assert.deepEqual(
+      keepProjectAttendanceSectionIds(["scene:props", own, "special:transport"], new Set(["cat-own"])),
+      ["scene:props", own, "special:transport"],
+    );
+  });
+
+  test("категория другого проекта, выдуманный блок, пустой id категории и повторы — отбрасываются", () => {
+    assert.deepEqual(
+      keepProjectAttendanceSectionIds(
+        [foreign, "scene:hacked", "resourceCategory:", "cat-own", own, own, "scene:props", "scene:props"],
+        new Set(["cat-own"]),
+      ),
+      [own, "scene:props"],
+    );
+  });
+
+  test("в проекте нет категорий — остаются только встроенные блоки", () => {
+    assert.deepEqual(keepProjectAttendanceSectionIds([own, "scene:art"], new Set()), ["scene:art"]);
   });
 });

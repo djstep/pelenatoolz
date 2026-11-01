@@ -1,3 +1,5 @@
+import { selectFields } from "@/shared/lib/finance-fields";
+
 /**
  * Персонаж, снимок утверждённого актёра и актёр в браузере (`pickFinanceFields`).
  * Фин. поля — по фин. просмотру актёров (`canFinanceRead("actors")`).
@@ -104,3 +106,54 @@ export const ACTOR_FIELDS = {
     "extraPayments",
   ],
 } as const;
+
+const SCENE_CHARACTER_KEYS = [
+  "id",
+  "projectId",
+  "name",
+  "description",
+  "roleRequirements",
+  "roleType",
+  "makeupOffsetMin",
+  "costumeOffsetMin",
+  "sourceCastingCandidateId",
+  "createdAt",
+  "updatedAt",
+] as const satisfies readonly (typeof CHARACTER_FIELDS.open)[number][];
+
+/**
+ * Персонаж в выборках сцен и списках для них (либретто, сценарий, КПП, вызывной) — вместо
+ * `character: true`. Только открытые поля `CHARACTER_FIELDS`: сырой `castSnapshot` (в нём ставка
+ * и условия актёра) из базы не берётся ни для кого — эти экраны снимок не показывают.
+ */
+export const SCENE_CHARACTER_SELECT = selectFields(SCENE_CHARACTER_KEYS);
+
+const SCENE_ACTOR_KEYS = [
+  "id",
+  "projectId",
+  "characterId",
+  "lastName",
+  "firstName",
+  "middleName",
+  "gender",
+  "contractorType",
+  "roleType",
+  "phone1",
+  "phone2",
+  "email",
+  "agentName",
+  "agentPhone",
+  "agentEmail",
+  "carPickupTime",
+  "arrivalTime",
+  "pickupOffsetMin",
+  "tags",
+  "createdAt",
+  "updatedAt",
+] as const satisfies readonly (typeof ACTOR_FIELDS.open)[number][];
+
+/**
+ * Актёр в вызывном и занятости актёров — вместо полной записи. Только открытые поля
+ * `ACTOR_FIELDS`: эти экраны денег актёра не показывают, ставка и условия не берутся ни для кого.
+ */
+export const SCENE_ACTOR_SELECT = selectFields(SCENE_ACTOR_KEYS);

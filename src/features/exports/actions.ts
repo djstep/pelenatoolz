@@ -7,15 +7,17 @@ import {
   ATTENDANCE_SHEET_WRITE_PERMISSION,
   exportLayoutPermission,
   isExportLayoutKey,
+  keepProjectAttendanceSectionIds,
   normalizeAttendanceSheetSettings,
   normalizeExportLayout,
   parseExportSettings,
 } from "@/features/exports/lib/column-utils";
-import type {
-  AttendanceSheetSettings,
-  ExportColumn,
-  ExportLayout,
-  ExportLayoutKey,
+import {
+  parseAttendanceCategorySectionId,
+  type AttendanceSheetSettings,
+  type ExportColumn,
+  type ExportLayout,
+  type ExportLayoutKey,
 } from "@/features/exports/types";
 import { requireProjectAccess } from "@/features/memberships/queries";
 import { prisma } from "@/shared/db/prisma";
@@ -149,8 +151,22 @@ export async function saveAttendanceSheetSettingsAction(
     return { error: "Недостаточно прав" };
   }
 
-  const attendanceSheet = normalizeAttendanceSheetSettings({ resourceIds }) ?? {
-    resourceIds: [],
+  const requested = normalizeAttendanceSheetSettings({ resourceIds })?.resourceIds ?? [];
+  const requestedCategoryIds = requested
+    .map(parseAttendanceCategorySectionId)
+    .filter((id): id is string => id !== null);
+  const projectCategories =
+    requestedCategoryIds.length > 0
+      ? await prisma.resourceCategory.findMany({
+          where: { projectId, id: { in: requestedCategoryIds } },
+          select: { id: true },
+        })
+      : [];
+  const attendanceSheet: AttendanceSheetSettings = {
+    resourceIds: keepProjectAttendanceSectionIds(
+      requested,
+      new Set(projectCategories.map((c) => c.id)),
+    ),
   };
 
   const project = await prisma.project.findUnique({

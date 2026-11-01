@@ -42,3 +42,8 @@ export function pickFinanceFields<
   }
   return result as Pick<T, Extract<O, keyof T>> & Partial<Pick<T, Extract<F, keyof T>>>;
 }
+
+/** Prisma `select` из явного списка полей: `{ id: true, name: true, … }`. */
+export function selectFields<K extends string>(keys: readonly K[]): { readonly [P in K]: true } {
+  return Object.fromEntries(keys.map((key) => [key, true])) as { readonly [P in K]: true };
+}
