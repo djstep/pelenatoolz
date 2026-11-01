@@ -13,7 +13,21 @@ import {
 } from "@/features/projects/schemas";
 import { inviteOrigin } from "@/features/memberships/lib/invite-origin";
 import { canManageMembers } from "@/features/memberships/permissions";
-import { requireProjectAccess, listProjectRoles } from "@/features/memberships/queries";
+import {
+  requireProjectAccess,
+  listProjectRoles as queryProjectRoles,
+} from "@/features/memberships/queries";
+import {
+  assertInProject,
+  isNotInProjectError,
+} from "@/features/memberships/assert-in-project";
+import {
+  lockProjectOwner,
+  OWNER_ONLY_DELETE_ERROR,
+  OWNER_ONLY_TRANSFER_ERROR,
+  OWNER_PROTECTED_ERROR,
+  TRANSFER_TO_PRODUCER_ERROR,
+} from "@/features/projects/lib/owner";
 import { prisma } from "@/shared/db/prisma";
 import { DEFAULT_APPROVAL_STATUSES } from "@/features/finance/lib/approval-statuses";
 import { DEFAULT_LEDGER_TYPES } from "@/features/contracts/lib/vat";
@@ -26,7 +40,7 @@ import {
 } from "@/features/roles/role-rules";
 import { AuditEntityType } from "@/shared/audit/entity-types";
 import { auditMemberName } from "@/shared/audit/member-name";
-import { recordAudit } from "@/shared/audit/with-audit";
+import { auditMutation, recordAudit } from "@/shared/audit/with-audit";
 import { nanoid } from "nanoid";
 
 export type ActionState = {
@@ -154,6 +168,7 @@ export async function createProjectAction(
         filmCoefficient: parsed.data.filmCoefficient,
         calcCalendarDays: parsed.data.calcCalendarDays ?? true,
         createdById: user.id!,
+        ownerUserId: user.id!,
       },
     });
 
@@ -344,15 +359,31 @@ export async function deleteProjectAction(
     return { error: "Название не совпадает" };
   }
 
-  await recordAudit({ user: { id: user.id! } }, {
-    projectId: null,
-    entityType: AuditEntityType.project,
-    entityId: projectId,
-    action: "DELETE",
-    summary: `Удалён проект «${project.name}»`,
-  });
-
-  await prisma.project.delete({ where: { id: projectId } });
+  // Владелец проверяется под блокировкой: передача владения в другой вкладке не проскочит.
+  // Запись журнала — в той же транзакции: удаление не прошло — записи нет.
+  const refusal = await prisma.$transaction(
+    async (tx) => {
+      const ownerUserId = await lockProjectOwner(tx, projectId);
+      if (ownerUserId !== user.id) return OWNER_ONLY_DELETE_ERROR;
+      await auditMutation(
+        { user: { id: user.id! } },
+        () => tx.project.delete({ where: { id: projectId } }),
+        null,
+        {
+          projectId: null,
+          entityType: AuditEntityType.project,
+          entityId: projectId,
+          action: "DELETE",
+          summary: `Удалён проект «${project.name}»`,
+        },
+        { db: tx },
+      );
+      return null;
+    },
+    // Каскад по всем данным проекта может идти дольше 5 с по умолчанию.
+    { timeout: 60_000 },
+  );
+  if (refusal) return { error: refusal };
 
   revalidatePath("/ru/projects");
   redirect("/ru/projects");
@@ -503,34 +534,53 @@ export async function updateMemberRoleAction(
     return { error: "Нельзя выдать права шире ваших собственных" };
   }
 
-  if (
-    target.status === MembershipStatus.ACTIVE &&
-    isProducerRole(target.role) &&
-    !isProducerRole(newRole) &&
-    (await countActiveProducers(projectId)) <= 1
-  ) {
-    return { error: "В проекте должен остаться хотя бы один продюсер" };
-  }
-
-  await prisma.projectMembership.update({
-    where: { id: target.id, projectId },
-    data: { roleId: parsed.data.roleId },
-  });
-
   const memberName = auditMemberName(target.user.name);
-  await recordAudit({ user: { id: user.id! } }, {
-    projectId,
-    entityType: AuditEntityType.membership,
-    entityId: target.id,
-    action: "UPDATE",
-    summary: `Роль участника «${memberName}» изменена: «${target.role.name}» → «${newRole.name}»`,
-    changes: {
-      userId: target.userId,
-      memberName,
-      roleId: { from: target.roleId, to: newRole.id },
-      roleName: { from: target.role.name, to: newRole.name },
-    },
+  // Владелец и «последний продюсер» проверяются под блокировкой проекта —
+  // одновременная передача владения или второе понижение ждут и видят результат.
+  const refusal = await prisma.$transaction(async (tx) => {
+    const ownerUserId = await lockProjectOwner(tx, projectId);
+    if (target.userId === ownerUserId) return OWNER_PROTECTED_ERROR;
+
+    const current = await tx.projectMembership.findFirst({
+      where: { id: target.id, projectId },
+      include: { role: true },
+    });
+    if (!current) return "Участник не найден";
+    if (
+      current.status === MembershipStatus.ACTIVE &&
+      isProducerRole(current.role) &&
+      !isProducerRole(newRole) &&
+      (await countActiveProducers(projectId, tx)) <= 1
+    ) {
+      return "В проекте должен остаться хотя бы один продюсер";
+    }
+
+    await auditMutation(
+      { user: { id: user.id! } },
+      () =>
+        tx.projectMembership.update({
+          where: { id: target.id, projectId },
+          data: { roleId: newRole.id },
+        }),
+      null,
+      {
+        projectId,
+        entityType: AuditEntityType.membership,
+        entityId: target.id,
+        action: "UPDATE",
+        summary: `Роль участника «${memberName}» изменена: «${current.role.name}» → «${newRole.name}»`,
+        changes: {
+          userId: target.userId,
+          memberName,
+          roleId: { from: current.roleId, to: newRole.id },
+          roleName: { from: current.role.name, to: newRole.name },
+        },
+      },
+      { db: tx },
+    );
+    return null;
   });
+  if (refusal) return { error: refusal };
 
   revalidatePath(`/ru/projects/${projectId}/members`);
   return { success: "Роль обновлена" };
@@ -560,50 +610,68 @@ export async function removeMemberAction(
     return { error: "Нельзя удалить участника с правами шире ваших" };
   }
 
-  if (
-    target.status === MembershipStatus.ACTIVE &&
-    isProducerRole(target.role) &&
-    (await countActiveProducers(projectId)) <= 1
-  ) {
-    return { error: "Это единственный продюсер проекта — удалить нельзя" };
-  }
-
-  // Удалённый участник перестаёт быть главой цехов: при повторном приглашении главу назначают заново.
-  const removedHeads = await prisma.$transaction(async (tx) => {
-    const heads = await tx.departmentHead.findMany({
-      where: { membershipId, department: { projectId } },
-      select: { department: { select: { id: true, name: true } } },
-    });
-    if (heads.length > 0) {
-      await tx.departmentHead.deleteMany({
-        where: { membershipId, department: { projectId } },
-      });
-    }
-    await tx.projectMembership.update({
-      where: { id: membershipId, projectId },
-      data: { status: MembershipStatus.REMOVED },
-    });
-    return heads.map((h) => h.department);
-  });
-
   const memberName = auditMemberName(target.user.name);
-  await recordAudit({ user: { id: user.id! } }, {
-    projectId,
-    entityType: AuditEntityType.membership,
-    entityId: target.id,
-    action: "DELETE",
-    summary:
-      removedHeads.length > 0
-        ? `Участник «${memberName}» с ролью «${target.role.name}» удалён из проекта и снят с глав цехов: ${removedHeads.map((d) => `«${d.name}»`).join(", ")}`
-        : `Участник «${memberName}» с ролью «${target.role.name}» удалён из проекта`,
-    changes: {
-      userId: target.userId,
-      memberName,
-      roleId: target.roleId,
-      roleName: target.role.name,
-      ...(removedHeads.length > 0 ? { removedFromDepartmentHeads: removedHeads } : {}),
-    },
+  // Владелец и «последний продюсер» — под блокировкой проекта, как при смене роли.
+  const outcome = await prisma.$transaction(async (tx) => {
+    const ownerUserId = await lockProjectOwner(tx, projectId);
+    if (target.userId === ownerUserId) return { error: OWNER_PROTECTED_ERROR };
+
+    const current = await tx.projectMembership.findFirst({
+      where: { id: membershipId, projectId },
+      include: { role: true },
+    });
+    if (!current) return { error: "Участник не найден" };
+    if (
+      current.status === MembershipStatus.ACTIVE &&
+      isProducerRole(current.role) &&
+      (await countActiveProducers(projectId, tx)) <= 1
+    ) {
+      return { error: "Это единственный продюсер проекта — удалить нельзя" };
+    }
+
+    // Удалённый участник перестаёт быть главой цехов: при повторном приглашении главу назначают заново.
+    const removedHeads = await auditMutation(
+      { user: { id: user.id! } },
+      async () => {
+        const heads = await tx.departmentHead.findMany({
+          where: { membershipId, department: { projectId } },
+          select: { department: { select: { id: true, name: true } } },
+        });
+        if (heads.length > 0) {
+          await tx.departmentHead.deleteMany({
+            where: { membershipId, department: { projectId } },
+          });
+        }
+        await tx.projectMembership.update({
+          where: { id: membershipId, projectId },
+          data: { status: MembershipStatus.REMOVED },
+        });
+        return heads.map((h) => h.department);
+      },
+      null,
+      {
+        projectId,
+        entityType: AuditEntityType.membership,
+        entityId: target.id,
+        action: "DELETE",
+        summary: (_input, heads) =>
+          heads.length > 0
+            ? `Участник «${memberName}» с ролью «${current.role.name}» удалён из проекта и снят с глав цехов: ${heads.map((d) => `«${d.name}»`).join(", ")}`
+            : `Участник «${memberName}» с ролью «${current.role.name}» удалён из проекта`,
+        changes: (_input, heads) => ({
+          userId: target.userId,
+          memberName,
+          roleId: current.roleId,
+          roleName: current.role.name,
+          ...(heads.length > 0 ? { removedFromDepartmentHeads: heads } : {}),
+        }),
+      },
+      { db: tx },
+    );
+    return { removedHeads };
   });
+  if ("error" in outcome) return { error: outcome.error };
+  const { removedHeads } = outcome;
 
   revalidatePath(`/ru/projects/${projectId}/members`);
   if (removedHeads.length > 0) {
@@ -643,6 +711,10 @@ export async function acceptInviteAction(token: string): Promise<ActionState> {
   });
   if (current?.status === MembershipStatus.ACTIVE) {
     return { error: "Вы уже участник проекта" };
+  }
+  // Владелец всегда активный участник; проверка на случай, если это когда-то изменится.
+  if (invite.project.ownerUserId === user.id) {
+    return { error: OWNER_PROTECTED_ERROR };
   }
 
   const { membershipId, previousRole } = await prisma.$transaction(async (tx) => {
@@ -709,4 +781,83 @@ export async function acceptInviteAction(token: string): Promise<ActionState> {
   redirect(`/ru/projects/${invite.projectId}`);
 }
 
-export { listProjectRoles };
+/**
+ * Передать владение проектом другому активному продюсеру.
+ * Только владелец. Бывший владелец остаётся продюсером, дальше его можно понизить как любого.
+ */
+export async function transferOwnershipAction(
+  projectId: string,
+  membershipId: string,
+): Promise<{ error?: string; success?: string }> {
+  const user = await requireUser();
+  await requireProjectAccess(projectId, user.id!);
+  if (typeof membershipId !== "string") return { error: "Участник не найден" };
+
+  let outcome: { error: string } | { toName: string };
+  try {
+    outcome = await prisma.$transaction(async (tx) => {
+      const ownerUserId = await lockProjectOwner(tx, projectId);
+      if (ownerUserId !== user.id) return { error: OWNER_ONLY_TRANSFER_ERROR };
+
+      await assertInProject("ProjectMembership", membershipId, projectId, tx);
+      const [target, from] = await Promise.all([
+        tx.projectMembership.findFirst({
+          where: { id: membershipId, projectId, status: MembershipStatus.ACTIVE },
+          include: { role: true, user: { select: { name: true } } },
+        }),
+        tx.projectMembership.findFirst({
+          where: { projectId, userId: user.id!, status: MembershipStatus.ACTIVE },
+          include: { role: true, user: { select: { name: true } } },
+        }),
+      ]);
+      if (!target || !from) return { error: "Участник не найден" };
+      if (target.userId === user.id) return { error: "Вы уже владелец проекта" };
+      if (!isProducerRole(target.role)) return { error: TRANSFER_TO_PRODUCER_ERROR };
+
+      const fromName = auditMemberName(from.user.name);
+      const toName = auditMemberName(target.user.name);
+      await auditMutation(
+        { user: { id: user.id! } },
+        () =>
+          tx.project.update({
+            where: { id: projectId },
+            data: { ownerUserId: target.userId },
+          }),
+        null,
+        {
+          projectId,
+          entityType: AuditEntityType.membership,
+          entityId: target.id,
+          action: "UPDATE",
+          summary: `Владение проектом передано: «${fromName}» → «${toName}»`,
+          changes: {
+            ownershipTransfer: true,
+            fromUserId: from.userId,
+            fromName,
+            fromRoleName: from.role.name,
+            toUserId: target.userId,
+            toName,
+            toPreviousRoleName: target.role.name,
+          },
+        },
+        { db: tx },
+      );
+      return { toName };
+    });
+  } catch (error) {
+    if (isNotInProjectError(error)) return { error: "Участник не найден" };
+    throw error;
+  }
+  if ("error" in outcome) return { error: outcome.error };
+
+  revalidatePath(`/ru/projects/${projectId}/members`);
+  revalidatePath(`/ru/projects/${projectId}/settings`);
+  return { success: `Владение передано: «${outcome.toName}»` };
+}
+
+/** Роли проекта — только активному участнику с просмотром «Участников». */
+export async function listProjectRoles(projectId: string) {
+  const user = await requireUser();
+  await requireProjectAccess(projectId, user.id!, "members:read");
+  return queryProjectRoles(projectId);
+}

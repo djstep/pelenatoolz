@@ -47,6 +47,7 @@ export default async function ProjectSettingsPage({ params }: Props) {
             projectId={projectId}
             projectName={ctx.project.name}
             status={ctx.project.status}
+            canDelete={ctx.project.ownerUserId === ctx.user.id}
           />
         </Card>
       ) : null}

@@ -82,10 +82,13 @@ export function ProjectDangerZone({
   projectId,
   projectName,
   status,
+  canDelete,
 }: {
   projectId: string;
   projectName: string;
   status: ProjectStatus;
+  /** Удалить проект может только владелец. */
+  canDelete: boolean;
 }) {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const boundDelete = deleteProjectAction.bind(null, projectId);
@@ -119,17 +122,25 @@ export function ProjectDangerZone({
 
       <div className="rounded-lg border border-red-500/30 bg-red-500/5 p-4">
         <h4 className="font-semibold text-[var(--tone-danger)]">Удаление проекта</h4>
-        <p className="mt-1 text-sm text-[var(--muted-fg)]">
-          Безвозвратно удалит проект, сцены, КПП, актёров и все связанные данные.
-        </p>
-        <Button
-          type="button"
-          variant="danger"
-          className="mt-3"
-          onClick={() => setDeleteOpen(true)}
-        >
-          Удалить проект
-        </Button>
+        {canDelete ? (
+          <>
+            <p className="mt-1 text-sm text-[var(--muted-fg)]">
+              Безвозвратно удалит проект, сцены, КПП, актёров и все связанные данные.
+            </p>
+            <Button
+              type="button"
+              variant="danger"
+              className="mt-3"
+              onClick={() => setDeleteOpen(true)}
+            >
+              Удалить проект
+            </Button>
+          </>
+        ) : (
+          <p className="mt-1 text-sm text-[var(--muted-fg)]">
+            Удалить проект может только его владелец.
+          </p>
+        )}
       </div>
 
       <Modal
