@@ -7,6 +7,10 @@ const nextConfig: NextConfig = {
   // Next.js 16.3 + standalone breaks Vercel onBuildComplete; keep standalone for Docker.
   output: process.env.VERCEL ? undefined : "standalone",
   serverExternalPackages: ["sql.js"],
+  // Шрифт печатного листа вызывного читается с диска (`fs`) — в сборку его кладём явно.
+  outputFileTracingIncludes: {
+    "/*/projects/*/call-sheets/**": ["./assets/fonts/ibm-plex-sans/**"],
+  },
   // Только для `next dev`: второй аккаунт открывается на 127.0.0.1 (отдельные куки входа).
   allowedDevOrigins: ["127.0.0.1"],
   experimental: {
