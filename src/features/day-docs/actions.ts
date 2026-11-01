@@ -2,7 +2,6 @@
 
 import { revalidatePath } from "next/cache";
 import {
-  saveDepartmentCallsSchema,
   saveResourceCallsSchema,
   saveResourceUsagesSchema,
   updateCallSheetHeaderSchema,
@@ -132,50 +131,6 @@ export async function updateCallSheetHeaderAction(
 
   revalidateCallSheet(projectId, shootDayId);
   return { success: "Шапка сохранена" };
-}
-
-export async function saveDepartmentCallsAction(
-  projectId: string,
-  shootDayId: string,
-  _prev: CallSheetActionState,
-  formData: FormData,
-): Promise<CallSheetActionState> {
-  const gate = await assertCallSheetWrite(projectId, shootDayId);
-  if ("error" in gate) return gate;
-
-  const raw = formData.get("rows");
-  let rows: unknown[] = [];
-  try {
-    rows = JSON.parse(String(raw ?? "[]"));
-  } catch {
-    return { error: "Некорректный формат списка" };
-  }
-
-  const parsed = saveDepartmentCallsSchema.safeParse({ rows });
-  if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Проверьте контакты" };
-  }
-
-  await prisma.$transaction([
-    prisma.departmentCallTime.deleteMany({ where: { shootDayId } }),
-    ...parsed.data.rows.map((row, index) =>
-      prisma.departmentCallTime.create({
-        data: {
-          shootDayId,
-          roleLabel: row.roleLabel,
-          personName: emptyToNull(row.personName),
-          phone: emptyToNull(row.phone),
-          callTime: emptyToNull(row.callTime),
-          sortOrder: index,
-        },
-      }),
-    ),
-  ]);
-
-  await auditCallSheet(gate.ctx, projectId, shootDayId, "Сохранены контакты отделов");
-
-  revalidateCallSheet(projectId, shootDayId);
-  return { success: "Контакты сохранены" };
 }
 
 export async function saveTimeSlotsAction(
@@ -801,100 +756,6 @@ export async function applyRecalculateResourceTimingsAction(
 
   revalidateCallSheet(projectId, shootDayId);
   return { success: `Обновлено ресурсов: ${toApply.length}` };
-}
-
-async function loadCallSheetExportBundle(
-  projectId: string,
-  dayId: string,
-): Promise<
-  | { error: string }
-  | { model: import("@/features/day-docs/lib/export-call-sheet").CallSheetExportModel }
-> {
-  const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("callsheet:read") && !ctx.can("schedule:read")) {
-    return { error: "Недостаточно прав" } as const;
-  }
-
-  const { getShootDayDocument, getNextShootDayBrief } = await import(
-    "@/features/day-docs/queries"
-  );
-  const { fetchCityAstro } = await import("@/features/day-docs/lib/city-astro");
-  const { buildCallSheetExportModel } = await import(
-    "@/features/day-docs/lib/export-call-sheet"
-  );
-
-  const bundle = await getShootDayDocument(projectId, dayId);
-  if (!bundle) return { error: "Съёмочный день не найден" } as const;
-
-  const [astro, nextDay] = await Promise.all([
-    fetchCityAstro(
-      bundle.project.city,
-      bundle.day.date,
-      bundle.project.timezone,
-    ),
-    getNextShootDayBrief(projectId, bundle.day.dayNumber),
-  ]);
-
-  const nextDayAstro = nextDay
-    ? await fetchCityAstro(
-        bundle.project.city,
-        nextDay.date,
-        bundle.project.timezone,
-      )
-    : null;
-
-  const model = buildCallSheetExportModel(bundle, astro, nextDay, nextDayAstro);
-  return { model } as const;
-}
-
-export async function exportCallSheetXlsxAction(
-  projectId: string,
-  dayId: string,
-): Promise<{ base64: string; fileName: string } | { error: string }> {
-  const loaded = await loadCallSheetExportBundle(projectId, dayId);
-  if ("error" in loaded) return loaded;
-
-  const { buildCallSheetXlsx } = await import(
-    "@/features/day-docs/lib/export-call-sheet-xlsx"
-  );
-  const buffer = await buildCallSheetXlsx(loaded.model);
-  return {
-    base64: Buffer.from(buffer).toString("base64"),
-    fileName: `${loaded.model.fileBaseName}.xlsx`,
-  };
-}
-
-export async function exportCallSheetPdfAction(
-  projectId: string,
-  dayId: string,
-): Promise<{ base64: string; fileName: string } | { error: string }> {
-  const loaded = await loadCallSheetExportBundle(projectId, dayId);
-  if ("error" in loaded) return loaded;
-
-  const { buildCallSheetPdf } = await import(
-    "@/features/day-docs/lib/export-call-sheet-pdf"
-  );
-  const buffer = await buildCallSheetPdf(loaded.model);
-  return {
-    base64: buffer.toString("base64"),
-    fileName: `${loaded.model.fileBaseName}.pdf`,
-  };
-}
-
-export async function exportCallSheetPrintHtmlAction(
-  projectId: string,
-  dayId: string,
-): Promise<{ html: string; fileName: string } | { error: string }> {
-  const loaded = await loadCallSheetExportBundle(projectId, dayId);
-  if ("error" in loaded) return loaded;
-
-  const { buildCallSheetPrintHtml } = await import(
-    "@/features/day-docs/lib/export-call-sheet"
-  );
-  return {
-    html: buildCallSheetPrintHtml(loaded.model),
-    fileName: `${loaded.model.fileBaseName}.html`,
-  };
 }
 
 export async function exportAttendanceSheetXlsxAction(

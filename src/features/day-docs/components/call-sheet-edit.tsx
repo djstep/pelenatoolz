@@ -7,13 +7,13 @@ import {
   addPerShiftResourceAction,
   removePerShiftResourceAction,
   saveActorCallsAction,
-  saveDepartmentCallsAction,
   saveResourceCallsAction,
   saveResourceUsagesAction,
   saveTimeSlotsAction,
   updateCallSheetHeaderAction,
   type CallSheetActionState,
 } from "@/features/day-docs/actions";
+import { SheetBlock } from "@/features/call-sheets/components/sheet-block";
 import { CallSheetTransportEditor } from "@/features/day-docs/components/call-sheet-transport-editor";
 import type { CallSheetTransportEditorData } from "@/features/day-docs/transport-queries";
 import {
@@ -41,13 +41,6 @@ import { cn } from "@/shared/lib/cn";
 import { useActionSuccess } from "@/shared/ui/unsaved/use-action-success";
 import { useFormGuard } from "@/shared/ui/unsaved/use-form-guard";
 import { useUnsavedChanges } from "@/shared/ui/unsaved/unsaved-changes-provider";
-
-type DeptRow = {
-  roleLabel: string;
-  personName: string;
-  phone: string;
-  callTime: string;
-};
 
 type SlotRow = {
   unit: CallSheetUnit;
@@ -141,15 +134,6 @@ export function CallSheetEditor({
     crewMeetTime: day.crewMeetTime ?? "",
   });
 
-  const [depts, setDepts] = useState<DeptRow[]>(
-    day.departmentCalls.map((d) => ({
-      roleLabel: d.roleLabel,
-      personName: d.personName ?? "",
-      phone: d.phone ?? "",
-      callTime: d.callTime ?? "",
-    })),
-  );
-
   const [slots, setSlots] = useState<SlotRow[]>(
     day.timeSlots.map((s) => ({
       // Поля плана вызывного (юнит, продолжение, свой текст) этот список не правит,
@@ -222,7 +206,6 @@ export function CallSheetEditor({
   const availableToAdd = perShiftCatalog.filter((item) => !item.added);
 
   const headerAction = updateCallSheetHeaderAction.bind(null, projectId, dayId);
-  const deptAction = saveDepartmentCallsAction.bind(null, projectId, dayId);
   const slotAction = saveTimeSlotsAction.bind(null, projectId, dayId);
   const actorAction = saveActorCallsAction.bind(null, projectId, dayId);
   const resourceAction = saveResourceCallsAction.bind(null, projectId, dayId);
@@ -258,17 +241,18 @@ export function CallSheetEditor({
   }
 
   return (
-    <section className="rounded-2xl border border-[var(--accent)]/30 bg-[var(--panel-solid)] p-5 print:hidden">
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <h3 className="font-semibold">Редактирование вызывного</h3>
+    <SheetBlock
+      title="Редактирование вызывного"
+      className="w-full"
+      actions={
         <Button type="button" variant="ghost" onClick={closeEditor}>
           Закрыть
         </Button>
-      </div>
-
+      }
+    >
       <div className="space-y-8">
         <form ref={headerFormRef} action={headerFormAction} className="space-y-3">
-          <h4 className="text-sm font-semibold text-[var(--muted-fg)]">Шапка дня</h4>
+          <h4 className="sheet-subhead">Шапка дня</h4>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <label className="space-y-1 text-xs">
               <span className="text-[var(--muted-fg)]">№ смены</span>
@@ -373,80 +357,15 @@ export function CallSheetEditor({
           </Button>
         </form>
 
-        <div className="space-y-3">
-          <h4 className="text-sm font-semibold text-[var(--muted-fg)]">Контакты по цехам</h4>
-          {depts.map((row, i) => (
-            <div key={i} className="grid gap-2 sm:grid-cols-5">
-              <Input
-                value={row.roleLabel}
-                onChange={(e) =>
-                  setDepts((p) =>
-                    p.map((r, j) => (j === i ? { ...r, roleLabel: e.target.value } : r)),
-                  )
-                }
-                placeholder="Цех / роль"
-              />
-              <Input
-                value={row.personName}
-                onChange={(e) =>
-                  setDepts((p) =>
-                    p.map((r, j) => (j === i ? { ...r, personName: e.target.value } : r)),
-                  )
-                }
-                placeholder="ФИО"
-              />
-              <Input
-                value={row.phone}
-                onChange={(e) =>
-                  setDepts((p) =>
-                    p.map((r, j) => (j === i ? { ...r, phone: e.target.value } : r)),
-                  )
-                }
-                placeholder="Телефон"
-              />
-              <HhMmInput
-                value={row.callTime}
-                onChange={(callTime) =>
-                  setDepts((p) =>
-                    p.map((r, j) => (j === i ? { ...r, callTime } : r)),
-                  )
-                }
-                placeholder="07:00"
-              />
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => setDepts((p) => p.filter((_, j) => j !== i))}
-              >
-                ✕
-              </Button>
-            </div>
-          ))}
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() =>
-              setDepts((p) => [...p, { roleLabel: "", personName: "", phone: "", callTime: "" }])
-            }
-          >
-            + Строка
-          </Button>
-          <JsonRowsForm
-            action={deptAction}
-            rowsJson={JSON.stringify(depts.filter((r) => r.roleLabel.trim()))}
-            label="Сохранить контакты"
-          />
-        </div>
-
         {transportEditor ? (
           <div className="space-y-3">
-            <h4 className="text-sm font-semibold text-[var(--muted-fg)]">Спецтранспорт</h4>
+            <h4 className="sheet-subhead">Спецтранспорт</h4>
             <CallSheetTransportEditor projectId={projectId} dayId={dayId} data={transportEditor} />
           </div>
         ) : null}
 
         <div className="space-y-3">
-          <h4 className="text-sm font-semibold text-[var(--muted-fg)]">Расписание по слотам</h4>
+          <h4 className="sheet-subhead">Расписание по слотам</h4>
           {slots.map((row, i) => (
             <div key={i} className="grid gap-2 lg:grid-cols-6">
               <HhMmInput
@@ -547,7 +466,7 @@ export function CallSheetEditor({
 
         {actorTimings.length > 0 ? (
           <div className="space-y-3">
-            <h4 className="text-sm font-semibold text-[var(--muted-fg)]">Тайминги актёров</h4>
+            <h4 className="sheet-subhead">Тайминги актёров</h4>
             {actorTimings.map((row, i) => {
               const baseline = timingBaselines[row.actorId];
               return (
@@ -700,7 +619,7 @@ export function CallSheetEditor({
 
         {resourceTimings.length > 0 ? (
           <div className="space-y-3">
-            <h4 className="text-sm font-semibold text-[var(--muted-fg)]">
+            <h4 className="sheet-subhead">
               Тайминги ресурсов (массовка, трюки, реквизит…)
             </h4>
             {resourceTimings.map((row, i) => {
@@ -770,7 +689,7 @@ export function CallSheetEditor({
         ) : null}
 
         <div className="space-y-3">
-          <h4 className="text-sm font-semibold text-[var(--muted-fg)]">
+          <h4 className="sheet-subhead">
             Посменные ресурсы
           </h4>
           {availableToAdd.length > 0 ? (
@@ -889,6 +808,6 @@ export function CallSheetEditor({
           )}
         </div>
       </div>
-    </section>
+    </SheetBlock>
   );
 }

@@ -19,13 +19,6 @@ export const updateCallSheetHeaderSchema = z.object({
   comment: z.string().trim().max(2000).optional(),
 });
 
-export const departmentCallRowSchema = z.object({
-  roleLabel: z.string().trim().min(1).max(120),
-  personName: z.string().trim().max(200).optional(),
-  phone: z.string().trim().max(40).optional(),
-  callTime: timeString,
-});
-
 export const timeSlotRowSchema = z.object({
   startTime: z.string().trim().min(1).max(10),
   endTime: timeString,
@@ -71,10 +64,6 @@ export const resourceCallRowSchema = z.object({
   makeupTime: timeString,
   readyTime: timeString,
   wrapTime: timeString,
-});
-
-export const saveDepartmentCallsSchema = z.object({
-  rows: z.array(departmentCallRowSchema),
 });
 
 export const saveTimeSlotsSchema = z.object({

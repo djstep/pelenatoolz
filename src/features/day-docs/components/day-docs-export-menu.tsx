@@ -1,11 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import {
-  exportAttendanceSheetXlsxAction,
-  exportCallSheetPdfAction,
-  exportCallSheetXlsxAction,
-} from "@/features/day-docs/actions";
+import { getCallSheetPrintHtmlAction } from "@/features/call-sheets/print-actions";
+import { exportAttendanceSheetXlsxAction } from "@/features/day-docs/actions";
 import {
   getAttendanceSheetSettingsAction,
   saveAttendanceSheetSettingsAction,
@@ -14,20 +11,62 @@ import {
   ATTENDANCE_BUILTIN_SECTIONS,
   attendanceCategorySectionId,
 } from "@/features/exports/types";
+import { printWhenImagesSettled } from "@/shared/lib/print-window";
 import { Button } from "@/shared/ui/button";
 import { Checkbox } from "@/shared/ui/checkbox";
 import { Modal } from "@/shared/ui/modal";
 import { PortaledMenu } from "@/shared/ui/portaled-menu";
 import { useActionToast, useToast } from "@/shared/ui/toast";
 
-function downloadBase64(base64: string, fileName: string, mimeType: string) {
-  const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
-  const url = URL.createObjectURL(new Blob([bytes], { type: mimeType }));
+const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+function downloadBlob(blob: Blob, fileName: string) {
+  const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
   a.download = fileName;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+function downloadBase64(base64: string, fileName: string, mimeType: string) {
+  const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+  downloadBlob(new Blob([bytes], { type: mimeType }), fileName);
+}
+
+/** Имя файла из `Content-Disposition`: сначала `filename*=UTF-8''…`, потом `filename="…"`. */
+function fileNameFromDisposition(header: string | null, fallback: string) {
+  const encoded = header?.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+  if (encoded) {
+    try {
+      return decodeURIComponent(encoded);
+    } catch {
+      // битое имя — ниже запасное
+    }
+  }
+  return header?.match(/filename="([^"]+)"/i)?.[1] ?? fallback;
+}
+
+/** Excel вызывного — файлом из маршрута; вход, право и день проверяет сервер. */
+async function fetchCallSheetXlsx(
+  projectId: string,
+  dayId: string,
+): Promise<{ blob: Blob; fileName: string } | { error: string }> {
+  const res = await fetch(
+    `/api/projects/${encodeURIComponent(projectId)}/call-sheets/${encodeURIComponent(dayId)}/xlsx`,
+  );
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as { error?: string } | null;
+    return { error: body?.error ?? "Не удалось выгрузить Excel" };
+  }
+  // Вход истёк — вместо файла пришла страница входа.
+  if (!res.headers.get("Content-Type")?.startsWith(XLSX_MIME)) {
+    return { error: "Не удалось выгрузить Excel — обновите страницу и войдите снова" };
+  }
+  return {
+    blob: await res.blob(),
+    fileName: fileNameFromDisposition(res.headers.get("Content-Disposition"), "Вызывной.xlsx"),
+  };
 }
 
 export type DayDocsExportResourceCategory = {
@@ -80,6 +119,46 @@ export function DayDocsExportMenu({
     }
   }
 
+  /** Окно печати — как в кастинге: HTML с сервера → `document.write` → печать после фото и шрифтов. */
+  async function printCallSheet() {
+    setExporting("print");
+    setOpen(false);
+    try {
+      const result = await getCallSheetPrintHtmlAction(projectId, dayId);
+      if ("error" in result) {
+        setMessage({ error: result.error });
+        return;
+      }
+      const win = window.open("", "_blank");
+      if (!win) {
+        setMessage({ error: "Браузер не открыл окно печати — разрешите всплывающие окна" });
+        return;
+      }
+      win.document.write(result.html);
+      win.document.close();
+      // Скрипты в странице печати запрещены (CSP) — печать вызывается отсюда.
+      printWhenImagesSettled(win);
+    } finally {
+      setExporting(null);
+    }
+  }
+
+  async function downloadCallSheetXlsx() {
+    setExporting("xlsx");
+    setOpen(false);
+    try {
+      const result = await fetchCallSheetXlsx(projectId, dayId);
+      if ("error" in result) {
+        setMessage({ error: result.error });
+        return;
+      }
+      downloadBlob(result.blob, result.fileName);
+      setMessage({ success: "Файл Excel сохранён" });
+    } finally {
+      setExporting(null);
+    }
+  }
+
   return (
     <>
       <span ref={triggerRef} className="inline-flex">
@@ -104,30 +183,16 @@ export function DayDocsExportMenu({
             <button
               type="button"
               className="glass-dropdown-item block w-full px-3 py-2 text-left text-sm"
-              onClick={() =>
-                void runDownload(
-                  "pdf",
-                  () => exportCallSheetPdfAction(projectId, dayId),
-                  "application/pdf",
-                  "Файл PDF сохранён",
-                )
-              }
+              onClick={() => void printCallSheet()}
             >
-              Вызывной PDF
+              Печать / PDF
             </button>
             <button
               type="button"
               className="glass-dropdown-item block w-full px-3 py-2 text-left text-sm"
-              onClick={() =>
-                void runDownload(
-                  "xlsx",
-                  () => exportCallSheetXlsxAction(projectId, dayId),
-                  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                  "Файл Excel сохранён",
-                )
-              }
+              onClick={() => void downloadCallSheetXlsx()}
             >
-              Вызывной Excel
+              Excel
             </button>
             <div className="my-1 border-t border-[var(--border)]" />
           </>

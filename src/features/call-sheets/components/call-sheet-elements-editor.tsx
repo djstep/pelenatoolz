@@ -371,7 +371,7 @@ export function CallSheetElementsEditor({
             (!isSpecial || data.specialTransport.length === 0);
           return (
             <section key={section.ref} className="space-y-2">
-              <h4 className="text-sm font-semibold">{section.name}</h4>
+              <h4 className="sheet-subhead">{section.name}</h4>
               {isSpecial ? (
                 <>
                   {data.specialTransport.length > 0 ? (
@@ -441,7 +441,7 @@ export function CallSheetElementsEditor({
 
         {orphans.length > 0 ? (
           <section className="space-y-2">
-            <h4 className="text-sm font-semibold">Нет в сценах дня</h4>
+            <h4 className="sheet-subhead">Нет в сценах дня</h4>
             <p className="text-xs text-[var(--muted-fg)]">
               Правки строк, которых больше нет в сценах этого дня (сцену убрали из дня, вырезали или
               поменяли разбор). Если строка вернётся в сцены — правка снова применится. Ненужные

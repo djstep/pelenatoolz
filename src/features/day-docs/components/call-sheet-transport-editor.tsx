@@ -93,7 +93,7 @@ export function CallSheetTransportEditor({
       <input type="hidden" name="payload" value={editorRowsPayload(rows, canEditFinance)} />
 
       <div>
-        <h4 className="text-sm font-semibold text-[var(--muted-fg)]">Спецтранспорт</h4>
+        <h4 className="sheet-subhead">Спецтранспорт</h4>
         <p className="mt-0.5 text-xs text-[var(--muted-fg)]">
           Статья сметы попадает в отчёт смены, когда там создаётся строка этой техники; у уже
           созданных строк отчёта и начислений статья не меняется.

@@ -1012,7 +1012,7 @@ export function CallSheetPlanner({
 
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="space-y-2">
-          <h4 className="text-sm font-semibold text-[var(--muted-fg)]">
+          <h4 className="sheet-subhead">
             План дня — основной юнит
           </h4>
           {dndReady ? (
@@ -1057,7 +1057,7 @@ export function CallSheetPlanner({
           )}
 
           <div className="space-y-2 pt-2">
-            <h4 className="text-sm font-semibold text-[var(--muted-fg)]">2-й юнит</h4>
+            <h4 className="sheet-subhead">2-й юнит</h4>
             <p className="text-xs text-[var(--muted-fg)]">
               Строки 2-го юнита добавляются руками: время, тип, сцена из либретто. Время
               основного юнита их не сдвигает.
@@ -1093,7 +1093,7 @@ export function CallSheetPlanner({
         </div>
 
         <div className="space-y-2">
-          <h4 className="text-sm font-semibold text-[var(--muted-fg)]">
+          <h4 className="sheet-subhead">
             Предпросмотр тайминга
           </h4>
           {!isValidHhMm(shiftStart) ? (

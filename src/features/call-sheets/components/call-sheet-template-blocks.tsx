@@ -13,7 +13,7 @@ import {
 } from "@/features/call-sheets/components/call-sheet-sheet-editor";
 import type { CallSheetBlocks, TemplateMemberOption } from "@/features/call-sheets/queries";
 import { Button } from "@/shared/ui/button";
-import { Card } from "@/shared/ui/card";
+import { SheetBlock } from "@/features/call-sheets/components/sheet-block";
 import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
 import { toast } from "@/shared/ui/toast";
 import { useUnsavedChanges } from "@/shared/ui/unsaved/unsaved-changes-provider";
@@ -21,7 +21,7 @@ import { useUnsavedChanges } from "@/shared/ui/unsaved/unsaved-changes-provider"
 function Block({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="min-w-0">
-      <h4 className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-fg)]">
+      <h4 className="sheet-subhead mb-2">
         {title}
       </h4>
       {children}
@@ -106,7 +106,7 @@ export function CallSheetTemplateBlocks({
 
   if (!callSheet) {
     return (
-      <Card className="space-y-3">
+      <SheetBlock title="Вызывной" className="space-y-3">
         <p className="text-sm">
           Вызывной этого дня ещё не создан. Ниже — данные дня из КПП.
         </p>
@@ -139,7 +139,7 @@ export function CallSheetTemplateBlocks({
             Создать вызывной может участник с правом «КПП и вызывные: правка».
           </p>
         )}
-      </Card>
+      </SheetBlock>
     );
   }
 
@@ -161,7 +161,7 @@ export function CallSheetTemplateBlocks({
     : null;
 
   return (
-    <Card className="space-y-4">
+    <SheetBlock title="Поля листа" className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-xs text-[var(--muted-fg)]">
           Из шаблона: {appliedAtLabel}
@@ -287,6 +287,6 @@ export function CallSheetTemplateBlocks({
           </div>
         </>
       )}
-    </Card>
+    </SheetBlock>
   );
 }
