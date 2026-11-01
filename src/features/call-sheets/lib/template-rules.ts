@@ -95,7 +95,8 @@ export function parseTemplatePayload(
 }
 
 export const NO_RIGHTS = "Недостаточно прав";
-export const MEMBER_NOT_FOUND = "Участник не найден или не активен";
+export const MEMBER_NOT_FOUND =
+  "Участник вышел из проекта или не найден — выберите в шаблоне другого";
 export const DEPARTMENT_NOT_FOUND = "Цех не найден";
 export const DAY_NOT_FOUND = "Съёмочный день не найден";
 

@@ -24,6 +24,8 @@ export type TemplateEditorData = {
     membershipId: string;
     personName: string;
     phone: string;
+    /** Участник строки вышел из проекта — его имя для пометки; иначе null. Не сохраняется. */
+    leftMemberName?: string | null;
   }[];
   crewCalls: { departmentId: string; label: string; callTime: string }[];
   baseItems: { name: string; callTime: string; notNeeded: boolean }[];
@@ -35,6 +37,7 @@ export async function getCallSheetTemplate(projectId: string): Promise<TemplateE
     prisma.callSheetTemplateLeader.findMany({
       where: { projectId },
       orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+      include: { membership: { select: { status: true, user: { select: { name: true } } } } },
     }),
     prisma.callSheetTemplateCrewCall.findMany({
       where: { projectId },
@@ -52,6 +55,10 @@ export async function getCallSheetTemplate(projectId: string): Promise<TemplateE
       membershipId: row.membershipId ?? "",
       personName: row.personName ?? "",
       phone: row.phone ?? "",
+      leftMemberName:
+        row.membership && row.membership.status !== MembershipStatus.ACTIVE
+          ? memberLabel({ name: row.membership.user.name, email: null })
+          : null,
     })),
     crewCalls: crewCalls.map((row) => ({
       departmentId: row.departmentId ?? "",

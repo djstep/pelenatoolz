@@ -293,10 +293,14 @@ export function DepartmentsWorkspace({
                   onDelete={() =>
                     void confirmDelete({
                       title: `Удалить цех «${department.name}»?`,
-                      details:
-                        department.heads.length > 0
+                      details: [
+                        ...(department.heads.length > 0
                           ? [`Главы будут сняты: ${department.heads.map((h) => h.label).join(", ")}`]
-                          : [],
+                          : []),
+                        ...(department.inCallSheetTemplate
+                          ? ["Цех также будет удалён из шаблона вызывного"]
+                          : []),
+                      ],
                       action: async () =>
                         (await deleteDepartmentAction(projectId, department.id)).error,
                     })

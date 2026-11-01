@@ -14,6 +14,8 @@ export type DepartmentRow = {
   name: string;
   codePrefix: string;
   heads: { membershipId: string; label: string }[];
+  /** Цех есть в шаблоне вызывного — при удалении цеха строка шаблона удалится. */
+  inCallSheetTemplate: boolean;
 };
 
 /** Цеха проекта по порядку, с главами. */
@@ -32,6 +34,7 @@ export async function listDepartments(projectId: string): Promise<DepartmentRow[
           membership: { select: { user: { select: { name: true, email: true } } } },
         },
       },
+      _count: { select: { callSheetTemplateCrewCalls: true } },
     },
   });
   return rows.map((row) => ({
@@ -42,6 +45,7 @@ export async function listDepartments(projectId: string): Promise<DepartmentRow[
       membershipId: h.membershipId,
       label: memberLabel(h.membership.user),
     })),
+    inCallSheetTemplate: row._count.callSheetTemplateCrewCalls > 0,
   }));
 }
 

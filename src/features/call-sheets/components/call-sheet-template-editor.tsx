@@ -258,10 +258,10 @@ export function CallSheetTemplateEditor({
                     }
                   >
                     <option value={FREE_PERSON}>Не участник — вписать имя</option>
-                    {/* Участник ушёл из проекта — строка остаётся, выбрать его снова нельзя. */}
+                    {/* Участник вышел из проекта — строка остаётся, выбрать его снова нельзя. */}
                     {row.membershipId && !member ? (
                       <option value={row.membershipId} disabled>
-                        Участник не активен
+                        {row.leftMemberName ?? "Участник"} — вышел из проекта
                       </option>
                     ) : null}
                     {members.map((m) => (
@@ -270,13 +270,20 @@ export function CallSheetTemplateEditor({
                       </option>
                     ))}
                   </Select>
-                  {row.membershipId ? (
+                  {row.membershipId && !member ? (
+                    <p
+                      role="alert"
+                      className="rounded-md border border-[var(--danger)]/40 bg-[var(--danger)]/10 px-2 py-1 text-xs font-medium text-[var(--danger)] sm:col-span-3"
+                    >
+                      {row.leftMemberName ? `Участник «${row.leftMemberName}»` : "Участник"} вышел
+                      из проекта — выберите другого. Пока не выберете, шаблон не сохранится, а в
+                      новый вызывной эта строка попадёт без человека.
+                    </p>
+                  ) : row.membershipId ? (
                     <p className="text-xs text-[var(--muted-fg)] sm:col-span-3">
-                      {member
-                        ? member.hasPhone
-                          ? "ФИ и телефон — из профиля участника."
-                          : "ФИ — из профиля участника. Телефона в профиле нет."
-                        : "Участник не активен — выберите другого или впишите имя."}
+                      {member?.hasPhone
+                        ? "ФИ и телефон — из профиля участника."
+                        : "ФИ — из профиля участника. Телефона в профиле нет."}
                     </p>
                   ) : (
                     <>
