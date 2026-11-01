@@ -3,6 +3,7 @@ import { getTranslations } from "next-intl/server";
 import { isProducerRole } from "@/features/roles/role-rules";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { canManageMembers } from "@/features/memberships/permissions";
+import { MEMBERS_PAGES_PERMISSION } from "@/features/memberships/lib/members-pages-access";
 import { InviteForm } from "@/features/memberships/components/invite-form";
 import { inviteOrigin } from "@/features/memberships/lib/invite-origin";
 import { InvitesList } from "@/features/memberships/components/invites-list";
@@ -23,7 +24,7 @@ export default async function ProjectMembersPage({ params }: Props) {
   const ctx = await requireProjectContext(projectId);
   const t = await getTranslations("members");
 
-  if (!ctx.can("members:read")) {
+  if (!ctx.can(MEMBERS_PAGES_PERMISSION)) {
     return <p className="text-sm text-[var(--danger)]">Нет доступа</p>;
   }
 

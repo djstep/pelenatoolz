@@ -13,6 +13,7 @@ import {
 } from "@/features/projects/schemas";
 import { inviteOrigin } from "@/features/memberships/lib/invite-origin";
 import { canManageMembers } from "@/features/memberships/permissions";
+import { MEMBERS_PAGES_PERMISSION } from "@/features/memberships/lib/members-pages-access";
 import {
   requireProjectAccess,
   listProjectRoles as queryProjectRoles,
@@ -858,6 +859,6 @@ export async function transferOwnershipAction(
 /** Роли проекта — только активному участнику с просмотром «Участников». */
 export async function listProjectRoles(projectId: string) {
   const user = await requireUser();
-  await requireProjectAccess(projectId, user.id!, "members:read");
+  await requireProjectAccess(projectId, user.id!, MEMBERS_PAGES_PERMISSION);
   return queryProjectRoles(projectId);
 }
