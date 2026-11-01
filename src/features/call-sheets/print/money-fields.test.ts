@@ -64,7 +64,7 @@ describe("денежных полей нет в листе вызывного", 
       const json = JSON.stringify(model);
       const snapshot = JSON.stringify(parseSnapshotModel(JSON.parse(json)));
       const html = buildCallSheetHtml(model, {
-        stamp: { status: "APPROVED", version: 1, approvedAtLabel: "10.09, 17:46" },
+        stamp: { status: "APPROVED", version: 1, approvedAtLabel: "10.09 17:46" },
       });
       const xlsx = cellsOf(model);
       for (const [where, text] of [

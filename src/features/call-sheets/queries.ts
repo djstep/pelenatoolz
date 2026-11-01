@@ -302,3 +302,10 @@ export async function getCallSheetStatus(
     })),
   };
 }
+
+/** Вызывные проекта на согласовании (рабочие дни) — счётчик меню; только `count`. */
+export async function countCallSheetsAwaitingApproval(projectId: string): Promise<number> {
+  return prisma.callSheet.count({
+    where: { projectId, status: "IN_REVIEW", shootDay: { dayType: "WORKING" } },
+  });
+}

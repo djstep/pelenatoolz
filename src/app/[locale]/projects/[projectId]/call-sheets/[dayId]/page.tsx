@@ -172,12 +172,6 @@ export default async function CallSheetDayPage({ params }: Props) {
     ? {
         status: status.status,
         version: status.version,
-        approvedLabel:
-          approved && status.approvedAt
-            ? [`утверждён ${dateTime(status.approvedAt)}`, status.approvedByName]
-                .filter(Boolean)
-                .join(" · ")
-            : null,
         // КПП, либретто и актёры правятся и после утверждения — тогда плашка.
         dataChanged: approvedSnapshot
           ? approvedSnapshot.modelHash !== callSheetDataHash(printSource)
@@ -203,17 +197,19 @@ export default async function CallSheetDayPage({ params }: Props) {
         canEdit={canEdit}
         canSaveAttendanceSettings={ctx.can(ATTENDANCE_SHEET_WRITE_PERMISSION)}
         sheetSrc={sheetSrc}
+        statusPanel={
+          statusPanel ? (
+            <CallSheetStatusPanel
+              projectId={projectId}
+              dayId={dayId}
+              data={statusPanel}
+              canEdit={canEditCallSheet}
+              canApprove={ctx.can("callsheet:approve")}
+            />
+          ) : null
+        }
         editBlocks={
           <>
-            {statusPanel ? (
-              <CallSheetStatusPanel
-                projectId={projectId}
-                dayId={dayId}
-                data={statusPanel}
-                canEdit={canEditCallSheet}
-                canApprove={ctx.can("callsheet:approve")}
-              />
-            ) : null}
             <CallSheetTemplateBlocks
               locale={locale}
               projectId={projectId}

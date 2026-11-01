@@ -7,7 +7,6 @@ import type {
   CallSheetPrintPlanRow,
 } from "@/features/call-sheets/print/print-model";
 import {
-  stampFooter,
   stampMark,
   stampVersion,
   type CallSheetStamp,
@@ -181,7 +180,6 @@ function headBlock(w: SheetWriter, model: CallSheetPrintModel, stamp: CallSheetS
     stampVersion(stamp),
   ].filter(Boolean);
   if (meta.length) w.text(meta.join(" · "));
-  if (stamp?.status === "APPROVED") w.text(stampFooter(stamp)!);
   if (model.crewCall.time) w.text(model.crewCall.time, "Сбор группы");
   if (model.crewCall.address) {
     w.text(`${model.crewCall.address}${model.scheme ? " (схема — в конце)" : ""}`, "Место сбора");

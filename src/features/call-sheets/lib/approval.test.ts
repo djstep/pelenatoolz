@@ -33,7 +33,7 @@ import {
 } from "@/features/call-sheets/print/print-source";
 import { buildCallSheetWorkbook } from "@/features/call-sheets/print/print-xlsx";
 import { IRP_DAY_SOURCE } from "@/features/call-sheets/print/preview-fixtures";
-import { formatApprovedAt, stampFooter } from "@/features/call-sheets/print/stamp";
+import { formatApprovedAt, stampVersion } from "@/features/call-sheets/print/stamp";
 import { hasPermission } from "@/features/memberships/permissions";
 import {
   buildFullMatrix,
@@ -453,7 +453,7 @@ describe("снимок утверждения и печать", () => {
       ...IRP_DAY_SOURCE,
       sheet: { ...IRP_DAY_SOURCE.sheet!, importantNote: "Новое после утверждения" },
     });
-    const stamp = { status: "APPROVED" as const, version: 2, approvedAtLabel: "10.09, 17:46" };
+    const stamp = { status: "APPROVED" as const, version: 2, approvedAtLabel: "10.09 17:46" };
     const html = buildCallSheetHtml(stored, { stamp });
     assert.ok(!html.includes("Новое после утверждения"));
     assert.ok(buildCallSheetHtml(live, { stamp }).includes("Новое после утверждения"));
@@ -522,16 +522,37 @@ describe("снимок утверждения и печать", () => {
 describe("статус и версия на листе", () => {
   const model = buildCallSheetPrintModel(IRP_DAY_SOURCE);
 
-  test("утверждённый: «версия N» в шапке, в подвале «утверждён ДД.ММ, ЧЧ:ММ · версия N», без метки", () => {
+  test("утверждённый: в шапке «версия N · утверждён ДД.ММ ЧЧ:ММ», без метки", () => {
     const html = buildCallSheetHtml(model, {
-      stamp: { status: "APPROVED", version: 2, approvedAtLabel: "10.09, 17:46" },
+      stamp: { status: "APPROVED", version: 2, approvedAtLabel: "10.09 17:46" },
     });
-    assert.match(html, /<div class="meta">[^\n]*версия 2<\/div>/);
-    assert.match(html, /@bottom-right\{ content:"утверждён 10\.09, 17:46 · версия 2 · " "лист " counter\(page\)/);
+    assert.match(html, /<div class="meta">[^\n]*версия 2 · утверждён 10\.09 17:46<\/div>/);
     assert.ok(!html.includes('class="stamp"'));
   });
 
-  test("черновик и на согласовании: заметная метка в шапке, в подвале без «утверждён»", () => {
+  test("подвала нет ни в одном режиме (просмотр, печать, версии); бегущая шапка листов 2+ — есть", () => {
+    const stamps = [
+      undefined,
+      { status: "DRAFT", version: null },
+      { status: "DRAFT", version: 1 },
+      { status: "IN_REVIEW", version: 1 },
+      { status: "APPROVED", version: 2, approvedAtLabel: "10.09 17:46" },
+    ] as const;
+    for (const stamp of stamps) {
+      // embed — печать, url — просмотр на странице (маршрут листа).
+      for (const font of ["embed", "url"] as const) {
+        const html = buildCallSheetHtml(model, { stamp, font });
+        const label = `${stamp?.status ?? "без статуса"} ${font}`;
+        assert.ok(!html.includes("@bottom-left"), label);
+        assert.ok(!html.includes("@bottom-right"), label);
+        assert.ok(!html.includes("counter(page"), label);
+        assert.match(html, /@top-left\{ content:"ИРП · /, label);
+        assert.match(html, /@page :first\{[^}]*@top-left\{ content:none;/, label);
+      }
+    }
+  });
+
+  test("черновик и на согласовании: заметная метка в шапке, без «утверждён»", () => {
     for (const [status, mark] of [
       ["DRAFT", "ЧЕРНОВИК"],
       ["IN_REVIEW", "НА СОГЛАСОВАНИИ"],
@@ -556,16 +577,16 @@ describe("статус и версия на листе", () => {
       return values.join("\n");
     };
     assert.ok(text({ status: "DRAFT", version: 1 }).includes("ЧЕРНОВИК"));
-    const approved = text({ status: "APPROVED", version: 2, approvedAtLabel: "10.09, 17:46" });
-    assert.ok(approved.includes("утверждён 10.09, 17:46 · версия 2"));
+    const approved = text({ status: "APPROVED", version: 2, approvedAtLabel: "10.09 17:46" });
+    assert.ok(approved.includes("версия 2 · утверждён 10.09 17:46"));
     assert.ok(!approved.includes("ЧЕРНОВИК"));
   });
 
-  test("время утверждения — в часовом поясе проекта, «ДД.ММ, ЧЧ:ММ»", () => {
+  test("время утверждения — в часовом поясе проекта, «ДД.ММ ЧЧ:ММ»", () => {
     const at = new Date("2026-09-10T14:46:00Z");
-    assert.equal(formatApprovedAt(at, "Europe/Moscow"), "10.09, 17:46");
-    assert.equal(formatApprovedAt(at, "Asia/Vladivostok"), "11.09, 00:46");
-    assert.equal(stampFooter(undefined), null);
+    assert.equal(formatApprovedAt(at, "Europe/Moscow"), "10.09 17:46");
+    assert.equal(formatApprovedAt(at, "Asia/Vladivostok"), "11.09 00:46");
+    assert.equal(stampVersion(undefined), null);
   });
 });
 

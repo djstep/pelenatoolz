@@ -458,12 +458,13 @@ describe("HTML листа вызывного", () => {
     assert.ok(titles.includes("План съёмки · основной юнит"));
   });
 
-  test("разрывы и поля страницы: шапка листов 2+ и подвал — @page, не HTML", () => {
+  test("разрывы и поля страницы: шапка листов 2+ — @page, не HTML; подвала нет", () => {
     const style = styleOf(html(IRP_DAY_SOURCE));
-    assert.match(style, /@page\{ size:A4;/);
+    assert.match(style, /@page\{ size:A4; margin:17mm 9mm 7mm;/);
     assert.match(style, /@top-left\{ content:"ИРП · пт 11\.09\.2026 · смена 40"/);
     assert.match(style, /@page :first\{[^}]*@top-left\{ content:none;/);
-    assert.match(style, /@bottom-right\{ content:"лист " counter\(page\) " из " counter\(pages\)/);
+    assert.ok(!style.includes("@bottom-left"));
+    assert.ok(!style.includes("@bottom-right"));
     assert.match(style, /thead\{ display:table-header-group; \}/);
     assert.match(style, /tr\{ break-inside:avoid; \}/);
     assert.match(style, /\.bh\{[^}]*break-after:avoid;/);

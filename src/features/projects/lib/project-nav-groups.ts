@@ -219,3 +219,12 @@ export function filterNavGroups(
   }
   return result;
 }
+
+/** Счётчик у пункта меню (`href` — как в `projectNavGroups`); `null` или 0 — без счётчика. */
+export function withNavCount(groups: NavGroup[], href: string, count: number | null): NavGroup[] {
+  if (!count) return groups;
+  return groups.map((group) => ({
+    ...group,
+    items: group.items.map((item) => (item.href === href ? { ...item, count } : item)),
+  }));
+}

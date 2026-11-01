@@ -35,6 +35,7 @@ export function CallSheetView({
   nextDayAstro,
   canEdit,
   sheetSrc,
+  statusPanel = null,
   editBlocks = null,
   canSaveAttendanceSettings,
   timingBaselines = {},
@@ -52,6 +53,8 @@ export function CallSheetView({
   canEdit: boolean;
   /** Адрес листа для просмотра (`callSheetPreviewSrc`) — тот же лист, что уходит в печать. */
   sheetSrc: string;
+  /** Панель статуса (плашка, версия, переходы) — вверху страницы, под заголовком. */
+  statusPanel?: React.ReactNode;
   /** Блоки правки вызывного (поля листа, элементы площадки) — под шапкой страницы. */
   editBlocks?: React.ReactNode;
   /** Сохранение настройки явочного листа (правка «КПП и вызывные»). */
@@ -105,38 +108,46 @@ export function CallSheetView({
             </p>
           ) : null}
         </div>
-        <div className="flex flex-wrap gap-2">
-          {canEdit ? (
-            <CallSheetEditor
+        <div className="flex flex-col items-end gap-1.5">
+          <div className="flex flex-wrap justify-end gap-2">
+            {canEdit ? (
+              <CallSheetEditor
+                projectId={projectId}
+                dayId={day.id}
+                bundle={bundle}
+                cast={cast}
+                resources={resources}
+                perShiftResources={perShiftResources}
+                perShiftCatalog={perShiftCatalog}
+                timingBaselines={timingBaselines}
+                resourceTimingBaselines={resourceTimingBaselines}
+                transportEditor={transportEditor}
+              />
+            ) : null}
+            <CallSheetMoveDateButton
               projectId={projectId}
               dayId={day.id}
-              bundle={bundle}
-              cast={cast}
-              resources={resources}
-              perShiftResources={perShiftResources}
-              perShiftCatalog={perShiftCatalog}
-              timingBaselines={timingBaselines}
-              resourceTimingBaselines={resourceTimingBaselines}
-              transportEditor={transportEditor}
+              dayNumber={day.dayNumber}
+              currentDate={day.date}
+              locale={locale}
+              canEdit={canEdit}
             />
-          ) : null}
-          <CallSheetMoveDateButton
-            projectId={projectId}
-            dayId={day.id}
-            dayNumber={day.dayNumber}
-            currentDate={day.date}
-            locale={locale}
-            canEdit={canEdit}
-          />
-          <CallSheetCharacterScriptsMenu projectId={projectId} cast={cast} />
-          <CallSheetExportButtons
-            projectId={projectId}
-            dayId={day.id}
-            resourceCategories={resourceCategories}
-            canSaveAttendanceSettings={canSaveAttendanceSettings}
-          />
+            <CallSheetCharacterScriptsMenu projectId={projectId} cast={cast} />
+            <CallSheetExportButtons
+              projectId={projectId}
+              dayId={day.id}
+              resourceCategories={resourceCategories}
+              canSaveAttendanceSettings={canSaveAttendanceSettings}
+            />
+          </div>
+          <p className="text-right text-xs text-[var(--muted-fg)]">
+            В окне печати откройте „Дополнительные настройки“ и снимите „Колонтитулы“ — Chrome
+            запомнит
+          </p>
         </div>
       </div>
+
+      {statusPanel}
 
       {editBlocks}
 

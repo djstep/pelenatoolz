@@ -59,12 +59,14 @@ export function PortaledMenu({
       const spaceBelow = window.innerHeight - r.bottom - 8;
       const spaceAbove = r.top - 8;
       const openUp = spaceBelow < Math.min(menuH, 240) && spaceAbove > spaceBelow;
-      let left = align === "end" ? r.right - Math.max(width, r.width) : r.left;
-      left = Math.min(Math.max(8, left), window.innerWidth - Math.max(width, 160) - 8);
+      // «end» — правый край меню у правого края кнопки, ширина — по содержимому (не по кнопке),
+      // от краёв экрана не меньше 8 px.
+      const right = Math.max(8, window.innerWidth - r.right);
+      const left = Math.min(Math.max(8, r.left), window.innerWidth - Math.max(width, 160) - 8);
       setStyle({
         position: "fixed",
         zIndex: 200,
-        left,
+        ...(align === "end" ? { right, maxWidth: window.innerWidth - right - 8 } : { left }),
         width: width || undefined,
         minWidth: minWidth ?? (matchAnchorWidth ? r.width : undefined),
         top: openUp ? undefined : r.bottom + gap,
