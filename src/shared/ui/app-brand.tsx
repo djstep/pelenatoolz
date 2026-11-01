@@ -7,6 +7,8 @@ const LOGO_HEIGHT = 219;
 const sizes = {
   md: { className: "h-14" },
   lg: { className: "h-20" },
+  /** Шапка приложения: на телефоне ниже, чтобы шапка помещалась в экран. */
+  header: { className: "h-9 sm:h-14" },
 } as const;
 
 export function AppBrand({
@@ -14,7 +16,7 @@ export function AppBrand({
   size = "md",
 }: {
   className?: string;
-  size?: "md" | "lg";
+  size?: keyof typeof sizes;
 }) {
   const { className: heightClass } = sizes[size];
 
