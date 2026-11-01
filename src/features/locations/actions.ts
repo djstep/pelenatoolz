@@ -15,6 +15,8 @@ import {
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { prisma } from "@/shared/db/prisma";
 import { impactLines } from "@/shared/lib/plural";
+import { pickFinanceFields } from "@/shared/lib/finance-fields";
+import { SCOUT_SNAPSHOT_INPUT_FIELDS } from "@/features/locations/lib/location-fields";
 import { AuditEntityType } from "@/shared/audit/entity-types";
 import { recordAudit } from "@/shared/audit/with-audit";
 import { z } from "zod";
@@ -315,17 +317,23 @@ export async function updateLocationScoutSnapshotAction(
     notes: formData.get("notes") || undefined,
   });
   if (!parsed.success) return { error: "Проверьте данные" };
+  // Стоимость площадки — только с фин. правкой объектов, иначе присланное не пишется.
+  const input = pickFinanceFields(
+    parsed.data,
+    SCOUT_SNAPSHOT_INPUT_FIELDS,
+    gate.ctx.canFinanceWrite("locations"),
+  );
 
   const current = parseScoutSnapshot(location.scoutSnapshot);
   if (!current) return { error: "Некорректный снимок" };
 
   const next: LocationScoutSnapshot = {
     ...current,
-    address: parsed.data.address ?? current.address,
-    cost: parsed.data.cost ?? current.cost,
-    contactName: parsed.data.contactName ?? current.contactName,
-    contactPhone: parsed.data.contactPhone ?? current.contactPhone,
-    notes: parsed.data.notes ?? current.notes,
+    address: input.address ?? current.address,
+    cost: input.cost ?? current.cost,
+    contactName: input.contactName ?? current.contactName,
+    contactPhone: input.contactPhone ?? current.contactPhone,
+    notes: input.notes ?? current.notes,
   };
 
   await prisma.location.update({

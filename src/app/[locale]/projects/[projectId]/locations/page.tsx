@@ -19,7 +19,7 @@ export default async function LocationsPage({ params }: Props) {
   }
 
   const [locations, addresses] = await Promise.all([
-    listLocationsWithStats(projectId),
+    listLocationsWithStats(projectId, ctx.canFinanceRead("locations")),
     listProjectAddresses(projectId),
   ]);
 

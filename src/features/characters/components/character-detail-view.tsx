@@ -303,28 +303,30 @@ export function CharacterDetailView({
                 disabled={!canWriteCast}
               />
             </div>
-            <div className="grid gap-3 md:grid-cols-2">
-              <div>
-                <Label htmlFor="shiftRate">Ставка за смену</Label>
-                <Input
-                  id="shiftRate"
-                  name="shiftRate"
-                  type="number"
-                  min={0}
-                  defaultValue={snapshot.shiftRate ?? undefined}
-                  disabled={!canWriteCast}
-                />
+            {canFinanceRead ? (
+              <div className="grid gap-3 md:grid-cols-2">
+                <div>
+                  <Label htmlFor="shiftRate">Ставка за смену</Label>
+                  <Input
+                    id="shiftRate"
+                    name="shiftRate"
+                    type="number"
+                    min={0}
+                    defaultValue={snapshot.shiftRate ?? undefined}
+                    disabled={!canWriteCast || !canFinanceWrite}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="proposedTerms">Финансовые условия</Label>
+                  <Input
+                    id="proposedTerms"
+                    name="proposedTerms"
+                    defaultValue={snapshot.proposedTerms ?? ""}
+                    disabled={!canWriteCast || !canFinanceWrite}
+                  />
+                </div>
               </div>
-              <div>
-                <Label htmlFor="proposedTerms">Финансовые условия</Label>
-                <Input
-                  id="proposedTerms"
-                  name="proposedTerms"
-                  defaultValue={snapshot.proposedTerms ?? ""}
-                  disabled={!canWriteCast}
-                />
-              </div>
-            </div>
+            ) : null}
             {canWriteCast ? (
               <Button type="submit" disabled={snapPending}>
                 {snapPending ? "…" : "Сохранить снимок"}
@@ -418,8 +420,8 @@ function CharacterPayrollSection({
               unpaidOvertimeMin={actor.unpaidOvertimeMin}
               overtimeMode={actor.overtimeMode}
               unpaidOvertimeMode={actor.unpaidOvertimeMode}
-              overtime={seedOvertime(actor.overtimeRates)}
-              extras={seedExtras(actor.extraPayments)}
+              overtime={seedOvertime(actor.overtimeRates ?? [])}
+              extras={seedExtras(actor.extraPayments ?? [])}
             />
             <Button type="submit" className="mt-4" disabled={pending}>
               {pending ? "…" : "Сохранить гонорар"}

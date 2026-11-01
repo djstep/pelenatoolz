@@ -13,6 +13,7 @@ import {
 import { getAvailabilityMiniBundle } from "@/features/actor-availability/lib/serialize-bundle";
 import { fullNameFromParts } from "@/features/preproduction/lib/snapshots";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
+import { financeAccess } from "@/shared/lib/finance-fields";
 import { Card } from "@/shared/ui/card";
 
 type Props = {
@@ -29,7 +30,7 @@ export default async function CastingPersonPage({ params }: Props) {
 
   const [person, characters, availability, auditions, people, scenes] =
     await Promise.all([
-      getCastingPerson(projectId, personId),
+      getCastingPerson(projectId, personId, ctx.canFinanceRead("actors")),
       listCharactersForCasting(projectId),
       getAvailabilityMiniBundle(projectId),
       listAuditionsForPerson(projectId, personId),
@@ -50,6 +51,7 @@ export default async function CastingPersonPage({ params }: Props) {
           person={person}
           characters={characters}
           canWrite={ctx.can("cast:write")}
+          finance={financeAccess(ctx.canFinanceRead("actors"), ctx.canFinanceWrite("actors"))}
           availabilityMini={{
             rowId: availability.rowByPersonId[personId],
             manualDays: availability.manualDays,

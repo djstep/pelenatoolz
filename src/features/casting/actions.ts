@@ -13,6 +13,8 @@ import {
   loadCastingPersonDeletePlan,
   type CastingPersonDeleteCounts,
 } from "@/features/casting/lib/delete-person";
+import { CASTING_PERSON_INPUT_FIELDS } from "@/features/casting/lib/casting-person-fields";
+import { pickFinanceFields } from "@/shared/lib/finance-fields";
 import { deleteAuditions } from "@/features/auditions/lib/delete-auditions";
 import { approveCastingCandidate } from "@/features/preproduction/lib/approve-casting";
 import { fullNameFromParts } from "@/features/preproduction/lib/snapshots";
@@ -128,6 +130,14 @@ function personFromForm(formData: FormData) {
   };
 }
 
+/** Ставка и условия из формы — только с фин. правкой актёров, иначе сервер их не пишет. */
+function castingPersonWritable<T extends object>(
+  ctx: { canFinanceWrite: (target: "actors") => boolean },
+  data: T,
+) {
+  return pickFinanceFields(data, CASTING_PERSON_INPUT_FIELDS, ctx.canFinanceWrite("actors"));
+}
+
 function revalidateCasting(projectId: string, characterId?: string, personId?: string) {
   revalidatePath(`/ru/projects/${projectId}/preproduction/casting`);
   revalidatePath(`/ru/projects/${projectId}/characters`);
@@ -151,7 +161,7 @@ export async function createCastingPersonAction(
   if ("error" in parsed) return { error: parsed.error };
 
   const characterId = String(formData.get("characterId") ?? "").trim();
-  const { skills, physicalParams, ...personData } = parsed.data;
+  const { skills, physicalParams, ...personData } = castingPersonWritable(ctx, parsed.data);
 
   if (characterId) {
     try {
@@ -210,7 +220,7 @@ export async function updateCastingPersonAction(
   const parsed = personFromForm(formData);
   if ("error" in parsed) return { error: parsed.error };
 
-  const { skills, physicalParams, ...personData } = parsed.data;
+  const { skills, physicalParams, ...personData } = castingPersonWritable(ctx, parsed.data);
 
   await prisma.castingPerson.update({
     where: { id: personId },

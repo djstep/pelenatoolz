@@ -7,6 +7,7 @@ import {
   buildEmptyMatrix,
   buildFullMatrix,
   buildViewerMatrix,
+  canReadAnyEntityFinance,
   type PermissionMatrix,
 } from "@/features/roles/permissions-matrix";
 
@@ -61,6 +62,7 @@ function visibleHrefs(matrix: PermissionMatrix): string[] {
     matrix,
     isProducer: false,
     headDepartmentIds: [],
+    anyEntityFinanceRead: canReadAnyEntityFinance(matrix, {}),
   });
   return groups.flatMap((g) => g.items.map((i) => i.href));
 }

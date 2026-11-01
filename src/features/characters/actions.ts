@@ -9,6 +9,8 @@ import { AuditEntityType } from "@/shared/audit/entity-types";
 import { auditMutation } from "@/shared/audit/with-audit";
 import { prisma } from "@/shared/db/prisma";
 import { impactLines } from "@/shared/lib/plural";
+import { pickFinanceFields } from "@/shared/lib/finance-fields";
+import { CAST_SNAPSHOT_INPUT_FIELDS } from "@/features/characters/lib/character-fields";
 
 export type CharacterActionState = { error?: string; success?: string };
 
@@ -119,17 +121,23 @@ export async function updateCharacterCastSnapshotAction(
     skills: formData.get("skills") || undefined,
   });
   if (!parsed.success) return { error: "Проверьте данные" };
+  // Ставка и фин. условия снимка — только с фин. правкой актёров, иначе присланное не пишется.
+  const input = pickFinanceFields(
+    parsed.data,
+    CAST_SNAPSHOT_INPUT_FIELDS,
+    ctx.canFinanceWrite("actors"),
+  );
 
   const current = character.castSnapshot as CharacterCastSnapshot;
-  const skills = parsed.data.skills
-    ? parsed.data.skills.split(/[,;]/).map((s) => s.trim()).filter(Boolean)
+  const skills = input.skills
+    ? input.skills.split(/[,;]/).map((s) => s.trim()).filter(Boolean)
     : current.skills;
 
   const next: CharacterCastSnapshot = {
     ...current,
-    riderNotes: parsed.data.riderNotes ?? current.riderNotes,
-    shiftRate: parsed.data.shiftRate ?? current.shiftRate,
-    proposedTerms: parsed.data.proposedTerms ?? current.proposedTerms,
+    riderNotes: input.riderNotes ?? current.riderNotes,
+    shiftRate: input.shiftRate ?? current.shiftRate,
+    proposedTerms: input.proposedTerms ?? current.proposedTerms,
     skills,
   };
 
@@ -143,11 +151,11 @@ export async function updateCharacterCastSnapshotAction(
       const actor = await prisma.actor.findFirst({
         where: { projectId, characterId },
       });
-      if (actor && parsed.data.shiftRate != null) {
+      if (actor && input.shiftRate != null) {
         await prisma.actor.update({
           where: { id: actor.id },
           data: {
-            shiftRate: parsed.data.shiftRate,
+            shiftRate: input.shiftRate,
             specialConditions: next.proposedTerms ?? actor.specialConditions,
           },
         });

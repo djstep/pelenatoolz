@@ -288,6 +288,21 @@ export function canEntityFinance(
   return can(matrix, "elements", mode === "write" ? "financeWrite" : "finance");
 }
 
+/**
+ * Есть фин. просмотр хотя бы одного источника ведомости: актёры, объекты, прочие ресурсы,
+ * отдельная категория ресурсов или раздел «Финансы» (спецтранспорт).
+ */
+export function canReadAnyEntityFinance(
+  matrix: PermissionMatrix,
+  categoryFinance: Record<string, CategoryFinancePermissions>,
+): boolean {
+  return (
+    can(matrix, "finance", "finance") ||
+    ENTITY_FINANCE_SECTIONS.some((section) => can(matrix, section, "finance")) ||
+    Object.values(categoryFinance).some((c) => c.financeRead || c.financeWrite)
+  );
+}
+
 export function resolveCategoryFinance(
   matrix: PermissionMatrix,
   categoryFinance: Record<string, CategoryFinancePermissions>,

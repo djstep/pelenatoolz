@@ -1,6 +1,10 @@
 import type { NavGroup, NavItem } from "@/features/projects/components/project-nav";
 import type { Permission } from "@/features/memberships/permissions";
-import type { PermissionMatrix } from "@/features/roles/permissions-matrix";
+import {
+  canReadAnyEntityFinance,
+  type CategoryFinancePermissions,
+  type PermissionMatrix,
+} from "@/features/roles/permissions-matrix";
 import { isProducerRole } from "@/features/roles/role-rules";
 
 /**
@@ -14,6 +18,8 @@ export type NavAccess = {
   isProducer: boolean;
   /** Цеха, где пользователь — глава (`requireProjectContext` → `headDepartmentIds`). */
   headDepartmentIds: readonly string[];
+  /** Фин. просмотр хотя бы одного источника (`canReadAnyEntityFinance`) — для ведомости. */
+  anyEntityFinanceRead: boolean;
 };
 
 /** Доступ для фильтра меню из контекста проекта (`requireProjectContext`). */
@@ -22,12 +28,14 @@ export function navAccessFromContext(ctx: {
   matrix: PermissionMatrix;
   role: { isSystem: boolean; name: string };
   headDepartmentIds: readonly string[];
+  categoryFinance: Record<string, CategoryFinancePermissions>;
 }): NavAccess {
   return {
     can: ctx.can,
     matrix: ctx.matrix,
     isProducer: isProducerRole(ctx.role),
     headDepartmentIds: ctx.headDepartmentIds,
+    anyEntityFinanceRead: canReadAnyEntityFinance(ctx.matrix, ctx.categoryFinance),
   };
 }
 
@@ -126,7 +134,8 @@ export const projectNavGroups: NavGroupDef[] = [
       {
         href: "/resource-usage",
         label: "Ведомость по использованию",
-        visible: anyOf("finance:read", "script:read"),
+        // В ведомости только суммы — без фин. просмотра хотя бы одного источника она пустая.
+        visible: (a) => a.anyEntityFinanceRead,
       },
       { href: "/payments", label: "Платежи", visible: anyOf("finance:read") },
       { href: "/finance/reports", label: "Отчёты", visible: anyOf("finance:read") },

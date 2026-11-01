@@ -61,7 +61,7 @@ export async function listUsageLedgerSummary(
     canActors: boolean;
     canLocations: boolean;
     canCategory: (categoryId: string) => boolean;
-    canElementsDefault: boolean;
+    canTransport: boolean;
   },
 ): Promise<UsageLedgerSummaryRow[]> {
   const rows = await prisma.productionReportWorkRow.findMany({
@@ -239,7 +239,7 @@ export async function listUsageLedgerSummary(
         return access.canCategory(agg.categoryId);
       }
       if (agg.kind === "TRANSPORT") {
-        return access.canElementsDefault;
+        return access.canTransport;
       }
       return false;
     })

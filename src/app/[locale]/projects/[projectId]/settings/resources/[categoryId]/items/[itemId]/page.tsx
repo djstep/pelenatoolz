@@ -22,7 +22,12 @@ export default async function SettingsResourceItemPage({ params }: Props) {
     return <p className="text-sm text-[var(--danger)]">Нет доступа</p>;
   }
 
-  const item = await getResourceItem(projectId, categoryId, itemId);
+  const item = await getResourceItem(
+    projectId,
+    categoryId,
+    itemId,
+    ctx.canFinanceRead({ categoryId }),
+  );
   if (!item) notFound();
 
   return (
@@ -43,9 +48,9 @@ export default async function SettingsResourceItemPage({ params }: Props) {
           target="resource"
           entityId={item.id}
           values={{
-            defaultBudgetItemId: item.defaultBudgetItemId,
-            overtimeBudgetItemId: item.overtimeBudgetItemId,
-            mileageBudgetItemId: item.mileageBudgetItemId,
+            defaultBudgetItemId: item.defaultBudgetItemId ?? null,
+            overtimeBudgetItemId: item.overtimeBudgetItemId ?? null,
+            mileageBudgetItemId: item.mileageBudgetItemId ?? null,
           }}
           canEdit={ctx.can("script:write") && ctx.canFinanceWrite({ categoryId })}
           showMileage={item.category.tracksMileage}

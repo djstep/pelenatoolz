@@ -1,6 +1,7 @@
 import { UsageLedgerSummary } from "@/features/payroll/components/usage-ledger-summary";
 import { listUsageLedgerSummary } from "@/features/payroll/queries-usage-ledger";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
+import { canReadAnyEntityFinance } from "@/features/roles/permissions-matrix";
 
 type Props = {
   params: Promise<{ locale: string; projectId: string }>;
@@ -10,22 +11,19 @@ export default async function ResourceUsagePage({ params }: Props) {
   const { locale, projectId } = await params;
   const ctx = await requireProjectContext(projectId);
 
-  if (!ctx.can("finance:read") && !ctx.can("script:read")) {
+  // Как пункт меню: в ведомости только суммы, без фин. просмотра источников она не нужна.
+  if (!canReadAnyEntityFinance(ctx.matrix, ctx.categoryFinance)) {
     return (
       <p className="text-sm text-[var(--danger)]">Нет доступа к ведомости</p>
     );
   }
 
-  // Несуществующий id → fallback на раздел «Прочие ресурсы (новые категории)»
-  const canElementsDefault = ctx.canFinanceRead({
-    categoryId: "__elements_default__",
-  });
-
   const rows = await listUsageLedgerSummary(projectId, locale, {
     canActors: ctx.canFinanceRead("actors"),
     canLocations: ctx.canFinanceRead("locations"),
     canCategory: (categoryId) => ctx.canFinanceRead({ categoryId }),
-    canElementsDefault,
+    // Спецтранспорт дня — как в отчёте смены (`workRowAccess`).
+    canTransport: ctx.can("finance:read"),
   });
 
   return (

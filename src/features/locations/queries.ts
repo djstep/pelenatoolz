@@ -1,5 +1,10 @@
 import { prisma } from "@/shared/db/prisma";
 import { parseScoutSnapshot } from "@/features/preproduction/lib/snapshots";
+import {
+  LOCATION_FIELDS,
+  SCOUT_SNAPSHOT_FIELDS,
+} from "@/features/locations/lib/location-fields";
+import { pickFinanceFields } from "@/shared/lib/finance-fields";
 
 const sceneBriefSelect = {
   id: true,
@@ -22,8 +27,9 @@ const sceneBriefSelect = {
   },
 } as const;
 
-export async function listLocationsWithStats(projectId: string) {
-  return prisma.location.findMany({
+/** `canFinanceRead` — фин. просмотр объектов (`ctx.canFinanceRead("locations")`). */
+export async function listLocationsWithStats(projectId: string, canFinanceRead: boolean) {
+  const locations = await prisma.location.findMany({
     where: { projectId },
     include: {
       scenes: {
@@ -36,6 +42,20 @@ export async function listLocationsWithStats(projectId: string) {
     },
     orderBy: [{ name: "asc" }, { sublocation: "asc" }],
   });
+  return locations.map((location) => locationForClient(location, canFinanceRead));
+}
+
+function locationForClient<T extends { scoutSnapshot: unknown }>(
+  location: T,
+  canFinanceRead: boolean,
+) {
+  const snapshot = parseScoutSnapshot(location.scoutSnapshot);
+  return {
+    ...pickFinanceFields(location, LOCATION_FIELDS, canFinanceRead),
+    scoutSnapshot: snapshot
+      ? pickFinanceFields(snapshot, SCOUT_SNAPSHOT_FIELDS, canFinanceRead)
+      : null,
+  };
 }
 
 export async function listProjectAddresses(projectId: string) {
@@ -50,7 +70,12 @@ export async function listProjectAddresses(projectId: string) {
     .filter((a): a is string => Boolean(a?.trim()));
 }
 
-export async function getLocationDetail(projectId: string, locationId: string) {
+/** `canFinanceRead` — фин. просмотр объектов (`ctx.canFinanceRead("locations")`). */
+export async function getLocationDetail(
+  projectId: string,
+  locationId: string,
+  canFinanceRead: boolean,
+) {
   const location = await prisma.location.findFirst({
     where: { id: locationId, projectId },
     include: {
@@ -79,10 +104,7 @@ export async function getLocationDetail(projectId: string, locationId: string) {
 
   if (!location) return null;
 
-  return {
-    ...location,
-    scoutSnapshot: parseScoutSnapshot(location.scoutSnapshot),
-  };
+  return locationForClient(location, canFinanceRead);
 }
 
 export type LocationWithStats = Awaited<

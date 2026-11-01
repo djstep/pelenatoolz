@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { refreshProductionReportAction } from "@/features/reports/actions";
-import type { ReportStaleness } from "@/features/reports/queries";
+import type { ReportStalenessForViewer as ReportStaleness } from "@/features/reports/queries";
 import { Button } from "@/shared/ui/button";
 import { useToast } from "@/shared/ui/toast";
 
@@ -132,9 +132,14 @@ function RateChanges({
   onUpdateRates: (value: boolean) => void;
 }) {
   const changes = staleness.rows.rateChanges;
+  // Строки без фин. просмотра источника приходят без значений — только сам факт расхождения.
+  const hiddenNames = changes.filter((c) => !c.fields).map((c) => c.name);
+  const shown = changes.flatMap((c) =>
+    c.fields && c.pay ? [{ ...c, fields: c.fields, pay: c.pay }] : [],
+  );
   return (
     <div className="mt-4 space-y-2">
-      {canEdit ? (
+      {canEdit && staleness.canUpdateRates ? (
         <label className="flex items-center gap-2 text-sm font-medium">
           <input
             type="checkbox"
@@ -150,43 +155,53 @@ function RateChanges({
       <p className="text-xs text-[var(--muted-fg)]">
         Без галочки существующие строки остаются со своими ставками, налогом, режимами и ставками
         переработки.
+        {canEdit && !staleness.canUpdateRates
+          ? " Обновить ставки может тот, у кого есть право правки фин. условий всех этих строк."
+          : ""}
       </p>
-      <div className="overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--panel-solid)]">
-        <table className="w-full text-left text-sm">
-          <thead>
-            <tr className="border-b border-[var(--border)] text-[var(--muted-fg)]">
-              <th className="px-3 py-2">Строка</th>
-              <th className="px-3 py-2">Что</th>
-              <th className="px-3 py-2">Было</th>
-              <th className="px-3 py-2">Станет</th>
-            </tr>
-          </thead>
-          <tbody>
-            {changes.flatMap((change) => [
-              ...change.fields.map((field, index) => (
+      {hiddenNames.length > 0 ? (
+        <p className="text-sm">
+          Ставки отличаются: {hiddenNames.join(", ")} (значения — только с фин. правами)
+        </p>
+      ) : null}
+      {shown.length > 0 ? (
+        <div className="overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--panel-solid)]">
+          <table className="w-full text-left text-sm">
+            <thead>
+              <tr className="border-b border-[var(--border)] text-[var(--muted-fg)]">
+                <th className="px-3 py-2">Строка</th>
+                <th className="px-3 py-2">Что</th>
+                <th className="px-3 py-2">Было</th>
+                <th className="px-3 py-2">Станет</th>
+              </tr>
+            </thead>
+            <tbody>
+              {shown.flatMap((change) => [
+                ...change.fields.map((field, index) => (
+                  <tr
+                    key={`${change.rowId}-${field.label}`}
+                    className="border-b border-[var(--border)]/60"
+                  >
+                    <td className="px-3 py-2 font-medium">{index === 0 ? change.name : ""}</td>
+                    <td className="px-3 py-2">{field.label}</td>
+                    <td className="px-3 py-2">{field.before}</td>
+                    <td className="px-3 py-2">{field.after}</td>
+                  </tr>
+                )),
                 <tr
-                  key={`${change.rowId}-${field.label}`}
-                  className="border-b border-[var(--border)]/60"
+                  key={`${change.rowId}-pay`}
+                  className="border-b border-[var(--border)]/60 text-[var(--muted-fg)]"
                 >
-                  <td className="px-3 py-2 font-medium">{index === 0 ? change.name : ""}</td>
-                  <td className="px-3 py-2">{field.label}</td>
-                  <td className="px-3 py-2">{field.before}</td>
-                  <td className="px-3 py-2">{field.after}</td>
-                </tr>
-              )),
-              <tr
-                key={`${change.rowId}-pay`}
-                className="border-b border-[var(--border)]/60 text-[var(--muted-fg)]"
-              >
-                <td className="px-3 py-2" />
-                <td className="px-3 py-2">Оплата с налогом</td>
-                <td className="px-3 py-2">{change.pay.before}</td>
-                <td className="px-3 py-2">{change.pay.after}</td>
-              </tr>,
-            ])}
-          </tbody>
-        </table>
-      </div>
+                  <td className="px-3 py-2" />
+                  <td className="px-3 py-2">Оплата с налогом</td>
+                  <td className="px-3 py-2">{change.pay.before}</td>
+                  <td className="px-3 py-2">{change.pay.after}</td>
+                </tr>,
+              ])}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
     </div>
   );
 }
