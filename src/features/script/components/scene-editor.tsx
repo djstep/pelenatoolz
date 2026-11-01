@@ -127,6 +127,8 @@ export function SceneEditor({
       title: `Вырезать сцену ${title}?`,
       details: () => getSceneCutImpactAction(projectId, scene.id),
       confirmLabel: "Вырезать",
+      // Вырезанную сцену можно вернуть — действие обратимое.
+      tone: "primary",
       action: async () => {
         const result = await setSceneCutAction(projectId, scene.id, "cut");
         if (result.error) return result.error;

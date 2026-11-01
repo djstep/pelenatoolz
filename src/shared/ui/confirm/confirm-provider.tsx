@@ -8,6 +8,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { cn } from "@/shared/lib/cn";
 import { Button } from "@/shared/ui/button";
 import { Modal } from "@/shared/ui/modal";
 
@@ -19,8 +20,18 @@ export type ConfirmRequest = {
    * Функция — загрузить при открытии окна (например, числа с сервера).
    */
   details?: string[] | (() => Promise<string[]>);
-  /** Текст красной кнопки, по умолчанию «Удалить». */
+  /** Текст кнопки подтверждения, по умолчанию «Удалить». */
   confirmLabel?: string;
+  /**
+   * Цвет кнопки: `danger` (красная, по умолчанию) — только удаление и необратимое;
+   * `primary` — обычные действия («Утвердить», «На согласование», «Внести изменения»…).
+   */
+  tone?: "danger" | "primary";
+  /**
+   * `details` — причины, почему действие нельзя выполнить (например, отказ в удалении):
+   * есть хоть одна — кнопка подтверждения неактивна.
+   */
+  detailsAreRefusals?: boolean;
   /**
    * Само действие. Вернуть текст — сервер отказал: окно остаётся и показывает причину.
    * Ничего не вернуть — готово, окно закрывается.
@@ -42,8 +53,8 @@ export function useConfirm(): Confirm {
 type Open = ConfirmRequest & { resolve: (done: boolean) => void };
 
 /**
- * Общее окно подтверждения удаления и других необратимых действий:
- * «Удалить» (красная) / «Отмена», фокус на «Отмена» — Enter ничего не удаляет.
+ * Общее окно подтверждения: «Удалить» (красная) или обычная кнопка (`tone: "primary"`) /
+ * «Отмена», фокус на «Отмена» — Enter ничего не выполняет.
  * Пока действие выполняется, кнопки неактивны и окно не закрывается.
  */
 export function ConfirmProvider({ children }: { children: ReactNode }) {
@@ -109,6 +120,9 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
     else finish(true);
   }, [finish]);
 
+  const refused = Boolean(open?.detailsAreRefusals && details && details.length > 0);
+  const hasBody = details === null || details.length > 0 || error !== null;
+
   return (
     <ConfirmContext.Provider value={confirm}>
       {children}
@@ -120,8 +134,10 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
           <div className="flex flex-wrap gap-2">
             <Button
               type="button"
-              variant="danger"
-              disabled={busy || details === null || error !== null}
+              variant={open?.tone === "primary" ? "primary" : "danger"}
+              disabled={busy || details === null || error !== null || refused}
+              aria-describedby={refused ? "confirm-refusal" : undefined}
+              title={refused ? details?.join(" ") : undefined}
               onClick={() => void run()}
             >
               {busy ? "Выполняется…" : (open?.confirmLabel ?? "Удалить")}
@@ -138,19 +154,29 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
           </div>
         }
       >
-        {details === null ? (
-          <p className="text-sm text-[var(--muted-fg)]">Проверяем связанные данные…</p>
-        ) : details.length > 0 ? (
-          <ul className="space-y-1 text-sm text-[var(--muted-fg)]">
-            {details.map((line) => (
-              <li key={line}>{line}</li>
-            ))}
-          </ul>
-        ) : null}
-        {error ? (
-          <p role="alert" className="mt-3 text-sm text-[var(--danger)]">
-            {error}
-          </p>
+        {hasBody ? (
+          <>
+            {details === null ? (
+              <p className="text-sm text-[var(--muted-fg)]">Проверяем связанные данные…</p>
+            ) : details.length > 0 ? (
+              <ul
+                id={refused ? "confirm-refusal" : undefined}
+                className={cn(
+                  "space-y-1 text-sm",
+                  refused ? "text-[var(--danger)]" : "text-[var(--muted-fg)]",
+                )}
+              >
+                {details.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+            ) : null}
+            {error ? (
+              <p role="alert" className="mt-3 text-sm text-[var(--danger)]">
+                {error}
+              </p>
+            ) : null}
+          </>
         ) : null}
       </Modal>
     </ConfirmContext.Provider>

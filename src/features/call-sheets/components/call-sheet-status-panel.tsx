@@ -101,6 +101,8 @@ export function CallSheetStatusPanel({
                   void confirm({
                     title: b.confirmTitle,
                     confirmLabel: b.confirmLabel,
+                    // Переходы статуса ничего не удаляют — обычная кнопка, не красная.
+                    tone: "primary",
                     action: async () => {
                       const result = track(await ACTIONS[b.command](projectId, dayId, revision));
                       if (result.error) return result.error;

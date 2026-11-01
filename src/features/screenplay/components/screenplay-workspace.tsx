@@ -201,6 +201,7 @@ export function ScreenplayWorkspace({
         "Если правки нужны в либретто — сначала сохраните версию.",
       ],
       confirmLabel: "Продолжить",
+      tone: "primary",
       action: async () => syncPage(),
     });
   }

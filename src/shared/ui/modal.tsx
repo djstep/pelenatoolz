@@ -136,7 +136,10 @@ export function Modal({
             ×
           </Button>
         </div>
-        <div className="flex-1 overflow-y-auto px-5 py-4">{children}</div>
+        {/* Тела нет — нет и пустой полосы между заголовком и кнопками. */}
+        {children == null || children === false ? null : (
+          <div className="flex-1 overflow-y-auto px-5 py-4">{children}</div>
+        )}
         {footer ? (
           <div className="border-t border-[var(--border)] px-5 py-4">{footer}</div>
         ) : null}

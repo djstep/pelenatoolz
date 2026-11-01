@@ -622,6 +622,7 @@ export function ScheduleDnDBoard({
       title: `Убрать сцену ${formatSceneBrief(scene)} из дня ${day.dayNumber}?`,
       details: () => getSceneDayRemoveImpactAction(projectId, day.id, scene.id),
       confirmLabel: "Убрать из дня",
+      tone: "primary",
       action: async () => {
         const result = await removeSceneFromDayAction(projectId, day.id, scene.id);
         if (result.error) return result.error;
