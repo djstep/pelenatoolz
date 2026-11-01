@@ -1,5 +1,8 @@
 import ExcelJS from "exceljs";
-import type { AttendanceSheetModel } from "@/features/day-docs/lib/export-attendance-sheet";
+import {
+  ATTENDANCE_ACTOR_COLUMNS,
+  type AttendanceSheetModel,
+} from "@/features/day-docs/lib/export-attendance-sheet";
 
 const HEADER_FILL: ExcelJS.Fill = {
   type: "pattern",
@@ -16,10 +19,100 @@ function styleHeaderRow(row: ExcelJS.Row) {
   row.height = 22;
 }
 
+const GRID_BORDER: Partial<ExcelJS.Borders> = {
+  top: { style: "thin", color: { argb: "FF000000" } },
+  left: { style: "thin", color: { argb: "FF000000" } },
+  bottom: { style: "thin", color: { argb: "FF000000" } },
+  right: { style: "thin", color: { argb: "FF000000" } },
+};
+
+/** Ширины под A4 альбомную; «Переработка» и «Подпись» — под запись от руки. */
+const ACTOR_COLUMN_WIDTHS = [28, 24, 9, 17, 15, 17, 26];
+/** ≈ 9 мм — место для подписи ручкой. */
+const ACTOR_ROW_HEIGHT = 26;
+const ACTOR_HEADER_ROW = 4;
+
+function addActorTableSheet(
+  workbook: ExcelJS.Workbook,
+  table: AttendanceSheetModel["actorTables"][number],
+) {
+  const columnCount = ATTENDANCE_ACTOR_COLUMNS.length;
+  const sheet = workbook.addWorksheet(table.sheetName, {
+    pageSetup: {
+      paperSize: 9,
+      orientation: "landscape",
+      fitToPage: true,
+      fitToWidth: 1,
+      fitToHeight: 0,
+      horizontalCentered: true,
+      margins: { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 },
+      printTitlesRow: `${ACTOR_HEADER_ROW}:${ACTOR_HEADER_ROW}`,
+    },
+  });
+  ACTOR_COLUMN_WIDTHS.forEach((width, i) => {
+    sheet.getColumn(i + 1).width = width;
+  });
+
+  const title = sheet.addRow([table.title]);
+  title.getCell(1).font = { bold: true, size: 14, name: "Arial" };
+  title.getCell(1).alignment = { vertical: "middle" };
+  title.height = 24;
+  sheet.mergeCells(1, 1, 1, columnCount);
+
+  const place = sheet.addRow([table.placeLine]);
+  place.getCell(1).font = { size: 11, name: "Arial" };
+  place.getCell(1).alignment = { vertical: "top", wrapText: true };
+  // В объединённой ячейке Excel сам высоту не подбирает: ~120 знаков в строке.
+  place.height = 16 * Math.max(1, Math.ceil(table.placeLine.length / 120));
+  sheet.mergeCells(2, 1, 2, columnCount);
+
+  sheet.addRow([]).height = 6;
+
+  const header = sheet.addRow([...ATTENDANCE_ACTOR_COLUMNS]);
+  header.eachCell((cell) => {
+    cell.font = { bold: true, size: 11, name: "Arial" };
+    cell.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+    cell.border = GRID_BORDER;
+  });
+  header.height = 30;
+
+  if (table.rows.length === 0) {
+    const empty = sheet.addRow(["В сценах дня нет персонажей"]);
+    sheet.mergeCells(empty.number, 1, empty.number, columnCount);
+    empty.getCell(1).font = { size: 11, name: "Arial" };
+    empty.getCell(1).alignment = { vertical: "middle" };
+    for (let col = 1; col <= columnCount; col += 1) {
+      empty.getCell(col).border = GRID_BORDER;
+    }
+    empty.height = ACTOR_ROW_HEIGHT;
+    return;
+  }
+
+  for (const row of table.rows) {
+    const dataRow = sheet.addRow([row.actor, row.character, row.callTime ?? "", "", "", "", ""]);
+    for (let col = 1; col <= columnCount; col += 1) {
+      const cell = dataRow.getCell(col);
+      cell.font = { size: 11, name: "Arial" };
+      cell.alignment = {
+        vertical: "middle",
+        wrapText: true,
+        horizontal: col === 3 ? "center" : "left",
+        indent: col === 3 ? 0 : 1,
+      };
+      cell.border = GRID_BORDER;
+    }
+    dataRow.height = ACTOR_ROW_HEIGHT;
+  }
+}
+
 export async function buildAttendanceSheetXlsx(model: AttendanceSheetModel) {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = "PELENA";
   workbook.created = new Date();
+
+  for (const table of model.actorTables) {
+    addActorTableSheet(workbook, table);
+  }
 
   for (const section of model.sections) {
     const sheet = workbook.addWorksheet(section.title);
