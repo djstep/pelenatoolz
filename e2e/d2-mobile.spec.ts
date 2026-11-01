@@ -82,6 +82,10 @@ test.describe("компьютер, 1280 px", () => {
     await expect(page.getByRole("link", { name: "КПП", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Меню", exact: true })).toBeHidden();
     await expect(page.getByRole("button", { name: "Меню аккаунта" })).toBeHidden();
-    await expect(page.getByRole("button", { name: "Выйти" })).toBeVisible();
+    // Меню пользователя (кружок с инициалами и имя): «Профиль» и «Выйти».
+    await page.getByRole("button", { name: "Меню пользователя" }).click();
+    const menu = page.getByRole("menu");
+    await expect(menu.getByRole("menuitem", { name: "Профиль" })).toBeVisible();
+    await expect(menu.getByRole("menuitem", { name: "Выйти" })).toBeVisible();
   });
 });

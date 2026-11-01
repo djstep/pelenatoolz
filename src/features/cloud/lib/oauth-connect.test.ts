@@ -305,4 +305,20 @@ describe("сообщение после окна согласия", () => {
     assert.equal(cloudOAuthNotice({ cloud_error: "xyz" })?.tone, "error");
     assert.equal(cloudOAuthNotice({}), null);
   });
+
+  test("не настроен клиент, нет прав, диск проекта — понятные тексты, не код", () => {
+    assert.match(cloudOAuthNotice({ cloud_error: "config_google" })?.text ?? "", /Google Диска не настроено/);
+    assert.match(cloudOAuthNotice({ cloud_error: "config_yandex" })?.text ?? "", /Яндекс Диска не настроено/);
+    assert.match(cloudOAuthNotice({ cloud_error: "forbidden" })?.text ?? "", /владелец проекта или продюсер/);
+    assert.match(cloudOAuthNotice({ cloud_error: "unsupported" })?.text ?? "", /пока не подключается/);
+    assert.equal(cloudOAuthNotice({ cloud_error: "bad_request" })?.tone, "error");
+  });
+
+  test("начало подключения: ошибки — возвратом с плашкой; JSON только для чужого сайта и чужого проекта", () => {
+    const source = readFileSync(path.join(process.cwd(), "src/features/cloud/lib/oauth-flow.ts"), "utf8");
+    const start = source.slice(source.indexOf("export async function startCloudConnect"), source.indexOf("export async function finishCloudConnect"));
+    const jsonErrors = start.match(/NextResponse\.json\(/g) ?? [];
+    assert.equal(jsonErrors.length, 2);
+    assert.match(start, /back\(returnTo, provider === "GOOGLE_DRIVE" \? "config_google" : "config_yandex"\)/);
+  });
 });

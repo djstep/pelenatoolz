@@ -51,15 +51,18 @@ export type CloudOAuthErrorCode =
   | "token"
   | "scope"
   | "forbidden"
-  | "unsupported";
+  | "unsupported"
+  | "config_google"
+  | "config_yandex"
+  | "bad_request";
 
 function callbackUri(provider: CloudProvider) {
   return `${appOrigin()}/api/cloud/${PROVIDER_SLUG[provider]}/callback`;
 }
 
 /** Добавить параметр к адресу возврата (в нём уже может быть `?`). */
-function withParam(path: string, key: string, value: string) {
-  const url = new URL(path, appOrigin());
+function withParam(path: string, key: string, value: string, origin = appOrigin()) {
+  const url = new URL(path, origin);
   url.searchParams.set(key, value);
   return url.toString();
 }
@@ -97,11 +100,17 @@ export async function startCloudConnect(request: Request, provider: CloudProvide
     return NextResponse.json({ error: "Запрос не с этого сайта" }, { status: 403 });
   }
 
+  // Ошибки — возвратом на страницу, откуда начали, с плашкой (`?cloud_error=`), а не голым JSON.
+  // Исключения: чужой сайт (выше) и чужой проект (ниже) — туда возвращать некуда.
+  // Возврат — на тот же сайт, откуда пришёл запрос (Origin уже проверен выше).
+  const back = (path: string, code: CloudOAuthErrorCode) =>
+    NextResponse.redirect(withParam(path, "cloud_error", code, new URL(request.url).origin), 303);
+
   let form: FormData;
   try {
     form = await request.formData();
   } catch {
-    return NextResponse.json({ error: "Неверный запрос" }, { status: 400 });
+    return back(DEFAULT_RETURN, "bad_request");
   }
   const purpose: CloudConnectPurpose = form.get("purpose") === "project" ? "project" : "personal";
   const projectIdRaw = form.get("projectId");
@@ -109,21 +118,20 @@ export async function startCloudConnect(request: Request, provider: CloudProvide
   const returnTo = safeRedirectPath(form.get("returnTo"), DEFAULT_RETURN);
 
   const refusal = await connectRefusal(userId, purpose, projectId);
-  if (refusal) {
+  if (refusal === "not_member") {
     return NextResponse.json({ error: cloudConnectRefusalText[refusal] }, { status: 403 });
   }
+  if (refusal) return back(returnTo, "forbidden");
   // Хранение токенов диска проекта — шаг 4 (ProjectDrive). До него — только личные диски.
-  if (purpose === "project") {
-    return NextResponse.json({ error: "Диск проекта пока не подключается" }, { status: 400 });
-  }
+  if (purpose === "project") return back(returnTo, "unsupported");
 
   const clientId =
     provider === "GOOGLE_DRIVE" ? process.env.GOOGLE_CLIENT_ID : process.env.YANDEX_CLIENT_ID;
-  if (!clientId) {
-    return NextResponse.json(
-      { error: provider === "GOOGLE_DRIVE" ? "GOOGLE_CLIENT_ID не настроен" : "YANDEX_CLIENT_ID не настроен" },
-      { status: 500 },
-    );
+  const clientSecret =
+    provider === "GOOGLE_DRIVE" ? process.env.GOOGLE_CLIENT_SECRET : process.env.YANDEX_CLIENT_SECRET;
+  if (!clientId?.trim() || !clientSecret?.trim()) {
+    console.error(`[cloud ${PROVIDER_SLUG[provider]} authorize] не задан client id / secret`);
+    return back(returnTo, provider === "GOOGLE_DRIVE" ? "config_google" : "config_yandex");
   }
 
   await revokeBeforeReconnect(userId, provider);

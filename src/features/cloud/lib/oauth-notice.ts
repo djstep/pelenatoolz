@@ -19,8 +19,21 @@ export function cloudOAuthNotice(params: {
         tone: "error",
         text: "Google Диск не подключён: в окне Google не отмечен доступ к файлам. Подключите ещё раз и оставьте галочку",
       };
+    case "config_google":
+      return {
+        tone: "error",
+        text: "Подключение Google Диска не настроено на сервере (нет ключей приложения Google) — сообщите администратору",
+      };
+    case "config_yandex":
+      return {
+        tone: "error",
+        text: "Подключение Яндекс Диска не настроено на сервере (нет ключей приложения Яндекса) — сообщите администратору",
+      };
     case "forbidden":
-      return { tone: "error", text: "Нет прав на подключение диска" };
+      return {
+        tone: "error",
+        text: "Нет прав на подключение диска проекта: подключает владелец проекта или продюсер",
+      };
     case "unsupported":
       return { tone: "error", text: "Диск проекта пока не подключается" };
     case "state":
