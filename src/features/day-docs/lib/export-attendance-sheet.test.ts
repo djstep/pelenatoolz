@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
 import { describe, test } from "node:test";
 import ExcelJS from "exceljs";
 import type { DayDocBundle } from "@/features/day-docs/lib/build-day-doc";
@@ -250,5 +252,28 @@ describe("buildAttendanceSheetXlsx", () => {
     assert.equal(sheet.pageSetup.paperSize, 9);
     assert.equal(sheet.pageSetup.fitToWidth, 1);
     assert.equal(sheet.pageSetup.printTitlesRow, "4:4");
+    assert.equal(sheet.getImages().length, 0, "без логотипа, если его не передали");
+  });
+
+  test("логотип — справа над таблицей, на каждом актёрском листе; шапка не заходит под него", async () => {
+    const logo = fs.readFileSync(path.join(process.cwd(), "public", "brand", "pelena-black.png"));
+    const secondUnit = bundle({ unit: "2-й юнит", scenes: [scene("5", [boris])] });
+    const model = buildAttendanceSheetModel(mainDay, { resourceIds: [] }, [], [secondUnit]);
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load((await buildAttendanceSheetXlsx(model, logo)) as ArrayBuffer);
+
+    for (const name of ["Актёры · Основная", "Актёры · 2-й юнит"]) {
+      const sheet = wb.getWorksheet(name)!;
+      const images = sheet.getImages();
+      assert.equal(images.length, 1, name);
+      const tl = images[0].range.tl;
+      assert.ok(tl.nativeRow === 0, "в первой строке, над таблицей");
+      assert.ok(tl.nativeCol >= ACTOR_TITLE_LAST_COL, "правее шапки — над «Переработкой» и «Подписью»");
+      assert.equal(sheet.getCell("F1").isMerged, false, "шапка объединена только до «Конца смены»");
+    }
+    assert.equal(wb.getWorksheet("Цеха")!.getImages().length, 0, "прочие листы без логотипа");
   });
 });
+
+/** Индекс (с 0) первой колонки правее шапки: «Переработка». */
+const ACTOR_TITLE_LAST_COL = 5;

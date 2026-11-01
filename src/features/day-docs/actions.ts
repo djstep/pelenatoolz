@@ -996,7 +996,14 @@ export async function exportAttendanceSheetXlsxAction(
     otherUnitBundles,
   );
 
-  const buffer = await buildAttendanceSheetXlsx(model);
+  // Логотип в угол актёрского листа; не прочитался — выгрузка без него.
+  const { readFile } = await import("node:fs/promises");
+  const path = await import("node:path");
+  const logoPng = await readFile(
+    path.join(process.cwd(), "public", "brand", "pelena-black.png"),
+  ).catch(() => null);
+
+  const buffer = await buildAttendanceSheetXlsx(model, logoPng);
   return {
     base64: Buffer.from(buffer).toString("base64"),
     fileName: `${model.fileBaseName}.xlsx`,

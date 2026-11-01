@@ -31,10 +31,44 @@ const ACTOR_COLUMN_WIDTHS = [28, 24, 9, 17, 15, 17, 26];
 /** ≈ 9 мм — место для подписи ручкой. */
 const ACTOR_ROW_HEIGHT = 26;
 const ACTOR_HEADER_ROW = 4;
+/** Шапка и «Место съёмки» — над колонками до «Конца смены»; правее — логотип. */
+const ACTOR_TITLE_COLUMNS = 5;
+
+/** Логотип PELENA 1024×219: справа в углу над «Переработкой» и «Подписью». */
+const LOGO_WIDTH_PX = 220;
+const LOGO_HEIGHT_PX = Math.round((LOGO_WIDTH_PX * 219) / 1024);
+
+/** Ширина колонки Excel в пикселях (шрифт книги по умолчанию — Calibri 11, 7 px на знак). */
+function columnPx(width: number) {
+  return Math.trunc(width * 7);
+}
+
+const EMU_PER_PX = 9525;
+
+/**
+ * Левый верхний угол логотипа так, чтобы правый край лёг на правый край таблицы.
+ * Смещение задаётся в EMU напрямую: дробную колонку ExcelJS пересчитывает
+ * в свои единицы (ширина × 10 000), а не в единицы Excel — логотип съезжал влево.
+ */
+function logoAnchor() {
+  let left = ACTOR_COLUMN_WIDTHS.reduce((sum, w) => sum + columnPx(w), 0) - LOGO_WIDTH_PX;
+  let nativeCol = 0;
+  while (nativeCol < ACTOR_COLUMN_WIDTHS.length - 1 && left >= columnPx(ACTOR_COLUMN_WIDTHS[nativeCol])) {
+    left -= columnPx(ACTOR_COLUMN_WIDTHS[nativeCol]);
+    nativeCol += 1;
+  }
+  return {
+    nativeCol,
+    nativeColOff: Math.max(0, Math.round(left * EMU_PER_PX)),
+    nativeRow: 0,
+    nativeRowOff: 4 * EMU_PER_PX,
+  };
+}
 
 function addActorTableSheet(
   workbook: ExcelJS.Workbook,
   table: AttendanceSheetModel["actorTables"][number],
+  logoImageId: number | null,
 ) {
   const columnCount = ATTENDANCE_ACTOR_COLUMNS.length;
   const sheet = workbook.addWorksheet(table.sheetName, {
@@ -53,18 +87,27 @@ function addActorTableSheet(
     sheet.getColumn(i + 1).width = width;
   });
 
+  // В объединённой ячейке Excel сам высоту не подбирает: считаем строки по длине текста.
   const title = sheet.addRow([table.title]);
   title.getCell(1).font = { bold: true, size: 14, name: "Arial" };
-  title.getCell(1).alignment = { vertical: "middle" };
-  title.height = 24;
-  sheet.mergeCells(1, 1, 1, columnCount);
+  title.getCell(1).alignment = { vertical: "middle", wrapText: true };
+  title.height = 22 * Math.max(1, Math.ceil(table.title.length / 60));
+  sheet.mergeCells(1, 1, 1, ACTOR_TITLE_COLUMNS);
 
   const place = sheet.addRow([table.placeLine]);
   place.getCell(1).font = { size: 11, name: "Arial" };
   place.getCell(1).alignment = { vertical: "top", wrapText: true };
-  // В объединённой ячейке Excel сам высоту не подбирает: ~120 знаков в строке.
-  place.height = 16 * Math.max(1, Math.ceil(table.placeLine.length / 120));
-  sheet.mergeCells(2, 1, 2, columnCount);
+  place.height = 16 * Math.max(1, Math.ceil(table.placeLine.length / 90));
+  sheet.mergeCells(2, 1, 2, ACTOR_TITLE_COLUMNS);
+
+  if (logoImageId != null) {
+    sheet.addImage(logoImageId, {
+      // Типы ExcelJS знают только { col, row }; Anchor принимает и native-поля.
+      tl: logoAnchor() as unknown as { col: number; row: number },
+      ext: { width: LOGO_WIDTH_PX, height: LOGO_HEIGHT_PX },
+      editAs: "oneCell",
+    });
+  }
 
   sheet.addRow([]).height = 6;
 
@@ -105,13 +148,24 @@ function addActorTableSheet(
   }
 }
 
-export async function buildAttendanceSheetXlsx(model: AttendanceSheetModel) {
+export async function buildAttendanceSheetXlsx(
+  model: AttendanceSheetModel,
+  /** PNG логотипа для актёрских листов; нет — лист без логотипа. */
+  logoPng?: Uint8Array | null,
+) {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = "PELENA";
   workbook.created = new Date();
 
+  const logoImageId = logoPng
+    ? workbook.addImage({
+        buffer: Buffer.from(logoPng) as unknown as ExcelJS.Buffer,
+        extension: "png",
+      })
+    : null;
+
   for (const table of model.actorTables) {
-    addActorTableSheet(workbook, table);
+    addActorTableSheet(workbook, table, logoImageId);
   }
 
   for (const section of model.sections) {
