@@ -64,9 +64,14 @@ export function decryptSecret(payload: string) {
   );
 }
 
+/** Куда подключаем: личный диск человека или диск проекта (шаг 4). */
+export type CloudConnectPurpose = "personal" | "project";
+
 export type OAuthStatePayload = {
   userId: string;
-  projectId: string;
+  purpose: CloudConnectPurpose;
+  /** Для `project` — обязателен; для `personal` — проект, с чьей страницы начали (или null). */
+  projectId: string | null;
   provider: "GOOGLE_DRIVE" | "YANDEX_DISK";
   returnTo: string;
   /** Время выпуска, мс. State старше OAUTH_STATE_TTL_MS не принимается. */
@@ -96,6 +101,9 @@ export function verifyOAuthState(state: string): OAuthStatePayload | null {
     return null;
   }
   if (typeof payload.issuedAt !== "number") return null;
+  // State до волны дисков (без назначения) не принимается: проверки проекта в нём не было.
+  if (payload.purpose !== "personal" && payload.purpose !== "project") return null;
+  if (payload.purpose === "project" && !payload.projectId) return null;
   const age = Date.now() - payload.issuedAt;
   // Небольшой запас на расхождение часов между инстансами.
   if (age < -60_000 || age > OAUTH_STATE_TTL_MS) return null;

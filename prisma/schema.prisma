@@ -243,25 +243,25 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  memberships              ProjectMembership[]
-  createdProjects          Project[]                 @relation("ProjectCreator")
-  ownedProjects            Project[]                 @relation("ProjectOwner")
-  createdInvites           ProjectInvite[]           @relation("InviteCreator")
-  auditLogs                AuditLog[]
-  cloudConnections         CloudConnection[]
-  passwordResetTokens      PasswordResetToken[]
-  scriptVersions           ScriptVersion[]
-  scriptComments           ScriptComment[]
-  castingCandidateComments CastingCandidateComment[]
-  createdBudgets           Budget[]                  @relation("BudgetCreator")
-  submittedBudgets         Budget[]                  @relation("BudgetSubmitter")
-  returnedBudgets          Budget[]                  @relation("BudgetReturner")
-  createdAccruals          Accrual[]                 @relation("AccrualCreator")
-  createdCashPayments      CashPayment[]             @relation("CashPaymentCreator")
-  lockedCashPayments       CashPayment[]             @relation("CashPaymentLocker")
-  createdAuditions         Audition[]                @relation("AuditionCreator")
-  uploadedFiles            ProjectFile[]             @relation("FileUploader")
-  approvedCallSheets       CallSheet[]               @relation("CallSheetApprover")
+  memberships               ProjectMembership[]
+  createdProjects           Project[]                  @relation("ProjectCreator")
+  ownedProjects             Project[]                  @relation("ProjectOwner")
+  createdInvites            ProjectInvite[]            @relation("InviteCreator")
+  auditLogs                 AuditLog[]
+  cloudConnections          CloudConnection[]
+  passwordResetTokens       PasswordResetToken[]
+  scriptVersions            ScriptVersion[]
+  scriptComments            ScriptComment[]
+  castingCandidateComments  CastingCandidateComment[]
+  createdBudgets            Budget[]                   @relation("BudgetCreator")
+  submittedBudgets          Budget[]                   @relation("BudgetSubmitter")
+  returnedBudgets           Budget[]                   @relation("BudgetReturner")
+  createdAccruals           Accrual[]                  @relation("AccrualCreator")
+  createdCashPayments       CashPayment[]              @relation("CashPaymentCreator")
+  lockedCashPayments        CashPayment[]              @relation("CashPaymentLocker")
+  createdAuditions          Audition[]                 @relation("AuditionCreator")
+  uploadedFiles             ProjectFile[]              @relation("FileUploader")
+  approvedCallSheets        CallSheet[]                @relation("CallSheetApprover")
   approvedCallSheetVersions CallSheetApprovedVersion[] @relation("CallSheetVersionApprover")
 }
 
@@ -898,21 +898,21 @@ model SceneResource {
 }
 
 model ResourceCategory {
-  id            String   @id @default(cuid())
-  projectId     String
-  name          String
-  sortOrder     Int      @default(0)
-  fillInScenes  Boolean  @default(true)
-  perShift      Boolean  @default(false)
-  countable     Boolean  @default(false)
-  showInKpp     Boolean  @default(true)
+  id                 String   @id @default(cuid())
+  projectId          String
+  name               String
+  sortOrder          Int      @default(0)
+  fillInScenes       Boolean  @default(true)
+  perShift           Boolean  @default(false)
+  countable          Boolean  @default(false)
+  showInKpp          Boolean  @default(true)
   /// Игровой/спецтранспорт: учитывать километраж в отчёте
-  tracksMileage Boolean  @default(false)
+  tracksMileage      Boolean  @default(false)
   /// Раздел элементов площадки вызывного; пусто — «Прочее». По умолчанию ставится только
   /// при создании категории (точное совпадение названия), дальше — только руками.
   callSheetSectionId String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
   project          Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
   callSheetSection CallSheetSection? @relation(fields: [callSheetSectionId], references: [id], onDelete: SetNull)
@@ -1142,11 +1142,11 @@ model CallSheetTemplateBaseItem {
 
 /// Вызывной дня КПП (1 к 1). Создаётся только кнопкой «Создать вызывной».
 model CallSheet {
-  id                String   @id @default(cuid())
+  id                String          @id @default(cuid())
   projectId         String
-  shootDayId        String   @unique
+  shootDayId        String          @unique
   /// Когда блоки руководителей, цехов и базы последний раз заполнены из шаблона.
-  templateAppliedAt DateTime @default(now())
+  templateAppliedAt DateTime        @default(now())
   /// Температура днём и ночью — руками («+18», «+15…+18»).
   tempDay           String?
   tempNight         String?
@@ -2449,6 +2449,12 @@ model CloudConnection {
   accessToken  String
   refreshToken String?
   expiresAt    DateTime?
+  /// Выданные права из ответа OAuth (через пробел). Пусто или без drive.file / disk.app_folder — «переподключите».
+  scopes           String?
+  /// Id аккаунта у провайдера (Google `sub`, Яндекс `id`): видно, что переподключили другой аккаунт.
+  accountSubject   String?
+  /// Доступ отозван у провайдера (invalid_grant, 401) или старый токен отозван при переподключении.
+  needsReconnectAt DateTime?
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 
