@@ -10,6 +10,7 @@ import {
   type AttendanceCallSheetCrew,
 } from "@/features/day-docs/lib/export-attendance-sheet";
 import { buildAttendanceSheetXlsx } from "@/features/day-docs/lib/export-attendance-sheet-xlsx";
+import { isFormulaLike } from "@/shared/lib/excel-safe";
 
 /** Явочный лист: вкладка «Цеха» — из нового вызывного, старая `DepartmentCallTime` не читается. */
 
@@ -91,5 +92,42 @@ describe("явочный лист: вкладка «Цеха»", () => {
       "utf8",
     );
     assert.ok(!/day\.departmentCalls|departmentCallTime\./.test(sheet));
+  });
+});
+
+describe("явочный лист в Excel: защита от формул", () => {
+  test("все строки — через excelSafe: формулы с апострофом, телефон и время как есть", async () => {
+    const dangerous: AttendanceCallSheetCrew = {
+      leaders: [{ position: "@SUM(A1)", shortTitle: null, personName: "=HYPERLINK(\"http://evil\",\"x\")" }],
+      crewCalls: [{ label: "+cmd|' /C calc'!A0", callTime: "07:00" }, { label: "-2+3*cmd", callTime: null }],
+    };
+    const evilBundle = {
+      ...bundle,
+      project: { ...bundle.project, name: "=1+1", city: "\tгород" },
+    } as unknown as DayDocBundle;
+    const model = buildAttendanceSheetModel(evilBundle, { resourceIds: [] }, [], dangerous);
+    const book = new ExcelJS.Workbook();
+    await book.xlsx.load(await buildAttendanceSheetXlsx(model));
+    const values: string[] = [];
+    book.eachSheet((sheet) =>
+      sheet.eachRow((row) =>
+        row.eachCell((cell) => {
+          if (typeof cell.value === "string") values.push(cell.value);
+        }),
+      ),
+    );
+    for (const expected of [
+      `'=HYPERLINK("http://evil","x")`,
+      "'@SUM(A1)",
+      "'+cmd|' /C calc'!A0",
+      "'-2+3*cmd",
+      "'=1+1",
+      "07:00",
+    ]) {
+      assert.ok(values.includes(expected), `нет ячейки ${expected}`);
+    }
+    for (const value of values) {
+      assert.ok(!isFormulaLike(value), `ячейка похожа на формулу: ${JSON.stringify(value)}`);
+    }
   });
 });

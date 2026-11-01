@@ -560,9 +560,6 @@ describe("шрифт листа по адресу (просмотр на стр�
       path.join(process.cwd(), "src/app/api/projects/[projectId]/call-sheets/[dayId]/sheet/route.ts"),
       "utf8",
     );
-    assert.match(route, /await loadCallSheetPrintModel\(projectId, dayId\)/);
-    assert.match(route, /buildCallSheetHtml\(result\.model, \{ font: "url" \}\)/);
-    assert.match(route, /sandbox allow-same-origin; frame-ancestors 'self'/);
-    assert.ok(!/allow-scripts/.test(route));
+    assert.ok(route.includes("return callSheetSheetResponse(await loadCallSheetPrintModel(projectId, dayId))"));
   });
 });

@@ -1,5 +1,11 @@
 import ExcelJS from "exceljs";
 import type { AttendanceSheetModel } from "@/features/day-docs/lib/export-attendance-sheet";
+import { excelSafe } from "@/shared/lib/excel-safe";
+
+/** Единственная запись строк листа: каждое строковое значение — через `excelSafe`. */
+function addSafeRow(sheet: ExcelJS.Worksheet, values: (string | number)[]) {
+  return sheet.addRow(values.map((value) => excelSafe(value)));
+}
 
 const HEADER_FILL: ExcelJS.Fill = {
   type: "pattern",
@@ -30,24 +36,24 @@ export async function buildAttendanceSheetXlsx(model: AttendanceSheetModel) {
     sheet.getColumn(5).width = 14;
     sheet.getColumn(6).width = 18;
 
-    const title = sheet.addRow([model.documentTitle]);
+    const title = addSafeRow(sheet, [model.documentTitle]);
     title.getCell(1).font = { bold: true, size: 14, name: "Calibri" };
     sheet.mergeCells(1, 1, 1, 6);
 
-    sheet.addRow([model.projectName]).getCell(1).font = {
+    addSafeRow(sheet, [model.projectName]).getCell(1).font = {
       bold: true,
       size: 12,
       name: "Calibri",
     };
     sheet.mergeCells(2, 1, 2, 6);
 
-    sheet.addRow([
+    addSafeRow(sheet, [
       `${model.dateLabel}${model.city ? ` · ${model.city}` : ""} · ${section.title}`,
     ]);
     sheet.mergeCells(3, 1, 3, 6);
-    sheet.addRow([]);
+    addSafeRow(sheet, []);
 
-    const header = sheet.addRow([
+    const header = addSafeRow(sheet, [
       "№",
       "ФИО / наименование",
       "Детали",
@@ -58,10 +64,10 @@ export async function buildAttendanceSheetXlsx(model: AttendanceSheetModel) {
     styleHeaderRow(header);
 
     if (section.rows.length === 0) {
-      sheet.addRow(["", section.emptyText ?? "Нет записей в вызывном", "", "", "", ""]);
+      addSafeRow(sheet, ["", section.emptyText ?? "Нет записей в вызывном", "", "", "", ""]);
     } else {
       section.rows.forEach((row, index) => {
-        const dataRow = sheet.addRow([
+        const dataRow = addSafeRow(sheet, [
           index + 1,
           row.name,
           row.detail ?? "",
@@ -86,8 +92,8 @@ export async function buildAttendanceSheetXlsx(model: AttendanceSheetModel) {
       });
     }
 
-    sheet.addRow([]);
-    sheet.addRow([
+    addSafeRow(sheet, []);
+    addSafeRow(sheet, [
       "Ведомость фактического присутствия на смене. Заполняется и подписывается на площадке в конце смены.",
     ]);
     sheet.mergeCells(sheet.rowCount, 1, sheet.rowCount, 6);

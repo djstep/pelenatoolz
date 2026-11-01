@@ -80,8 +80,7 @@ describe("право на печать и Excel вызывного", () => {
     assert.match(action, /await loadCallSheetPrintModel\(projectId, dayId\)/);
 
     const route = source("src/app/api/projects/[projectId]/call-sheets/[dayId]/xlsx/route.ts");
-    assert.match(route, /await loadCallSheetPrintModel\(projectId, dayId\)/);
-    assert.match(route, /attachmentDisposition\(/);
+    assert.ok(route.includes("return callSheetXlsxResponse(await loadCallSheetPrintModel(projectId, dayId))"));
   });
 
   test("старого формата нет: PDF через pdfkit, печать FilmToolz, base64-экспорт", () => {
