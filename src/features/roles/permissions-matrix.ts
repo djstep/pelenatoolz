@@ -68,6 +68,16 @@ export function isSectionFlagAllowed(
   section: PermissionSectionId,
   flag: keyof SectionPermissions,
 ): boolean {
+  // «Снятие фиксации платежей» проверяется только у «Финансов» (finance:unlock).
+  if (flag === "financeUnlock" && section !== "finance") return false;
+  // Фин. условия проверяются только у ставок (актёры, локации, ресурсы) и у «Финансов».
+  if (
+    (flag === "financeRead" || flag === "financeWrite") &&
+    section !== "finance" &&
+    !ENTITY_FINANCE_SECTIONS.includes(section)
+  ) {
+    return false;
+  }
   const allowed = RESTRICTED_SECTION_FLAGS[section];
   return !allowed || allowed.includes(flag);
 }
@@ -81,6 +91,18 @@ function restrictSectionFlags(
     if (!isSectionFlagAllowed(section, flag)) out[flag] = false;
   }
   return out;
+}
+
+/**
+ * Выключает флаги, которых у раздела нет (см. isSectionFlagAllowed).
+ * Применяется при сохранении роли — до проверки «не шире своих» и до записи.
+ */
+export function normalizePermissionMatrix(
+  matrix: PermissionMatrix,
+): PermissionMatrix {
+  return Object.fromEntries(
+    PERMISSION_SECTIONS.map((s) => [s.id, restrictSectionFlags(s.id, matrix[s.id])]),
+  ) as PermissionMatrix;
 }
 
 /** Разделы, где колонки фин. условий относятся к сущности (не к модулю «Финансы»). */

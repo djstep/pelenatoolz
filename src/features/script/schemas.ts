@@ -23,7 +23,6 @@ export const createSceneSchema = z.object({
   title: z.string().trim().max(200).optional(),
   summary: z.string().trim().max(5000).optional(),
   description: z.string().trim().max(5000).optional(),
-  scriptContent: z.string().trim().max(100000).optional(),
   scriptDay: z.coerce.number().int().min(0).max(9999).optional(),
   objectType: z.string().trim().max(100).optional(),
   sceneKind: z.enum(SceneKind).optional(),

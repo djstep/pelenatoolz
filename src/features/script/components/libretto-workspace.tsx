@@ -124,6 +124,7 @@ export function LibrettoWorkspace({
   resourceCategories = [],
   exportResourceCategories,
   canWrite,
+  canSaveExportLayout,
 }: {
   projectId: string;
   locale: string;
@@ -138,6 +139,8 @@ export function LibrettoWorkspace({
   /** Все категории ресурсов проекта (для пула полей экспорта) */
   exportResourceCategories?: { id: string; name: string }[];
   canWrite: boolean;
+  /** Право сохранять раскладку выгрузки в проект — по ключу, как на сервере. */
+  canSaveExportLayout: { libretto: boolean; directorsScript: boolean };
 }) {
   const router = useRouter();
   const allColumns = useMemo(
@@ -296,6 +299,7 @@ export function LibrettoWorkspace({
           filteredCount={filtered.length}
           resourceCategories={resourceCategories}
           onExcelExport={() => setExportOpen(true)}
+          canSaveDirectorsLayout={canSaveExportLayout.directorsScript}
         />
         <div className="relative ml-auto">
           <Button type="button" variant="ghost" onClick={() => setColumnsOpen((v) => !v)}>
@@ -539,6 +543,7 @@ export function LibrettoWorkspace({
         onClose={() => setExportOpen(false)}
         onExport={exportXls}
         projectId={projectId}
+        canSaveLayout={canSaveExportLayout.libretto}
         tableResourceCategories={resourceCategories}
         allResourceCategories={exportAllResources}
       />

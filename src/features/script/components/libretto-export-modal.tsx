@@ -10,7 +10,11 @@ import {
   columnsReadyForExport,
   createExportColumnId,
 } from "@/features/exports/lib/column-utils";
-import type { ExportColumn, ExportFieldDef } from "@/features/exports/types";
+import {
+  EXPORT_LAYOUT_NOT_SAVED_HINT,
+  type ExportColumn,
+  type ExportFieldDef,
+} from "@/features/exports/types";
 import {
   buildLibrettoExportFields,
   createDefaultExportColumns,
@@ -25,6 +29,7 @@ export function LibrettoExportModal({
   onClose,
   onExport,
   projectId,
+  canSaveLayout,
   tableResourceCategories = [],
   allResourceCategories = [],
 }: {
@@ -35,6 +40,8 @@ export function LibrettoExportModal({
     fieldLabels: Record<string, string>,
   ) => void | Promise<void>;
   projectId: string;
+  /** Право сохранять раскладку в проект — то же, что проверяет сервер по ключу «libretto». */
+  canSaveLayout: boolean;
   /** Категории, видимые как столбцы таблицы (fillInScenes) */
   tableResourceCategories?: { id: string; name: string }[];
   /** Все категории из раздела «Ресурсы» */
@@ -95,8 +102,10 @@ export function LibrettoExportModal({
     const ready = columnsReadyForExport(columns);
     if (ready.length === 0) return;
     startTransition(async () => {
-      const save = await saveExportLayoutAction(projectId, "libretto", columns);
-      if (save.error) toast.warning(save.error);
+      if (canSaveLayout) {
+        const save = await saveExportLayoutAction(projectId, "libretto", columns);
+        if (save.error) toast.warning(save.error);
+      }
       await onExport(ready, fieldLabels);
       onClose();
     });
@@ -112,8 +121,13 @@ export function LibrettoExportModal({
       <p className="mb-3 text-sm text-[var(--muted-fg)]">
         Столбцы Excel: поля таблицы либретто и ресурсы проекта. Перетаскивайте
         ресурсы между столбцами; «Доп. ресурсы» схлопывает заголовок в файле.
-        Раскладка сохраняется в проекте.
+        {canSaveLayout ? " Раскладка сохраняется в проекте." : null}
       </p>
+      {canSaveLayout ? null : (
+        <p className="mb-3 text-sm text-[var(--muted-fg)]">
+          {EXPORT_LAYOUT_NOT_SAVED_HINT}
+        </p>
+      )}
 
       <div className="mb-3 flex flex-wrap gap-2">
         <Button type="button" variant="secondary" onClick={resetToTable}>

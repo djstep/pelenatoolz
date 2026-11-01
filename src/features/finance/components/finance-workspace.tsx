@@ -26,6 +26,7 @@ import {
 import { formatDateShort } from "@/shared/i18n/format-date";
 import { Button } from "@/shared/ui/button";
 import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
+import { submitKeepingFields } from "@/shared/ui/forms/submit-keeping-fields";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Modal } from "@/shared/ui/modal";
@@ -295,7 +296,7 @@ function OpModal({
         </div>
       }
     >
-      <form id="finance-op-form" action={action} key={op?.id ?? "new"}>
+      <form id="finance-op-form" onSubmit={submitKeepingFields(action)} key={op?.id ?? "new"}>
         <OpForm
           projectId={projectId}
           op={op}

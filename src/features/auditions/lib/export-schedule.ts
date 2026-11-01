@@ -17,6 +17,13 @@ import type {
 import { auditionKindLabels } from "@/features/auditions/lib/types";
 import { actorRoleTypeLabels } from "@/shared/i18n/domain-labels";
 import { formatDateShort } from "@/shared/i18n/format-date";
+import {
+  escapeHtml,
+  PRINT_HTML_CSP_META,
+  safePrintUrl,
+} from "@/shared/lib/escape-html";
+import type { ExportImages } from "@/shared/lib/export-image";
+import { toOwnUploadPath } from "@/shared/lib/own-upload-url";
 
 export type ScheduleExportField =
   | "time"
@@ -74,23 +81,6 @@ function buildDayTimeline(schedules: AuditionScheduleRow[]): Map<string, Timelin
   return byDate;
 }
 
-async function fetchImageBytes(
-  url: string | null | undefined,
-): Promise<Uint8Array | null> {
-  if (!url) return null;
-  try {
-    const abs =
-      url.startsWith("http://") || url.startsWith("https://")
-        ? url
-        : `${process.env.APP_URL ?? "http://localhost:3000"}${url}`;
-    const res = await fetch(abs);
-    if (!res.ok) return null;
-    return new Uint8Array(await res.arrayBuffer());
-  } catch {
-    return null;
-  }
-}
-
 function textCell(text: string, width: number) {
   return new TableCell({
     borders: thin,
@@ -103,10 +93,21 @@ function textCell(text: string, width: number) {
   });
 }
 
+/** Адреса фото для Word: загружает их действие (`loadExportImages`) — модуль сети и диска сюда не тянуть, файл импортирует окно. */
+export function schedulePhotoUrls(
+  schedules: AuditionScheduleRow[],
+  fields: ScheduleExportField[],
+): (string | null)[] {
+  return fields.includes("photo")
+    ? schedules.flatMap((s) => s.candidates.map((c) => c.person.photoUrl))
+    : [];
+}
+
 export async function buildScheduleDocx(
   projectName: string,
   schedules: AuditionScheduleRow[],
   fields: ScheduleExportField[],
+  photos: ExportImages,
 ): Promise<Buffer> {
   const body: (Paragraph | Table)[] = [
     new Paragraph({
@@ -126,7 +127,6 @@ export async function buildScheduleDocx(
   const bodyFields = fields.filter(
     (f) => f !== "time" && f !== "kind" && f !== "comment",
   );
-
   for (const [dateKey, dayItems] of byDate) {
     body.push(
       new Paragraph({
@@ -191,18 +191,18 @@ export async function buildScheduleDocx(
         const cells = [];
         for (const f of bodyFields) {
           if (f === "photo") {
-            const bytes = await fetchImageBytes(c.person.photoUrl);
+            const photo = photos.get(c.person.photoUrl);
             cells.push(
               new TableCell({
                 borders: thin,
                 width: { size: colW, type: WidthType.DXA },
                 children: [
-                  bytes
+                  photo
                     ? new Paragraph({
                         children: [
                           new ImageRun({
-                            type: "jpg",
-                            data: bytes,
+                            type: photo.type,
+                            data: photo.data,
                             transformation: { width: 48, height: 48 },
                           }),
                         ],
@@ -262,7 +262,7 @@ export function buildSchedulePrintHtml(
     (f) => f !== "time" && f !== "kind" && f !== "comment",
   );
 
-  let html = `<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"/><title>План проб — ${escapeHtml(projectName)}</title>
+  let html = `<!DOCTYPE html><html lang="ru"><head>${PRINT_HTML_CSP_META}<meta charset="utf-8"/><title>План проб — ${escapeHtml(projectName)}</title>
 <style>
   body{font-family:system-ui,sans-serif;padding:24px;color:#111}
   h1{font-size:20px} h2{font-size:16px;margin-top:24px}
@@ -272,9 +272,7 @@ export function buildSchedulePrintHtml(
   th{background:#f3f3f3;text-align:left}
   img{width:48px;height:48px;object-fit:cover;border-radius:999px}
   .notes{min-height:40px}
-  @media print{.noprint{display:none}}
 </style></head><body>
-<button class="noprint" onclick="window.print()">Печать / PDF</button>
 <h1>План кастинг-проб — ${escapeHtml(projectName)}</h1>`;
 
   for (const [dateKey, dayItems] of byDate) {
@@ -295,10 +293,11 @@ export function buildSchedulePrintHtml(
         html += `<tr>`;
         for (const f of bodyCols) {
           if (f === "photo") {
+            const photoSrc = c.person.photoUrl
+              ? safePrintUrl(toOwnUploadPath(c.person.photoUrl))
+              : null;
             html += `<td>${
-              c.person.photoUrl
-                ? `<img src="${escapeAttr(c.person.photoUrl)}" alt=""/>`
-                : "—"
+              photoSrc ? `<img src="${escapeHtml(photoSrc)}" alt=""/>` : "—"
             }</td>`;
           } else if (f === "name") {
             html += `<td>${escapeHtml(c.person.label)}</td>`;
@@ -311,7 +310,7 @@ export function buildSchedulePrintHtml(
                 : "—"
             }</td>`;
           } else if (f === "rating") {
-            html += `<td>${c.rating ?? "—"}</td>`;
+            html += `<td>${c.rating != null ? escapeHtml(String(c.rating)) : "—"}</td>`;
           } else if (f === "notesBlank") {
             html += `<td class="notes"></td>`;
           }
@@ -324,16 +323,4 @@ export function buildSchedulePrintHtml(
 
   html += `</body></html>`;
   return html;
-}
-
-function escapeHtml(s: string) {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
-function escapeAttr(s: string) {
-  return escapeHtml(s);
 }

@@ -30,6 +30,7 @@ import {
   formatSecondsMmSs,
   intExtLabels,
 } from "@/shared/i18n/domain-labels";
+import { escapeHtml, PRINT_HTML_CSP_META } from "@/shared/lib/escape-html";
 
 export type ScriptExportBlock = {
   type: ScriptBlockType;
@@ -64,13 +65,6 @@ function run(text: string, opts?: { bold?: boolean; italics?: boolean }) {
     bold: opts?.bold,
     italics: opts?.italics,
   });
-}
-
-function escapeHtml(text: string) {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
 }
 
 export function buildSceneHeading(
@@ -403,6 +397,7 @@ export function buildSceneScriptPrintHtml(
   return `<!DOCTYPE html>
 <html lang="ru">
 <head>
+  ${PRINT_HTML_CSP_META}
   <meta charset="utf-8" />
   <title>${escapeHtml(opts.projectName)}</title>
   <style>

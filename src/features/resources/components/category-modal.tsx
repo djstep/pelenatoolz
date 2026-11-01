@@ -7,6 +7,7 @@ import {
   type ResourceActionState,
 } from "@/features/resources/actions";
 import type { ResourceCategoryRow } from "@/features/resources/queries";
+import { submitKeepingFields } from "@/shared/ui/forms/submit-keeping-fields";
 import { useActionToast } from "@/shared/ui/toast";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
@@ -112,7 +113,7 @@ export function CategoryModal({
         </div>
       }
     >
-      <form id="category-form" action={action} key={category?.id ?? "new"}>
+      <form id="category-form" onSubmit={submitKeepingFields(action)} key={category?.id ?? "new"}>
         <CategoryFormFields category={category} />
       </form>
     </Modal>

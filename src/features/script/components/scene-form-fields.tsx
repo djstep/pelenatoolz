@@ -47,7 +47,6 @@ export type SceneEditData = {
   title: string | null;
   summary: string | null;
   description: string | null;
-  scriptContent: string | null;
   scriptDay: number | null;
   objectType: string | null;
   sceneKind: SceneKind;

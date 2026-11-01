@@ -1,4 +1,5 @@
 import { requireProjectContext } from "@/features/projects/lib/project-context";
+import { navAccessFromContext } from "@/features/projects/lib/project-nav-groups";
 import { AuditWorkspace } from "@/features/audit/components/audit-workspace";
 import {
   listAuditEntityTypes,
@@ -28,6 +29,8 @@ export default async function AuditLogPage({ params, searchParams }: Props) {
     return <p className="text-sm text-[var(--danger)]">Нет доступа</p>;
   }
 
+  // Записи — только видимых разделов, фин. поля — по фин. правам (features/audit/lib/entity-access.ts).
+  const viewer = { ...navAccessFromContext(ctx), canFinanceRead: ctx.canFinanceRead };
   const page = sp.page ? Number(sp.page) : 1;
   const action =
     sp.action && ["CREATE", "UPDATE", "DELETE"].includes(sp.action)
@@ -35,7 +38,7 @@ export default async function AuditLogPage({ params, searchParams }: Props) {
       : undefined;
 
   const [data, entityTypes] = await Promise.all([
-    listAuditLogs(projectId, {
+    listAuditLogs(projectId, viewer, {
       entityType: sp.entityType,
       action,
       userId: sp.userId,
@@ -44,7 +47,7 @@ export default async function AuditLogPage({ params, searchParams }: Props) {
       search: sp.search,
       page: Number.isFinite(page) ? page : 1,
     }),
-    listAuditEntityTypes(projectId),
+    listAuditEntityTypes(projectId, viewer),
   ]);
 
   return (

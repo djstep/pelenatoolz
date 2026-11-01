@@ -12,6 +12,7 @@ import {
 import type { FinanceVariableRow } from "@/features/finance/queries-variables";
 import { Button } from "@/shared/ui/button";
 import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
+import { submitKeepingFields } from "@/shared/ui/forms/submit-keeping-fields";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Modal } from "@/shared/ui/modal";
@@ -144,7 +145,7 @@ function CustomVariableModal({
     >
       <form
         id="finance-var-form"
-        action={action}
+        onSubmit={submitKeepingFields(action)}
         key={variable?.id ?? "new"}
         className="grid gap-3"
       >

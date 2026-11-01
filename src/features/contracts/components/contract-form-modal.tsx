@@ -26,6 +26,7 @@ import {
   quickCreateCounterpartyAction,
 } from "@/features/counterparties/actions";
 import { Button } from "@/shared/ui/button";
+import { submitKeepingFields } from "@/shared/ui/forms/submit-keeping-fields";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Modal } from "@/shared/ui/modal";
@@ -216,7 +217,7 @@ export function ContractFormModal({
         </div>
       }
     >
-      <form id="contract-form" action={action} className="space-y-4">
+      <form id="contract-form" onSubmit={submitKeepingFields(action)} className="space-y-4">
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
             <Label htmlFor="date">Дата *</Label>

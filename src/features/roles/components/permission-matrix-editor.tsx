@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  ENTITY_FINANCE_SECTIONS,
   isSectionFlagAllowed,
   PERMISSION_FLAGS,
   PERMISSION_SECTIONS,
@@ -22,8 +21,9 @@ const FLAG_LABELS: Record<keyof SectionPermissions, string> = {
   financeUnlock: "Снятие фиксации платежей",
 };
 
+// Фин. флаги — в своих блоках ниже; «Снятие фиксации» есть только у «Финансов».
 const MAIN_FLAGS = PERMISSION_FLAGS.filter(
-  (f) => f !== "financeRead" && f !== "financeWrite",
+  (f) => f !== "financeRead" && f !== "financeWrite" && f !== "financeUnlock",
 );
 
 export type ResourceCategoryOption = {
@@ -274,32 +274,6 @@ export function PermissionMatrixEditor({
           </table>
         </div>
       </div>
-
-      {/* Preserve finance flags for non-entity sections that are not finance */}
-      {PERMISSION_SECTIONS.filter(
-        (s) =>
-          !ENTITY_FINANCE_SECTIONS.includes(s.id) &&
-          s.id !== "finance" &&
-          isSectionFlagAllowed(s.id, "financeRead"),
-      ).map((section) => (
-        <div key={section.id} className="hidden">
-          <input
-            type="checkbox"
-            name={`${prefix}_${section.id}_financeRead`}
-            defaultChecked={matrix[section.id].financeRead}
-          />
-          <input
-            type="checkbox"
-            name={`${prefix}_${section.id}_financeWrite`}
-            defaultChecked={matrix[section.id].financeWrite}
-          />
-          <input
-            type="checkbox"
-            name={`${prefix}_${section.id}_financeUnlock`}
-            defaultChecked={matrix[section.id].financeUnlock}
-          />
-        </div>
-      ))}
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import type { ScriptVersionSourceType } from "@prisma/client";
 import type { ScreenplayBlock } from "@/features/screenplay/lib/block-types";
+import { sanitizeBlockHtml } from "@/features/screenplay/lib/safe-block-html";
 import type { ScriptVersionRow } from "@/features/screenplay/lib/version-types";
 import { prisma } from "@/shared/db/prisma";
 
@@ -124,7 +125,7 @@ export async function replaceVersionBlocks(
         sceneId: block.sceneId,
         type: block.type,
         content: block.content,
-        contentHtml: block.contentHtml ?? null,
+        contentHtml: sanitizeBlockHtml(block.contentHtml),
         sortOrder: block.sortOrder ?? index,
       }));
 
@@ -161,7 +162,7 @@ export async function copyBlocksBetweenVersions(
       sceneId: block.sceneId,
       type: block.type,
       content: block.content,
-      contentHtml: block.contentHtml ?? null,
+      contentHtml: sanitizeBlockHtml(block.contentHtml),
       sortOrder: block.sortOrder,
     })),
   });
@@ -219,7 +220,7 @@ export async function createScriptVersion({
           sceneId: block.sceneId,
           type: block.type,
           content: block.content,
-          contentHtml: block.contentHtml ?? null,
+          contentHtml: sanitizeBlockHtml(block.contentHtml),
           sortOrder: block.sortOrder ?? index,
         })),
       });
@@ -238,7 +239,7 @@ export async function createScriptVersion({
             sceneId: block.sceneId,
             type: block.type,
             content: block.content,
-            contentHtml: block.contentHtml ?? null,
+            contentHtml: sanitizeBlockHtml(block.contentHtml),
             sortOrder: block.sortOrder,
           })),
         });

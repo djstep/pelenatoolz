@@ -3,7 +3,19 @@
 import { CastingCandidateStatus, Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import {
+  castSnapshotClearedAuditMeta,
+  clearCastSnapshotAudited,
+  shouldClearCastSnapshot,
+} from "@/features/casting/lib/cast-snapshot-reject";
+import {
+  castingPersonDeleteLines,
+  loadCastingPersonDeletePlan,
+  type CastingPersonDeleteCounts,
+} from "@/features/casting/lib/delete-person";
+import { deleteAuditions } from "@/features/auditions/lib/delete-auditions";
 import { approveCastingCandidate } from "@/features/preproduction/lib/approve-casting";
+import { fullNameFromParts } from "@/features/preproduction/lib/snapshots";
 import {
   assertInProject,
   isNotInProjectError,
@@ -11,7 +23,9 @@ import {
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { prisma } from "@/shared/db/prisma";
 import { AuditEntityType } from "@/shared/audit/entity-types";
-import { recordAudit } from "@/shared/audit/with-audit";
+import { auditMutation, recordAudit } from "@/shared/audit/with-audit";
+import { safePrintUrl } from "@/shared/lib/escape-html";
+import { toOwnUploadPath } from "@/shared/lib/own-upload-url";
 
 export type CastingActionState = { error?: string; success?: string };
 
@@ -36,7 +50,13 @@ const personSchema = z.object({
   proposedTerms: z.string().trim().max(5000).optional(),
   tags: z.string().trim().max(500).optional(),
   notes: z.string().trim().max(5000).optional(),
-  photoUrl: z.string().trim().max(2000).optional(),
+  photoUrl: z
+    .string()
+    .trim()
+    .max(2000)
+    .optional()
+    .refine((v) => !v || safePrintUrl(v) !== null)
+    .transform((v) => (v ? toOwnUploadPath(v) : v)),
   skills: z.string().trim().optional(),
   birthDate: z.string().optional(),
   education: z.string().trim().max(2000).optional(),
@@ -91,7 +111,12 @@ function personFromForm(formData: FormData) {
     education: formData.get("education") || undefined,
     filmography: formData.get("filmography") || undefined,
   });
-  if (!parsed.success) return { error: "Проверьте данные кандидата" as const };
+  if (!parsed.success) {
+    if (parsed.error.issues.some((issue) => issue.path[0] === "photoUrl")) {
+      return { error: "Фото: только ссылка http(s) или загруженный файл" as const };
+    }
+    return { error: "Проверьте данные кандидата" as const };
+  }
   const { birthDate: birthRaw, ...rest } = parsed.data;
   return {
     data: {
@@ -222,7 +247,12 @@ export async function updateCastingCandidateStatusAction(
 
   const existing = await prisma.castingCandidate.findFirst({
     where: { id: candidateId, projectId },
-    select: { status: true, characterId: true },
+    select: {
+      status: true,
+      characterId: true,
+      character: { select: { name: true, sourceCastingCandidateId: true } },
+      person: { select: { lastName: true, firstName: true, middleName: true } },
+    },
   });
   if (!existing) return { error: "Заявка не найдена" };
 
@@ -232,20 +262,33 @@ export async function updateCastingCandidateStatusAction(
   });
 
   if (
-    existing.status === CastingCandidateStatus.APPROVED &&
-    status === CastingCandidateStatus.REJECTED
+    shouldClearCastSnapshot(status, candidateId, existing.character.sourceCastingCandidateId)
   ) {
-    await prisma.character.updateMany({
-      where: {
-        id: existing.characterId,
+    await clearCastSnapshotAudited(
+      ctx,
+      castSnapshotClearedAuditMeta({
         projectId,
-        sourceCastingCandidateId: candidateId,
+        candidateId,
+        characterId: existing.characterId,
+        characterName: existing.character.name,
+        personName: fullNameFromParts(existing.person),
+        previousStatus: existing.status,
+      }),
+      async () => {
+        const { count } = await prisma.character.updateMany({
+          where: {
+            id: existing.characterId,
+            projectId,
+            sourceCastingCandidateId: candidateId,
+          },
+          data: {
+            castSnapshot: Prisma.DbNull,
+            sourceCastingCandidateId: null,
+          },
+        });
+        return count;
       },
-      data: {
-        castSnapshot: Prisma.DbNull,
-        sourceCastingCandidateId: null,
-      },
-    });
+    );
   }
 
   revalidateCasting(projectId, existing.characterId);
@@ -289,19 +332,65 @@ export async function deleteCastingPersonAction(
   const ctx = await requireProjectContext(projectId);
   if (!ctx.can("cast:write")) return { error: "Недостаточно прав" };
 
-  const person = await prisma.castingPerson.findFirst({
-    where: { id: personId, projectId },
-    select: { lastName: true, firstName: true },
-  });
-  if (!person) return { error: "Кандидат не найден" };
-  await prisma.castingPerson.deleteMany({ where: { id: personId, projectId } });
-  await recordAudit(ctx, {
-    projectId,
-    entityType: AuditEntityType.castingPerson,
-    entityId: personId,
-    action: "DELETE",
-    summary: `Удалён кандидат ${[person.lastName, person.firstName].filter(Boolean).join(" ")}`,
-  });
+  try {
+    await assertInProject("CastingPerson", personId, projectId);
+  } catch (error) {
+    if (isNotInProjectError(error)) return { error: "Кандидат не найден" };
+    throw error;
+  }
+
+  let deleted: { name: string; counts: CastingPersonDeleteCounts };
+  try {
+    deleted = await auditMutation(
+      ctx,
+      () =>
+        // Отказ и список одиночных проб — в той же транзакции, что удаление,
+        // а не из данных окна подтверждения.
+        prisma.$transaction(async (tx) => {
+          const plan = await loadCastingPersonDeletePlan(tx, projectId, personId);
+          if (!plan) throw new CastingPersonDeleteRefused("Кандидат не найден");
+          if (plan.refusal) throw new CastingPersonDeleteRefused(plan.refusal);
+          await deleteAuditions(tx, projectId, plan.soloAuditionIds);
+          await tx.castingPerson.deleteMany({ where: { id: personId, projectId } });
+          return { name: plan.name, counts: plan.counts };
+        }),
+      null,
+      {
+        projectId,
+        entityType: AuditEntityType.castingPerson,
+        entityId: personId,
+        action: "DELETE",
+        summary: (_, r) => `Удалён кандидат кастинга «${r.name}»`,
+        changes: (_, r) => r.counts,
+      },
+    );
+  } catch (error) {
+    if (error instanceof CastingPersonDeleteRefused) return { error: error.message };
+    throw error;
+  }
+
   revalidateCasting(projectId);
-  return { success: "Кандидат удалён" };
+  revalidatePath(`/ru/projects/${projectId}/preproduction/auditions`);
+  return { success: `Кандидат «${deleted.name}» удалён` };
+}
+
+class CastingPersonDeleteRefused extends Error {}
+
+/** Что удалится вместе с кандидатом — для окна подтверждения. */
+export async function getCastingPersonDeleteImpactAction(
+  projectId: string,
+  personId: string,
+): Promise<string[]> {
+  const ctx = await requireProjectContext(projectId);
+  if (!ctx.can("cast:write")) return [];
+  try {
+    await assertInProject("CastingPerson", personId, projectId);
+  } catch (error) {
+    if (isNotInProjectError(error)) return [];
+    throw error;
+  }
+  const plan = await loadCastingPersonDeletePlan(prisma, projectId, personId);
+  if (!plan) return [];
+  if (plan.refusal) return [plan.refusal];
+  return castingPersonDeleteLines(plan.counts);
 }

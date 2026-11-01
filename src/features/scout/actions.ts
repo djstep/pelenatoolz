@@ -5,11 +5,14 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { approveScoutCandidate } from "@/features/preproduction/lib/approve-scout";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
+import { parseMediaUrls, parsePhotoUrls } from "@/features/scout/lib/media-urls";
 import { AuditEntityType } from "@/shared/audit/entity-types";
 import { recordAudit } from "@/shared/audit/with-audit";
 import { prisma } from "@/shared/db/prisma";
 
 export type ScoutActionState = { error?: string; success?: string };
+
+const PHOTO_URL_ERROR = "Фото: только ссылки http(s) или загруженные файлы";
 
 const scoutSchema = z.object({
   locationIds: z.array(z.string().cuid()).min(1),
@@ -22,15 +25,6 @@ const scoutSchema = z.object({
   photoUrls: z.string().trim().optional(),
   videoUrls: z.string().trim().optional(),
 });
-
-function parseMediaUrls(raw: string | undefined) {
-  if (!raw?.trim()) return [];
-  return raw
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((url) => ({ url }));
-}
 
 function parseLocationIds(formData: FormData) {
   return formData.getAll("locationIds").map(String).filter(Boolean);
@@ -76,6 +70,8 @@ export async function createScoutCandidateAction(
     videoUrls: formData.get("videoUrls") || undefined,
   });
   if (!parsed.success) return { error: "Проверьте данные" };
+  const photos = parsePhotoUrls(parsed.data.photoUrls);
+  if (!photos) return { error: PHOTO_URL_ERROR };
 
   if (!(await assertLocations(projectId, parsed.data.locationIds))) {
     return { error: "Одна или несколько локаций не найдены" };
@@ -90,7 +86,7 @@ export async function createScoutCandidateAction(
       contactName: parsed.data.contactName,
       contactPhone: parsed.data.contactPhone,
       notes: parsed.data.notes,
-      photos: parseMediaUrls(parsed.data.photoUrls),
+      photos,
       videos: parseMediaUrls(parsed.data.videoUrls),
       locationLinks: {
         create: parsed.data.locationIds.map((locationId) => ({ locationId })),
@@ -133,6 +129,8 @@ export async function updateScoutCandidateAction(
     videoUrls: formData.get("videoUrls") || undefined,
   });
   if (!parsed.success) return { error: "Проверьте данные" };
+  const photos = parsePhotoUrls(parsed.data.photoUrls);
+  if (!photos) return { error: PHOTO_URL_ERROR };
 
   if (!(await assertLocations(projectId, parsed.data.locationIds))) {
     return { error: "Одна или несколько локаций не найдены" };
@@ -149,7 +147,7 @@ export async function updateScoutCandidateAction(
         contactName: parsed.data.contactName,
         contactPhone: parsed.data.contactPhone,
         notes: parsed.data.notes,
-        photos: parseMediaUrls(parsed.data.photoUrls),
+        photos,
         videos: parseMediaUrls(parsed.data.videoUrls),
         locationLinks: {
           create: parsed.data.locationIds.map((locationId) => ({ locationId })),

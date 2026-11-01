@@ -8,6 +8,7 @@ import {
   type ExportLayoutKey,
   type ExportSettings,
 } from "@/features/exports/types";
+import type { Permission } from "@/features/memberships/permissions";
 
 export function createExportColumnId() {
   return `col-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -34,6 +35,24 @@ export function resolveColumnHeader(col: ExportColumn): string {
 
 export function isExportLayoutKey(value: string): value is ExportLayoutKey {
   return (EXPORT_LAYOUT_KEYS as readonly string[]).includes(value);
+}
+
+/** Право раздела для раскладки: чтение — загрузка в окно, правка — сохранение в проект. */
+const EXPORT_LAYOUT_PERMISSIONS: Record<
+  ExportLayoutKey,
+  { read: Permission; write: Permission }
+> = {
+  libretto: { read: "script:read", write: "script:write" },
+  directorsScript: { read: "script:read", write: "script:write" },
+  kppFull: { read: "schedule:read", write: "schedule:write" },
+  kppShort: { read: "schedule:read", write: "schedule:write" },
+};
+
+export function exportLayoutPermission(
+  key: ExportLayoutKey,
+  action: "read" | "write",
+): Permission {
+  return EXPORT_LAYOUT_PERMISSIONS[key][action];
 }
 
 export function normalizeExportColumn(raw: unknown): ExportColumn | null {

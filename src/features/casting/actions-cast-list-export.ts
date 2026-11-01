@@ -4,10 +4,12 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import {
   loadCastListExportBundle,
+  serializeCastListBundle,
 } from "@/features/casting/lib/cast-list-export-data";
 import {
   buildCastListDocx,
   buildCastListPrintHtml,
+  castListPhotoUrls,
 } from "@/features/casting/lib/export-cast-list";
 import type {
   CastListActorFieldId,
@@ -19,6 +21,11 @@ import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { AuditEntityType } from "@/shared/audit/entity-types";
 import { recordAudit } from "@/shared/audit/with-audit";
 import { prisma } from "@/shared/db/prisma";
+import { isHttpUrl, safePrintUrl } from "@/shared/lib/escape-html";
+import {
+  EXPORT_IMAGES_PARTIAL_WARNING,
+  loadExportImages,
+} from "@/shared/lib/export-image";
 
 const tapeSchema = z.discriminatedUnion("kind", [
   z.object({
@@ -29,14 +36,18 @@ const tapeSchema = z.discriminatedUnion("kind", [
   z.object({
     id: z.string().min(1),
     kind: z.literal("external"),
-    url: z.string().url(),
+    url: z.string().url().refine(isHttpUrl),
     note: z.string().max(500),
   }),
 ]);
 
 const candidateConfigSchema = z.object({
   candidateId: z.string().min(1),
-  photoOverrideUrl: z.string().max(2000).nullable(),
+  photoOverrideUrl: z
+    .string()
+    .max(2000)
+    .nullable()
+    .refine((v) => v === null || safePrintUrl(v) !== null),
   tapes: z.array(tapeSchema),
   commentIds: z.array(z.string()).nullable(),
   commentsManual: z.boolean(),
@@ -57,6 +68,34 @@ const exportPayloadSchema = z.object({
   candidateConfigs: z.array(candidateConfigSchema),
   locale: z.string().min(2).max(8).optional(),
 });
+
+const loadBundlePayloadSchema = z.object({
+  characterId: z.string().min(1),
+  locale: z.string().min(2).max(8).optional(),
+});
+
+/** Набор для окна каст-листа со страницы кастинга: персонаж ищется только внутри проекта из контекста. */
+export async function loadCastListExportBundleAction(
+  projectId: string,
+  payload: unknown,
+) {
+  const ctx = await requireProjectContext(projectId);
+  if (!ctx.can("cast:read")) return { error: "Недостаточно прав" };
+
+  const parsed = loadBundlePayloadSchema.safeParse(payload);
+  if (!parsed.success) return { error: "Персонаж не найден" };
+
+  const bundle = await loadCastListExportBundle(
+    projectId,
+    parsed.data.characterId,
+    parsed.data.locale ?? "ru",
+  );
+  if (!bundle) return { error: "Персонаж не найден" };
+  if (bundle.candidates.length === 0) {
+    return { error: "Нет кандидатов для экспорта" };
+  }
+  return { bundle: serializeCastListBundle(bundle) };
+}
 
 export async function exportCastListAction(
   projectId: string,
@@ -90,11 +129,13 @@ export async function exportCastListAction(
   };
 
   if (parsed.data.format === "docx") {
-    const buf = await buildCastListDocx(args);
+    const photos = await loadExportImages(projectId, castListPhotoUrls(args));
+    const buf = await buildCastListDocx(args, photos);
     return {
       base64: buf.toString("base64"),
       fileName: `cast-list-${bundle.character.name}.docx`,
       mime: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      ...(photos.partial ? { warning: EXPORT_IMAGES_PARTIAL_WARNING } : {}),
     };
   }
 

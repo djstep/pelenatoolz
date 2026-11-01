@@ -8,6 +8,7 @@ import {
 } from "docx";
 import type { ScriptBlockType } from "@prisma/client";
 import { NON_PRINTABLE_BLOCK_TYPES } from "@/features/screenplay/lib/block-types";
+import { escapeHtml, PRINT_HTML_CSP_META } from "@/shared/lib/escape-html";
 
 type ExportBlock = {
   type: ScriptBlockType;
@@ -116,10 +117,7 @@ export function buildScreenplayPrintHtml(
     .map((block) => {
       const text = block.content.trim();
       if (!text) return "";
-      const escaped = text
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;");
+      const escaped = escapeHtml(text);
       const type = block.type.toLowerCase().replace(/_/g, "-");
       return `<p class="screenplay-block screenplay-block--${type}">${escaped}</p>`;
     })
@@ -128,8 +126,9 @@ export function buildScreenplayPrintHtml(
   return `<!DOCTYPE html>
 <html lang="ru">
 <head>
+  ${PRINT_HTML_CSP_META}
   <meta charset="utf-8" />
-  <title>${title.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</title>
+  <title>${escapeHtml(title)}</title>
   <style>
     @page { size: letter; margin: 1in 1in 1in 1.5in; }
     body { font-family: "Courier New", Courier, monospace; font-size: 12pt; line-height: 1.35; color: #000; }

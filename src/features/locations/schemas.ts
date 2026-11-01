@@ -1,5 +1,7 @@
 import { LocationKind } from "@prisma/client";
 import { z } from "zod";
+import { safePrintUrl } from "@/shared/lib/escape-html";
+import { toOwnUploadPath } from "@/shared/lib/own-upload-url";
 
 export const locationFormSchema = z.object({
   name: z.string().trim().min(1).max(200),
@@ -19,7 +21,13 @@ export const locationFormSchema = z.object({
 });
 
 export const locationPhotoSchema = z.object({
-  url: z.string().trim().url().max(2000),
+  // Сначала полный адрес своего сайта → путь, потом проверка: http(s) или путь сайта.
+  url: z
+    .string()
+    .trim()
+    .max(2000)
+    .transform(toOwnUploadPath)
+    .refine((v) => safePrintUrl(v) !== null),
   caption: z.string().trim().max(500).optional(),
 });
 

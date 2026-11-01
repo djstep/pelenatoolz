@@ -3,8 +3,11 @@
 import { useActionState, useState, useTransition, type ReactNode } from "react";
 import type { CastingCandidateStatus } from "@prisma/client";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   addCastingApplicationAction,
+  deleteCastingPersonAction,
+  getCastingPersonDeleteImpactAction,
   updateCastingCandidateStatusAction,
   updateCastingPersonAction,
   type CastingActionState,
@@ -20,6 +23,7 @@ import { StatusSelect } from "@/features/preproduction/components/status-select"
 import { AvailabilityMiniPreview } from "@/features/actor-availability/components/availability-mini-preview";
 import { useActionToast, useToast } from "@/shared/ui/toast";
 import { Button } from "@/shared/ui/button";
+import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
 import { Label } from "@/shared/ui/label";
 import { Select } from "@/shared/ui/select";
 import { useActionSuccess } from "@/shared/ui/unsaved/use-action-success";
@@ -59,6 +63,8 @@ export function CastingPersonDetail({
   const [editOpen, setEditOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const toast = useToast();
+  const router = useRouter();
+  const confirmDelete = useConfirm();
 
   const bound = updateCastingPersonAction.bind(null, projectId, person.id);
   const [state, action, formPending] = useActionState(bound, initial);
@@ -98,6 +104,19 @@ export function CastingPersonDetail({
     });
   }
 
+  function deletePerson() {
+    void confirmDelete({
+      title: `Удалить кандидата «${fullNameFromParts(person)}»?`,
+      details: () => getCastingPersonDeleteImpactAction(projectId, person.id),
+      action: async () => {
+        const result = await deleteCastingPersonAction(projectId, person.id);
+        if (result.error) return result.error;
+        toast.success(result.success ?? "Кандидат удалён");
+        router.push(`/${locale}/projects/${projectId}/preproduction/casting`);
+      },
+    });
+  }
+
   function addApplication(characterId: string) {
     startTransition(async () => {
       const result = await addCastingApplicationAction(
@@ -130,9 +149,14 @@ export function CastingPersonDetail({
             </p>
           </div>
           {canWrite ? (
-            <Button type="button" variant="secondary" onClick={() => setEditOpen(true)}>
-              Редактировать
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="secondary" onClick={() => setEditOpen(true)}>
+                Редактировать
+              </Button>
+              <Button type="button" variant="danger" onClick={deletePerson}>
+                Удалить
+              </Button>
+            </div>
           ) : null}
         </div>
       </div>

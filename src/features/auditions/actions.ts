@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { deleteAuditions } from "@/features/auditions/lib/delete-auditions";
 import {
   assertInProject,
   isNotInProjectError,
@@ -223,7 +224,7 @@ export async function deleteAuditionAction(
   });
   if (!existing) return { error: "Проба не найдена" };
 
-  await prisma.audition.delete({ where: { id: auditionId } });
+  await deleteAuditions(prisma, projectId, [auditionId]);
   await recordAudit(ctx, {
     projectId,
     entityType: AuditEntityType.audition,

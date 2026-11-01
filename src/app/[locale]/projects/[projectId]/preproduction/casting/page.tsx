@@ -8,10 +8,12 @@ import { Card } from "@/shared/ui/card";
 
 type Props = {
   params: Promise<{ locale: string; projectId: string }>;
+  searchParams: Promise<{ character?: string | string[] }>;
 };
 
-export default async function CastingPage({ params }: Props) {
+export default async function CastingPage({ params, searchParams }: Props) {
   const { locale, projectId } = await params;
+  const { character } = await searchParams;
   const ctx = await requireProjectContext(projectId);
 
   if (!ctx.can("cast:read")) {
@@ -38,6 +40,7 @@ export default async function CastingPage({ params }: Props) {
           people={people}
           characters={characters}
           canWrite={ctx.can("cast:write")}
+          characterFilter={typeof character === "string" ? character : undefined}
         />
       </Card>
     </div>

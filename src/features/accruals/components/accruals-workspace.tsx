@@ -22,6 +22,7 @@ import {
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
+import { submitKeepingFields } from "@/shared/ui/forms/submit-keeping-fields";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Modal } from "@/shared/ui/modal";
@@ -381,7 +382,7 @@ function AccrualModal({
         </div>
       }
     >
-      <form id="accrual-form" action={action} key={accrual?.id ?? "new"}>
+      <form id="accrual-form" onSubmit={submitKeepingFields(action)} key={accrual?.id ?? "new"}>
         {accrual?.reportPart ? (
           <ReportAccrualFields
             accrual={accrual}

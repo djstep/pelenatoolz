@@ -8,7 +8,7 @@ import {
   buildPermissionsDocument,
   type CategoryFinancePermissions,
   type PermissionMatrix,
-  isSectionFlagAllowed,
+  normalizePermissionMatrix,
   PERMISSION_FLAGS,
   PERMISSION_SECTIONS,
 } from "@/features/roles/permissions-matrix";
@@ -17,6 +17,7 @@ import {
   isReservedRoleName,
 } from "@/features/roles/role-rules";
 import { AuditEntityType } from "@/shared/audit/entity-types";
+import { auditMemberName } from "@/shared/audit/member-name";
 import { recordAudit } from "@/shared/audit/with-audit";
 import { isForeignKeyError, LINKED_ERROR } from "@/shared/db/foreign-key";
 import { prisma } from "@/shared/db/prisma";
@@ -44,12 +45,12 @@ function matrixFromFormData(formData: FormData): PermissionMatrix {
   const matrix = buildEmptyMatrix();
   for (const section of PERMISSION_SECTIONS) {
     for (const flag of PERMISSION_FLAGS) {
-      if (!isSectionFlagAllowed(section.id, flag)) continue;
       const key = `perm_${section.id}_${flag}`;
       matrix[section.id][flag] = formData.get(key) === "on";
     }
   }
-  return matrix;
+  // Флаги, которых у раздела нет, — false, что бы ни прислал браузер.
+  return normalizePermissionMatrix(matrix);
 }
 
 function categoryFinanceFromFormData(
@@ -274,11 +275,21 @@ export async function deleteRoleAction(
   // Отменённые, просроченные и принятые приглашения уже отработали — удаляются вместе с ролью.
   let deletedInvites = 0;
   let movedMembers = 0;
+  let movedToViewer: { userId: string; name: string }[] = [];
   try {
     await prisma.$transaction(async (tx) => {
       if (viewerId) {
+        const formerWhere = { roleId, projectId, status: MembershipStatus.REMOVED };
+        const former = await tx.projectMembership.findMany({
+          where: formerWhere,
+          select: { userId: true, user: { select: { name: true } } },
+        });
+        movedToViewer = former.map((m) => ({
+          userId: m.userId,
+          name: auditMemberName(m.user.name),
+        }));
         const moved = await tx.projectMembership.updateMany({
-          where: { roleId, projectId, status: MembershipStatus.REMOVED },
+          where: formerWhere,
           data: { roleId: viewerId },
         });
         movedMembers = moved.count;
@@ -303,6 +314,7 @@ export async function deleteRoleAction(
     changes: {
       deletedInvites,
       formerMembersMovedToViewer: movedMembers,
+      ...(movedToViewer.length > 0 ? { movedToViewer } : {}),
     },
   });
 

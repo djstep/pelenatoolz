@@ -6,6 +6,7 @@ import {
   parseBlockHtml,
   safeBlockHtml,
   safeColor,
+  sanitizeBlockHtml,
 } from "@/features/screenplay/lib/safe-block-html";
 
 // Пункт 4 аудита (минимум, шаг 7 волны 4): блок показывается из узлов, а не через innerHTML.
@@ -77,5 +78,57 @@ describe("safe-block-html: форматирование панели сохра�
   test("правка блока без разметки — contentHtml остаётся пустым", () => {
     const shown = safeBlockHtml("Просто текст", null);
     assert.deepEqual(blockFromEditorHtml(`${shown}!`), { content: "Просто текст!", contentHtml: null });
+  });
+});
+
+// Задача 6 волны 2б: очистка contentHtml на сервере перед записью в базу.
+describe("sanitizeBlockHtml: запись в базу", () => {
+  const formatted =
+    '<b>Жир</b> <i>курсив</i> <u>подчёрк</u> <strike>зачёрк</strike> ' +
+    '<font color="#ff0000">цвет</font> <span style="color: rgb(0, 0, 255);">синий</span> ' +
+    '<span style="background-color: rgb(255, 255, 0);">фон</span><br>строка';
+
+  const cases: [string, string | null][] = [
+    ["<img src=x onerror=alert(1)>", null],
+    ["<script>alert(1)</script>", null],
+    ['<a href="javascript:alert(1)">ссылка</a>', null],
+    ['<span style="background:url(https://example.com/x.png)">т</span>', null],
+    ['<span style="color: red">т</span>', null],
+    ["&lt;script&gt;alert(1)&lt;/script&gt;", null],
+    ["   ", null],
+    ['<b>жир</b><img src=x onerror="alert(1)">', "<b>жир</b>"],
+    ['<b onclick="alert(1)">жир</b><script>alert(1)</script> текст', "<b>жир</b> текст"],
+    ['<span style="color: #f00; background: url(x)">т</span>', '<span style="color: #f00;">т</span>'],
+    ["<b><i><u>т</u></i></b>", "<b><i><u>т</u></i></b>"],
+    ['<b><a href="javascript:alert(1)"><i>т</i></a></b>', "<b><i>т</i></b>"],
+    ["<b>жир <i>курсив", "<b>жир <i>курсив</i></b>"],
+    ["<b>&lt;script&gt;alert(1)&lt;/script&gt;</b>", "<b>&lt;script&gt;alert(1)&lt;/script&gt;</b>"],
+    ["<span><b>т</b></span>", "<span><b>т</b></span>"],
+    [formatted, formatted],
+  ];
+  for (const [input, expected] of cases) {
+    test(input.trim() || "(пробелы)", () => assert.equal(sanitizeBlockHtml(input), expected));
+  }
+
+  test("пусто и null — null", () => {
+    assert.equal(sanitizeBlockHtml(null), null);
+    assert.equal(sanitizeBlockHtml(undefined), null);
+    assert.equal(sanitizeBlockHtml(""), null);
+  });
+
+  test("результат совпадает с показом в редакторе", () => {
+    for (const [input] of cases) {
+      const clean = sanitizeBlockHtml(input);
+      if (clean === null) continue;
+      assert.equal(clean, safeBlockHtml("", input), input);
+      assert.equal(safeBlockHtml("", clean), clean, input);
+    }
+  });
+
+  test("повторная очистка ничего не меняет", () => {
+    for (const [input] of cases) {
+      const clean = sanitizeBlockHtml(input);
+      assert.equal(sanitizeBlockHtml(clean), clean, input);
+    }
   });
 });

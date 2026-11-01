@@ -33,6 +33,7 @@ import {
 } from "@/features/casting/lib/cast-list-export-fields";
 import { formatDateShort } from "@/shared/i18n/format-date";
 import { cn } from "@/shared/lib/cn";
+import { printWhenImagesSettled } from "@/shared/lib/print-window";
 import { Button } from "@/shared/ui/button";
 import { ImageUpload } from "@/shared/ui/image-upload";
 import { Input } from "@/shared/ui/input";
@@ -450,6 +451,7 @@ export function CastListExportModal({
       }
       if ("base64" in result && result.base64) {
         downloadBase64(result.base64, result.fileName, result.mime);
+        if ("warning" in result && result.warning) toast.warning(result.warning);
         toast.success("Файл сохранён");
         onClose();
         return;
@@ -459,6 +461,8 @@ export function CastListExportModal({
         if (win) {
           win.document.write(result.html);
           win.document.close();
+          // Скрипты в странице печати запрещены (CSP) — печать вызывается отсюда, после загрузки фото.
+          printWhenImagesSettled(win);
         }
         toast.success("Открыто окно печати");
         onClose();
