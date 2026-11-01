@@ -219,6 +219,8 @@ model User {
   name         String
   passwordHash String
   phone        String?
+  /// Почта для Google (доступы к Диску); может отличаться от почты входа.
+  googleEmail  String?
   avatarUrl    String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -314,6 +316,10 @@ model Project {
   resourceCategories ResourceCategory[]
   actorAvailabilityRows ActorAvailabilityRow[]
   departments Department[]
+  callSheetTemplateLeaders   CallSheetTemplateLeader[]
+  callSheetTemplateCrewCalls CallSheetTemplateCrewCall[]
+  callSheetTemplateBaseItems CallSheetTemplateBaseItem[]
+  callSheets                 CallSheet[]
 
   @@index([createdById])
   @@index([status])
@@ -351,6 +357,8 @@ model ProjectMembership {
   user    User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
   role    ProjectRoleDefinition @relation(fields: [roleId], references: [id])
   departmentHeads DepartmentHead[]
+  callSheetTemplateLeaders CallSheetTemplateLeader[]
+  callSheetLeaders         CallSheetLeader[]
 
   @@unique([projectId, userId])
   @@index([userId])
@@ -373,6 +381,8 @@ model Department {
   budget      Budget?
   budgetItems BudgetItem[]
   budgetVersions BudgetVersion[]
+  callSheetTemplateCrewCalls CallSheetTemplateCrewCall[]
+  callSheetCrewCalls         CallSheetCrewCall[]
 
   @@unique([projectId, name])
   @@unique([projectId, codePrefix])
@@ -991,6 +1001,7 @@ model ShootDay {
   productionReport ProductionReport?
   shootAttempts    SceneShootAttempt[]
   accruals         Accrual[]
+  callSheet        CallSheet?
 
   @@unique([projectId, dayNumber])
   @@index([projectId, date])
@@ -1014,6 +1025,131 @@ model SceneShootAttempt {
   @@unique([sceneId, shootDayId])
   @@index([sceneId, shootDate])
   @@index([shootDayId])
+}
+
+/// Шаблон вызывного: руководитель группы. Человек — участник проекта или свободное имя.
+model CallSheetTemplateLeader {
+  id           String   @id @default(cuid())
+  projectId    String
+  position     String
+  shortTitle   String?
+  membershipId String?
+  /// Свободное имя (если не участник проекта).
+  personName   String?
+  /// Телефон свободного имени. У участника телефон — из профиля.
+  phone        String?
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  project    Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  membership ProjectMembership? @relation(fields: [membershipId], references: [id], onDelete: SetNull)
+
+  @@index([projectId, sortOrder])
+  @@index([membershipId])
+}
+
+/// Шаблон вызывного: вызов цеха. Цех проекта или своя строка (каскадёры, рабочие…).
+/// Цех удалён — строка шаблона удаляется вместе с ним.
+model CallSheetTemplateCrewCall {
+  id           String   @id @default(cuid())
+  projectId    String
+  departmentId String?
+  /// Своя строка (если не цех проекта).
+  label        String?
+  callTime     String?
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  project    Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  department Department? @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, sortOrder])
+  @@index([departmentId])
+}
+
+/// Шаблон вызывного: база и транспорт группы.
+model CallSheetTemplateBaseItem {
+  id        String   @id @default(cuid())
+  projectId String
+  name      String
+  callTime  String?
+  notNeeded Boolean  @default(false)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, sortOrder])
+}
+
+/// Вызывной дня КПП (1 к 1). Создаётся только кнопкой «Создать вызывной».
+model CallSheet {
+  id                String   @id @default(cuid())
+  projectId         String
+  shootDayId        String   @unique
+  /// Когда блоки руководителей, цехов и базы последний раз заполнены из шаблона.
+  templateAppliedAt DateTime @default(now())
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  project   Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  shootDay  ShootDay            @relation(fields: [shootDayId], references: [id], onDelete: Cascade)
+  leaders   CallSheetLeader[]
+  crewCalls CallSheetCrewCall[]
+  baseItems CallSheetBaseItem[]
+
+  @@index([projectId])
+}
+
+/// Руководитель в вызывном — копия строки шаблона: ФИ и телефон участника скопированы.
+model CallSheetLeader {
+  id           String  @id @default(cuid())
+  callSheetId  String
+  position     String
+  shortTitle   String?
+  membershipId String?
+  personName   String?
+  phone        String?
+  sortOrder    Int     @default(0)
+
+  callSheet  CallSheet          @relation(fields: [callSheetId], references: [id], onDelete: Cascade)
+  membership ProjectMembership? @relation(fields: [membershipId], references: [id], onDelete: SetNull)
+
+  @@index([callSheetId, sortOrder])
+  @@index([membershipId])
+}
+
+/// Вызов цеха в вызывном — копия строки шаблона: название цеха скопировано.
+model CallSheetCrewCall {
+  id           String  @id @default(cuid())
+  callSheetId  String
+  departmentId String?
+  label        String
+  callTime     String?
+  sortOrder    Int     @default(0)
+
+  callSheet  CallSheet   @relation(fields: [callSheetId], references: [id], onDelete: Cascade)
+  department Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+
+  @@index([callSheetId, sortOrder])
+  @@index([departmentId])
+}
+
+/// База и транспорт группы в вызывном — копия строки шаблона.
+model CallSheetBaseItem {
+  id          String  @id @default(cuid())
+  callSheetId String
+  name        String
+  callTime    String?
+  notNeeded   Boolean @default(false)
+  sortOrder   Int     @default(0)
+
+  callSheet CallSheet @relation(fields: [callSheetId], references: [id], onDelete: Cascade)
+
+  @@index([callSheetId, sortOrder])
 }
 
 model DepartmentCallTime {

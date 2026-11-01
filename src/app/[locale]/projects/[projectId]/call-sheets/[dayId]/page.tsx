@@ -1,6 +1,8 @@
 import { notFound } from "next/navigation";
 import { isWorkingShootDay } from "@/features/schedule/lib/shoot-day-type";
 import { syncShootDayResourceUsages } from "@/features/schedule/lib/sync-shoot-day-resources";
+import { CallSheetTemplateBlocks } from "@/features/call-sheets/components/call-sheet-template-blocks";
+import { getCallSheetForDay } from "@/features/call-sheets/queries";
 import { CallSheetView } from "@/features/day-docs/components/call-sheet-view";
 import { fetchCityAstro } from "@/features/day-docs/lib/city-astro";
 import {
@@ -68,6 +70,7 @@ export default async function CallSheetDayPage({ params }: Props) {
     resourceTimingBaselines,
     perShiftCatalog,
     resourceCategories,
+    callSheet,
   ] = await Promise.all([
     fetchCityAstro(
       bundleFresh.project.city,
@@ -79,6 +82,7 @@ export default async function CallSheetDayPage({ params }: Props) {
     getResourceTimingBaselines(projectId, dayId),
     listPerShiftCatalogForDay(projectId, dayId),
     listResourceCategories(projectId),
+    getCallSheetForDay(projectId, dayId),
   ]);
 
   const nextDayAstro = nextDay
@@ -92,23 +96,44 @@ export default async function CallSheetDayPage({ params }: Props) {
   const canEdit =
     ctx.can("callsheet:write") || ctx.can("schedule:write");
 
+  const appliedAtLabel = callSheet
+    ? callSheet.templateAppliedAt.toLocaleString("ru-RU", {
+        timeZone: bundleFresh.project.timezone,
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : null;
+
   return (
-    <CallSheetView
-      locale={locale}
-      projectId={projectId}
-      bundle={bundleFresh}
-      astro={astro}
-      nextDay={nextDay}
-      nextDayAstro={nextDayAstro}
-      canEdit={canEdit}
-      timingBaselines={timingBaselines}
-      resourceTimingBaselines={resourceTimingBaselines}
-      perShiftCatalog={perShiftCatalog}
-      resourceCategories={resourceCategories.map((c) => ({
-        id: c.id,
-        name: c.name,
-        perShift: c.perShift,
-      }))}
-    />
+    <div className="space-y-4">
+      <CallSheetTemplateBlocks
+        locale={locale}
+        projectId={projectId}
+        dayId={dayId}
+        callSheet={callSheet}
+        appliedAtLabel={appliedAtLabel}
+        canEdit={canEdit}
+      />
+      <CallSheetView
+        locale={locale}
+        projectId={projectId}
+        bundle={bundleFresh}
+        astro={astro}
+        nextDay={nextDay}
+        nextDayAstro={nextDayAstro}
+        canEdit={canEdit}
+        timingBaselines={timingBaselines}
+        resourceTimingBaselines={resourceTimingBaselines}
+        perShiftCatalog={perShiftCatalog}
+        resourceCategories={resourceCategories.map((c) => ({
+          id: c.id,
+          name: c.name,
+          perShift: c.perShift,
+        }))}
+      />
+    </div>
   );
 }

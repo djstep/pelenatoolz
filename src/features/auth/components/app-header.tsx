@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { auth } from "@/auth";
 import { logoutAction } from "@/features/auth/actions";
+import { prisma } from "@/shared/db/prisma";
 import { AppBrand } from "@/shared/ui/app-brand";
 import { ThemeToggle } from "@/shared/theme/theme-toggle";
 import { Button } from "@/shared/ui/button";
@@ -14,6 +15,11 @@ export async function AppHeader({ locale }: { locale: string }) {
   if (!session?.user) {
     redirect(`/${locale}/login`);
   }
+
+  // Имя — из базы: в сессии оно остаётся прежним до нового входа, а профиль его меняет.
+  const profile = session.user.id
+    ? await prisma.user.findUnique({ where: { id: session.user.id }, select: { name: true } })
+    : null;
 
   return (
     <header className="glass-header sticky top-0 z-50">
@@ -33,9 +39,13 @@ export async function AppHeader({ locale }: { locale: string }) {
         </div>
         <div className="flex items-center gap-3 text-sm">
           <ThemeToggle />
-          <span className="hidden rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-[var(--muted-fg)] sm:inline">
-            {session.user.name ?? session.user.email}
-          </span>
+          <Link
+            href={`/${locale}/profile`}
+            title="Профиль"
+            className="hidden rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-[var(--muted-fg)] transition hover:text-[var(--foreground)] sm:inline"
+          >
+            {profile?.name || session.user.name || session.user.email}
+          </Link>
           <form action={logoutAction}>
             <Button type="submit" variant="ghost">
               {t("logout")}

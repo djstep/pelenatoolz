@@ -164,6 +164,12 @@ export const projectNavGroups: NavGroupDef[] = [
       },
       { href: "/settings/resources", label: "Ресурсы", visible: anyOf("script:read") },
       {
+        href: "/settings/call-sheet-template",
+        label: "Шаблон вызывного",
+        // Как canEditCallSheets (features/call-sheets/lib/template-rules.ts).
+        visible: anyOf("callsheet:write", "schedule:write"),
+      },
+      {
         href: "/settings/departments",
         label: "Цеха",
         // Как canManageDepartments (features/smeta/lib/smeta-access.ts).
