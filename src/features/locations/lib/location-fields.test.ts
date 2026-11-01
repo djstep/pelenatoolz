@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import {
   LOCATION_FIELDS,
+  SCENE_LOCATION_SELECT,
   SCOUT_SNAPSHOT_FIELDS,
   SCOUT_SNAPSHOT_INPUT_FIELDS,
 } from "@/features/locations/lib/location-fields";
@@ -66,5 +67,26 @@ describe("карточка ресурса", () => {
     const out = pickFinanceFields(item, RESOURCE_ITEM_FIELDS, true);
     assert.equal(out.shiftRate, 8000);
     assert.equal(out.kmRate, 40);
+  });
+});
+
+describe("объект в сценах (либретто, КПП, вызывной)", () => {
+  const keys = Object.keys(SCENE_LOCATION_SELECT);
+
+  test("из базы берутся только открытые поля объекта", () => {
+    const open: readonly string[] = LOCATION_FIELDS.open;
+    for (const key of keys) assert.ok(open.includes(key), key);
+  });
+
+  test("ни одного фин. поля и нет снимка скаута со стоимостью", () => {
+    const finance: readonly string[] = LOCATION_FIELDS.finance;
+    assert.deepEqual(keys.filter((key) => finance.includes(key)), []);
+    assert.equal(keys.includes("scoutSnapshot"), false);
+  });
+
+  test("название и вид объекта есть — по ним работают сцены и фильтры либретто", () => {
+    for (const key of ["id", "name", "sublocation", "locationKind", "address"]) {
+      assert.ok(keys.includes(key), key);
+    }
   });
 });

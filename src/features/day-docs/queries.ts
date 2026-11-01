@@ -1,3 +1,4 @@
+import { SCENE_LOCATION_SELECT } from "@/features/locations/lib/location-fields";
 import { prisma } from "@/shared/db/prisma";
 import { serializeForClient } from "@/shared/db/serialize-decimal";
 import {
@@ -22,7 +23,7 @@ const sceneSelect = {
   dayNight: true,
   status: true,
   scriptDay: true,
-  locations: { include: { location: true } },
+  locations: { include: { location: { select: SCENE_LOCATION_SELECT } } },
   characters: { include: { character: true } },
   resources: true,
   resourceItems: {
@@ -117,7 +118,7 @@ export async function getNextShootDayBrief(
               postfix: true,
               episodeNumber: true,
               dayNight: true,
-              locations: { include: { location: true } },
+              locations: { include: { location: { select: SCENE_LOCATION_SELECT } } },
             },
           },
         },

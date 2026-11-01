@@ -36,6 +36,32 @@ export const LOCATION_FIELDS = {
   ],
 } as const;
 
+const SCENE_LOCATION_KEYS = [
+  "id",
+  "projectId",
+  "name",
+  "sublocation",
+  "locationKind",
+  "hasDecoration",
+  "address",
+  "tags",
+  "notes",
+  "requirementNotes",
+  "sourceScoutCandidateId",
+  "createdAt",
+  "updatedAt",
+] as const satisfies readonly (typeof LOCATION_FIELDS.open)[number][];
+
+/**
+ * Объект в выборках сцен (либретто, сценарий, КПП, вызывной) — вместо `location: true`.
+ * Только открытые поля `LOCATION_FIELDS` (проверка типов не даст добавить фин. поле).
+ * Эти экраны денег объекта не показывают, поэтому фин. поля и снимок скаута (в нём стоимость)
+ * из базы не берутся ни для кого.
+ */
+export const SCENE_LOCATION_SELECT = Object.fromEntries(
+  SCENE_LOCATION_KEYS.map((key) => [key, true]),
+) as { readonly [K in (typeof SCENE_LOCATION_KEYS)[number]]: true };
+
 /** Снимок утверждённой площадки (`LocationScoutSnapshot`): стоимость — фин. условие объекта. */
 export const SCOUT_SNAPSHOT_FIELDS = {
   open: ["title", "address", "contactName", "contactPhone", "photos", "videos", "notes", "approvedAt"],

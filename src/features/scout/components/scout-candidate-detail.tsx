@@ -16,6 +16,7 @@ import {
 import type { ScoutCandidateDetail } from "@/features/scout/queries";
 import { scoutStatusOptions } from "@/features/preproduction/lib/status-labels";
 import { StatusSelect } from "@/features/preproduction/components/status-select";
+import type { FinanceAccess } from "@/shared/lib/finance-fields";
 import { submitKeepingFields } from "@/shared/ui/forms/submit-keeping-fields";
 import { useActionToast, useToast } from "@/shared/ui/toast";
 import { Button } from "@/shared/ui/button";
@@ -41,12 +42,15 @@ export function ScoutCandidateDetail({
   candidate,
   locations,
   canWrite,
+  finance,
 }: {
   projectId: string;
   locale: string;
   candidate: ScoutCandidateDetail;
   locations: LocationOpt[];
   canWrite: boolean;
+  /** Стоимость площадки — фин. условие объектов. */
+  finance: FinanceAccess;
 }) {
   const [editOpen, setEditOpen] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -127,10 +131,12 @@ export function ScoutCandidateDetail({
             </ul>
           </div>
           <div className="grid gap-3 text-sm md:grid-cols-2">
-            <div>
-              <span className="text-[var(--muted-fg)]">Стоимость</span>
-              <p className="font-medium">{candidate.cost ?? "—"}</p>
-            </div>
+            {finance !== "none" ? (
+              <div>
+                <span className="text-[var(--muted-fg)]">Стоимость</span>
+                <p className="font-medium">{candidate.cost ?? "—"}</p>
+              </div>
+            ) : null}
             <div>
               <span className="text-[var(--muted-fg)]">Контакт</span>
               <p className="font-medium">
@@ -229,7 +235,7 @@ export function ScoutCandidateDetail({
         }
       >
         <form id="scout-edit-form" onSubmit={submitKeepingFields(action)} key={candidate.updatedAt.toISOString()}>
-          <ScoutFormFields candidate={candidate} locations={locations} />
+          <ScoutFormFields candidate={candidate} locations={locations} finance={finance} />
         </form>
       </Modal>
     </div>

@@ -6,9 +6,11 @@ import { z } from "zod";
 import { approveScoutCandidate } from "@/features/preproduction/lib/approve-scout";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { parseMediaUrls, parsePhotoUrls } from "@/features/scout/lib/media-urls";
+import { SCOUT_CANDIDATE_INPUT_FIELDS } from "@/features/scout/lib/scout-fields";
 import { AuditEntityType } from "@/shared/audit/entity-types";
 import { recordAudit } from "@/shared/audit/with-audit";
 import { prisma } from "@/shared/db/prisma";
+import { pickFinanceFields } from "@/shared/lib/finance-fields";
 
 export type ScoutActionState = { error?: string; success?: string };
 
@@ -58,17 +60,24 @@ export async function createScoutCandidateAction(
   if (!ctx.can("script:write")) return { error: "Недостаточно прав" };
 
   const locationIds = parseLocationIds(formData);
-  const parsed = scoutSchema.safeParse({
-    locationIds,
-    title: formData.get("title"),
-    address: formData.get("address") || undefined,
-    cost: formData.get("cost") || undefined,
-    contactName: formData.get("contactName") || undefined,
-    contactPhone: formData.get("contactPhone") || undefined,
-    notes: formData.get("notes") || undefined,
-    photoUrls: formData.get("photoUrls") || undefined,
-    videoUrls: formData.get("videoUrls") || undefined,
-  });
+  // Стоимость — фин. условие объектов: без фин. правки присланное значение отбрасывается.
+  const parsed = scoutSchema.safeParse(
+    pickFinanceFields(
+      {
+        locationIds,
+        title: formData.get("title"),
+        address: formData.get("address") || undefined,
+        cost: formData.get("cost") || undefined,
+        contactName: formData.get("contactName") || undefined,
+        contactPhone: formData.get("contactPhone") || undefined,
+        notes: formData.get("notes") || undefined,
+        photoUrls: formData.get("photoUrls") || undefined,
+        videoUrls: formData.get("videoUrls") || undefined,
+      },
+      SCOUT_CANDIDATE_INPUT_FIELDS,
+      ctx.canFinanceWrite("locations"),
+    ),
+  );
   if (!parsed.success) return { error: "Проверьте данные" };
   const photos = parsePhotoUrls(parsed.data.photoUrls);
   if (!photos) return { error: PHOTO_URL_ERROR };
@@ -117,17 +126,24 @@ export async function updateScoutCandidateAction(
   }
 
   const locationIds = parseLocationIds(formData);
-  const parsed = scoutSchema.safeParse({
-    locationIds,
-    title: formData.get("title"),
-    address: formData.get("address") || undefined,
-    cost: formData.get("cost") || undefined,
-    contactName: formData.get("contactName") || undefined,
-    contactPhone: formData.get("contactPhone") || undefined,
-    notes: formData.get("notes") || undefined,
-    photoUrls: formData.get("photoUrls") || undefined,
-    videoUrls: formData.get("videoUrls") || undefined,
-  });
+  // Стоимость — фин. условие объектов: без фин. правки присланное значение отбрасывается.
+  const parsed = scoutSchema.safeParse(
+    pickFinanceFields(
+      {
+        locationIds,
+        title: formData.get("title"),
+        address: formData.get("address") || undefined,
+        cost: formData.get("cost") || undefined,
+        contactName: formData.get("contactName") || undefined,
+        contactPhone: formData.get("contactPhone") || undefined,
+        notes: formData.get("notes") || undefined,
+        photoUrls: formData.get("photoUrls") || undefined,
+        videoUrls: formData.get("videoUrls") || undefined,
+      },
+      SCOUT_CANDIDATE_INPUT_FIELDS,
+      ctx.canFinanceWrite("locations"),
+    ),
+  );
   if (!parsed.success) return { error: "Проверьте данные" };
   const photos = parsePhotoUrls(parsed.data.photoUrls);
   if (!photos) return { error: PHOTO_URL_ERROR };

@@ -1,10 +1,11 @@
+import { SCENE_LOCATION_SELECT } from "@/features/locations/lib/location-fields";
 import { prisma } from "@/shared/db/prisma";
 
 export async function listScenes(projectId: string) {
   return prisma.scene.findMany({
     where: { projectId },
     include: {
-      locations: { include: { location: true } },
+      locations: { include: { location: { select: SCENE_LOCATION_SELECT } } },
       characters: {
         include: {
           character: {
@@ -57,7 +58,7 @@ export async function getSceneForEdit(projectId: string, sceneId: string) {
   return prisma.scene.findFirst({
     where: { id: sceneId, projectId },
     include: {
-      locations: { include: { location: true } },
+      locations: { include: { location: { select: SCENE_LOCATION_SELECT } } },
       characters: { include: { character: true } },
       elements: { include: { element: true } },
       resources: true,

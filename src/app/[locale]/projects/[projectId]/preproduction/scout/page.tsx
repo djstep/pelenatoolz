@@ -2,6 +2,7 @@ import { ScoutWorkspace } from "@/features/scout/components/scout-workspace";
 import { listScoutCandidates } from "@/features/scout/queries";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { prisma } from "@/shared/db/prisma";
+import { financeAccess } from "@/shared/lib/finance-fields";
 import { Card } from "@/shared/ui/card";
 
 type Props = {
@@ -17,7 +18,7 @@ export default async function ScoutPage({ params }: Props) {
   }
 
   const [candidates, locations] = await Promise.all([
-    listScoutCandidates(projectId),
+    listScoutCandidates(projectId, ctx.canFinanceRead("locations")),
     prisma.location.findMany({
       where: { projectId },
       select: { id: true, name: true, sublocation: true },
@@ -40,6 +41,7 @@ export default async function ScoutPage({ params }: Props) {
           candidates={candidates}
           locations={locations}
           canWrite={ctx.can("script:write")}
+          finance={financeAccess(ctx.canFinanceRead("locations"), ctx.canFinanceWrite("locations"))}
         />
       </Card>
     </div>

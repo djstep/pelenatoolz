@@ -1,3 +1,4 @@
+import { SCENE_LOCATION_SELECT } from "@/features/locations/lib/location-fields";
 import { prisma } from "@/shared/db/prisma";
 
 const sceneDetailSelect = {
@@ -15,7 +16,7 @@ const sceneDetailSelect = {
   status: true,
   cutAt: true,
   scriptDay: true,
-  locations: { include: { location: true } },
+  locations: { include: { location: { select: SCENE_LOCATION_SELECT } } },
   characters: { include: { character: true } },
 } as const;
 
