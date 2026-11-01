@@ -3,6 +3,7 @@ import { once } from "node:events";
 import { PassThrough } from "node:stream";
 import { describe, test } from "node:test";
 import ExcelJS from "exceljs";
+import { isFormulaLike } from "@/shared/lib/excel-safe";
 import { buildCallSheetHtml } from "@/features/call-sheets/print/print-html";
 import {
   buildCallSheetPrintModel,
@@ -79,7 +80,7 @@ describe("вызывной в Excel", () => {
     source.sheet!.schemeLocation!.address = "=адрес схемы";
     source.elements!.manual.push({
       ...source.elements!.manual[2]!,
-      name: "+1",
+      name: "+cmd|' /C calc'!A0",
       notes: "-x",
     });
     source.day.transports[0]!.notes = "-примечание";
@@ -94,7 +95,7 @@ describe("вызывной в Excel", () => {
       "'-важно",
       "'@цех",
       "'=адрес схемы",
-      "'+1",
+      "'+cmd|' /C calc'!A0",
       "'-x",
       "'-примечание",
       "'@cmd",
@@ -105,8 +106,12 @@ describe("вызывной в Excel", () => {
     assert.ok(values.some((v) => v.startsWith("'+79990000000 адрес")));
     assert.ok(values.some((v) => v.startsWith("'@cmd, ")));
     for (const value of values) {
-      assert.doesNotMatch(value, /^[=+\-@\t\r]/, `ячейка начинается со знака формулы: ${value}`);
+      assert.ok(!isFormulaLike(value), `ячейка похожа на формулу: ${value}`);
     }
+    // Телефон и температура со знаком — без апострофа.
+    assert.ok(values.includes("+7 921 555-01-01"));
+    assert.ok(!values.some((v) => v.startsWith("'+7 921")));
+    assert.ok(values.includes("+6°"));
   });
 
   test("ставки км нет", () => {

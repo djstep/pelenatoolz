@@ -70,7 +70,7 @@ function main() {
     { name: "callsheet-min", source: MIN_DAY_SOURCE },
   ];
   for (const { name, source } of variants) {
-    const html = buildCallSheetHtml(buildCallSheetPrintModel(source), { fontCss });
+    const html = buildCallSheetHtml(buildCallSheetPrintModel(source), { font: "embed" });
     const file = path.join(OUT_DIR, `${name}.html`);
     writeFileSync(file, html, "utf8");
     console.log(`${path.relative(process.cwd(), file)} (${kb(file)})`);

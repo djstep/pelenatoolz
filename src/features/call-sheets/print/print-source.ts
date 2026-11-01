@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { CallSheetBlocks } from "@/features/call-sheets/queries";
 import type { ElementsEditorData } from "@/features/call-sheets/elements-queries";
 import type {
@@ -99,4 +100,15 @@ export function attachmentDisposition(fileName: string): string {
     (ch) => `%${ch.charCodeAt(0).toString(16).toUpperCase()}`,
   );
   return `attachment; filename="${ascii}"; filename*=UTF-8''${encoded}`;
+}
+
+// ---- Адрес просмотра ----
+
+/**
+ * Адрес листа для просмотра на странице. `v` — отпечаток модели: правки и «Обновить из КПП»
+ * меняют модель → меняется адрес → iframe перезагружается; без правок — тот же адрес.
+ */
+export function callSheetPreviewSrc(projectId: string, dayId: string, model: CallSheetPrintModel) {
+  const version = createHash("sha256").update(JSON.stringify(model)).digest("hex").slice(0, 16);
+  return `/api/projects/${encodeURIComponent(projectId)}/call-sheets/${encodeURIComponent(dayId)}/sheet?v=${version}`;
 }

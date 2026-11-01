@@ -58,7 +58,7 @@ export async function buildAttendanceSheetXlsx(model: AttendanceSheetModel) {
     styleHeaderRow(header);
 
     if (section.rows.length === 0) {
-      sheet.addRow(["", "Нет записей в вызывном", "", "", "", ""]);
+      sheet.addRow(["", section.emptyText ?? "Нет записей в вызывном", "", "", "", ""]);
     } else {
       section.rows.forEach((row, index) => {
         const dataRow = sheet.addRow([

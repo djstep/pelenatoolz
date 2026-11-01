@@ -8,14 +8,16 @@ const SHEET_WIDTH_PX = 820;
 const INITIAL_HEIGHT_PX = 1160;
 
 /**
- * Просмотр листа вызывного — тот же HTML, что идёт в печать, в `<iframe srcDoc sandbox>`:
- * стили листа не смешиваются со стилями сайта, лист белый в обеих темах.
+ * Просмотр листа вызывного — тот же HTML, что идёт в печать, в `<iframe src sandbox>`
+ * (маршрут `…/call-sheets/[dayId]/sheet`, право проверяет он). В данные страницы HTML не
+ * попадает — браузер берёт его один раз, шрифт — отдельным файлом из кэша.
+ * Стили листа не смешиваются со стилями сайта, лист белый в обеих темах.
  * `sandbox` без `allow-scripts` — скрипты в листе не выполняются (их там и нет, плюс CSP);
  * `allow-same-origin` нужен только чтобы снаружи узнать высоту листа.
  * Ширина — как у A4, на узком экране лист уменьшается целиком.
- * Новый HTML (после сохранения правок или «Обновить из КПП») перезагружает просмотр.
+ * Новый адрес (после сохранения правок или «Обновить из КПП» меняется `v`) перезагружает просмотр.
  */
-export function CallSheetPreview({ html }: { html: string }) {
+export function CallSheetPreview({ src }: { src: string }) {
   const boxRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<HTMLIFrameElement>(null);
   const [scale, setScale] = useState(1);
@@ -29,14 +31,14 @@ export function CallSheetPreview({ html }: { html: string }) {
 
   const onLoad = useCallback(() => {
     measure();
-    // Шрифт встроен в лист — после его загрузки строки могут перестроиться.
+    // Шрифт грузится отдельным файлом — после него строки могут перестроиться.
     void frameRef.current?.contentDocument?.fonts?.ready.then(measure);
   }, [measure]);
 
   // Лист мог загрузиться до гидратации — тогда `onLoad` уже прошёл мимо.
   useEffect(() => {
     if (frameRef.current?.contentDocument?.readyState === "complete") onLoad();
-  }, [html, onLoad]);
+  }, [src, onLoad]);
 
   useEffect(() => {
     const box = boxRef.current;
@@ -58,7 +60,7 @@ export function CallSheetPreview({ html }: { html: string }) {
         <iframe
           ref={frameRef}
           title="Вызывной лист"
-          srcDoc={html}
+          src={src}
           sandbox="allow-same-origin"
           onLoad={onLoad}
           className="block border-0 bg-white"

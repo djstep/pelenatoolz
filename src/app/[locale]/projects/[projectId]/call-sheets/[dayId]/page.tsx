@@ -9,10 +9,9 @@ import {
   canReadCallSheet,
   getWorkingDayPosition,
 } from "@/features/call-sheets/print/load-print-model";
-import { loadMedeoFontCss } from "@/features/call-sheets/print/medeo-font";
-import { buildCallSheetHtml } from "@/features/call-sheets/print/print-html";
 import { buildCallSheetPrintModel } from "@/features/call-sheets/print/print-model";
 import {
+  callSheetPreviewSrc,
   dayLocationsOf,
   printSourceFromPageData,
 } from "@/features/call-sheets/print/print-source";
@@ -128,12 +127,14 @@ export default async function CallSheetDayPage({ params }: Props) {
       : Promise.resolve(null),
   ]);
 
-  // Просмотр — тот же лист, что уходит в печать (те же данные, та же сборка).
-  const sheetHtml = buildCallSheetHtml(
+  // Просмотр — тот же лист, что уходит в печать: iframe берёт его маршрутом (HTML в данные
+  // страницы не попадает). Модель здесь — только для отпечатка в адресе.
+  const sheetSrc = callSheetPreviewSrc(
+    projectId,
+    dayId,
     buildCallSheetPrintModel(
       printSourceFromPageData(bundle, callSheet, elements, astro, workingDay),
     ),
-    { fontCss: loadMedeoFontCss() },
   );
 
   const appliedAtLabel = callSheet
@@ -156,7 +157,7 @@ export default async function CallSheetDayPage({ params }: Props) {
       nextDay={nextDay}
       nextDayAstro={nextDayAstro}
       canEdit={canEdit}
-      sheetHtml={sheetHtml}
+      sheetSrc={sheetSrc}
       editBlocks={
         <>
           <CallSheetTemplateBlocks

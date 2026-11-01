@@ -127,3 +127,16 @@ describe("имя файла вызывного", () => {
     assert.doesNotMatch(attachmentDisposition('a"b\\c.xlsx'), /filename="[^"]*["\\][^"]*"/);
   });
 });
+
+describe("адрес просмотра листа", () => {
+  test("отпечаток модели в адресе: та же модель — тот же адрес, правка — новый", async () => {
+    const { callSheetPreviewSrc } = await import("@/features/call-sheets/print/print-source");
+    const { buildCallSheetPrintModel } = await import("@/features/call-sheets/print/print-model");
+    const { FULL_DAY_SOURCE } = await import("@/features/call-sheets/print/preview-fixtures");
+    const model = buildCallSheetPrintModel(FULL_DAY_SOURCE);
+    const src = callSheetPreviewSrc("p 1", "d/1", model);
+    assert.match(src, /^\/api\/projects\/p%201\/call-sheets\/d%2F1\/sheet\?v=[0-9a-f]{16}$/);
+    assert.equal(callSheetPreviewSrc("p 1", "d/1", structuredClone(model)), src);
+    assert.notEqual(callSheetPreviewSrc("p 1", "d/1", { ...model, important: "Новое" }), src);
+  });
+});

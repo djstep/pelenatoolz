@@ -44,7 +44,6 @@ const shootDayInclude = {
     include: { scene: { select: sceneSelect } },
     orderBy: { sortOrder: "asc" as const },
   },
-  departmentCalls: { orderBy: { sortOrder: "asc" as const } },
   transports: { orderBy: { sortOrder: "asc" as const } },
   timeSlots: {
     include: { scene: { select: sceneSelect } },

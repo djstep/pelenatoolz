@@ -22,7 +22,17 @@ export type AttendanceSheetSection = {
   id: string;
   title: string;
   rows: AttendancePersonRow[];
+  /** Текст вместо строк, если их нет (по умолчанию — «Нет записей в вызывном»). */
+  emptyText?: string;
 };
+
+/** Руководители и вызов цехов из вызывного дня (`CallSheetLeader`, `CallSheetCrewCall`). */
+export type AttendanceCallSheetCrew = {
+  leaders: { position: string; shortTitle: string | null; personName: string | null }[];
+  crewCalls: { label: string; callTime: string | null }[];
+};
+
+export const ATTENDANCE_NO_CALL_SHEET = "Создайте вызывной — цеха берутся из него";
 
 export type AttendanceSheetModel = {
   fileBaseName: string;
@@ -149,10 +159,31 @@ function buildCategorySection(
   };
 }
 
+/**
+ * Вкладка «Цеха» — из вызывного: руководители (человек, должность), затем цеха со временем
+ * вызова. Старая `DepartmentCallTime` не читается.
+ */
+function buildCrewRows(callSheet: AttendanceCallSheetCrew): AttendancePersonRow[] {
+  return [
+    ...callSheet.leaders.map((row) => ({
+      name: row.personName?.trim() || "—",
+      detail: row.shortTitle?.trim() || row.position,
+      callTime: null,
+    })),
+    ...callSheet.crewCalls.map((row) => ({
+      name: row.label,
+      detail: null,
+      callTime: row.callTime,
+    })),
+  ];
+}
+
 export function buildAttendanceSheetModel(
   bundle: DayDocBundle,
   settings: AttendanceSheetSettings,
   categories: { id: string; name: string; perShift: boolean }[],
+  /** Вызывной дня; null — ещё не создан (вкладка «Цеха» пустая с подсказкой). */
+  callSheet: AttendanceCallSheetCrew | null,
 ): AttendanceSheetModel {
   const { project, day } = bundle;
   const cast = buildCastForDay(bundle);
@@ -173,11 +204,8 @@ export function buildAttendanceSheetModel(
   sections.push({
     id: "crew",
     title: uniqueSheetName("Цеха", usedNames),
-    rows: day.departmentCalls.map((d) => ({
-      name: d.personName?.trim() || "—",
-      detail: d.roleLabel,
-      callTime: d.callTime,
-    })),
+    rows: callSheet ? buildCrewRows(callSheet) : [],
+    ...(callSheet ? {} : { emptyText: ATTENDANCE_NO_CALL_SHEET }),
   });
 
   const categoryById = new Map(categories.map((c) => [c.id, c]));

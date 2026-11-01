@@ -34,7 +34,7 @@ export function CallSheetView({
   nextDay,
   nextDayAstro,
   canEdit,
-  sheetHtml,
+  sheetSrc,
   editBlocks = null,
   timingBaselines = {},
   resourceTimingBaselines = {},
@@ -49,8 +49,8 @@ export function CallSheetView({
   nextDay: Awaited<ReturnType<typeof getNextShootDayBrief>>;
   nextDayAstro: DayAstro | null;
   canEdit: boolean;
-  /** HTML печатного листа — тот же, что уходит в печать. */
-  sheetHtml: string;
+  /** Адрес листа для просмотра (`callSheetPreviewSrc`) — тот же лист, что уходит в печать. */
+  sheetSrc: string;
   /** Блоки правки вызывного (поля листа, элементы площадки) — под шапкой страницы. */
   editBlocks?: React.ReactNode;
   timingBaselines?: ActorTimingBaselines;
@@ -148,7 +148,7 @@ export function CallSheetView({
       ) : null}
 
       <SheetBlock title="Лист вызывного">
-        <CallSheetPreview html={sheetHtml} />
+        <CallSheetPreview src={sheetSrc} />
       </SheetBlock>
 
       {nextDay ? (

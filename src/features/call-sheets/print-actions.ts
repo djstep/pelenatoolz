@@ -1,7 +1,6 @@
 "use server";
 
 import { loadCallSheetPrintModel } from "@/features/call-sheets/print/load-print-model";
-import { loadMedeoFontCss } from "@/features/call-sheets/print/medeo-font";
 import { buildCallSheetHtml } from "@/features/call-sheets/print/print-html";
 
 /**
@@ -15,7 +14,7 @@ export async function getCallSheetPrintHtmlAction(
   const loaded = await loadCallSheetPrintModel(projectId, dayId);
   if ("error" in loaded) return { error: loaded.error };
   return {
-    html: buildCallSheetHtml(loaded.model, { fontCss: loadMedeoFontCss() }),
+    html: buildCallSheetHtml(loaded.model, { font: "embed" }),
     fileName: `${loaded.fileBaseName}.html`,
   };
 }

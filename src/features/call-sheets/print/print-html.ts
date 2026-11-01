@@ -4,10 +4,11 @@ import type {
   CallSheetPrintModel,
   CallSheetPrintPlanRow,
 } from "@/features/call-sheets/print/print-model";
-import { escapeHtml, PRINT_HTML_CSP_META } from "@/shared/lib/escape-html";
+import { loadMedeoFontCss, medeoFontUrlCss } from "@/features/call-sheets/print/medeo-font";
+import { escapeHtml } from "@/shared/lib/escape-html";
 
 /**
- * Печатный лист вызывного: модель → HTML-строка. Чистая функция, без скриптов и обработчиков;
+ * Печатный лист вызывного: модель → HTML-строка. Без скриптов и обработчиков (с диска читается только файл шрифта в режиме `embed`);
  * весь текст — через `escapeHtml`, строки в CSS `content` — через `cssString`. Вид — по макету
  * владельца (`docs/callsheet-mockup-v5.html`). Страницы — поток: принудительный разрыв только
  * перед схемой объекта; бегущая шапка листов 2+ и подвал — поля страницы (`@page`).
@@ -668,13 +669,33 @@ td:first-child, th:first-child{ padding-left:1mm; }
 `;
 
 /**
- * Чистая функция: модель → HTML листа. `fontCss` — `@font-face` со встроенным шрифтом
- * (`loadMedeoFontCss()`); без него — системный шрифт.
+ * Шрифт листа: `embed` — встроен (`data:`, для печати / PDF), `url` — файлом с сайта
+ * (`MEDEO_FONT_URL`, для просмотра на странице), `none` — системный (тесты).
  */
+export type CallSheetFontMode = "embed" | "url" | "none";
+
+/**
+ * CSP листа: как у всех печатных страниц (без скриптов, объектов и `<base>`), плюс откуда
+ * можно брать шрифт — только `data:` или только свой сайт (`'self'`: адрес шрифта — путь на
+ * нём же; полный адрес с доменом в шаблоне неизвестен).
+ */
+export function callSheetCsp(font: CallSheetFontMode): string {
+  const fontSrc = font === "embed" ? "data:" : font === "url" ? "'self'" : "'none'";
+  return `script-src 'none'; object-src 'none'; base-uri 'none'; font-src ${fontSrc}`;
+}
+
+function fontCss(font: CallSheetFontMode): string {
+  if (font === "embed") return loadMedeoFontCss();
+  if (font === "url") return medeoFontUrlCss();
+  return "";
+}
+
+/** Модель → HTML листа. Без скриптов и обработчиков; шрифт — см. `CallSheetFontMode`. */
 export function buildCallSheetHtml(
   model: CallSheetPrintModel,
-  options: { fontCss?: string } = {},
+  options: { font?: CallSheetFontMode } = {},
 ): string {
+  const font = options.font ?? "none";
   const body = [
     headHtml(model),
     timesHtml(model),
@@ -693,11 +714,11 @@ export function buildCallSheetHtml(
     .join("\n");
 
   return `<!DOCTYPE html>
-<html lang="ru"><head>${PRINT_HTML_CSP_META}
+<html lang="ru"><head><meta http-equiv="Content-Security-Policy" content="${callSheetCsp(font)}">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${e(model.documentTitle)}</title>
-<style>${options.fontCss ?? ""}
+<style>${fontCss(font)}
 ${pageCss(model)}
 ${SHEET_CSS}</style>
 </head><body><main class="sheet">

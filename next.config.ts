@@ -12,6 +12,7 @@ const nextConfig: NextConfig = {
     "/*/projects/*/call-sheets/**": [
       "./node_modules/medeo-font/dist/fonts/medeo-sans/MedeoSansVariable.woff2",
     ],
+    "/api/fonts/**": ["./node_modules/medeo-font/dist/fonts/medeo-sans/MedeoSansVariable.woff2"],
   },
   // Только для `next dev`: второй аккаунт открывается на 127.0.0.1 (отдельные куки входа).
   allowedDevOrigins: ["127.0.0.1"],

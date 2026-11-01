@@ -4,8 +4,19 @@ import path from "node:path";
 import { describe, test } from "node:test";
 import type { CallSheetBlocks } from "@/features/call-sheets/queries";
 import type { ElementsEditorData } from "@/features/call-sheets/elements-queries";
-import { loadMedeoFontCss, medeoFontPath } from "@/features/call-sheets/print/medeo-font";
-import { buildCallSheetHtml, cssString } from "@/features/call-sheets/print/print-html";
+import {
+  loadMedeoFontCss,
+  MEDEO_FONT_FILE_NAME,
+  MEDEO_FONT_URL,
+  MEDEO_FONT_VERSION,
+  medeoFontPath,
+} from "@/features/call-sheets/print/medeo-font";
+import {
+  buildCallSheetHtml,
+  callSheetCsp,
+  cssString,
+  type CallSheetFontMode,
+} from "@/features/call-sheets/print/print-html";
 import {
   buildCallSheetPrintModel,
   formatTiming,
@@ -54,8 +65,8 @@ function model(source: CallSheetPrintSource) {
   return buildCallSheetPrintModel(source);
 }
 
-function html(source: CallSheetPrintSource, fontCss?: string) {
-  return buildCallSheetHtml(model(source), { fontCss });
+function html(source: CallSheetPrintSource, font?: CallSheetFontMode) {
+  return buildCallSheetHtml(model(source), { font });
 }
 
 /** Ключи объекта на любой глубине. */
@@ -342,7 +353,13 @@ describe("модель листа вызывного", () => {
 describe("HTML листа вызывного", () => {
   test("CSP первой строкой head, без скриптов и обработчиков", () => {
     const page = html(FULL_DAY_SOURCE);
-    assert.ok(page.includes(`<head>${PRINT_HTML_CSP_META}`));
+    assert.ok(
+      page.includes(
+        `<head><meta http-equiv="Content-Security-Policy" content="script-src 'none'; object-src 'none'; base-uri 'none'; font-src 'none'">`,
+      ),
+    );
+    // Политика листа — общая печатная плюс источник шрифта.
+    assert.ok(PRINT_HTML_CSP_META.includes(callSheetCsp("none").split("; font-src")[0]!));
     const t = tags(page);
     assert.equal(t.filter((tag) => /^<script\b/i.test(tag)).length, 0);
     assert.equal(t.filter((tag) => /\son[a-z]+\s*=/i.test(tag)).length, 0);
@@ -480,7 +497,10 @@ describe("HTML листа вызывного", () => {
     assert.equal(css.match(/url\(data:font\/woff2;base64,/g)?.length, 1);
     assert.ok(!/url\((?!data:)/.test(css), "никаких внешних адресов");
     assert.ok(!/italic/i.test(css), "курсив не встраивается");
-    assert.ok(html(MIN_DAY_SOURCE, css).includes('font-family:"Medeo Sans"'));
+    const embedded = html(MIN_DAY_SOURCE, "embed");
+    assert.ok(embedded.includes(css), "печать — шрифт встроен");
+    assert.ok(embedded.includes(`content="${callSheetCsp("embed")}"`));
+    assert.match(callSheetCsp("embed"), /font-src data:$/);
     // Файлы IBM Plex для листа убраны.
     assert.ok(!existsSync(path.join(process.cwd(), "assets", "fonts", "ibm-plex-sans")));
     const config = readFileSync(path.join(process.cwd(), "next.config.ts"), "utf8");
@@ -490,5 +510,59 @@ describe("HTML листа вызывного", () => {
   test("модель без лишних полей шаблона попадает в HTML как есть", () => {
     const m: CallSheetPrintModel = { ...model(MIN_DAY_SOURCE), important: "Проверка" };
     assert.ok(buildCallSheetHtml(m).includes(`<p>Проверка</p>`));
+  });
+});
+
+describe("шрифт листа по адресу (просмотр на странице)", () => {
+  test("режим url: @font-face с адресом файла, без base64, CSP — шрифт только со своего сайта", () => {
+    const page = html(FULL_DAY_SOURCE, "url");
+    assert.ok(page.includes(`src:url(${MEDEO_FONT_URL}) format("woff2")`));
+    assert.ok(!page.includes("base64"), "шрифт не встроен");
+    assert.ok(page.includes(`content="${callSheetCsp("url")}"`));
+    assert.match(callSheetCsp("url"), /font-src 'self'$/);
+    assert.ok(Buffer.byteLength(page) < 80 * 1024, `лист без шрифта лёгкий: ${Buffer.byteLength(page)} байт`);
+    assert.ok(Buffer.byteLength(html(FULL_DAY_SOURCE, "embed")) > 400 * 1024, "печать — со шрифтом внутри");
+  });
+
+  test("имя файла — с версией пакета (та же, что в package.json и node_modules)", () => {
+    const pkg = JSON.parse(readFileSync(path.join(process.cwd(), "package.json"), "utf8"));
+    const installed = JSON.parse(
+      readFileSync(path.join(process.cwd(), "node_modules", "medeo-font", "package.json"), "utf8"),
+    );
+    assert.equal(MEDEO_FONT_VERSION, pkg.dependencies["medeo-font"]);
+    assert.equal(MEDEO_FONT_VERSION, installed.version);
+    assert.equal(MEDEO_FONT_FILE_NAME, `medeo-sans-variable-${MEDEO_FONT_VERSION}.woff2`);
+    assert.equal(MEDEO_FONT_URL, `/api/fonts/${MEDEO_FONT_FILE_NAME}`);
+  });
+
+  test("маршрут шрифта: только этот файл, кэш навсегда; другое имя — 404", async () => {
+    const { GET } = await import("@/app/api/fonts/[file]/route");
+    const ok = await GET(new Request("http://localhost/x"), { params: Promise.resolve({ file: MEDEO_FONT_FILE_NAME }) });
+    assert.equal(ok.status, 200);
+    assert.equal(ok.headers.get("Content-Type"), "font/woff2");
+    assert.equal(ok.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
+    assert.deepEqual(Buffer.from(await ok.arrayBuffer()), readFileSync(medeoFontPath()));
+    for (const file of ["../../package.json", "MedeoSansVariable.woff2", "medeo-sans-variable-0.0.1.woff2"]) {
+      const res = await GET(new Request("http://localhost/x"), { params: Promise.resolve({ file }) });
+      assert.equal(res.status, 404, file);
+    }
+    const config = readFileSync(path.join(process.cwd(), "next.config.ts"), "utf8");
+    assert.match(config, /"\/api\/fonts\/\*\*": \["\.\/node_modules\/medeo-font\/dist\/fonts\/medeo-sans\/MedeoSansVariable\.woff2"\]/);
+  });
+
+  test("страница вызывного не кладёт HTML листа в свои данные: iframe берёт его маршрутом с проверкой права", () => {
+    const pagePath = "src/app/[locale]/projects/[projectId]/call-sheets/[dayId]/page.tsx";
+    const pageSource = readFileSync(path.join(process.cwd(), pagePath), "utf8");
+    assert.ok(!pageSource.includes("buildCallSheetHtml"), "страница не собирает HTML");
+    assert.ok(!pageSource.includes("loadMedeoFontCss"), "страница не встраивает шрифт");
+    assert.ok(pageSource.includes("callSheetPreviewSrc("));
+    const route = readFileSync(
+      path.join(process.cwd(), "src/app/api/projects/[projectId]/call-sheets/[dayId]/sheet/route.ts"),
+      "utf8",
+    );
+    assert.match(route, /await loadCallSheetPrintModel\(projectId, dayId\)/);
+    assert.match(route, /buildCallSheetHtml\(result\.model, \{ font: "url" \}\)/);
+    assert.match(route, /sandbox allow-same-origin; frame-ancestors 'self'/);
+    assert.ok(!/allow-scripts/.test(route));
   });
 });

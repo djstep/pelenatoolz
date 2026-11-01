@@ -786,13 +786,17 @@ export async function exportAttendanceSheetXlsxAction(
   );
   const { prisma } = await import("@/shared/db/prisma");
 
-  const [bundle, categories, project] = await Promise.all([
+  const { getCallSheetForDay } = await import("@/features/call-sheets/queries");
+
+  const [bundle, categories, project, callSheet] = await Promise.all([
     getShootDayDocument(projectId, dayId),
     listResourceCategories(projectId),
     prisma.project.findUnique({
       where: { id: projectId },
       select: { exportSettings: true },
     }),
+    // Тот же день и проект, что у `getShootDayDocument`: чужой день — null.
+    getCallSheetForDay(projectId, dayId),
   ]);
   if (!bundle) return { error: "Съёмочный день не найден" };
   if (!project) return { error: "Проект не найден" };
@@ -806,6 +810,7 @@ export async function exportAttendanceSheetXlsxAction(
       name: c.name,
       perShift: c.perShift,
     })),
+    callSheet,
   );
 
   const buffer = await buildAttendanceSheetXlsx(model);
