@@ -15,7 +15,7 @@ type Props = {
 
 export default async function ProfilePage({ params, searchParams }: Props) {
   const { locale } = await params;
-  const notice = cloudOAuthNotice(await searchParams);
+  const query = await searchParams;
   const sessionUser = await requireUser();
   const [user, connections] = await Promise.all([
     prisma.user.findUnique({
@@ -24,6 +24,7 @@ export default async function ProfilePage({ params, searchParams }: Props) {
     }),
     listUserCloudConnections(sessionUser.id!),
   ]);
+  const notice = cloudOAuthNotice(query, connections);
 
   return (
     <>

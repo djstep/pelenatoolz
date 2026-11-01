@@ -15,7 +15,7 @@ type Props = {
 
 export default async function ProjectFilesPage({ params, searchParams }: Props) {
   const { locale, projectId } = await params;
-  const notice = cloudOAuthNotice(await searchParams);
+  const query = await searchParams;
   const ctx = await requireProjectContext(projectId);
 
   if (!ctx.can("script:read") && !ctx.can("project:read")) {
@@ -27,6 +27,7 @@ export default async function ProjectFilesPage({ params, searchParams }: Props) 
     listProjectCloudFiles(projectId),
     listProjectUploadedFiles(projectId),
   ]);
+  const notice = cloudOAuthNotice(query, connections);
 
   const canWrite = ctx.can("script:write") || ctx.can("project:write");
 

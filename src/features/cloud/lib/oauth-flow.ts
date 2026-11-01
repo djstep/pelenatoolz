@@ -18,6 +18,7 @@ import {
   cloudConnectRefusalText,
 } from "@/features/cloud/lib/oauth-access";
 import {
+  connectionReconnectReason,
   GOOGLE_REQUESTED_SCOPE,
   hasRequiredScope,
   YANDEX_APP_FOLDER_SCOPE,
@@ -31,6 +32,7 @@ import {
 import {
   exchangeYandexCode,
   fetchYandexAccount,
+  revokeYandexToken,
   yandexDeviceId,
 } from "@/features/cloud/lib/yandex-disk";
 import { getProjectForUser } from "@/features/projects/queries";
@@ -50,6 +52,7 @@ export type CloudOAuthErrorCode =
   | "state"
   | "token"
   | "scope"
+  | "scope_yandex"
   | "forbidden"
   | "unsupported"
   | "config_google"
@@ -189,9 +192,11 @@ export async function finishCloudConnect(request: Request, provider: CloudProvid
   if (refusal) return fail(returnTo, "forbidden");
   if (state.purpose === "project") return fail(returnTo, "unsupported");
 
+  let saved: Awaited<ReturnType<typeof saveCloudConnection>>;
   try {
     if (provider === "GOOGLE_DRIVE") {
       const tokens = await exchangeGoogleCode(code, callbackUri(provider));
+      logTokenResponse(slug, tokens);
       const scopes = tokens.scope ?? "";
       // Человек снял галочку «файлы, созданные приложением» — такой токен не годится.
       if (!hasRequiredScope(provider, scopes)) {
@@ -199,7 +204,7 @@ export async function finishCloudConnect(request: Request, provider: CloudProvid
         return fail(returnTo, "scope");
       }
       const account = parseGoogleIdToken(tokens.id_token);
-      await saveCloudConnection({
+      saved = await saveCloudConnection({
         userId: state.userId,
         provider,
         accessToken: tokens.access_token,
@@ -211,15 +216,22 @@ export async function finishCloudConnect(request: Request, provider: CloudProvid
       });
     } else {
       const tokens = await exchangeYandexCode(code);
+      logTokenResponse(slug, tokens);
+      // Яндекс обычно не присылает scope: права — ровно запрошенные в окне (и отмеченные
+      // в приложении). Если прислал и в нём нет папки приложения — такой токен не годится.
+      const scopes = tokens.scope?.trim() ? tokens.scope : YANDEX_APP_FOLDER_SCOPE;
+      if (!hasRequiredScope(provider, scopes)) {
+        await revokeYandexToken(tokens.access_token);
+        return fail(returnTo, "scope_yandex");
+      }
       const account = await fetchYandexAccount(tokens.access_token);
-      await saveCloudConnection({
+      saved = await saveCloudConnection({
         userId: state.userId,
         provider,
         accessToken: tokens.access_token,
         refreshToken: tokens.refresh_token ?? null,
         expiresIn: tokens.expires_in ?? null,
-        // Яндекс выдаёт ровно права, запрошенные в окне (и отмеченные в приложении).
-        scopes: tokens.scope ?? YANDEX_APP_FOLDER_SCOPE,
+        scopes,
         accountEmail: account.email,
         accountSubject: account.id,
       });
@@ -229,5 +241,24 @@ export async function finishCloudConnect(request: Request, provider: CloudProvid
     return fail(returnTo, "token");
   }
 
+  // «Подключён» — только если запись сохранилась рабочей (права есть, не помечена отозванной).
+  if (connectionReconnectReason(saved)) {
+    console.error(`[cloud ${slug} callback] подключение сохранено, но не годится для записи`);
+    return fail(returnTo, provider === "GOOGLE_DRIVE" ? "scope" : "scope_yandex");
+  }
   return NextResponse.redirect(withParam(returnTo, "cloud_connected", slug));
+}
+
+/**
+ * В лог сервера — какие поля прислал провайдер при обмене кода и выданные права.
+ * Значения токенов не пишутся никогда.
+ */
+function logTokenResponse(slug: string, tokens: object) {
+  const fields = Object.keys(tokens).sort().join(", ");
+  const scope = (tokens as { scope?: unknown }).scope;
+  console.info(
+    `[cloud ${slug} callback] ответ на обмен кода: поля ${fields}; scope: ${
+      typeof scope === "string" ? scope || "(пусто)" : "(нет)"
+    }`,
+  );
 }

@@ -11,6 +11,7 @@ import {
   revokeGoogleToken,
 } from "@/features/cloud/lib/google-drive";
 import { cloudOAuthNotice } from "@/features/cloud/lib/oauth-notice";
+import { cloudProviderLabels } from "@/features/cloud/lib/types";
 import {
   connectionReconnectReason,
   GOOGLE_REQUESTED_SCOPE,
@@ -299,19 +300,61 @@ describe("«Вставить ссылку»", () => {
 });
 
 describe("сообщение после окна согласия", () => {
+  const ok = (provider: "GOOGLE_DRIVE" | "YANDEX_DISK") => ({ provider, reconnectReason: null });
+
+  test("баг: «Яндекс Диск подключён» без рабочей записи — ошибка, а не успех", () => {
+    // Записи нет (не сохранилась или уже отключили) — не «подключён».
+    const missing = cloudOAuthNotice({ cloud_connected: "yandex" }, [ok("GOOGLE_DRIVE")]);
+    assert.equal(missing?.tone, "error");
+    assert.match(missing?.text ?? "", /Яндекс Диск не подключён/);
+    // Запись есть, но не годится (права не те / отозвана) — тоже не «подключён».
+    const stale = cloudOAuthNotice({ cloud_connected: "yandex" }, [
+      { provider: "YANDEX_DISK", reconnectReason: "old_scopes" },
+    ]);
+    assert.equal(stale?.tone, "error");
+    assert.match(stale?.text ?? "", /переподключите/);
+    // Рабочая запись — успех.
+    assert.deepEqual(cloudOAuthNotice({ cloud_connected: "yandex" }, [ok("YANDEX_DISK")]), {
+      tone: "success",
+      text: "Яндекс Диск подключён",
+    });
+  });
+
+  test("Яндекс без поля scope в ответе — права папки приложения; ответ «не те права» — отказ", () => {
+    assert.equal(cloudOAuthNotice({ cloud_error: "scope_yandex" }, [])?.tone, "error");
+    const source = readFileSync(path.join(process.cwd(), "src/features/cloud/lib/oauth-flow.ts"), "utf8");
+    assert.match(source, /tokens\.scope\?\.trim\(\) \? tokens\.scope : YANDEX_APP_FOLDER_SCOPE/);
+    assert.match(source, /if \(connectionReconnectReason\(saved\)\)/);
+    // В лог — только имена полей ответа и scope, не токены.
+    assert.doesNotMatch(source, /console\.[a-z]+\([^)]*access_token/);
+  });
+
+  test("плашка убирает свой параметр из адреса — F5 и «Отключить» не показывают старое «подключён»", () => {
+    const source = readFileSync(
+      path.join(process.cwd(), "src/features/cloud/components/cloud-oauth-notice.tsx"),
+      "utf8",
+    );
+    assert.match(source, /CLOUD_NOTICE_PARAMS/);
+    assert.match(source, /history\.replaceState/);
+  });
+
+  test("название везде — «Яндекс Диск», без точки", () => {
+    assert.equal(cloudProviderLabels.YANDEX_DISK, "Яндекс Диск");
+  });
+
   test("подключён / отказ / неизвестный код", () => {
-    assert.equal(cloudOAuthNotice({ cloud_connected: "google" })?.tone, "success");
-    assert.match(cloudOAuthNotice({ cloud_error: "scope" })?.text ?? "", /галочку/);
-    assert.equal(cloudOAuthNotice({ cloud_error: "xyz" })?.tone, "error");
-    assert.equal(cloudOAuthNotice({}), null);
+    assert.equal(cloudOAuthNotice({ cloud_connected: "google" }, [ok("GOOGLE_DRIVE")])?.tone, "success");
+    assert.match(cloudOAuthNotice({ cloud_error: "scope" }, [])?.text ?? "", /галочку/);
+    assert.equal(cloudOAuthNotice({ cloud_error: "xyz" }, [])?.tone, "error");
+    assert.equal(cloudOAuthNotice({}, []), null);
   });
 
   test("не настроен клиент, нет прав, диск проекта — понятные тексты, не код", () => {
-    assert.match(cloudOAuthNotice({ cloud_error: "config_google" })?.text ?? "", /Google Диска не настроено/);
-    assert.match(cloudOAuthNotice({ cloud_error: "config_yandex" })?.text ?? "", /Яндекс Диска не настроено/);
-    assert.match(cloudOAuthNotice({ cloud_error: "forbidden" })?.text ?? "", /владелец проекта или продюсер/);
-    assert.match(cloudOAuthNotice({ cloud_error: "unsupported" })?.text ?? "", /пока не подключается/);
-    assert.equal(cloudOAuthNotice({ cloud_error: "bad_request" })?.tone, "error");
+    assert.match(cloudOAuthNotice({ cloud_error: "config_google" }, [])?.text ?? "", /Google Диска не настроено/);
+    assert.match(cloudOAuthNotice({ cloud_error: "config_yandex" }, [])?.text ?? "", /Яндекс Диска не настроено/);
+    assert.match(cloudOAuthNotice({ cloud_error: "forbidden" }, [])?.text ?? "", /владелец проекта или продюсер/);
+    assert.match(cloudOAuthNotice({ cloud_error: "unsupported" }, [])?.text ?? "", /пока не подключается/);
+    assert.equal(cloudOAuthNotice({ cloud_error: "bad_request" }, [])?.tone, "error");
   });
 
   test("начало подключения: ошибки — возвратом с плашкой; JSON только для чужого сайта и чужого проекта", () => {
