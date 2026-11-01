@@ -1,5 +1,4 @@
 import { readFileSync } from "node:fs";
-import { createRequire } from "node:module";
 import path from "node:path";
 
 /**
@@ -10,8 +9,13 @@ import path from "node:path";
  * - адресом `MEDEO_FONT_URL` — для просмотра на странице: файл кэшируется браузером навсегда
  *   (в имени — версия пакета), HTML листа остаётся лёгким.
  * Файл попадает в сборку через `outputFileTracingIncludes`.
+ *
+ * Файл шрифта от корня проекта — ровно тот путь, что в `outputFileTracingIncludes`
+ * (`next.config.ts`). На Vercel в сборку попадает только этот файл, без `package.json` пакета,
+ * поэтому искать его через `require.resolve` (карта `exports` пакета) там нельзя.
  */
-export const MEDEO_FONT_SPECIFIER = "medeo-font/fonts/medeo-sans/MedeoSansVariable.woff2";
+export const MEDEO_FONT_RELATIVE_PATH =
+  "node_modules/medeo-font/dist/fonts/medeo-sans/MedeoSansVariable.woff2";
 
 /** Версия пакета `medeo-font` — та же, что в `package.json` (сверяет тест). */
 export const MEDEO_FONT_VERSION = "1.0.0-rc.4.1";
@@ -22,10 +26,9 @@ export const MEDEO_FONT_FILE_NAME = `medeo-sans-variable-${MEDEO_FONT_VERSION}.w
 /** Адрес файла шрифта на сайте (маршрут `api/fonts/[file]`). */
 export const MEDEO_FONT_URL = `/api/fonts/${MEDEO_FONT_FILE_NAME}`;
 
-/** Путь к файлу шрифта в node_modules (поиск — от корня проекта). */
+/** Путь к файлу шрифта в node_modules (от корня проекта). */
 export function medeoFontPath(rootDir: string = process.cwd()): string {
-  const resolveFromRoot = createRequire(path.join(rootDir, "package.json"));
-  return resolveFromRoot.resolve(MEDEO_FONT_SPECIFIER);
+  return path.join(rootDir, ...MEDEO_FONT_RELATIVE_PATH.split("/"));
 }
 
 let cachedFile: Buffer | null = null;
