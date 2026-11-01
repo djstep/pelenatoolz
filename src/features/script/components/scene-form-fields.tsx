@@ -71,7 +71,6 @@ export type SceneEditData = {
     category: SceneResourceCategory;
     name: string;
     quantity: number;
-    unitPrice: { toString(): string } | number;
   }>;
   resourceItems?: Array<{
     itemId: string;
@@ -113,7 +112,6 @@ function resourcesFor(
     .map((r) => ({
       name: r.name,
       quantity: r.quantity,
-      unitPrice: Number(r.unitPrice) || 0,
     }));
 }
 

@@ -2,6 +2,13 @@ import { SCENE_CHARACTER_SELECT } from "@/features/characters/lib/character-fiel
 import { SCENE_LOCATION_SELECT } from "@/features/locations/lib/location-fields";
 import { SCENE_RESOURCE_ITEM_SELECT } from "@/features/resources/lib/item-fields";
 import { prisma } from "@/shared/db/prisma";
+import { selectFields } from "@/shared/lib/finance-fields";
+
+/**
+ * Ресурс либретто — без устаревших `unitPrice` / `total` (деньги): либретто, карточка сцены
+ * и сценарий уходят в браузер любой роли с правом на сцены, а цены нигде не показываются.
+ */
+export const LIBRETTO_SCENE_RESOURCE_SELECT = selectFields(["id", "sceneId", "category", "name", "quantity"]);
 
 export async function listScenes(projectId: string) {
   return prisma.scene.findMany({
@@ -26,7 +33,7 @@ export async function listScenes(projectId: string) {
         },
       },
       elements: { include: { element: true } },
-      resources: true,
+      resources: { select: LIBRETTO_SCENE_RESOURCE_SELECT },
       resourceItems: {
         include: {
           item: {
@@ -69,7 +76,7 @@ export async function getSceneForEdit(projectId: string, sceneId: string) {
       locations: { include: { location: { select: SCENE_LOCATION_SELECT } } },
       characters: { include: { character: { select: SCENE_CHARACTER_SELECT } } },
       elements: { include: { element: true } },
-      resources: true,
+      resources: { select: LIBRETTO_SCENE_RESOURCE_SELECT },
       resourceItems: {
         include: {
           item: {
