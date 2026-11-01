@@ -5,6 +5,7 @@ import {
   type CategoryFinancePermissions,
   type PermissionMatrix,
 } from "@/features/roles/permissions-matrix";
+import { canOpenProjectSettings } from "@/features/projects/lib/project-list-access";
 import { isProducerRole } from "@/features/roles/role-rules";
 
 /**
@@ -169,7 +170,7 @@ export const projectNavGroups: NavGroupDef[] = [
       {
         href: "/settings",
         label: "Настройки проекта",
-        visible: anyOf("project:write", "project:archive"),
+        visible: (a) => canOpenProjectSettings(a.can),
       },
       { href: "/settings/resources", label: "Ресурсы", visible: anyOf("script:read") },
       {

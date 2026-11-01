@@ -88,8 +88,12 @@ export default async function ProjectsPage({ params, searchParams }: Props) {
                     </h2>
                     <p className="mt-2 text-sm text-[var(--muted-fg)]">
                       {t("yourRole")}: {role ? role.name : "—"}
-                      {" · "}
-                      {t("membersCount", { count: project._count.memberships })}
+                      {project.membersCount !== null ? (
+                        <>
+                          {" · "}
+                          {t("membersCount", { count: project.membersCount })}
+                        </>
+                      ) : null}
                       {project.city ? (
                         <>
                           {" · "}
@@ -101,9 +105,11 @@ export default async function ProjectsPage({ params, searchParams }: Props) {
                       <Link href={`/${locale}/projects/${project.id}`}>
                         <Button variant="secondary">{t("open")}</Button>
                       </Link>
-                      <Link href={`/${locale}/projects/${project.id}/settings`}>
-                        <Button variant="ghost">Настройки</Button>
-                      </Link>
+                      {project.canOpenSettings ? (
+                        <Link href={`/${locale}/projects/${project.id}/settings`}>
+                          <Button variant="ghost">Настройки</Button>
+                        </Link>
+                      ) : null}
                     </div>
                   </Card>
                 </li>

@@ -4,6 +4,7 @@ import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/features/auth/session";
 import {
+  ATTENDANCE_SHEET_WRITE_PERMISSION,
   exportLayoutPermission,
   isExportLayoutKey,
   normalizeAttendanceSheetSettings,
@@ -144,12 +145,7 @@ export async function saveAttendanceSheetSettingsAction(
     "@/features/projects/lib/project-context"
   );
   const ctx = await requireProjectContext(projectId);
-  if (
-    !ctx.can("callsheet:write") &&
-    !ctx.can("schedule:write") &&
-    !ctx.can("report:write") &&
-    !ctx.can("project:write")
-  ) {
+  if (!ctx.can(ATTENDANCE_SHEET_WRITE_PERMISSION)) {
     return { error: "Недостаточно прав" };
   }
 

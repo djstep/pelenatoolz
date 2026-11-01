@@ -48,6 +48,12 @@ const EXPORT_LAYOUT_PERMISSIONS: Record<
   kppShort: { read: "schedule:read", write: "schedule:write" },
 };
 
+/**
+ * «Настройка явочного листа» — настройка раздела «КПП и вызывные»: сохраняет только участник
+ * с правкой этого раздела. Открыть окно и выгрузить явочный лист можно и без неё.
+ */
+export const ATTENDANCE_SHEET_WRITE_PERMISSION: Permission = "schedule:write";
+
 export function exportLayoutPermission(
   key: ExportLayoutKey,
   action: "read" | "write",

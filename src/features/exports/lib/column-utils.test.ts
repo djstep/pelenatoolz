@@ -1,10 +1,18 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import {
+  ATTENDANCE_SHEET_WRITE_PERMISSION,
   exportLayoutPermission,
   isExportLayoutKey,
 } from "@/features/exports/lib/column-utils";
 import { EXPORT_LAYOUT_KEYS } from "@/features/exports/types";
+import { hasPermission } from "@/features/memberships/permissions";
+import {
+  buildEmptyMatrix,
+  buildFullMatrix,
+  buildViewerMatrix,
+  type PermissionMatrix,
+} from "@/features/roles/permissions-matrix";
 
 describe("exportLayoutPermission", () => {
   test("КПП — раздел «КПП и вызывные»", () => {
@@ -32,5 +40,31 @@ describe("exportLayoutPermission", () => {
   test("неизвестный ключ не проходит проверку ключа", () => {
     assert.equal(isExportLayoutKey("attendanceSheet"), false);
     assert.equal(isExportLayoutKey("unknown"), false);
+  });
+});
+
+describe("настройка явочного листа", () => {
+  function withSection(section: keyof PermissionMatrix, update: boolean): PermissionMatrix {
+    const matrix = buildEmptyMatrix();
+    matrix[section] = { ...matrix[section], access: true, read: true, update };
+    return matrix;
+  }
+  const canSave = (matrix: PermissionMatrix) =>
+    hasPermission(matrix, ATTENDANCE_SHEET_WRITE_PERMISSION);
+
+  test("принадлежит разделу «КПП и вызывные» — как раскладки КПП", () => {
+    assert.equal(ATTENDANCE_SHEET_WRITE_PERMISSION, exportLayoutPermission("kppFull", "write"));
+  });
+
+  test("сохраняет только правка «КПП и вызывные»", () => {
+    assert.equal(canSave(withSection("schedule", true)), true);
+    assert.equal(canSave(buildFullMatrix()), true);
+  });
+
+  test("правка отчётов или настроек проекта, просмотр КПП, «Наблюдатель» — не сохраняют", () => {
+    assert.equal(canSave(withSection("reports", true)), false);
+    assert.equal(canSave(withSection("project_settings", true)), false);
+    assert.equal(canSave(withSection("schedule", false)), false);
+    assert.equal(canSave(buildViewerMatrix()), false);
   });
 });
