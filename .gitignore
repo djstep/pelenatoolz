@@ -48,3 +48,11 @@ next-env.d.ts
 
 # превью печатных листов (npm run preview:callsheet)
 /preview/
+
+# приёмка (Playwright): пароли тестовых аккаунтов, сессии входа, отчёты и скриншоты
+.env.e2e
+/e2e/.auth/
+/e2e/screenshots/
+/e2e/.downloads/
+/test-results/
+/playwright-report/
