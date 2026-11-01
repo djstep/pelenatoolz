@@ -11,8 +11,64 @@ import { parseExtraPaymentFormRows } from "@/features/payroll/lib/parse-extra-pa
 import { parseOvertimeFormRows } from "@/features/payroll/lib/parse-overtime-form";
 import { prisma } from "@/shared/db/prisma";
 import { countOf } from "@/shared/lib/plural";
+import type { Tx } from "@/features/call-sheets/queries";
+import { ensureCallSheetSections } from "@/features/call-sheets/sections-db";
+import {
+  assertInProject,
+  isNotInProjectError,
+} from "@/features/memberships/assert-in-project";
+import {
+  checkCategorySection,
+  type CategorySection,
+  type CategorySectionDeps,
+} from "@/features/resources/lib/category-section";
 
 export type ResourceActionState = { error?: string; success?: string };
+
+/** Ключ раздела вызывного этого проекта; undefined — раздела нет или он чужой. */
+function sectionKeyInProject(projectId: string): CategorySectionDeps["sectionKey"] {
+  return async (id) => {
+    try {
+      await assertInProject("CallSheetSection", id, projectId);
+    } catch (error) {
+      if (isNotInProjectError(error)) return undefined;
+      throw error;
+    }
+    const row = await prisma.callSheetSection.findFirst({
+      where: { id, projectId },
+      select: { key: true },
+    });
+    return row ? row.key : undefined;
+  };
+}
+
+/** id раздела для записи: системного раздела может ещё не быть в базе — создаётся. */
+async function sectionIdFor(
+  tx: Pick<Tx, "callSheetSection">,
+  projectId: string,
+  section: CategorySection,
+): Promise<string | null> {
+  if (section.kind === "none") return null;
+  if (section.kind === "id") return section.id;
+  await ensureCallSheetSections(tx, projectId);
+  const row = await tx.callSheetSection.findFirst({
+    where: { projectId, key: section.key },
+    select: { id: true },
+  });
+  return row?.id ?? null;
+}
+
+async function sectionLabel(
+  tx: Pick<Tx, "callSheetSection">,
+  sectionId: string | null,
+): Promise<string> {
+  if (!sectionId) return "Прочее";
+  const row = await tx.callSheetSection.findUnique({
+    where: { id: sectionId },
+    select: { name: true },
+  });
+  return row?.name ?? "Прочее";
+}
 
 const durationMinutes = z.preprocess((val) => {
   if (val == null || String(val).trim() === "") return undefined;
@@ -89,26 +145,38 @@ export async function createResourceCategoryAction(
   });
   if (!parsed.success) return { error: "Укажите название категории" };
 
+  // Раздел вызывного по умолчанию (точное название) — только здесь, при создании.
+  const section = await checkCategorySection(
+    { canEdit: ctx.can("script:write"), sectionKey: sectionKeyInProject(projectId) },
+    formData.get("callSheetSection"),
+    { name: parsed.data.name, perShift: parsed.data.perShift ?? false, creating: true },
+  );
+  if ("error" in section) return { error: section.error };
+
   await auditMutation(
     ctx,
-    async (data) => {
-      const maxOrder = await prisma.resourceCategory.aggregate({
-        where: { projectId },
-        _max: { sortOrder: true },
-      });
-      return prisma.resourceCategory.create({
-        data: {
-          projectId,
-          name: data.name,
-          sortOrder: (maxOrder._max.sortOrder ?? -1) + 1,
-          fillInScenes: data.fillInScenes ?? true,
-          perShift: data.perShift ?? false,
-          countable: data.countable ?? false,
-          showInKpp: data.showInKpp ?? true,
-          tracksMileage: data.tracksMileage ?? false,
-        },
-      });
-    },
+    (data) =>
+      prisma.$transaction(async (tx) => {
+        const maxOrder = await tx.resourceCategory.aggregate({
+          where: { projectId },
+          _max: { sortOrder: true },
+        });
+        const callSheetSectionId = await sectionIdFor(tx, projectId, section.section);
+        const created = await tx.resourceCategory.create({
+          data: {
+            projectId,
+            name: data.name,
+            sortOrder: (maxOrder._max.sortOrder ?? -1) + 1,
+            fillInScenes: data.fillInScenes ?? true,
+            perShift: data.perShift ?? false,
+            countable: data.countable ?? false,
+            showInKpp: data.showInKpp ?? true,
+            tracksMileage: data.tracksMileage ?? false,
+            callSheetSectionId,
+          },
+        });
+        return { ...created, sectionName: await sectionLabel(tx, callSheetSectionId) };
+      }),
     parsed.data,
     {
       projectId,
@@ -116,6 +184,7 @@ export async function createResourceCategoryAction(
       action: "CREATE",
       entityId: (_, c) => c.id,
       summary: (_, c) => `Создана категория ресурсов «${c.name}»`,
+      changes: (_, c) => ({ callSheetSection: c.sectionName }),
     },
   );
 
@@ -142,22 +211,46 @@ export async function updateResourceCategoryAction(
   });
   if (!parsed.success) return { error: "Проверьте данные" };
 
+  const before = await prisma.resourceCategory.findFirst({
+    where: { id: categoryId, projectId },
+    select: { callSheetSectionId: true },
+  });
+  if (!before) return { error: "Категория не найдена" };
+
+  // Раздел вызывного меняется только руками: из формы, без подбора по названию.
+  const section = await checkCategorySection(
+    { canEdit: ctx.can("script:write"), sectionKey: sectionKeyInProject(projectId) },
+    formData.get("callSheetSection"),
+    { name: parsed.data.name, perShift: parsed.data.perShift ?? false, creating: false },
+  );
+  if ("error" in section) return { error: section.error };
+
   await auditMutation(
     ctx,
-    async (data) => {
-      await prisma.resourceCategory.updateMany({
-        where: { id: categoryId, projectId },
-        data: {
-          name: data.name,
-          fillInScenes: data.fillInScenes ?? true,
-          perShift: data.perShift ?? false,
-          countable: data.countable ?? false,
-          showInKpp: data.showInKpp ?? true,
-          tracksMileage: data.tracksMileage ?? false,
-        },
-      });
-      return data;
-    },
+    (data) =>
+      prisma.$transaction(async (tx) => {
+        const callSheetSectionId = await sectionIdFor(tx, projectId, section.section);
+        await tx.resourceCategory.updateMany({
+          where: { id: categoryId, projectId },
+          data: {
+            name: data.name,
+            fillInScenes: data.fillInScenes ?? true,
+            perShift: data.perShift ?? false,
+            countable: data.countable ?? false,
+            showInKpp: data.showInKpp ?? true,
+            tracksMileage: data.tracksMileage ?? false,
+            callSheetSectionId,
+          },
+        });
+        const sectionChange =
+          callSheetSectionId === before.callSheetSectionId
+            ? null
+            : {
+                from: await sectionLabel(tx, before.callSheetSectionId),
+                to: await sectionLabel(tx, callSheetSectionId),
+              };
+        return { ...data, sectionChange };
+      }),
     parsed.data,
     {
       projectId,
@@ -165,6 +258,7 @@ export async function updateResourceCategoryAction(
       action: "UPDATE",
       entityId: categoryId,
       summary: (_, d) => `Обновлена категория «${d.name}»`,
+      changes: (_, d) => (d.sectionChange ? { callSheetSection: d.sectionChange } : undefined),
     },
   );
 

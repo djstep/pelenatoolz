@@ -100,7 +100,15 @@ export async function loadElementsAutoSource(
                   itemId: true,
                   quantity: true,
                   item: {
-                    select: { name: true, category: { select: { name: true, perShift: true } } },
+                    select: {
+                      name: true,
+                      category: {
+                        select: {
+                          perShift: true,
+                          callSheetSection: { select: { id: true, key: true } },
+                        },
+                      },
+                    },
                   },
                 },
               },
@@ -249,7 +257,10 @@ export async function getCallSheetElementsEditor(
     sections,
     autoRows: merged.rows.map((row) => ({
       autoKey: row.auto.autoKey,
-      sectionRef: refByKey.get(row.auto.sectionKey) ?? "",
+      sectionRef:
+        "key" in row.auto.section
+          ? (refByKey.get(row.auto.section.key) ?? "")
+          : row.auto.section.id,
       auto: {
         name: row.auto.name,
         quantity: row.auto.quantity ?? "",

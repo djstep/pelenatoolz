@@ -13,16 +13,49 @@ import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Modal } from "@/shared/ui/modal";
+import { Select } from "@/shared/ui/select";
 import { useActionSuccess } from "@/shared/ui/unsaved/use-action-success";
+import { AUTO_SECTION } from "@/features/resources/lib/category-section";
 
 const initial: ResourceActionState = {};
 
-function CategoryFormFields({ category }: { category?: ResourceCategoryRow }) {
+/** Раздел элементов площадки вызывного: id раздела или «key:КЛЮЧ» (системный, ещё не в базе). */
+export type CallSheetSectionOption = { ref: string; name: string };
+
+function CategoryFormFields({
+  category,
+  sections,
+}: {
+  category?: ResourceCategoryRow;
+  sections: CallSheetSectionOption[];
+}) {
   return (
     <div className="space-y-4">
       <div>
         <Label htmlFor="name">Название категории *</Label>
         <Input id="name" name="name" required defaultValue={category?.name} />
+      </div>
+      <div>
+        <Label htmlFor="callSheetSection">Раздел вызывного</Label>
+        <Select
+          id="callSheetSection"
+          name="callSheetSection"
+          defaultValue={category ? (category.callSheetSectionId ?? "") : AUTO_SECTION}
+        >
+          {category ? null : (
+            <option value={AUTO_SECTION}>По названию категории (если совпадает с разделом)</option>
+          )}
+          <option value="">Без раздела — в «Прочее»</option>
+          {sections.map((s) => (
+            <option key={s.ref} value={s.ref}>
+              {s.name}
+            </option>
+          ))}
+        </Select>
+        <p className="mt-1 text-xs text-[var(--muted-fg)]">
+          В какой раздел «Элементов площадки» вызывного попадают ресурсы этой категории из сцен.
+          Посменные категории туда не попадают.
+        </p>
       </div>
       <div className="space-y-2 text-sm">
         <p className="font-medium">Настройки</p>
@@ -76,11 +109,13 @@ export function CategoryModal({
   open,
   onClose,
   category,
+  sections,
 }: {
   projectId: string;
   open: boolean;
   onClose: () => void;
   category?: ResourceCategoryRow;
+  sections: CallSheetSectionOption[];
 }) {
   const isEdit = Boolean(category);
   const bound = isEdit
@@ -114,7 +149,7 @@ export function CategoryModal({
       }
     >
       <form id="category-form" onSubmit={submitKeepingFields(action)} key={category?.id ?? "new"}>
-        <CategoryFormFields category={category} />
+        <CategoryFormFields category={category} sections={sections} />
       </form>
     </Modal>
   );

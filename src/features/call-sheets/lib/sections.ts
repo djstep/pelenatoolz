@@ -10,12 +10,16 @@ export const DEFAULT_CALL_SHEET_SECTIONS = [
   { key: "CAMERA", name: "Опер. техника" },
   { key: "CG", name: "CG" },
   { key: "SPECIAL_TRANSPORT", name: "Спецтранспорт" },
+  { key: "OTHER", name: "Прочее" },
 ] as const;
 
 export type SectionKey = (typeof DEFAULT_CALL_SHEET_SECTIONS)[number]["key"];
 
 /** Спецтранспорт правится в своём блоке — в разделе только показ, своих строк нет. */
 export const SPECIAL_TRANSPORT_KEY: SectionKey = "SPECIAL_TRANSPORT";
+
+/** Всё, чему раздел не назначен, — в «Прочее». */
+export const OTHER_SECTION_KEY: SectionKey = "OTHER";
 
 const SECTION_KEYS = new Set<string>(DEFAULT_CALL_SHEET_SECTIONS.map((s) => s.key));
 
@@ -29,8 +33,8 @@ export function defaultSectionName(key: string | null): string | null {
 
 // ---- Соответствие типов разделам ----
 
-/** Ресурс сцены из либретто → раздел. Грим и «своё» — без раздела. */
-export function sectionForSceneResource(category: SceneResourceCategory): SectionKey | null {
+/** Ресурс сцены из либретто → раздел. Грим и «своё» — в «Прочее». */
+export function sectionForSceneResource(category: SceneResourceCategory): SectionKey {
   switch (category) {
     case "EXTRAS":
     case "GROUP":
@@ -46,12 +50,12 @@ export function sectionForSceneResource(category: SceneResourceCategory): Sectio
     case "CAMERA":
       return "CAMERA";
     default:
-      return null;
+      return OTHER_SECTION_KEY;
   }
 }
 
-/** Элемент разбора сцены → раздел. Пиро/SFX, грим, прочее — без раздела. */
-export function sectionForElement(type: ElementType): SectionKey | null {
+/** Элемент разбора сцены → раздел. Пиро/SFX, грим, прочее — в «Прочее». */
+export function sectionForElement(type: ElementType): SectionKey {
   switch (type) {
     case "PROP":
       return "PROPS";
@@ -61,36 +65,65 @@ export function sectionForElement(type: ElementType): SectionKey | null {
     case "COSTUME":
       return "COSTUME";
     default:
-      return null;
+      return OTHER_SECTION_KEY;
   }
 }
 
-const CATEGORY_KEYWORDS: { words: string[]; key: SectionKey }[] = [
-  { words: ["групп", "массов"], key: "GROUP" },
-  { words: ["транспорт"], key: "GAME_TRANSPORT" },
-  { words: ["реквиз"], key: "PROPS" },
-  { words: ["костюм"], key: "COSTUME" },
-  { words: ["трюк", "каскад"], key: "STUNTS" },
-  { words: ["техник", "оператор", "камер"], key: "CAMERA" },
-  { words: ["cg", "график"], key: "CG" },
-];
+/**
+ * Названия категорий каталога, которым раздел ставится по умолчанию. Только точное совпадение
+ * (без регистра, «ё» = «е», лишние пробелы не важны), не по части слова: «Пиротехника» не
+ * попадёт в «Опер. технику». Тот же список — в миграции данных
+ * 20261101121045_resource_category_call_sheet_section (тест сверяет).
+ */
+export const CATEGORY_DEFAULT_NAMES: Record<
+  Exclude<SectionKey, "SPECIAL_TRANSPORT" | "OTHER">,
+  readonly string[]
+> = {
+  GROUP: ["групповка", "массовка", "групповка и массовка", "массовка и групповка"],
+  GAME_TRANSPORT: ["игровой транспорт", "игровые машины"],
+  PROPS: ["реквизит", "игровой реквизит"],
+  COSTUME: ["костюм", "костюмы"],
+  STUNTS: ["трюки", "трюк", "каскадеры"],
+  CAMERA: ["опер. техника", "операторская техника", "опер техника"],
+  CG: ["cg", "графика", "компьютерная графика"],
+};
+
+export function normalizeCategoryName(name: string): string {
+  return name.toLowerCase().replaceAll("ё", "е").replace(/\s+/g, " ").trim();
+}
 
 /**
- * Категория каталога ресурсов → раздел по ключевым словам в названии.
- * Посменные категории — без раздела (это люди и техника «на смену», не по сценам).
- * «Спецтранспорт» — без раздела: он правится в блоке «Спецтранспорт».
+ * Раздел по умолчанию для новой категории — по точному названию. Посменные категории —
+ * без раздела (в элементы площадки они не попадают). null — без раздела («Прочее»).
+ * Вызывается только при создании категории; дальше раздел меняют руками.
  */
-export function sectionForResourceCategory(category: {
+export function defaultSectionKeyForCategory(category: {
   name: string;
   perShift: boolean;
 }): SectionKey | null {
   if (category.perShift) return null;
-  const name = category.name.toLowerCase();
-  if (name.includes("спецтранс")) return null;
-  for (const rule of CATEGORY_KEYWORDS) {
-    if (rule.words.some((word) => name.includes(word))) return rule.key;
+  const name = normalizeCategoryName(category.name);
+  for (const [key, names] of Object.entries(CATEGORY_DEFAULT_NAMES)) {
+    if (names.includes(name)) return key as SectionKey;
   }
   return null;
+}
+
+/** Раздел строки: системный по ключу или раздел проекта по id. */
+export type AutoRowSection = { key: SectionKey } | { id: string };
+
+/**
+ * Позиция каталога → раздел по настройке её категории. Посменные — не в элементах (null).
+ * Раздел не выбран (или выбран спецтранспорт, который правится в своём блоке) — «Прочее».
+ */
+export function sectionForResourceCategory(category: {
+  perShift: boolean;
+  callSheetSection: { id: string; key: string | null } | null;
+}): AutoRowSection | null {
+  if (category.perShift) return null;
+  const section = category.callSheetSection;
+  if (!section || section.key === SPECIAL_TRANSPORT_KEY) return { key: OTHER_SECTION_KEY };
+  return { id: section.id };
 }
 
 // ---- Авто-строки из сцен дня ----
@@ -106,16 +139,22 @@ export type AutoSourceScene = {
   resourceItems: {
     itemId: string;
     quantity: number;
-    item: { name: string; category: { name: string; perShift: boolean } };
+    item: {
+      name: string;
+      category: {
+        perShift: boolean;
+        callSheetSection: { id: string; key: string | null } | null;
+      };
+    };
   }[];
 };
 
 /** Авто-строка раздела: что, сколько, в каких сценах. */
 export type AutoElementRow = {
   autoKey: string;
-  sectionKey: SectionKey;
+  section: AutoRowSection;
   name: string;
-  /** Сумма количеств по сценам; null — количества нет (элемент разбора). */
+  /** Наибольшее количество по сценам; null — количества нет (элемент разбора). */
   quantity: string | null;
   /** Номера сцен через запятую. */
   scenes: string;
@@ -166,7 +205,7 @@ export function parseAutoKey(
 }
 
 type Accumulator = {
-  sectionKey: SectionKey;
+  section: AutoRowSection;
   name: string;
   quantity: number | null;
   scenes: Set<string>;
@@ -175,28 +214,33 @@ type Accumulator = {
 function add(
   map: Map<string, Accumulator>,
   autoKey: string,
-  sectionKey: SectionKey,
+  section: AutoRowSection,
   name: string,
   quantity: number | null,
   sceneNumber: string,
 ) {
   const existing = map.get(autoKey);
   if (existing) {
-    if (quantity !== null) existing.quantity = (existing.quantity ?? 0) + quantity;
+    // Одни и те же люди и вещи в разных сценах — не сумма, а наибольшее количество.
+    if (quantity !== null) existing.quantity = Math.max(existing.quantity ?? 0, quantity);
     existing.scenes.add(sceneNumber);
     return;
   }
-  map.set(autoKey, { sectionKey, name, quantity, scenes: new Set([sceneNumber]) });
+  map.set(autoKey, { section, name, quantity, scenes: new Set([sceneNumber]) });
 }
 
 const SECTION_ORDER = new Map<string, number>(
   DEFAULT_CALL_SHEET_SECTIONS.map((s, index) => [s.key, index]),
 );
 
+function sectionOrder(section: AutoRowSection): number {
+  return "key" in section ? (SECTION_ORDER.get(section.key) ?? 0) : SECTION_ORDER.size;
+}
+
 /**
  * Авто-строки элементов площадки из сцен дня. Вырезанные сцены строк не дают.
- * Одинаковое из разных сцен — одна строка: количество — сумма, сцены — список номеров.
- * Порядок: по разделам, внутри — по названию.
+ * Одинаковое из разных сцен — одна строка: количество — наибольшее, сцены — список номеров.
+ * Порядок: системные разделы по порядку по умолчанию, потом разделы проекта, внутри — по названию.
  */
 export function buildAutoRows(scenes: AutoSourceScene[]): AutoElementRow[] {
   const map = new Map<string, Accumulator>();
@@ -206,26 +250,26 @@ export function buildAutoRows(scenes: AutoSourceScene[]): AutoElementRow[] {
     for (const res of scene.resources) {
       const sectionKey = sectionForSceneResource(res.category);
       const name = res.name.trim();
-      if (!sectionKey || !name) continue;
-      add(map, resourceAutoKey(sectionKey, name), sectionKey, name, res.quantity, num);
+      if (!name) continue;
+      add(map, resourceAutoKey(sectionKey, name), { key: sectionKey }, name, res.quantity, num);
     }
     for (const link of scene.elements) {
       const sectionKey = sectionForElement(link.element.type);
       const name = link.element.name.trim();
-      if (!sectionKey || !name) continue;
-      add(map, elementAutoKey(link.element.id), sectionKey, name, null, num);
+      if (!name) continue;
+      add(map, elementAutoKey(link.element.id), { key: sectionKey }, name, null, num);
     }
     for (const link of scene.resourceItems) {
-      const sectionKey = sectionForResourceCategory(link.item.category);
+      const section = sectionForResourceCategory(link.item.category);
       const name = link.item.name.trim();
-      if (!sectionKey || !name) continue;
-      add(map, itemAutoKey(link.itemId), sectionKey, name, link.quantity, num);
+      if (!section || !name) continue;
+      add(map, itemAutoKey(link.itemId), section, name, link.quantity, num);
     }
   }
   return [...map.entries()]
     .map(([autoKey, entry]) => ({
       autoKey,
-      sectionKey: entry.sectionKey,
+      section: entry.section,
       name: entry.name,
       quantity: entry.quantity !== null && entry.quantity > 0 ? String(entry.quantity) : null,
       scenes: [...entry.scenes]
@@ -234,7 +278,7 @@ export function buildAutoRows(scenes: AutoSourceScene[]): AutoElementRow[] {
     }))
     .sort(
       (a, b) =>
-        (SECTION_ORDER.get(a.sectionKey) ?? 0) - (SECTION_ORDER.get(b.sectionKey) ?? 0) ||
+        sectionOrder(a.section) - sectionOrder(b.section) ||
         a.name.localeCompare(b.name, "ru"),
     );
 }

@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
 import { describe, test } from "node:test";
 import {
   AUTO_ROW_NOT_FOUND,
@@ -25,6 +27,8 @@ import {
 import {
   applyOverride,
   buildAutoRows,
+  CATEGORY_DEFAULT_NAMES,
+  defaultSectionKeyForCategory,
   DEFAULT_CALL_SHEET_SECTIONS,
   effectiveSections,
   ensureSectionsIn,
@@ -124,8 +128,9 @@ describe("соответствие типов разделам", () => {
     assert.equal(sectionForSceneResource("VEHICLE"), "GAME_TRANSPORT");
     assert.equal(sectionForSceneResource("COSTUME"), "COSTUME");
     assert.equal(sectionForSceneResource("CAMERA"), "CAMERA");
-    assert.equal(sectionForSceneResource("MAKEUP"), null);
-    assert.equal(sectionForSceneResource("CUSTOM"), null);
+    // Без своего раздела — в «Прочее».
+    assert.equal(sectionForSceneResource("MAKEUP"), "OTHER");
+    assert.equal(sectionForSceneResource("CUSTOM"), "OTHER");
   });
 
   test("элементы разбора", () => {
@@ -133,33 +138,66 @@ describe("соответствие типов разделам", () => {
     assert.equal(sectionForElement("VEHICLE"), "GAME_TRANSPORT");
     assert.equal(sectionForElement("WARDROBE"), "COSTUME");
     assert.equal(sectionForElement("COSTUME"), "COSTUME");
-    assert.equal(sectionForElement("SFX"), null);
-    assert.equal(sectionForElement("MAKEUP"), null);
-    assert.equal(sectionForElement("OTHER"), null);
+    assert.equal(sectionForElement("SFX"), "OTHER");
+    assert.equal(sectionForElement("MAKEUP"), "OTHER");
+    assert.equal(sectionForElement("OTHER"), "OTHER");
   });
 
-  test("категории каталога — по словам в названии, посменные — без раздела", () => {
-    const cat = (name: string, perShift = false) => sectionForResourceCategory({ name, perShift });
-    assert.equal(cat("Групповка"), "GROUP");
-    assert.equal(cat("Массовка"), "GROUP");
-    assert.equal(cat("Игровой транспорт"), "GAME_TRANSPORT");
-    assert.equal(cat("Реквизит"), "PROPS");
-    assert.equal(cat("Костюмы"), "COSTUME");
-    assert.equal(cat("Трюки"), "STUNTS");
-    assert.equal(cat("Каскадёры"), "STUNTS");
-    assert.equal(cat("Операторская техника"), "CAMERA");
-    assert.equal(cat("Камеры"), "CAMERA");
-    assert.equal(cat("CG"), "CG");
-    assert.equal(cat("Компьютерная графика"), "CG");
-    assert.equal(cat("Животные"), null);
-    assert.equal(cat("Спецтранспорт"), null);
-    assert.equal(cat("Операторская техника", true), null);
-    assert.equal(cat("Групповка", true), null);
+  test("позиция каталога — раздел из настройки категории, не выбран — «Прочее»", () => {
+    const cat = (callSheetSection: { id: string; key: string | null } | null, perShift = false) =>
+      sectionForResourceCategory({ perShift, callSheetSection });
+    assert.deepEqual(cat({ id: "s-cam", key: "CAMERA" }), { id: "s-cam" });
+    assert.deepEqual(cat({ id: "s-own", key: null }), { id: "s-own" });
+    assert.deepEqual(cat(null), { key: "OTHER" });
+    // Спецтранспорт правится в своём блоке — позиции каталога туда не идут.
+    assert.deepEqual(cat({ id: "s-st", key: "SPECIAL_TRANSPORT" }), { key: "OTHER" });
+    // Посменные — не в элементах площадки.
+    assert.equal(cat({ id: "s-cam", key: "CAMERA" }, true), null);
+  });
+
+  test("раздел по умолчанию для новой категории — только точное название", () => {
+    const def = (name: string, perShift = false) => defaultSectionKeyForCategory({ name, perShift });
+    assert.equal(def("Групповка"), "GROUP");
+    assert.equal(def("  МАССОВКА "), "GROUP");
+    assert.equal(def("Игровой транспорт"), "GAME_TRANSPORT");
+    assert.equal(def("Реквизит"), "PROPS");
+    assert.equal(def("Костюмы"), "COSTUME");
+    assert.equal(def("Каскадёры"), "STUNTS");
+    assert.equal(def("Операторская  техника"), "CAMERA");
+    assert.equal(def("Опер. техника"), "CAMERA");
+    assert.equal(def("CG"), "CG");
+    // Не по части слова.
+    assert.equal(def("Пиротехника"), null);
+    assert.equal(def("Светотехника"), null);
+    assert.equal(def("Доп. техника"), null);
+    assert.equal(def("Транспорт группы"), null);
+    assert.equal(def("Спецтранспорт"), null);
+    assert.equal(def("Реквизит (аренда)"), null);
+    // Посменные — без раздела.
+    assert.equal(def("Групповка", true), null);
+  });
+
+  test("список названий по умолчанию совпадает с миграцией данных", () => {
+    const sql = fs.readFileSync(
+      path.join(
+        process.cwd(),
+        "prisma/migrations/20261101121045_resource_category_call_sheet_section/migration.sql",
+      ),
+      "utf8",
+    );
+    for (const [key, names] of Object.entries(CATEGORY_DEFAULT_NAMES)) {
+      for (const name of names) {
+        assert.ok(sql.includes(`('${name}', '${key}')`), `в миграции нет ${name} → ${key}`);
+      }
+    }
+    const pairs = sql.match(/\('[^']+', '[A-Z_]+'\)/g) ?? [];
+    assert.equal(pairs.length, Object.values(CATEGORY_DEFAULT_NAMES).flat().length);
   });
 });
 
 describe("авто-строки из сцен дня", () => {
-  test("одинаковое из разных сцен — одна строка: количество — сумма, сцены — список", () => {
+  test("одинаковое из разных сцен — одна строка: количество — наибольшее, сцены — список", () => {
+    const camera = { id: "s-cam", key: "CAMERA" };
     const rows = buildAutoRows([
       scene({
         number: "12",
@@ -169,7 +207,7 @@ describe("авто-строки из сцен дня", () => {
           {
             itemId: "i1",
             quantity: 2,
-            item: { name: "Кран", category: { name: "Операторская техника", perShift: false } },
+            item: { name: "Кран", category: { perShift: false, callSheetSection: camera } },
           },
         ],
       }),
@@ -186,16 +224,25 @@ describe("авто-строки из сцен дня", () => {
           {
             itemId: "i1",
             quantity: 1,
-            item: { name: "Кран", category: { name: "Операторская техника", perShift: false } },
+            item: { name: "Кран", category: { perShift: false, callSheetSection: camera } },
+          },
+          {
+            itemId: "i2",
+            quantity: 1,
+            item: { name: "Дым-машина", category: { perShift: false, callSheetSection: null } },
           },
         ],
       }),
       scene({ number: "4", resources: [{ category: "GROUP", name: "Прохожие", quantity: 1 }] }),
     ]);
     assert.deepEqual(rows, [
-      { autoKey: "res:GROUP:прохожие", sectionKey: "GROUP", name: "Прохожие", quantity: "16", scenes: "2-3А, 4, 12" },
-      { autoKey: "el:e1", sectionKey: "PROPS", name: "Нож", quantity: null, scenes: "2-3А, 12" },
-      { autoKey: "item:i1", sectionKey: "CAMERA", name: "Кран", quantity: "3", scenes: "2-3А, 12" },
+      // 10, 5 и 1 человек в трёх сценах — это не 16, а не больше 10.
+      { autoKey: "res:GROUP:прохожие", section: { key: "GROUP" }, name: "Прохожие", quantity: "10", scenes: "2-3А, 4, 12" },
+      { autoKey: "el:e1", section: { key: "PROPS" }, name: "Нож", quantity: null, scenes: "2-3А, 12" },
+      { autoKey: "item:i2", section: { key: "OTHER" }, name: "Дым-машина", quantity: "1", scenes: "2-3А" },
+      { autoKey: "res:OTHER:шрам", section: { key: "OTHER" }, name: "Шрам", quantity: "1", scenes: "2-3А" },
+      // Раздел проекта по id — после системных.
+      { autoKey: "item:i1", section: { id: "s-cam" }, name: "Кран", quantity: "2", scenes: "2-3А, 12" },
     ]);
   });
 
@@ -225,7 +272,7 @@ describe("авто-строки из сцен дня", () => {
 });
 
 describe("правки авто-строк и «убрать из вызывного»", () => {
-  const auto = { autoKey: "el:e1", sectionKey: "PROPS" as const, name: "Нож", quantity: "2", scenes: "1, 2" };
+  const auto = { autoKey: "el:e1", section: { key: "PROPS" as const }, name: "Нож", quantity: "2", scenes: "1, 2" };
 
   test("правка перекрывает поля, пустые — из сцен", () => {
     assert.deepEqual(applyOverride(auto, null), {
@@ -404,7 +451,7 @@ describe("сохранение разделов", () => {
       { id: "s-GAME_TRANSPORT", name: "Игровой транспорт", sortOrder: 0 },
       { id: "s-GROUP", name: "Массовка", sortOrder: 1 },
     ]);
-    assert.deepEqual(plan.creates, [{ key: null, name: "Животные", sortOrder: 8 }]);
+    assert.deepEqual(plan.creates, [{ key: null, name: "Животные", sortOrder: DEFAULT_CALL_SHEET_SECTIONS.length }]);
     assert.deepEqual(plan.deletes, []);
   });
 
@@ -517,7 +564,7 @@ describe("сохранение элементов площадки", () => {
     assert.deepEqual(parseElementsPayload("{"), { error: "Некорректные данные" });
   });
 
-  const auto = { autoKey: "el:e1", sectionKey: "PROPS" as const, name: "Нож", quantity: null, scenes: "1" };
+  const auto = { autoKey: "el:e1", section: { key: "PROPS" as const }, name: "Нож", quantity: null, scenes: "1" };
   const sections = existingSystem().map((row) => ({ id: row.id, key: row.key }));
 
   test("autoKey — только из авто-строк дня или сохранённых правок", () => {

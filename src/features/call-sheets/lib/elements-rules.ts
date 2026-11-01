@@ -365,7 +365,7 @@ export function planElementsSave(input: {
           ...override,
           autoKey: auto.autoKey,
           sortOrder: 0,
-          section: { key: auto.sectionKey },
+          section: auto.section,
         });
       }
       continue;

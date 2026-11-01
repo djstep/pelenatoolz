@@ -1,3 +1,5 @@
+import { getCallSheetSectionsEditor } from "@/features/call-sheets/elements-queries";
+import { SPECIAL_TRANSPORT_KEY, OTHER_SECTION_KEY } from "@/features/call-sheets/lib/sections";
 import { ResourcesIndex } from "@/features/resources/components/resources-index";
 import { listResourceCategories } from "@/features/resources/queries";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
@@ -15,7 +17,11 @@ export default async function SettingsResourcesPage({ params }: Props) {
     return <p className="text-sm text-[var(--danger)]">Нет доступа</p>;
   }
 
-  const categories = await listResourceCategories(projectId);
+  const [categories, sections] = await Promise.all([
+    listResourceCategories(projectId),
+    // Ничего не пишет: системных разделов может не быть в базе — тогда «key:КЛЮЧ».
+    getCallSheetSectionsEditor(projectId),
+  ]);
 
   return (
     <div className="space-y-6">
@@ -31,6 +37,10 @@ export default async function SettingsResourcesPage({ params }: Props) {
           locale={locale}
           categories={categories}
           canWrite={ctx.can("script:write")}
+          sections={sections
+            // Спецтранспорт правится в своём блоке, «Прочее» — это «без раздела».
+            .filter((s) => s.key !== SPECIAL_TRANSPORT_KEY && s.key !== OTHER_SECTION_KEY)
+            .map((s) => ({ ref: s.id || `key:${s.key}`, name: s.name }))}
         />
       </Card>
     </div>
