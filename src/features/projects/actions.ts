@@ -23,11 +23,13 @@ import {
   isNotInProjectError,
 } from "@/features/memberships/assert-in-project";
 import {
+  deleteProjectRefusal,
+  isProjectOwner,
   lockProjectOwner,
-  OWNER_ONLY_DELETE_ERROR,
+  memberChangeRefusal,
   OWNER_ONLY_TRANSFER_ERROR,
-  OWNER_PROTECTED_ERROR,
-  TRANSFER_TO_PRODUCER_ERROR,
+  projectCreatedAuditMeta,
+  transferRefusal,
 } from "@/features/projects/lib/owner";
 import { prisma } from "@/shared/db/prisma";
 import { DEFAULT_APPROVAL_STATUSES } from "@/features/finance/lib/approval-statuses";
@@ -209,14 +211,34 @@ export async function createProjectAction(
 
     const producer = roles.find((r) => r.name === producerRole.name)!;
 
-    await tx.projectMembership.create({
-      data: {
-        projectId: created.id,
-        userId: user.id!,
-        roleId: producer.id,
-        status: MembershipStatus.ACTIVE,
-      },
+    // Создатель — участник с ролью «Продюсер» и владелец. Запись журнала — в этой же
+    // транзакции: создание откатилось — записи нет; запись не легла — нет и проекта.
+    const owner = await tx.user.findUnique({
+      where: { id: user.id! },
+      select: { name: true },
     });
+    await auditMutation(
+      { user: { id: user.id! } },
+      () =>
+        tx.projectMembership.create({
+          data: {
+            projectId: created.id,
+            userId: user.id!,
+            roleId: producer.id,
+            status: MembershipStatus.ACTIVE,
+          },
+        }),
+      null,
+      projectCreatedAuditMeta({
+        projectId: created.id,
+        projectName: created.name,
+        ownerUserId: user.id!,
+        ownerName: owner?.name,
+        roleId: producer.id,
+        roleName: producer.name,
+      }),
+      { db: tx },
+    );
 
     return created;
   });
@@ -365,7 +387,8 @@ export async function deleteProjectAction(
   const refusal = await prisma.$transaction(
     async (tx) => {
       const ownerUserId = await lockProjectOwner(tx, projectId);
-      if (ownerUserId !== user.id) return OWNER_ONLY_DELETE_ERROR;
+      const notOwner = deleteProjectRefusal(user.id!, ownerUserId);
+      if (notOwner) return notOwner;
       await auditMutation(
         { user: { id: user.id! } },
         () => tx.project.delete({ where: { id: projectId } }),
@@ -539,8 +562,11 @@ export async function updateMemberRoleAction(
   // Владелец и «последний продюсер» проверяются под блокировкой проекта —
   // одновременная передача владения или второе понижение ждут и видят результат.
   const refusal = await prisma.$transaction(async (tx) => {
-    const ownerUserId = await lockProjectOwner(tx, projectId);
-    if (target.userId === ownerUserId) return OWNER_PROTECTED_ERROR;
+    const ownerRefusal = memberChangeRefusal(
+      target.userId,
+      await lockProjectOwner(tx, projectId),
+    );
+    if (ownerRefusal) return ownerRefusal;
 
     const current = await tx.projectMembership.findFirst({
       where: { id: target.id, projectId },
@@ -614,8 +640,11 @@ export async function removeMemberAction(
   const memberName = auditMemberName(target.user.name);
   // Владелец и «последний продюсер» — под блокировкой проекта, как при смене роли.
   const outcome = await prisma.$transaction(async (tx) => {
-    const ownerUserId = await lockProjectOwner(tx, projectId);
-    if (target.userId === ownerUserId) return { error: OWNER_PROTECTED_ERROR };
+    const ownerRefusal = memberChangeRefusal(
+      target.userId,
+      await lockProjectOwner(tx, projectId),
+    );
+    if (ownerRefusal) return { error: ownerRefusal };
 
     const current = await tx.projectMembership.findFirst({
       where: { id: membershipId, projectId },
@@ -714,9 +743,8 @@ export async function acceptInviteAction(token: string): Promise<ActionState> {
     return { error: "Вы уже участник проекта" };
   }
   // Владелец всегда активный участник; проверка на случай, если это когда-то изменится.
-  if (invite.project.ownerUserId === user.id) {
-    return { error: OWNER_PROTECTED_ERROR };
-  }
+  const ownerRefusal = memberChangeRefusal(user.id!, invite.project.ownerUserId);
+  if (ownerRefusal) return { error: ownerRefusal };
 
   const { membershipId, previousRole } = await prisma.$transaction(async (tx) => {
     const existing = await tx.projectMembership.findUnique({
@@ -798,7 +826,10 @@ export async function transferOwnershipAction(
   try {
     outcome = await prisma.$transaction(async (tx) => {
       const ownerUserId = await lockProjectOwner(tx, projectId);
-      if (ownerUserId !== user.id) return { error: OWNER_ONLY_TRANSFER_ERROR };
+      // Не владелец получает отказ до поиска участника.
+      if (!isProjectOwner(user.id!, ownerUserId)) {
+        return { error: OWNER_ONLY_TRANSFER_ERROR };
+      }
 
       await assertInProject("ProjectMembership", membershipId, projectId, tx);
       const [target, from] = await Promise.all([
@@ -811,9 +842,13 @@ export async function transferOwnershipAction(
           include: { role: true, user: { select: { name: true } } },
         }),
       ]);
+      const refusal = transferRefusal({
+        actorUserId: user.id!,
+        ownerUserId,
+        target: target && { userId: target.userId, isProducer: isProducerRole(target.role) },
+      });
+      if (refusal) return { error: refusal };
       if (!target || !from) return { error: "Участник не найден" };
-      if (target.userId === user.id) return { error: "Вы уже владелец проекта" };
-      if (!isProducerRole(target.role)) return { error: TRANSFER_TO_PRODUCER_ERROR };
 
       const fromName = auditMemberName(from.user.name);
       const toName = auditMemberName(target.user.name);
