@@ -156,6 +156,13 @@ describe("buildAttendancePlaceLine", () => {
   });
 });
 
+describe("имя файла", () => {
+  test("дата дня по поясу проекта: день 01.11 (полночь по Москве) — 2026-11-01, не 31.10", () => {
+    const model = buildAttendanceSheetModel(mainDay, { resourceIds: [] }, []);
+    assert.equal(model.fileBaseName, "attendance-day-3-2026-11-01");
+  });
+});
+
 describe("formatAttendanceDate", () => {
   test("ДД.ММ.ГГГГ по часовому поясу проекта, без пояса — Москва", () => {
     const stored = new Date("2026-11-30T21:00:00.000Z");

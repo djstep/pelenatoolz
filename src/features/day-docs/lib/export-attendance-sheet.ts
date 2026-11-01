@@ -10,7 +10,7 @@ import {
   parseAttendanceCategorySectionId,
   type AttendanceSheetSettings,
 } from "@/features/exports/types";
-import { formatDateLong, formatDateShort } from "@/shared/i18n/format-date";
+import { formatDateLong, formatFileDate } from "@/shared/i18n/format-date";
 
 export type AttendancePersonRow = {
   name: string;
@@ -344,7 +344,7 @@ export function buildAttendanceSheetModel(
   }
 
   const dateLabel = formatDateLong(day.date);
-  const fileBaseName = `attendance-day-${day.dayNumber}-${formatDateShort(day.date, { utc: true }).replace(/\s/g, "-")}`;
+  const fileBaseName = `attendance-day-${day.dayNumber}-${formatFileDate(day.date, project.timezone)}`;
 
   return {
     fileBaseName,

@@ -12,6 +12,7 @@ import { getPlanFact, resolvePlanFactFilters } from "@/features/smeta/plan-fact-
 import { getSummaryBook } from "@/features/smeta/summary-queries";
 import { AuditEntityType } from "@/shared/audit/entity-types";
 import { recordAudit } from "@/shared/audit/with-audit";
+import { formatFileDate } from "@/shared/i18n/format-date";
 
 const NO_RIGHTS = "Недостаточно прав";
 /** Больше — не отдаём: ответ серверного действия целиком в памяти браузера. */
@@ -21,8 +22,8 @@ export type SmetaExportResult =
   | { error: string; base64?: undefined; fileName?: undefined }
   | { error?: undefined; base64: string; fileName: string };
 
-function stamp() {
-  return new Date().toISOString().slice(0, 10);
+function stamp(timezone: string | null) {
+  return formatFileDate(new Date(), timezone);
 }
 
 /** План/факт в Excel. Те же права и фильтры, что у экрана; выгрузка — в журнал, без сумм. */
@@ -68,7 +69,7 @@ export async function exportPlanFactAction(
       dateTo: filters.dateTo,
     },
   });
-  return { base64, fileName: `plan-fact-${stamp()}.xlsx` };
+  return { base64, fileName: `plan-fact-${stamp(ctx.project.timezone)}.xlsx` };
 }
 
 /** Сводная книга в Excel: продюсер и «Сметы — просмотр всех». Выгрузка — в журнал. */
@@ -98,5 +99,5 @@ export async function exportSummaryBookAction(
     }`,
     changes: { export: "summary_book", drafts },
   });
-  return { base64, fileName: `summary-book-${stamp()}.xlsx` };
+  return { base64, fileName: `summary-book-${stamp(ctx.project.timezone)}.xlsx` };
 }

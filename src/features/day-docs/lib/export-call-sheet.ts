@@ -20,7 +20,7 @@ import {
   shootDayStatusLabels,
   shootDayTypeLabels,
 } from "@/shared/i18n/domain-labels";
-import { formatDateLong, formatDateShort } from "@/shared/i18n/format-date";
+import { formatDateLong, formatDateShort, formatFileDate } from "@/shared/i18n/format-date";
 import { escapeHtml, PRINT_HTML_CSP_META } from "@/shared/lib/escape-html";
 
 type NextDay = Awaited<ReturnType<typeof getNextShootDayBrief>>;
@@ -211,7 +211,7 @@ export function buildCallSheetExportModel(
   ].filter((section) => section.rows.length > 0);
 
   const dateLabel = formatDateLong(day.date);
-  const fileBaseName = `call-sheet-day-${day.dayNumber}-${formatDateShort(day.date, { utc: true }).replace(/\s/g, "-")}`;
+  const fileBaseName = `call-sheet-day-${day.dayNumber}-${formatFileDate(day.date, project.timezone)}`;
 
   return {
     fileBaseName,
