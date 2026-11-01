@@ -70,6 +70,8 @@ export function isSectionFlagAllowed(
 ): boolean {
   // «Снятие фиксации платежей» проверяется только у «Финансов» (finance:unlock).
   if (flag === "financeUnlock" && section !== "finance") return false;
+  // У «Финансов» фин. условия — только просмотр: правку модуля даёт «Создание» / «Редактирование».
+  if (flag === "financeWrite" && section === "finance") return false;
   // Фин. условия проверяются только у ставок (актёры, локации, ресурсы) и у «Финансов».
   if (
     (flag === "financeRead" || flag === "financeWrite") &&
@@ -87,6 +89,8 @@ function restrictSectionFlags(
   perms: SectionPermissions,
 ): SectionPermissions {
   const out = { ...perms };
+  // «Фин. условия: редактирование» у «Финансов» всегда давало только просмотр — им и остаётся.
+  if (section === "finance" && perms.financeWrite) out.financeRead = true;
   for (const flag of PERMISSION_FLAGS) {
     if (!isSectionFlagAllowed(section, flag)) out[flag] = false;
   }
