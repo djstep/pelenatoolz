@@ -33,7 +33,7 @@ import {
 } from "@/features/casting/lib/cast-list-export-fields";
 import { formatDateShort } from "@/shared/i18n/format-date";
 import { cn } from "@/shared/lib/cn";
-import { printWhenImagesSettled } from "@/shared/lib/print-window";
+import { printExport } from "@/shared/lib/print-window";
 import { Button } from "@/shared/ui/button";
 import { ImageUpload } from "@/shared/ui/image-upload";
 import { Input } from "@/shared/ui/input";
@@ -435,16 +435,29 @@ export function CastListExportModal({
   }
 
   function run() {
+    const input = {
+      characterId: bundle.character.id,
+      format,
+      sort,
+      characterFieldIds,
+      actorFieldIds,
+      candidateConfigs: configs,
+      locale,
+    };
     start(async () => {
-      const result = await exportCastListAction(projectId, {
-        characterId: bundle.character.id,
-        format,
-        sort,
-        characterFieldIds,
-        actorFieldIds,
-        candidateConfigs: configs,
-        locale,
-      });
+      if (format === "pdf") {
+        // Окно открывается сразу по клику, до ответа сервера (блокировщик всплывающих окон).
+        const printed = await printExport(() => exportCastListAction(projectId, input));
+        if (printed.error) {
+          toast.error(printed.error);
+          return;
+        }
+        if (printed.warning) toast.warning(printed.warning);
+        toast.success("Открыто окно печати");
+        onClose();
+        return;
+      }
+      const result = await exportCastListAction(projectId, input);
       if ("error" in result && result.error) {
         toast.error(result.error);
         return;
@@ -453,18 +466,6 @@ export function CastListExportModal({
         downloadBase64(result.base64, result.fileName, result.mime);
         if ("warning" in result && result.warning) toast.warning(result.warning);
         toast.success("Файл сохранён");
-        onClose();
-        return;
-      }
-      if ("html" in result && result.html) {
-        const win = window.open("", "_blank");
-        if (win) {
-          win.document.write(result.html);
-          win.document.close();
-          // Скрипты в странице печати запрещены (CSP) — печать вызывается отсюда, после загрузки фото.
-          printWhenImagesSettled(win);
-        }
-        toast.success("Открыто окно печати");
         onClose();
       }
     });

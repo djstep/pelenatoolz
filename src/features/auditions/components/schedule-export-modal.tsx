@@ -8,7 +8,7 @@ import {
   type ScheduleExportField,
 } from "@/features/auditions/lib/export-schedule";
 import { formatDateShort } from "@/shared/i18n/format-date";
-import { printWhenImagesSettled } from "@/shared/lib/print-window";
+import { printExport } from "@/shared/lib/print-window";
 import { Button } from "@/shared/ui/button";
 import { Label } from "@/shared/ui/label";
 import { Modal } from "@/shared/ui/modal";
@@ -65,14 +65,27 @@ export function ScheduleExportModal({
       toast.error("Откройте день в календаре для экспорта плана на день");
       return;
     }
+    const input = {
+      scope,
+      weekAnchorIso,
+      dayKey: dayKey ?? undefined,
+      format,
+      fields,
+    };
     start(async () => {
-      const result = await exportAuditionScheduleAction(projectId, {
-        scope,
-        weekAnchorIso,
-        dayKey: dayKey ?? undefined,
-        format,
-        fields,
-      });
+      if (format === "pdf") {
+        // Окно открывается сразу по клику, до ответа сервера (блокировщик всплывающих окон).
+        const printed = await printExport(() => exportAuditionScheduleAction(projectId, input));
+        if (printed.error) {
+          toast.error(printed.error);
+          return;
+        }
+        if (printed.warning) toast.warning(printed.warning);
+        toast.success("Открыто окно печати");
+        onClose();
+        return;
+      }
+      const result = await exportAuditionScheduleAction(projectId, input);
       if ("error" in result && result.error) {
         toast.error(result.error);
         return;
@@ -81,18 +94,6 @@ export function ScheduleExportModal({
         downloadBase64(result.base64, result.fileName, result.mime);
         if ("warning" in result && result.warning) toast.warning(result.warning);
         toast.success("Файл сохранён");
-        onClose();
-        return;
-      }
-      if ("html" in result && result.html) {
-        const win = window.open("", "_blank");
-        if (win) {
-          win.document.write(result.html);
-          win.document.close();
-          // Скрипты в странице печати запрещены (CSP) — печать вызывается отсюда, после загрузки фото.
-          printWhenImagesSettled(win);
-        }
-        toast.success("Открыто окно печати");
         onClose();
       }
     });

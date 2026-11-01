@@ -7,11 +7,14 @@ const nextConfig: NextConfig = {
   // Next.js 16.3 + standalone breaks Vercel onBuildComplete; keep standalone for Docker.
   output: process.env.VERCEL ? undefined : "standalone",
   serverExternalPackages: ["sql.js"],
-  // Шрифт печатного листа вызывного читается с диска (`fs`) — в сборку его кладём явно.
+  // Файлы, которые выгрузки читают с диска (`fs`), — в сборку кладём явно, прямыми путями:
+  // шрифт печатного листа вызывного; логотип явочного листа (вызывной и отчёт смены).
   outputFileTracingIncludes: {
     "/*/projects/*/call-sheets/**": [
       "./node_modules/medeo-font/dist/fonts/medeo-sans/MedeoSansVariable.woff2",
+      "./public/brand/pelena-black.png",
     ],
+    "/*/projects/*/reports/**": ["./public/brand/pelena-black.png"],
     "/api/fonts/**": ["./node_modules/medeo-font/dist/fonts/medeo-sans/MedeoSansVariable.woff2"],
   },
   // Только для `next dev`: второй и третий аккаунты открываются на 127.0.0.1 и 127.0.0.2
