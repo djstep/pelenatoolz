@@ -185,6 +185,26 @@ export async function saveTransportsAction(
     return { error: parsed.error.issues[0]?.message ?? "Проверьте транспорт" };
   }
 
+  const { resolveTransportKmRates } = await import(
+    "@/features/day-docs/lib/transport-km-rate"
+  );
+  const canWriteFinance = gate.ctx.can("finance:write");
+  const existing = canWriteFinance
+    ? []
+    : await prisma.shootDayTransport.findMany({
+        where: { shootDayId },
+        select: { name: true, kmRate: true },
+        orderBy: { sortOrder: "asc" },
+      });
+  const kmRates = resolveTransportKmRates(
+    parsed.data.rows,
+    existing.map((e) => ({
+      name: e.name,
+      kmRate: e.kmRate == null ? null : Number(e.kmRate),
+    })),
+    canWriteFinance,
+  );
+
   await prisma.$transaction([
     prisma.shootDayTransport.deleteMany({ where: { shootDayId } }),
     ...parsed.data.rows.map((row, index) =>
@@ -194,7 +214,7 @@ export async function saveTransportsAction(
           name: row.name,
           callTime: emptyToNull(row.callTime),
           notes: emptyToNull(row.notes),
-          kmRate: row.kmRate ?? null,
+          kmRate: kmRates[index],
           sortOrder: index,
         },
       }),
