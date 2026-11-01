@@ -43,6 +43,10 @@ type TimingComputeInput = {
     endTime: string | null;
     slotType: string;
     sceneId: string | null;
+    /** Юнит строки (MAIN / SECOND). Нет — основной. */
+    unit?: string | null;
+    /** Сцена строки: вырезанная (cutAt) в тайминги не идёт. */
+    scene?: { cutAt?: Date | string | null } | null;
   }>;
   sceneCharacters: SceneCharacterLink[];
   actors: ActorInput[];
@@ -51,6 +55,16 @@ type TimingComputeInput = {
 
 function subtractMinutes(time: string, minutes: number): string {
   return addMinutesToTime(time, -minutes);
+}
+
+/** Строки плана без вырезанных сцен. */
+function activeTimeSlots<T extends TimingComputeInput["timeSlots"][number]>(slots: T[]): T[] {
+  return slots.filter((slot) => !slot.scene?.cutAt);
+}
+
+/** Строки основного юнита: начало и конец съёмки дня считаются по нему. */
+function mainUnitSlots<T extends TimingComputeInput["timeSlots"][number]>(slots: T[]): T[] {
+  return slots.filter((slot) => slot.unit !== "SECOND");
 }
 
 /** Ready anchor: REHEARSAL slot immediately before scene shooting, else scene start. */
@@ -86,13 +100,15 @@ export function getSceneWrapTime(
   return wrap;
 }
 
-function getDayFirstReadyTime(slots: TimingComputeInput["timeSlots"]): string | null {
+function getDayFirstReadyTime(allSlots: TimingComputeInput["timeSlots"]): string | null {
+  const slots = mainUnitSlots(allSlots);
   const sceneOrder = sceneOrderFromSlots(slots);
   if (sceneOrder.length === 0) return null;
   return getSceneReadyTime(slots, sceneOrder[0]!);
 }
 
-function getDayLastWrapTime(slots: TimingComputeInput["timeSlots"]): string | null {
+function getDayLastWrapTime(allSlots: TimingComputeInput["timeSlots"]): string | null {
+  const slots = mainUnitSlots(allSlots);
   const sceneOrder = sceneOrderFromSlots(slots);
   if (sceneOrder.length === 0) return null;
   return getSceneWrapTime(slots, sceneOrder[sceneOrder.length - 1]!);
@@ -137,7 +153,8 @@ function buildProposedForActor(
   return proposed;
 }
 
-function computeActorTimingResults(input: TimingComputeInput) {
+function computeActorTimingResults(rawInput: TimingComputeInput) {
+  const input = { ...rawInput, timeSlots: activeTimeSlots(rawInput.timeSlots) };
   const sceneOrder = sceneOrderFromSlots(input.timeSlots);
   if (sceneOrder.length === 0) return [];
 
@@ -292,6 +309,8 @@ function collectResourceSceneLinks(
   dayScenes: Array<{
     scene: {
       id: string;
+      /** Вырезанная сцена в тайминги не идёт. */
+      cutAt?: Date | string | null;
       resources: Array<{ category: string; name: string }>;
       elements: Array<{ element: { name: string; type: string } }>;
       resourceItems?: Array<{
@@ -307,6 +326,7 @@ function collectResourceSceneLinks(
 ): ResourceSceneLink[] {
   const links: ResourceSceneLink[] = [];
   for (const row of dayScenes) {
+    if (row.scene.cutAt) continue;
     const sceneId = row.scene.id;
     for (const res of row.scene.resources) {
       links.push({ category: res.category, name: res.name, sceneId });
@@ -336,7 +356,7 @@ function collectResourceSceneLinks(
   return links;
 }
 
-function computeResourceTimingResults(input: {
+function computeResourceTimingResults(rawInput: {
   timeSlots: TimingComputeInput["timeSlots"];
   dayScenes: Parameters<typeof collectResourceSceneLinks>[0];
   shiftStartTime: string | null;
@@ -346,6 +366,7 @@ function computeResourceTimingResults(input: {
     arrivalOffsetMin: number | null;
   }>;
 }): ResourceTimingBaselines {
+  const input = { ...rawInput, timeSlots: activeTimeSlots(rawInput.timeSlots) };
   const sceneOrder = sceneOrderFromSlots(input.timeSlots);
   const links = collectResourceSceneLinks(input.dayScenes);
 

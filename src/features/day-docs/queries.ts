@@ -22,6 +22,8 @@ const sceneSelect = {
   dayNight: true,
   status: true,
   scriptDay: true,
+  /** Вырезана — в план, счётчики и хронометраж не идёт. */
+  cutAt: true,
   locations: { include: { location: true } },
   characters: { include: { character: true } },
   resources: true,
@@ -68,8 +70,25 @@ const shootDayInclude = {
   },
 } as const;
 
+/**
+ * Сцены проекта для выбора в строке плана 2-го юнита: из либретто, без вырезанных.
+ * Подпись строится `formatSceneLine` (номер · инт/нат · объект · режим).
+ */
+const projectSceneOptionSelect = {
+  id: true,
+  number: true,
+  postfix: true,
+  episodeNumber: true,
+  intExt: true,
+  dayNight: true,
+  locations: {
+    select: { location: { select: { name: true } } },
+    take: 1,
+  },
+} as const;
+
 export async function getShootDayDocument(projectId: string, shootDayId: string) {
-  const [project, day, actors] = await Promise.all([
+  const [project, day, actors, projectScenes] = await Promise.all([
     prisma.project.findFirst({
       where: { id: projectId },
       select: {
@@ -90,11 +109,16 @@ export async function getShootDayDocument(projectId: string, shootDayId: string)
       include: { character: true },
       orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
     }),
+    prisma.scene.findMany({
+      where: { projectId, cutAt: null },
+      select: projectSceneOptionSelect,
+      orderBy: [{ episodeNumber: "asc" }, { sortOrder: "asc" }, { number: "asc" }],
+    }),
   ]);
 
   if (!project || !day) return null;
 
-  return serializeForClient({ project, day, actors });
+  return serializeForClient({ project, day, actors, projectScenes });
 }
 
 export async function getNextShootDayBrief(
@@ -142,7 +166,8 @@ export async function listShootDaysBrief(projectId: string) {
       wrapTime: true,
       isNightShift: true,
       isLocked: true,
-      _count: { select: { scenes: true } },
+      // Счётчик сцен — без вырезанных.
+      _count: { select: { scenes: { where: { scene: { cutAt: null } } } } },
     },
     orderBy: { dayNumber: "asc" },
   });
@@ -152,11 +177,16 @@ export async function getActorTimingBaselines(
   projectId: string,
   shootDayId: string,
 ): Promise<ActorTimingBaselines> {
+  // Вырезанные сцены в тайминги не идут: ни сцены дня, ни их строки плана.
   const day = await prisma.shootDay.findFirst({
     where: { id: shootDayId, projectId },
     include: {
-      timeSlots: { orderBy: { sortOrder: "asc" } },
+      timeSlots: {
+        orderBy: { sortOrder: "asc" },
+        include: { scene: { select: { cutAt: true } } },
+      },
       scenes: {
+        where: { scene: { cutAt: null } },
         include: {
           scene: {
             select: {
@@ -222,16 +252,21 @@ export async function getResourceTimingBaselines(
   projectId: string,
   shootDayId: string,
 ): Promise<ResourceTimingBaselines> {
+  // Вырезанные сцены в тайминги не идут: ни сцены дня, ни их строки плана.
   const day = await prisma.shootDay.findFirst({
     where: { id: shootDayId, projectId },
     include: {
-      timeSlots: { orderBy: { sortOrder: "asc" } },
+      timeSlots: {
+        orderBy: { sortOrder: "asc" },
+        include: { scene: { select: { cutAt: true } } },
+      },
       scenes: {
+        where: { scene: { cutAt: null } },
         include: {
           scene: {
             select: {
               id: true,
-              resources: { select: { category: true, name: true } },
+              resources:{ select: { category: true, name: true } },
               elements: {
                 select: {
                   element: { select: { name: true, type: true } },

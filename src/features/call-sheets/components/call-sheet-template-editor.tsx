@@ -43,11 +43,11 @@ const initial: CallSheetTemplateActionState = {};
 const FREE_PERSON = "";
 const OWN_ROW = "";
 
-function withKeys<T>(rows: T[], prefix: string): (T & { key: string })[] {
+export function withKeys<T>(rows: T[], prefix: string): (T & { key: string })[] {
   return rows.map((row, index) => ({ ...row, key: `${prefix}${index}` }));
 }
 
-function stripKey<T extends { key: string }>(rows: T[]): Omit<T, "key">[] {
+export function stripKey<T extends { key: string }>(rows: T[]): Omit<T, "key">[] {
   return rows.map((row) => {
     const rest: Partial<T> = { ...row };
     delete rest.key;
@@ -56,7 +56,7 @@ function stripKey<T extends { key: string }>(rows: T[]): Omit<T, "key">[] {
 }
 
 /** Список строк с перетаскиванием за ⠿. */
-function SortableRows<T extends { key: string }>({
+export function SortableRows<T extends { key: string }>({
   rows,
   onReorder,
   renderRow,
@@ -126,7 +126,7 @@ function SortableRow({ id, children }: { id: string; children: ReactNode }) {
   );
 }
 
-function Section({
+export function Section({
   title,
   hint,
   addLabel,
@@ -159,7 +159,7 @@ function Section({
   );
 }
 
-function RemoveButton({ label, onClick }: { label: string; onClick: () => void }) {
+export function RemoveButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
     <Button type="button" variant="ghost" aria-label={label} title={label} onClick={onClick}>
       ✕

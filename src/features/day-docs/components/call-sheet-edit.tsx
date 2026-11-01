@@ -1,6 +1,6 @@
 "use client";
 
-import { TimeSlotType } from "@prisma/client";
+import { ActorTransportMode, CallSheetUnit, TimeSlotType } from "@prisma/client";
 import { useRouter } from "next/navigation";
 import { useActionState, useState, useTransition } from "react";
 import {
@@ -11,11 +11,18 @@ import {
   saveResourceCallsAction,
   saveResourceUsagesAction,
   saveTimeSlotsAction,
-  saveTransportsAction,
   updateCallSheetHeaderAction,
   type CallSheetActionState,
 } from "@/features/day-docs/actions";
-import type { CastRow, DayDocBundle, PerShiftResourceRow, ResourceTableRow } from "@/features/day-docs/lib/build-day-doc";
+import { CallSheetTransportEditor } from "@/features/day-docs/components/call-sheet-transport-editor";
+import type { CallSheetTransportEditorData } from "@/features/day-docs/transport-queries";
+import {
+  activeDayScenes,
+  type CastRow,
+  type DayDocBundle,
+  type PerShiftResourceRow,
+  type ResourceTableRow,
+} from "@/features/day-docs/lib/build-day-doc";
 import {
   isManualActorTiming,
   isManualResourceTiming,
@@ -42,19 +49,21 @@ type DeptRow = {
   callTime: string;
 };
 
-type TransportRow = {
-  name: string;
-  callTime: string;
-  notes: string;
-  kmRate: string;
-};
-
 type SlotRow = {
+  unit: CallSheetUnit;
+  isContinuation: boolean;
+  customLabel: string | null;
   startTime: string;
   endTime: string;
   slotType: TimeSlotType;
   sceneId: string;
   notes: string;
+};
+
+const actorTransportLabels: Record<ActorTransportMode, string> = {
+  CAR: "Машина",
+  SELF: "Сам",
+  CUSTOM: "Свой текст",
 };
 
 function ActionMessage({ state }: { state: CallSheetActionState }) {
@@ -96,6 +105,7 @@ export function CallSheetEditor({
   perShiftCatalog = [],
   timingBaselines = {},
   resourceTimingBaselines = {},
+  transportEditor,
 }: {
   projectId: string;
   dayId: string;
@@ -113,6 +123,8 @@ export function CallSheetEditor({
   perShiftCatalog?: PerShiftCatalogOption[];
   timingBaselines?: ActorTimingBaselines;
   resourceTimingBaselines?: ResourceTimingBaselines;
+  /** Спецтранспорт дня (сохранение по id, статья сметы). null — нет права. */
+  transportEditor: CallSheetTransportEditorData | null;
 }) {
   const router = useRouter();
   const [addPending, startAddTransition] = useTransition();
@@ -138,17 +150,13 @@ export function CallSheetEditor({
     })),
   );
 
-  const [transports, setTransports] = useState<TransportRow[]>(
-    day.transports.map((t) => ({
-      name: t.name,
-      callTime: t.callTime ?? "",
-      notes: t.notes ?? "",
-      kmRate: t.kmRate != null ? String(t.kmRate) : "",
-    })),
-  );
-
   const [slots, setSlots] = useState<SlotRow[]>(
     day.timeSlots.map((s) => ({
+      // Поля плана вызывного (юнит, продолжение, свой текст) этот список не правит,
+      // но сохраняет как есть — иначе «удалить и создать» их бы стёрло.
+      unit: s.unit,
+      isContinuation: s.isContinuation,
+      customLabel: s.customLabel,
       startTime: s.startTime,
       endTime: s.endTime ?? "",
       slotType: s.slotType,
@@ -160,16 +168,21 @@ export function CallSheetEditor({
   const [actorTimings, setActorTimings] = useState(
     cast
       .filter((c) => c.actorId)
-      .map((c) => ({
-        actorId: c.actorId!,
-        label: `${c.characterName} · ${c.actorName ?? "—"}`,
-        pickupTime: c.pickup ?? "",
-        arrivalTime: c.arrival ?? "",
-        makeupTime: c.makeup ?? "",
-        costumeTime: c.costume ?? "",
-        readyTime: c.ready ?? "",
-        wrapTime: c.wrap ?? "",
-      })),
+      .map((c) => {
+        const call = day.actorCalls.find((a) => a.actorId === c.actorId);
+        return {
+          actorId: c.actorId!,
+          label: `${c.characterName} · ${c.actorName ?? "—"}`,
+          pickupTime: c.pickup ?? "",
+          arrivalTime: c.arrival ?? "",
+          makeupTime: c.makeup ?? "",
+          costumeTime: c.costume ?? "",
+          readyTime: c.ready ?? "",
+          wrapTime: c.wrap ?? "",
+          transportMode: (call?.transportMode ?? "") as ActorTransportMode | "",
+          transportText: call?.transportText ?? "",
+        };
+      }),
   );
 
   const allResources = [
@@ -209,7 +222,6 @@ export function CallSheetEditor({
 
   const headerAction = updateCallSheetHeaderAction.bind(null, projectId, dayId);
   const deptAction = saveDepartmentCallsAction.bind(null, projectId, dayId);
-  const transportAction = saveTransportsAction.bind(null, projectId, dayId);
   const slotAction = saveTimeSlotsAction.bind(null, projectId, dayId);
   const actorAction = saveActorCallsAction.bind(null, projectId, dayId);
   const resourceAction = saveResourceCallsAction.bind(null, projectId, dayId);
@@ -425,88 +437,12 @@ export function CallSheetEditor({
           />
         </div>
 
-        <div className="space-y-3">
-          <h4 className="text-sm font-semibold text-[var(--muted-fg)]">Спецтранспорт</h4>
-          {transports.map((row, i) => (
-            <div key={i} className="grid gap-2 sm:grid-cols-5">
-              <Input
-                value={row.name}
-                onChange={(e) =>
-                  setTransports((p) =>
-                    p.map((r, j) => (j === i ? { ...r, name: e.target.value } : r)),
-                  )
-                }
-                placeholder="Техника"
-              />
-              <HhMmInput
-                value={row.callTime}
-                onChange={(callTime) =>
-                  setTransports((p) =>
-                    p.map((r, j) => (j === i ? { ...r, callTime } : r)),
-                  )
-                }
-                placeholder="07:00"
-              />
-              <Input
-                type="number"
-                min={0}
-                step="0.01"
-                value={row.kmRate}
-                onChange={(e) =>
-                  setTransports((p) =>
-                    p.map((r, j) =>
-                      j === i ? { ...r, kmRate: e.target.value } : r,
-                    ),
-                  )
-                }
-                placeholder="₽/км"
-                title="Ставка за километр"
-              />
-              <Input
-                value={row.notes}
-                onChange={(e) =>
-                  setTransports((p) =>
-                    p.map((r, j) => (j === i ? { ...r, notes: e.target.value } : r)),
-                  )
-                }
-                placeholder="Примечание"
-              />
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => setTransports((p) => p.filter((_, j) => j !== i))}
-              >
-                ✕
-              </Button>
-            </div>
-          ))}
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() =>
-              setTransports((p) => [
-                ...p,
-                { name: "", callTime: "", notes: "", kmRate: "" },
-              ])
-            }
-          >
-            + Техника
-          </Button>
-          <JsonRowsForm
-            action={transportAction}
-            rowsJson={JSON.stringify(
-              transports
-                .filter((r) => r.name.trim())
-                .map((r) => ({
-                  name: r.name,
-                  callTime: r.callTime,
-                  notes: r.notes,
-                  kmRate: r.kmRate.trim() === "" ? null : Number(r.kmRate),
-                })),
-            )}
-            label="Сохранить спецтранспорт"
-          />
-        </div>
+        {transportEditor ? (
+          <div className="space-y-3">
+            <h4 className="text-sm font-semibold text-[var(--muted-fg)]">Спецтранспорт</h4>
+            <CallSheetTransportEditor projectId={projectId} dayId={dayId} data={transportEditor} />
+          </div>
+        ) : null}
 
         <div className="space-y-3">
           <h4 className="text-sm font-semibold text-[var(--muted-fg)]">Расписание по слотам</h4>
@@ -557,7 +493,7 @@ export function CallSheetEditor({
                 }
               >
                 <option value="">— сцена —</option>
-                {day.scenes.map((s) => (
+                {activeDayScenes(day.scenes).map((s) => (
                   <option key={s.scene.id} value={s.scene.id}>
                     {s.scene.number}
                     {s.scene.postfix} · {s.scene.locations[0]?.location.name ?? ""}
@@ -580,6 +516,9 @@ export function CallSheetEditor({
               setSlots((p) => [
                 ...p,
                 {
+                  unit: CallSheetUnit.MAIN,
+                  isContinuation: false,
+                  customLabel: null,
                   startTime: "",
                   endTime: "",
                   slotType: TimeSlotType.SHOOTING,
@@ -658,21 +597,77 @@ export function CallSheetEditor({
                     );
                   })}
                 </div>
+                <div className="mt-2 grid gap-2 sm:grid-cols-[12rem_1fr]">
+                  <label className="space-y-1 text-xs">
+                    <span className="text-[var(--muted-fg)]">Транспорт</span>
+                    <select
+                      value={row.transportMode}
+                      onChange={(e) =>
+                        setActorTimings((p) =>
+                          p.map((r, j) =>
+                            j === i
+                              ? { ...r, transportMode: e.target.value as ActorTransportMode | "" }
+                              : r,
+                          ),
+                        )
+                      }
+                      className="w-full rounded-lg border border-[var(--border)] bg-[var(--panel-solid)] px-2 py-1.5 text-sm"
+                    >
+                      <option value="">—</option>
+                      {(Object.keys(actorTransportLabels) as ActorTransportMode[]).map((mode) => (
+                        <option key={mode} value={mode}>
+                          {actorTransportLabels[mode]}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  {row.transportMode === ActorTransportMode.CUSTOM ? (
+                    <label className="space-y-1 text-xs">
+                      <span className="text-[var(--muted-fg)]">Свой текст</span>
+                      <Input
+                        value={row.transportText}
+                        maxLength={200}
+                        onChange={(e) =>
+                          setActorTimings((p) =>
+                            p.map((r, j) =>
+                              j === i ? { ...r, transportText: e.target.value } : r,
+                            ),
+                          )
+                        }
+                        placeholder="Например: такси за счёт группы"
+                      />
+                    </label>
+                  ) : null}
+                </div>
               </div>
               );
             })}
             <JsonRowsForm
               action={actorAction}
               rowsJson={JSON.stringify(
-                actorTimings.map(({ actorId, pickupTime, arrivalTime, makeupTime, costumeTime, readyTime, wrapTime }) => ({
-                  actorId,
-                  pickupTime,
-                  arrivalTime,
-                  makeupTime,
-                  costumeTime,
-                  readyTime,
-                  wrapTime,
-                })),
+                actorTimings.map(
+                  ({
+                    actorId,
+                    pickupTime,
+                    arrivalTime,
+                    makeupTime,
+                    costumeTime,
+                    readyTime,
+                    wrapTime,
+                    transportMode,
+                    transportText,
+                  }) => ({
+                    actorId,
+                    pickupTime,
+                    arrivalTime,
+                    makeupTime,
+                    costumeTime,
+                    readyTime,
+                    wrapTime,
+                    transportMode,
+                    transportText,
+                  }),
+                ),
               )}
               label="Сохранить тайминги актёров"
             />

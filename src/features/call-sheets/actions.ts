@@ -1,7 +1,14 @@
 "use server";
 
-import { Prisma } from "@prisma/client";
+import { MembershipStatus, Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
+import {
+  buildSheetRows,
+  changedMemberIds,
+  checkSheetSave,
+  sheetAuditView,
+  type StoredLeader,
+} from "@/features/call-sheets/lib/sheet-rules";
 import {
   buildCallSheetCopies,
   canEditCallSheets,
@@ -19,6 +26,7 @@ import {
   loadTemplateForCopy,
   type Tx,
 } from "@/features/call-sheets/queries";
+import { ensureCallSheetSections } from "@/features/call-sheets/sections-db";
 import { memberLabelsById } from "@/features/departments/queries";
 import {
   assertInProject,
@@ -26,6 +34,7 @@ import {
 } from "@/features/memberships/assert-in-project";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { isWorkingShootDay } from "@/features/schedule/lib/shoot-day-type";
+import { syncShootDayResourceUsages } from "@/features/schedule/lib/sync-shoot-day-resources";
 import { AuditEntityType } from "@/shared/audit/entity-types";
 import { auditMutation } from "@/shared/audit/with-audit";
 import { prisma } from "@/shared/db/prisma";
@@ -187,6 +196,8 @@ export async function createCallSheetAction(
       (shootDayId: string) =>
         prisma.$transaction(async (tx) => {
           const copies = buildCallSheetCopies(await loadTemplateForCopy(tx, projectId));
+          // Разделы элементов площадки проекта: системные — если их ещё нет.
+          await ensureCallSheetSections(tx, projectId);
           const sheet = await tx.callSheet.create({
             data: { projectId, shootDayId },
             select: { id: true },
@@ -266,6 +277,188 @@ export async function refreshCallSheetFromTemplateAction(
         },
         to: copiesCount(copies),
       }),
+    },
+  );
+
+  revalidateDay(projectId, checked.dayId);
+  return {};
+}
+
+/** Руководители, цеха, база и поля листа — как они в вызывном сейчас (для журнала). */
+type StoredSheet = {
+  id: string;
+  tempDay: string | null;
+  tempNight: string | null;
+  importantNote: string | null;
+  actorRestrictions: string | null;
+  schemeLocationId: string | null;
+  shootDay: { dayNumber: number };
+  leaders: (StoredLeader & { position: string; shortTitle: string | null; sortOrder: number })[];
+  crewCalls: CallSheetCopies["crewCalls"];
+  baseItems: CallSheetCopies["baseItems"];
+};
+
+/** Правка самого вызывного: блоки из шаблона (добавить, убрать, поменять, порядок) и поля листа. */
+export async function saveCallSheetSheetAction(
+  projectId: string,
+  dayId: string,
+  _prev: CallSheetTemplateActionState,
+  formData: FormData,
+): Promise<CallSheetTemplateActionState> {
+  const ctx = await requireProjectContext(projectId);
+  const deps = { canEdit: canEditCallSheets(ctx), inProject: inProjectCheck(projectId) };
+  const command = await checkCallSheetCommand(deps, dayId);
+  if ("error" in command) return { error: command.error };
+
+  const sheet: StoredSheet | null = await prisma.callSheet.findFirst({
+    where: { projectId, shootDayId: command.dayId },
+    select: {
+      id: true,
+      tempDay: true,
+      tempNight: true,
+      importantNote: true,
+      actorRestrictions: true,
+      schemeLocationId: true,
+      shootDay: { select: { dayNumber: true } },
+      leaders: {
+        orderBy: { sortOrder: "asc" },
+        select: {
+          id: true,
+          position: true,
+          shortTitle: true,
+          membershipId: true,
+          personName: true,
+          phone: true,
+          sortOrder: true,
+        },
+      },
+      crewCalls: {
+        orderBy: { sortOrder: "asc" },
+        select: { departmentId: true, label: true, callTime: true, sortOrder: true },
+      },
+      baseItems: {
+        orderBy: { sortOrder: "asc" },
+        select: { name: true, callTime: true, notNeeded: true, sortOrder: true },
+      },
+    },
+  });
+  if (!sheet) return { error: NOT_CREATED };
+
+  const checked = await checkSheetSave(deps, formData.get("payload") ?? "", sheet.leaders);
+  if ("error" in checked) return { error: checked.error };
+  const { data } = checked;
+
+  const memberIds = changedMemberIds(data.leaders, sheet.leaders);
+  const departmentIds = data.crewCalls
+    .map((row) => row.departmentId)
+    .filter((id): id is string => id !== null);
+  const [members, departments] = await Promise.all([
+    memberIds.length === 0
+      ? Promise.resolve([])
+      : prisma.projectMembership.findMany({
+          where: { projectId, id: { in: memberIds }, status: MembershipStatus.ACTIVE },
+          select: { id: true, user: { select: { name: true, phone: true } } },
+        }),
+    departmentIds.length === 0
+      ? Promise.resolve([])
+      : prisma.department.findMany({
+          where: { projectId, id: { in: departmentIds } },
+          select: { id: true, name: true },
+        }),
+  ]);
+  const rows = buildSheetRows(
+    data,
+    sheet.leaders,
+    new Map(members.map((m) => [m.id, { name: m.user.name, phone: m.user.phone }])),
+    new Map(departments.map((d) => [d.id, d.name])),
+  );
+
+  const before = sheetAuditView(sheet, {
+    leaders: sheet.leaders,
+    crewCalls: sheet.crewCalls,
+    baseItems: sheet.baseItems,
+  });
+  const after = sheetAuditView(data, rows);
+  if (JSON.stringify(before) === JSON.stringify(after)) {
+    return { success: "Вызывной сохранён" };
+  }
+
+  await auditMutation(
+    ctx,
+    (callSheetId: string) =>
+      prisma.$transaction(async (tx) => {
+        await tx.callSheet.update({
+          where: { id: callSheetId },
+          data: {
+            tempDay: data.tempDay,
+            tempNight: data.tempNight,
+            importantNote: data.importantNote,
+            actorRestrictions: data.actorRestrictions,
+            schemeLocationId: data.schemeLocationId,
+          },
+        });
+        // Копии шаблона в вызывном: на их строки ничего не ссылается.
+        await tx.callSheetLeader.deleteMany({ where: { callSheetId } });
+        await tx.callSheetCrewCall.deleteMany({ where: { callSheetId } });
+        await tx.callSheetBaseItem.deleteMany({ where: { callSheetId } });
+        await writeCopies(tx, callSheetId, rows);
+      }),
+    sheet.id,
+    {
+      projectId,
+      entityType: AuditEntityType.callSheet,
+      action: "UPDATE",
+      entityId: sheet.id,
+      summary: `Изменён вызывной дня ${sheet.shootDay.dayNumber}`,
+      // Телефоны в журнал не пишем.
+      changes: { from: before, to: after },
+    },
+  );
+
+  revalidateDay(projectId, command.dayId);
+  return { success: "Вызывной сохранён" };
+}
+
+/**
+ * «Обновить из КПП»: ресурсы смены дня заново из сцен дня (раньше это делало открытие
+ * страницы). Посменные ресурсы, добавленные руками, остаются.
+ */
+export async function refreshCallSheetFromScheduleAction(
+  projectId: string,
+  dayId: string,
+): Promise<{ error?: string }> {
+  const ctx = await requireProjectContext(projectId);
+  const checked = await checkCallSheetCommand(
+    { canEdit: canEditCallSheets(ctx), inProject: inProjectCheck(projectId) },
+    dayId,
+  );
+  if ("error" in checked) return { error: checked.error };
+
+  const day = await prisma.shootDay.findFirst({
+    where: { id: checked.dayId, projectId },
+    select: { dayNumber: true, dayType: true },
+  });
+  if (!day) return { error: DAY_NOT_FOUND };
+  if (!isWorkingShootDay(day.dayType)) return { error: NOT_WORKING_DAY };
+
+  const countUsages = (shootDayId: string) =>
+    prisma.shootDayResourceUsage.count({ where: { shootDayId } });
+  const before = await countUsages(checked.dayId);
+
+  await auditMutation(
+    ctx,
+    async (shootDayId: string) => {
+      await syncShootDayResourceUsages(shootDayId);
+      return countUsages(shootDayId);
+    },
+    checked.dayId,
+    {
+      projectId,
+      entityType: AuditEntityType.callSheet,
+      action: "UPDATE",
+      entityId: checked.dayId,
+      summary: `Вызывной дня ${day.dayNumber} обновлён из КПП`,
+      changes: (_input, after) => ({ resourceUsages: { from: before, to: after } }),
     },
   );
 

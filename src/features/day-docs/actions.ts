@@ -6,8 +6,6 @@ import {
   saveDepartmentCallsSchema,
   saveResourceCallsSchema,
   saveResourceUsagesSchema,
-  saveTimeSlotsSchema,
-  saveTransportsSchema,
   updateCallSheetHeaderSchema,
 } from "@/features/day-docs/schemas";
 import {
@@ -16,13 +14,14 @@ import {
   type ActorTimingProposal,
   type ResourceTimingProposal,
 } from "@/features/day-docs/lib/compute-call-timings";
+import { checkTimeSlotsSave } from "@/features/day-docs/lib/plan-rules";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import {
   assertInProject,
   isNotInProjectError,
 } from "@/features/memberships/assert-in-project";
 import { AuditEntityType } from "@/shared/audit/entity-types";
-import { recordAudit } from "@/shared/audit/with-audit";
+import { auditMutation, recordAudit } from "@/shared/audit/with-audit";
 import { prisma } from "@/shared/db/prisma";
 
 export type CallSheetActionState = { error?: string; success?: string };
@@ -164,49 +163,6 @@ export async function saveDepartmentCallsAction(
   return { success: "Контакты сохранены" };
 }
 
-export async function saveTransportsAction(
-  projectId: string,
-  shootDayId: string,
-  _prev: CallSheetActionState,
-  formData: FormData,
-): Promise<CallSheetActionState> {
-  const gate = await assertCallSheetWrite(projectId, shootDayId);
-  if ("error" in gate) return gate;
-
-  let rows: unknown[] = [];
-  try {
-    rows = JSON.parse(String(formData.get("rows") ?? "[]"));
-  } catch {
-    return { error: "Некорректный формат списка" };
-  }
-
-  const parsed = saveTransportsSchema.safeParse({ rows });
-  if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Проверьте транспорт" };
-  }
-
-  await prisma.$transaction([
-    prisma.shootDayTransport.deleteMany({ where: { shootDayId } }),
-    ...parsed.data.rows.map((row, index) =>
-      prisma.shootDayTransport.create({
-        data: {
-          shootDayId,
-          name: row.name,
-          callTime: emptyToNull(row.callTime),
-          notes: emptyToNull(row.notes),
-          kmRate: row.kmRate ?? null,
-          sortOrder: index,
-        },
-      }),
-    ),
-  ]);
-
-  await auditCallSheet(gate.ctx, projectId, shootDayId, "Сохранён спецтранспорт");
-
-  revalidateCallSheet(projectId, shootDayId);
-  return { success: "Спецтранспорт сохранён" };
-}
-
 export async function saveTimeSlotsAction(
   projectId: string,
   shootDayId: string,
@@ -216,54 +172,54 @@ export async function saveTimeSlotsAction(
   const gate = await assertCallSheetWrite(projectId, shootDayId);
   if ("error" in gate) return gate;
 
-  let rows: unknown[] = [];
-  try {
-    rows = JSON.parse(String(formData.get("rows") ?? "[]"));
-  } catch {
-    return { error: "Некорректный формат расписания" };
-  }
+  // Проверки — чистая функция plan-rules.ts: формат, «продолжение» только со сценой,
+  // сцены этого проекта, вырезанную сцену в план не поставить. До первой записи.
+  const checked = await checkTimeSlotsSave(
+    {
+      inProject: async (sceneIds) => {
+        try {
+          await assertInProject("Scene", sceneIds, projectId);
+          return true;
+        } catch (error) {
+          if (isNotInProjectError(error)) return false;
+          throw error;
+        }
+      },
+      loadScenes: (sceneIds) =>
+        prisma.scene.findMany({
+          where: { id: { in: sceneIds }, projectId },
+          select: { id: true, number: true, postfix: true, episodeNumber: true, cutAt: true },
+        }),
+    },
+    String(formData.get("rows") ?? "[]"),
+  );
+  if ("error" in checked) return { error: checked.error };
 
-  const parsed = saveTimeSlotsSchema.safeParse({ rows });
-  if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Проверьте слоты" };
-  }
-
-  const sceneIds = [
-    ...new Set(
-      parsed.data.rows
-        .map((row) => row.sceneId)
-        .filter((id): id is string => Boolean(id)),
-    ),
-  ];
-  try {
-    await assertInProject("Scene", sceneIds, projectId);
-  } catch (error) {
-    if (isNotInProjectError(error)) return { error: "Объект не найден" };
-    throw error;
-  }
-
-  await prisma.$transaction([
-    prisma.shootDayTimeSlot.deleteMany({ where: { shootDayId } }),
-    ...parsed.data.rows.map((row, index) =>
-      prisma.shootDayTimeSlot.create({
-        data: {
-          shootDayId,
-          startTime: row.startTime,
-          endTime: emptyToNull(row.endTime),
-          slotType: row.slotType,
-          sceneId: row.sceneId || null,
-          notes: emptyToNull(row.notes),
-          sortOrder: index,
-        },
+  await auditMutation(
+    gate.ctx,
+    (rows: typeof checked.rows) =>
+      prisma.$transaction([
+        prisma.shootDayTimeSlot.deleteMany({ where: { shootDayId } }),
+        ...rows.map((row) => prisma.shootDayTimeSlot.create({ data: { shootDayId, ...row } })),
+        prisma.shootDay.update({
+          where: { id: shootDayId },
+          data: { callSheetSavedAt: new Date() },
+        }),
+      ]),
+    checked.rows,
+    {
+      projectId,
+      entityType: AuditEntityType.callSheet,
+      entityId: shootDayId,
+      action: "UPDATE",
+      summary: "Сохранено расписание дня",
+      changes: (rows) => ({
+        rows: rows.length,
+        secondUnit: rows.filter((row) => row.unit === "SECOND").length,
+        continuations: rows.filter((row) => row.isContinuation).length,
       }),
-    ),
-    prisma.shootDay.update({
-      where: { id: shootDayId },
-      data: { callSheetSavedAt: new Date() },
-    }),
-  ]);
-
-  await auditCallSheet(gate.ctx, projectId, shootDayId, "Сохранено расписание дня");
+    },
+  );
 
   revalidateCallSheet(projectId, shootDayId);
   return { success: "Расписание сохранено" };
@@ -290,14 +246,30 @@ export async function saveActorCallsAction(
     return { error: parsed.error.issues[0]?.message ?? "Проверьте тайминги актёров" };
   }
 
-  const withData = parsed.data.rows.filter(
+  const rowsData = parsed.data.rows.map((row) => {
+    const transportMode = row.transportMode || null;
+    return {
+      actorId: row.actorId,
+      pickupTime: emptyToNull(row.pickupTime),
+      arrivalTime: emptyToNull(row.arrivalTime),
+      makeupTime: emptyToNull(row.makeupTime),
+      costumeTime: emptyToNull(row.costumeTime),
+      readyTime: emptyToNull(row.readyTime),
+      wrapTime: emptyToNull(row.wrapTime),
+      transportMode,
+      // Свой текст хранится только у «свой текст».
+      transportText: transportMode === "CUSTOM" ? emptyToNull(row.transportText) : null,
+    };
+  });
+  const withData = rowsData.filter(
     (r) =>
       r.pickupTime ||
       r.arrivalTime ||
       r.makeupTime ||
       r.costumeTime ||
       r.readyTime ||
-      r.wrapTime,
+      r.wrapTime ||
+      r.transportMode,
   );
 
   const actorIds = [...new Set(parsed.data.rows.map((row) => row.actorId))];
@@ -308,25 +280,26 @@ export async function saveActorCallsAction(
     throw error;
   }
 
-  await prisma.$transaction([
-    prisma.shootDayActorCall.deleteMany({ where: { shootDayId } }),
-    ...withData.map((row) =>
-      prisma.shootDayActorCall.create({
-        data: {
-          shootDayId,
-          actorId: row.actorId,
-          pickupTime: emptyToNull(row.pickupTime),
-          arrivalTime: emptyToNull(row.arrivalTime),
-          makeupTime: emptyToNull(row.makeupTime),
-          costumeTime: emptyToNull(row.costumeTime),
-          readyTime: emptyToNull(row.readyTime),
-          wrapTime: emptyToNull(row.wrapTime),
-        },
+  await auditMutation(
+    gate.ctx,
+    (data: typeof withData) =>
+      prisma.$transaction([
+        prisma.shootDayActorCall.deleteMany({ where: { shootDayId } }),
+        ...data.map((row) => prisma.shootDayActorCall.create({ data: { shootDayId, ...row } })),
+      ]),
+    withData,
+    {
+      projectId,
+      entityType: AuditEntityType.callSheet,
+      entityId: shootDayId,
+      action: "UPDATE",
+      summary: "Сохранены тайминги актёров",
+      changes: (data) => ({
+        rows: data.length,
+        transport: data.filter((row) => row.transportMode).length,
       }),
-    ),
-  ]);
-
-  await auditCallSheet(gate.ctx, projectId, shootDayId, "Сохранены тайминги актёров");
+    },
+  );
 
   revalidateCallSheet(projectId, shootDayId);
   return { success: "Тайминги актёров сохранены" };
@@ -528,8 +501,13 @@ export async function previewRecalculateActorTimingsAction(
   const day = await prisma.shootDay.findFirst({
     where: { id: shootDayId, projectId },
     include: {
-      timeSlots: { orderBy: { sortOrder: "asc" } },
+      timeSlots: {
+        orderBy: { sortOrder: "asc" },
+        include: { scene: { select: { cutAt: true } } },
+      },
+      // Вырезанные сцены в пересчёт не идут.
       scenes: {
+        where: { scene: { cutAt: null } },
         include: {
           scene: {
             select: {
@@ -672,8 +650,13 @@ export async function previewRecalculateResourceTimingsAction(
   const day = await prisma.shootDay.findFirst({
     where: { id: shootDayId, projectId },
     include: {
-      timeSlots: { orderBy: { sortOrder: "asc" } },
+      timeSlots: {
+        orderBy: { sortOrder: "asc" },
+        include: { scene: { select: { cutAt: true } } },
+      },
+      // Вырезанные сцены в пересчёт не идут.
       scenes: {
+        where: { scene: { cutAt: null } },
         include: {
           scene: {
             select: {

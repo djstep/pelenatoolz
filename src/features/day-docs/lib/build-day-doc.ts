@@ -99,13 +99,21 @@ function lookupResourceCall(
   );
 }
 
-export function buildDayStats(day: DayDocBundle["day"]) {
+/** Сцены дня без вырезанных (`Scene.cutAt`): в план, счётчики, хронометраж и таблицы не идут. */
+export function activeDayScenes<T extends { scene: { cutAt?: Date | string | null } }>(
+  scenes: T[],
+): T[] {
+  return scenes.filter((row) => !row.scene.cutAt);
+}
+
+export function buildDayStats(day: Pick<DayDocBundle["day"], "scenes">) {
   let totalSeconds = 0;
   let totalPages = 0;
   let shot = 0;
   const locations = new Set<string>();
+  const scenes = activeDayScenes(day.scenes);
 
-  for (const row of day.scenes) {
+  for (const row of scenes) {
     if (row.scene.planSeconds) totalSeconds += row.scene.planSeconds;
     const pages = row.estimatedPages ?? row.scene.pageCount;
     if (pages != null) totalPages += Number(pages);
@@ -116,9 +124,9 @@ export function buildDayStats(day: DayDocBundle["day"]) {
   }
 
   return {
-    sceneCount: day.scenes.length,
+    sceneCount: scenes.length,
     shotCount: shot,
-    notShotCount: day.scenes.length - shot,
+    notShotCount: scenes.length - shot,
     totalSeconds,
     totalPages,
     timingLabel:
@@ -138,7 +146,7 @@ export function buildCastForDay(bundle: DayDocBundle): CastRow[] {
     }
   >();
 
-  for (const row of bundle.day.scenes) {
+  for (const row of activeDayScenes(bundle.day.scenes)) {
     const num = formatSceneNumber(row.scene);
     for (const link of row.scene.characters) {
       const key = link.character.id;
@@ -258,7 +266,7 @@ export function buildResourceTables(bundle: DayDocBundle) {
   const camera = new Map<string, ResourceAccumulator>();
   const vehicles = new Map<string, ResourceAccumulator>();
 
-  for (const row of bundle.day.scenes) {
+  for (const row of activeDayScenes(bundle.day.scenes)) {
     const num = formatSceneNumber(row.scene);
     for (const res of row.scene.resources) {
       const cat = res.category as SceneResourceCategory;
@@ -302,7 +310,7 @@ function buildCatalogResourceSections(bundle: DayDocBundle) {
     Map<string, { name: string; sceneNumbers: Set<string> }>
   >();
 
-  for (const row of bundle.day.scenes) {
+  for (const row of activeDayScenes(bundle.day.scenes)) {
     const num = formatSceneNumber(row.scene);
     for (const link of row.scene.resourceItems ?? []) {
       if (link.item.category.perShift) continue;
@@ -481,7 +489,7 @@ export function buildShootingSlotDetails(
 export function inferDayNightLabel(day: DayDocBundle["day"]) {
   if (day.isNightShift) return "Ночь";
   const counts = { DAY: 0, NIGHT: 0, DAWN: 0, DUSK: 0 };
-  for (const row of day.scenes) {
+  for (const row of activeDayScenes(day.scenes)) {
     if (row.scene.dayNight) counts[row.scene.dayNight] += 1;
   }
   const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
@@ -491,7 +499,11 @@ export function inferDayNightLabel(day: DayDocBundle["day"]) {
   return day.isNightShift ? "Ночь" : "День";
 }
 
-export function formatSceneLine(scene: SceneRow) {
+export function formatSceneLine(
+  scene: Pick<SceneRow, "episodeNumber" | "number" | "postfix" | "intExt" | "dayNight"> & {
+    locations: Array<{ location: { name: string } }>;
+  },
+) {
   const num = formatSceneNumber(scene);
   const loc = scene.locations[0]?.location.name;
   // Как slugline / плашка КПП: № · Инт/Нат · Локация · День/Ночь

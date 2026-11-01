@@ -5,8 +5,9 @@ export const timeSlotTypeLabels: Record<TimeSlotType, string> = {
   REHEARSAL: "Репетиция",
   SHOOTING: "Съёмка сцены",
   LUNCH: "Обед",
-  TRAVEL: "Переезд / подготовка",
+  TRAVEL: "Переезд",
   IDLE: "Простой",
+  PREP: "Подготовка",
 };
 
 export const resourceCategoryLabels: Record<string, string> = {

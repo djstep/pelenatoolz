@@ -109,7 +109,7 @@ export function canEditCallSheets(access: {
 
 /** Проверка, что id принадлежат проекту. false — чужой или нет записи. */
 export type InProjectCheck = (
-  entity: "ProjectMembership" | "Department" | "ShootDay",
+  entity: "ProjectMembership" | "Department" | "ShootDay" | "Location",
   ids: string[],
 ) => Promise<boolean>;
 

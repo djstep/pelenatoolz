@@ -57,6 +57,7 @@ export function CallSheetView({
   resourceTimingBaselines = {},
   perShiftCatalog = [],
   resourceCategories = [],
+  transportEditor = null,
 }: {
   locale: string;
   projectId: string;
@@ -69,6 +70,7 @@ export function CallSheetView({
   resourceTimingBaselines?: ResourceTimingBaselines;
   perShiftCatalog?: import("@/features/day-docs/queries").PerShiftCatalogOption[];
   resourceCategories?: DayDocsExportResourceCategory[];
+  transportEditor?: import("@/features/day-docs/transport-queries").CallSheetTransportEditorData | null;
 }) {
   const { day } = bundle;
   const cast = buildCastForDay(bundle);
@@ -125,6 +127,7 @@ export function CallSheetView({
               perShiftCatalog={perShiftCatalog}
               timingBaselines={timingBaselines}
               resourceTimingBaselines={resourceTimingBaselines}
+              transportEditor={transportEditor}
             />
           ) : null}
           <CallSheetMoveDateButton

@@ -169,18 +169,31 @@ export async function loadTemplateForCopy(
 export type CallSheetBlocks = {
   id: string;
   templateAppliedAt: Date;
+  tempDay: string | null;
+  tempNight: string | null;
+  importantNote: string | null;
+  actorRestrictions: string | null;
+  schemeLocationId: string | null;
+  schemeLocation: {
+    id: string;
+    name: string;
+    sublocation: string | null;
+    latitude: number | null;
+    longitude: number | null;
+  } | null;
   leaders: {
     id: string;
     position: string;
     shortTitle: string | null;
+    membershipId: string | null;
     personName: string | null;
     phone: string | null;
   }[];
-  crewCalls: { id: string; label: string; callTime: string | null }[];
+  crewCalls: { id: string; departmentId: string | null; label: string; callTime: string | null }[];
   baseItems: { id: string; name: string; callTime: string | null; notNeeded: boolean }[];
 };
 
-/** Вызывной дня (если создан) с блоками из шаблона. Только чтение. */
+/** Вызывной дня (если создан) с блоками из шаблона и полями листа. Только чтение. */
 export async function getCallSheetForDay(
   projectId: string,
   shootDayId: string,
@@ -190,13 +203,28 @@ export async function getCallSheetForDay(
     select: {
       id: true,
       templateAppliedAt: true,
+      tempDay: true,
+      tempNight: true,
+      importantNote: true,
+      actorRestrictions: true,
+      schemeLocationId: true,
+      schemeLocation: {
+        select: { id: true, name: true, sublocation: true, latitude: true, longitude: true },
+      },
       leaders: {
         orderBy: { sortOrder: "asc" },
-        select: { id: true, position: true, shortTitle: true, personName: true, phone: true },
+        select: {
+          id: true,
+          position: true,
+          shortTitle: true,
+          membershipId: true,
+          personName: true,
+          phone: true,
+        },
       },
       crewCalls: {
         orderBy: { sortOrder: "asc" },
-        select: { id: true, label: true, callTime: true },
+        select: { id: true, departmentId: true, label: true, callTime: true },
       },
       baseItems: {
         orderBy: { sortOrder: "asc" },

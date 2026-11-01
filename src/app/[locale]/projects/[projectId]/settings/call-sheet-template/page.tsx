@@ -1,4 +1,6 @@
+import { CallSheetSectionsEditor } from "@/features/call-sheets/components/call-sheet-sections-editor";
 import { CallSheetTemplateEditor } from "@/features/call-sheets/components/call-sheet-template-editor";
+import { getCallSheetSectionsEditor } from "@/features/call-sheets/elements-queries";
 import { canEditCallSheets } from "@/features/call-sheets/lib/template-rules";
 import {
   getCallSheetTemplate,
@@ -20,10 +22,11 @@ export default async function CallSheetTemplatePage({ params }: Props) {
     return <p className="text-sm text-[var(--danger)]">Нет доступа</p>;
   }
 
-  const [template, members, departments] = await Promise.all([
+  const [template, members, departments, sections] = await Promise.all([
     getCallSheetTemplate(projectId),
     listTemplateMemberOptions(projectId),
     listDepartmentsForSmeta(projectId, null),
+    getCallSheetSectionsEditor(projectId),
   ]);
 
   return (
@@ -42,6 +45,9 @@ export default async function CallSheetTemplatePage({ params }: Props) {
           members={members}
           departments={departments.map((d) => ({ id: d.id, name: d.name }))}
         />
+      </Card>
+      <Card>
+        <CallSheetSectionsEditor projectId={projectId} sections={sections} />
       </Card>
     </div>
   );
