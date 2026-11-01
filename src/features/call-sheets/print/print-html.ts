@@ -158,12 +158,6 @@ function importantHtml(model: CallSheetPrintModel) {
 
 // ---- Руководители, цеха, база ----
 
-/** «Миронова Татьяна» → фамилия жирным. */
-function boldLastName(name: string) {
-  const [last, ...rest] = name.split(/\s+/);
-  return `<b>${e(last!)}</b>${rest.length ? ` ${e(rest.join(" "))}` : ""}`;
-}
-
 function leadersHtml(model: CallSheetPrintModel) {
   const rows = model.leaders;
   if (rows.length === 0) return "";
@@ -175,7 +169,7 @@ function leadersHtml(model: CallSheetPrintModel) {
   const body = rows
     .map(
       (r) =>
-        `<tr><td>${e(r.position)}</td>${withName ? `<td class="nm">${r.name ? boldLastName(r.name) : ""}</td>` : ""}${
+        `<tr><td>${e(r.position)}</td>${withName ? `<td class="nm">${r.name ? e(r.name) : ""}</td>` : ""}${
           withPhone ? `<td class="r">${r.phone ? t(r.phone) : ""}</td>` : ""
         }</tr>`,
     )

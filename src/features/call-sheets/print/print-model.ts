@@ -323,9 +323,14 @@ function formatDayDate(value: Date | string) {
 }
 
 /** Хронометраж «м:сс». */
-function formatTiming(seconds: number) {
-  if (seconds <= 0) return null;
-  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+/**
+ * Хронометраж «11′40″»: минуты (сколько угодно, без часов) со штрихом, секунды двумя цифрами
+ * с двойным штрихом (U+2032 / U+2033) — чтобы не путать со временем суток.
+ */
+export function formatTiming(seconds: number): string | null {
+  if (!Number.isFinite(seconds) || seconds <= 0) return null;
+  const total = Math.round(seconds);
+  return `${Math.floor(total / 60)}′${String(total % 60).padStart(2, "0")}″`;
 }
 
 /** Длительность строки плана «ч:мм». */
@@ -500,10 +505,11 @@ function elementWithQuantity(row: CallSheetPrintElementRow, group: boolean) {
 }
 
 /**
- * Разделы, которые в плане не повторяются (как в макете): реквизит, костюм, грим и спецтранспорт
- * цеха смотрят в «Элементах площадки», в строке сцены — транспорт, люди, трюки, техника, CG.
+ * Разделы, которые в плане не повторяются (решение владельца, шаг 3а): костюм, грим и
+ * спецтранспорт цеха смотрят в «Элементах площадки»; в строке сцены — люди, транспорт,
+ * реквизит, трюки, техника, CG и свои разделы.
  */
-const PLAN_HIDDEN_SECTIONS = new Set<string>(["PROPS", "COSTUME", "MAKEUP", SPECIAL_TRANSPORT_KEY]);
+const PLAN_HIDDEN_SECTIONS = new Set<string>(["COSTUME", "MAKEUP", SPECIAL_TRANSPORT_KEY]);
 
 /** Второй и дальше в перечислении — со строчной буквы, если это обычное русское слово. */
 function lowerFirst(name: string) {
