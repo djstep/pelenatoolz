@@ -1,7 +1,7 @@
 "use client";
 
 import { getCallSheetPrintHtmlAction } from "@/features/call-sheets/print-actions";
-import { printWhenImagesSettled } from "@/shared/lib/print-window";
+import { printServerHtml } from "@/shared/lib/print-window";
 
 /**
  * Печать и Excel вызывного из браузера: меню «Экспорт» и список утверждённых версий.
@@ -57,19 +57,18 @@ export async function fetchCallSheetXlsx(
   };
 }
 
-/** Окно печати — как в кастинге: HTML с сервера → `document.write` → печать после фото и шрифтов. */
-export async function printCallSheet(
+/**
+ * Окно печати: открывается сразу в обработчике клика (до запроса к серверу), потом в него
+ * пишется HTML с сервера → печать после фото и шрифтов. Ошибка — окно закрывается, текст
+ * ошибки — вызывающему. Вызывать прямо из `onClick`, без `await` перед вызовом.
+ */
+export function printCallSheet(
   projectId: string,
   dayId: string,
   version?: number,
 ): Promise<{ error?: string }> {
-  const result = await getCallSheetPrintHtmlAction(projectId, dayId, version);
-  if ("error" in result) return { error: result.error };
-  const win = window.open("", "_blank");
-  if (!win) return { error: "Браузер не открыл окно печати — разрешите всплывающие окна" };
-  win.document.write(result.html);
-  win.document.close();
-  // Скрипты в странице печати запрещены (CSP) — печать вызывается отсюда.
-  printWhenImagesSettled(win);
-  return {};
+  return printServerHtml(
+    () => window.open("", "_blank"),
+    () => getCallSheetPrintHtmlAction(projectId, dayId, version),
+  );
 }

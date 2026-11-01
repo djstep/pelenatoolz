@@ -57,3 +57,49 @@ export function printWhenImagesSettled(win: PrintWindow, timeoutMs = PRINT_IMAGE
   fontsReady?.then(settle, settle);
   const timer = setTimeout(print, timeoutMs);
 }
+
+/** Окно печати, в которое пишется HTML с сервера. */
+type ServerPrintWindow = PrintWindow & {
+  close(): void;
+  document: PrintWindow["document"] & { write(html: string): void; close(): void };
+};
+
+export const PRINT_POPUP_BLOCKED = "Браузер не открыл окно печати — разрешите всплывающие окна";
+export const PRINT_FAILED = "Не удалось подготовить лист к печати — попробуйте ещё раз";
+
+/** Пока сервер собирает лист — в окне эта строка (без скриптов). */
+const PRINT_WAIT_HTML =
+  '<!doctype html><meta charset="utf-8"><title>Печать</title>' +
+  '<p style="font:14px sans-serif;margin:24px">Готовим лист к печати…</p>';
+
+/**
+ * Печать HTML, который собирает сервер. Окно открывается сразу, до первого `await`:
+ * браузер разрешает всплывающее окно только в обработчике клика (Safari — строго синхронно,
+ * Chrome — несколько секунд после клика). Потом в окно пишется HTML. Ошибка сервера
+ * (ответ `{ error }` или исключение) — окно закрывается, вызывающий показывает сообщение.
+ */
+export async function printServerHtml(
+  openWindow: () => ServerPrintWindow | null,
+  load: () => Promise<{ html: string } | { error: string }>,
+): Promise<{ error?: string }> {
+  const win = openWindow();
+  if (!win) return { error: PRINT_POPUP_BLOCKED };
+  win.document.write(PRINT_WAIT_HTML);
+  win.document.close();
+  let result: { html: string } | { error: string };
+  try {
+    result = await load();
+  } catch {
+    win.close();
+    return { error: PRINT_FAILED };
+  }
+  if ("error" in result) {
+    win.close();
+    return { error: result.error };
+  }
+  win.document.write(result.html);
+  win.document.close();
+  // Скрипты в странице печати запрещены (CSP) — печать вызывается отсюда.
+  printWhenImagesSettled(win);
+  return {};
+}
