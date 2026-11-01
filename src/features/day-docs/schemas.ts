@@ -56,6 +56,8 @@ export const actorCallRowSchema = z.object({
   /** Транспорт актёра: машина / сам / свой текст. Пусто — не указан. */
   transportMode: z.enum(ActorTransportMode).nullable().optional().or(z.literal("")),
   transportText: z.string().trim().max(200).optional(),
+  /** Подача машины — сохраняется только при транспорте «машина». */
+  carPickupTime: timeString,
 }).refine(
   (row) => row.transportMode !== ActorTransportMode.CUSTOM || Boolean(row.transportText),
   { message: "Транспорт актёра: впишите свой текст" },

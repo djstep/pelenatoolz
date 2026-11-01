@@ -2,7 +2,6 @@
 
 import { revalidatePath } from "next/cache";
 import {
-  saveActorCallsSchema,
   saveDepartmentCallsSchema,
   saveResourceCallsSchema,
   saveResourceUsagesSchema,
@@ -14,6 +13,7 @@ import {
   type ActorTimingProposal,
   type ResourceTimingProposal,
 } from "@/features/day-docs/lib/compute-call-timings";
+import { checkActorCallsSave } from "@/features/day-docs/lib/actor-call-rules";
 import { checkTimeSlotsSave } from "@/features/day-docs/lib/plan-rules";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import {
@@ -29,6 +29,21 @@ export type CallSheetActionState = { error?: string; success?: string };
 function revalidateCallSheet(projectId: string, dayId: string) {
   revalidatePath(`/ru/projects/${projectId}/call-sheets/${dayId}`);
   revalidatePath(`/ru/projects/${projectId}/call-sheets`);
+}
+
+/** Все id — этого проекта (assertInProject без исключения). */
+async function isInProject(
+  entity: Parameters<typeof assertInProject>[0],
+  ids: string[],
+  projectId: string,
+): Promise<boolean> {
+  try {
+    await assertInProject(entity, ids, projectId);
+    return true;
+  } catch (error) {
+    if (isNotInProjectError(error)) return false;
+    throw error;
+  }
 }
 
 function emptyToNull(v: string | undefined | null) {
@@ -231,57 +246,23 @@ export async function saveActorCallsAction(
   _prev: CallSheetActionState,
   formData: FormData,
 ): Promise<CallSheetActionState> {
-  const gate = await assertCallSheetWrite(projectId, shootDayId);
-  if ("error" in gate) return gate;
-
-  let rows: unknown[] = [];
-  try {
-    rows = JSON.parse(String(formData.get("rows") ?? "[]"));
-  } catch {
-    return { error: "Некорректный формат" };
-  }
-
-  const parsed = saveActorCallsSchema.safeParse({ rows });
-  if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Проверьте тайминги актёров" };
-  }
-
-  const rowsData = parsed.data.rows.map((row) => {
-    const transportMode = row.transportMode || null;
-    return {
-      actorId: row.actorId,
-      pickupTime: emptyToNull(row.pickupTime),
-      arrivalTime: emptyToNull(row.arrivalTime),
-      makeupTime: emptyToNull(row.makeupTime),
-      costumeTime: emptyToNull(row.costumeTime),
-      readyTime: emptyToNull(row.readyTime),
-      wrapTime: emptyToNull(row.wrapTime),
-      transportMode,
-      // Свой текст хранится только у «свой текст».
-      transportText: transportMode === "CUSTOM" ? emptyToNull(row.transportText) : null,
-    };
-  });
-  const withData = rowsData.filter(
-    (r) =>
-      r.pickupTime ||
-      r.arrivalTime ||
-      r.makeupTime ||
-      r.costumeTime ||
-      r.readyTime ||
-      r.wrapTime ||
-      r.transportMode,
+  const ctx = await requireProjectContext(projectId);
+  // Проверки — чистая функция actor-call-rules.ts: право, день и актёры проекта, формат;
+  // подача машины — только при «машина». До первой записи.
+  const checked = await checkActorCallsSave(
+    {
+      canEdit: ctx.can("callsheet:write") || ctx.can("schedule:write"),
+      dayInProject: (dayId) => isInProject("ShootDay", [dayId], projectId),
+      actorsInProject: (actorIds) => isInProject("Actor", actorIds, projectId),
+    },
+    shootDayId,
+    String(formData.get("rows") ?? "[]"),
   );
-
-  const actorIds = [...new Set(parsed.data.rows.map((row) => row.actorId))];
-  try {
-    await assertInProject("Actor", actorIds, projectId);
-  } catch (error) {
-    if (isNotInProjectError(error)) return { error: "Объект не найден" };
-    throw error;
-  }
+  if ("error" in checked) return { error: checked.error };
+  const withData = checked.rows;
 
   await auditMutation(
-    gate.ctx,
+    ctx,
     (data: typeof withData) =>
       prisma.$transaction([
         prisma.shootDayActorCall.deleteMany({ where: { shootDayId } }),
@@ -297,6 +278,7 @@ export async function saveActorCallsAction(
       changes: (data) => ({
         rows: data.length,
         transport: data.filter((row) => row.transportMode).length,
+        carPickup: data.filter((row) => row.carPickupTime).length,
       }),
     },
   );

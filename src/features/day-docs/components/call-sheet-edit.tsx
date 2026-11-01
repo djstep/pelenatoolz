@@ -181,6 +181,7 @@ export function CallSheetEditor({
           wrapTime: c.wrap ?? "",
           transportMode: (call?.transportMode ?? "") as ActorTransportMode | "",
           transportText: call?.transportText ?? "",
+          carPickupTime: call?.carPickupTime ?? "",
         };
       }),
   );
@@ -606,7 +607,13 @@ export function CallSheetEditor({
                         setActorTimings((p) =>
                           p.map((r, j) =>
                             j === i
-                              ? { ...r, transportMode: e.target.value as ActorTransportMode | "" }
+                              ? {
+                                  ...r,
+                                  transportMode: e.target.value as ActorTransportMode | "",
+                                  // Подача машины — только у «машина»: при смене режима стирается.
+                                  carPickupTime:
+                                    e.target.value === ActorTransportMode.CAR ? r.carPickupTime : "",
+                                }
                               : r,
                           ),
                         )
@@ -621,6 +628,21 @@ export function CallSheetEditor({
                       ))}
                     </select>
                   </label>
+                  {row.transportMode === ActorTransportMode.CAR ? (
+                    <label className="space-y-1 text-xs">
+                      <span className="text-[var(--muted-fg)]">Подача машины</span>
+                      <HhMmInput
+                        value={row.carPickupTime}
+                        onChange={(v) =>
+                          setActorTimings((p) =>
+                            p.map((r, j) => (j === i ? { ...r, carPickupTime: v } : r)),
+                          )
+                        }
+                        placeholder="00:00"
+                        className="max-w-[8rem]"
+                      />
+                    </label>
+                  ) : null}
                   {row.transportMode === ActorTransportMode.CUSTOM ? (
                     <label className="space-y-1 text-xs">
                       <span className="text-[var(--muted-fg)]">Свой текст</span>
@@ -656,6 +678,7 @@ export function CallSheetEditor({
                     wrapTime,
                     transportMode,
                     transportText,
+                    carPickupTime,
                   }) => ({
                     actorId,
                     pickupTime,
@@ -666,6 +689,7 @@ export function CallSheetEditor({
                     wrapTime,
                     transportMode,
                     transportText,
+                    carPickupTime,
                   }),
                 ),
               )}

@@ -180,6 +180,12 @@ export type CallSheetBlocks = {
     sublocation: string | null;
     latitude: number | null;
     longitude: number | null;
+    /** Для листа схемы объекта. */
+    address: string | null;
+    directions: string | null;
+    parking: string | null;
+    onSiteNotes: string | null;
+    points: { number: string; name: string; description: string | null }[];
   } | null;
   leaders: {
     id: string;
@@ -209,7 +215,21 @@ export async function getCallSheetForDay(
       actorRestrictions: true,
       schemeLocationId: true,
       schemeLocation: {
-        select: { id: true, name: true, sublocation: true, latitude: true, longitude: true },
+        select: {
+          id: true,
+          name: true,
+          sublocation: true,
+          latitude: true,
+          longitude: true,
+          address: true,
+          directions: true,
+          parking: true,
+          onSiteNotes: true,
+          points: {
+            orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+            select: { number: true, name: true, description: true },
+          },
+        },
       },
       leaders: {
         orderBy: { sortOrder: "asc" },

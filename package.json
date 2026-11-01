@@ -29,6 +29,7 @@
     "dejavu-fonts-ttf": "^2.37.3",
     "docx": "^9.7.1",
     "exceljs": "^4.4.0",
+    "medeo-font": "1.0.0-rc.4.1",
     "nanoid": "^6.0.1",
     "next": "16.4.2",
     "next-auth": "^5.0.0-beta.32",

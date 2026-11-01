@@ -9,7 +9,9 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ["sql.js"],
   // Шрифт печатного листа вызывного читается с диска (`fs`) — в сборку его кладём явно.
   outputFileTracingIncludes: {
-    "/*/projects/*/call-sheets/**": ["./assets/fonts/ibm-plex-sans/**"],
+    "/*/projects/*/call-sheets/**": [
+      "./node_modules/medeo-font/dist/fonts/medeo-sans/MedeoSansVariable.woff2",
+    ],
   },
   // Только для `next dev`: второй аккаунт открывается на 127.0.0.1 (отдельные куки входа).
   allowedDevOrigins: ["127.0.0.1"],

@@ -1329,6 +1329,8 @@ model ShootDayActorCall {
   /// Транспорт: машина / сам / свой текст (`transportText`).
   transportMode ActorTransportMode?
   transportText String?
+  /// Подача машины за актёром — только при транспорте «машина».
+  carPickupTime String?
 
   shootDay ShootDay @relation(fields: [shootDayId], references: [id], onDelete: Cascade)
   actor    Actor    @relation(fields: [actorId], references: [id], onDelete: Cascade)

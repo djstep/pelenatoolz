@@ -1,8 +1,10 @@
 /**
- * Превью печатного листа вызывного без входа и без базы: HTML из фикстур (насыщенный и
- * минимальный день) → `preview/callsheet-full.html`, `preview/callsheet-min.html`.
+ * Превью печатного листа вызывного без входа и без базы: HTML из фикстур — день «ИРП» из
+ * макета владельца, насыщенный и минимальный день → `preview/callsheet-irp.html`,
+ * `preview/callsheet-full.html`, `preview/callsheet-min.html`.
  * Если найден Chrome / Chromium (переменная `CHROME_PATH` или обычные места установки) —
- * ещё PDF A4 и PNG рядом. Ничего не ставит и в базу не ходит.
+ * ещё PDF A4 и PNG рядом и PDF самого макета (`preview/mockup-v5.pdf`) для сверки по страницам.
+ * Ничего не ставит и в базу не ходит.
  *
  *   npm run preview:callsheet
  */
@@ -10,15 +12,17 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { loadMedeoFontCss } from "../src/features/call-sheets/print/medeo-font";
 import { buildCallSheetHtml } from "../src/features/call-sheets/print/print-html";
 import { buildCallSheetPrintModel } from "../src/features/call-sheets/print/print-model";
-import { loadPlexFontCss } from "../src/features/call-sheets/print/plex-font";
 import {
   FULL_DAY_SOURCE,
+  IRP_DAY_SOURCE,
   MIN_DAY_SOURCE,
 } from "../src/features/call-sheets/print/preview-fixtures";
 
 const OUT_DIR = path.join(process.cwd(), "preview");
+const MOCKUP = path.join(process.cwd(), "docs", "callsheet-mockup-v5.html");
 
 const CHROME_CANDIDATES = [
   process.env.CHROME_PATH,
@@ -39,26 +43,29 @@ function kb(file: string) {
   return `${(statSync(file).size / 1024).toFixed(0)} КБ`;
 }
 
-function render(chrome: string, htmlFile: string, base: string) {
+function render(chrome: string, htmlFile: string, base: string, withPng = true) {
   const url = pathToFileURL(htmlFile).href;
   const common = ["--headless=new", "--disable-gpu", "--no-first-run", "--hide-scrollbars"];
   const pdf = `${base}.pdf`;
-  const png = `${base}.png`;
   execFileSync(chrome, [...common, "--no-pdf-header-footer", `--print-to-pdf=${pdf}`, url], {
     stdio: "ignore",
   });
-  // 794 px — ширина A4 при 96 dpi; высота с запасом, чтобы было видно, где кончается лист.
-  execFileSync(chrome, [...common, "--window-size=794,2246", `--screenshot=${png}`, url], {
+  console.log(`  ${path.relative(process.cwd(), pdf)} (${kb(pdf)})`);
+  if (!withPng) return;
+  // Экранный вид: лист 210 мм с полями — чуть шире 794 px; высота с запасом.
+  const png = `${base}.png`;
+  execFileSync(chrome, [...common, "--window-size=840,3400", `--screenshot=${png}`, url], {
     stdio: "ignore",
   });
-  console.log(`  ${path.relative(process.cwd(), pdf)} (${kb(pdf)}), ${path.relative(process.cwd(), png)}`);
+  console.log(`  ${path.relative(process.cwd(), png)}`);
 }
 
 function main() {
   mkdirSync(OUT_DIR, { recursive: true });
-  const fontCss = loadPlexFontCss();
+  const fontCss = loadMedeoFontCss();
   const chrome = findChrome();
   const variants = [
+    { name: "callsheet-irp", source: IRP_DAY_SOURCE },
     { name: "callsheet-full", source: FULL_DAY_SOURCE },
     { name: "callsheet-min", source: MIN_DAY_SOURCE },
   ];
@@ -68,6 +75,10 @@ function main() {
     writeFileSync(file, html, "utf8");
     console.log(`${path.relative(process.cwd(), file)} (${kb(file)})`);
     if (chrome) render(chrome, file, path.join(OUT_DIR, name));
+  }
+  if (chrome && existsSync(MOCKUP)) {
+    console.log("Макет для сверки:");
+    render(chrome, MOCKUP, path.join(OUT_DIR, "mockup-v5"), false);
   }
   console.log(`Шрифт в HTML: ${(Buffer.byteLength(fontCss) / 1024).toFixed(0)} КБ`);
   if (!chrome) console.log("Chrome не найден — только HTML (путь можно задать в CHROME_PATH).");
