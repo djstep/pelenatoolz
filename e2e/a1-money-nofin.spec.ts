@@ -52,7 +52,7 @@ const PAGES: { name: string; path: string; marker: string | RegExp }[] = [
   { name: "локации", path: projectPath(ctx, "/locations"), marker: NAMES.location },
   { name: "ресурсы", path: projectPath(ctx, "/resources"), marker: /Игровой транспорт/ },
   { name: "либретто", path: projectPath(ctx, "/libretto"), marker: "Показано 3 из 3 сцен" },
-  { name: "обзор проекта", path: projectPath(ctx), marker: /E2E приёмка/ },
+  { name: "обзор проекта", path: projectPath(ctx), marker: "Обзор проекта" },
   { name: "карточка сцены", path: projectPath(ctx, `/libretto/${ctx.sceneId}`), marker: "Сцена 1" },
   { name: "карточка объекта", path: projectPath(ctx, `/locations/${ctx.locationId}`), marker: NAMES.location },
   { name: "карточка персонажа (актёр)", path: projectPath(ctx, `/characters/${ctx.characterId}`), marker: "Требования к роли" },

@@ -9,6 +9,7 @@ import {
 import { Button } from "@/shared/ui/button";
 import { Label } from "@/shared/ui/label";
 import { Modal } from "@/shared/ui/modal";
+import { printExport } from "@/shared/lib/print-window";
 import { useToast } from "@/shared/ui/toast";
 
 interface Props {
@@ -27,14 +28,6 @@ function downloadBase64(base64: string, fileName: string, mime: string) {
   a.download = fileName;
   a.click();
   URL.revokeObjectURL(url);
-}
-
-function openPrintHtml(html: string) {
-  const win = window.open("", "_blank");
-  if (!win) return;
-  win.document.write(html);
-  win.document.close();
-  win.focus();
 }
 
 export function CharacterScriptButton({
@@ -72,6 +65,16 @@ export function CharacterScriptButton({
             : undefined,
       };
 
+      if (format === "pdf") {
+        // Окно открывается сразу по клику, до ответа сервера; печатает пользователь (как было).
+        const printed = await printExport(() => exportCharacterScriptAction(projectId, payload), {
+          print: false,
+        });
+        if (printed.error) toast.error(printed.error);
+        else setOpen(false);
+        return;
+      }
+
       const result = await exportCharacterScriptAction(projectId, payload);
       if ("error" in result) {
         toast.error(result.error);
@@ -83,8 +86,6 @@ export function CharacterScriptButton({
       if (result.type === "single") {
         downloadBase64(result.base64, result.fileName, result.mime);
         toast.success("Файл сохранён");
-      } else if (result.type === "single_html") {
-        openPrintHtml(result.html);
       }
     });
   }

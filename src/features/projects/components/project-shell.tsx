@@ -3,6 +3,7 @@ import {
   ProjectNav,
   type NavGroup,
 } from "@/features/projects/components/project-nav";
+import { ProjectSidebar } from "@/features/projects/components/project-sidebar";
 import {
   projectStatusLabels,
   projectTypeLabels,
@@ -38,8 +39,7 @@ export function ProjectShell({
 }) {
   return (
     <div className="flex h-[calc(100vh-3.5rem)] flex-col overflow-hidden lg:flex-row">
-      <aside className="w-full shrink-0 border-b border-[var(--border)] lg:w-60 lg:border-b-0 lg:border-r">
-        <div className="project-sidebar space-y-4 px-3 py-5 lg:h-full lg:max-h-none lg:overflow-y-auto lg:backdrop-blur-md">
+      <ProjectSidebar projectName={project.name}>
           <div className="px-1">
             <div className="mb-3 flex flex-wrap gap-1.5">
               <Badge>{projectTypeLabels[project.type]}</Badge>
@@ -58,8 +58,7 @@ export function ProjectShell({
             projectId={project.id}
             groups={navGroups}
           />
-        </div>
-      </aside>
+      </ProjectSidebar>
       <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-auto px-4 py-4 sm:px-5 lg:px-6 lg:py-5">
         {children}
       </main>

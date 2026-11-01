@@ -11,7 +11,7 @@ import { describe, test } from "node:test";
  */
 
 function source(relative: string) {
-  return readFileSync(path.join(process.cwd(), relative), "utf8");
+  return readFileSync(path.join(process.cwd(), relative), "utf8").replace(/\r\n/g, "\n");
 }
 
 describe("ресурсы сцены без цен", () => {

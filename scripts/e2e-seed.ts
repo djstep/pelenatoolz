@@ -320,6 +320,25 @@ async function createProject(users: Record<E2ERoleKey, string>) {
         scenes.push(scene);
       }
 
+      // Версия сценария — для редактора и его «PDF».
+      await tx.scriptVersion.create({
+        data: {
+          projectId,
+          versionNumber: 1,
+          title: "Версия E2E",
+          isCurrent: true,
+          createdById: users.producer,
+          blocks: {
+            create: [
+              { projectId, sceneId: scenes[0].id, type: "SLUGLINE", content: "1. ИНТ. КВАРТИРА ИВАНОВЫХ — ДЕНЬ", sortOrder: 0 },
+              { projectId, sceneId: scenes[0].id, type: "ACTION", content: "Иван собирает чемодан.", sortOrder: 1 },
+              { projectId, sceneId: scenes[0].id, type: "CHARACTER", content: "ИВАН", sortOrder: 2 },
+              { projectId, sceneId: scenes[0].id, type: "DIALOGUE", content: "Опаздываем.", sortOrder: 3 },
+            ],
+          },
+        },
+      });
+
       const days = [];
       for (const d of DAYS) {
         days.push(

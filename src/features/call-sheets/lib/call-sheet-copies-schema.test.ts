@@ -27,7 +27,7 @@ function migrationSql(): string {
   const dir = path.join(ROOT, "prisma", "migrations");
   const name = readdirSync(dir).find((d) => d.endsWith("_call_sheet_template_profile"));
   assert.ok(name, "миграция шага 1");
-  return readFileSync(path.join(dir, name, "migration.sql"), "utf8");
+  return readFileSync(path.join(dir, name, "migration.sql"), "utf8").replace(/\r\n/g, "\n");
 }
 
 describe("копии в вызывном не зависят от цеха и участника", () => {
@@ -54,7 +54,7 @@ describe("копии в вызывном не зависят от цеха и у
   test("выход из проекта — смена статуса, строка участия остаётся", () => {
     assert.match(model("ProjectMembership"), /status\s+MembershipStatus/);
     assert.match(schema, /enum MembershipStatus \{[^}]*REMOVED/);
-    const actions = readFileSync(path.join(ROOT, "src", "features", "projects", "actions.ts"), "utf8");
+    const actions = readFileSync(path.join(ROOT, "src", "features", "projects", "actions.ts"), "utf8").replace(/\r\n/g, "\n");
     assert.match(actions, /status: MembershipStatus\.REMOVED/);
     assert.doesNotMatch(actions, /projectMembership\.(delete|deleteMany)\b/);
   });
@@ -74,7 +74,7 @@ describe("копии в вызывном не зависят от цеха и у
         if (entry.isDirectory()) walk(full);
         else if (/\.tsx?$/.test(entry.name) && !entry.name.endsWith(".test.ts")) {
           const rel = path.relative(ROOT, full);
-          if (rel !== allowed && writes.test(readFileSync(full, "utf8"))) offenders.push(rel);
+          if (rel !== allowed && writes.test(readFileSync(full, "utf8").replace(/\r\n/g, "\n"))) offenders.push(rel);
         }
       }
     };

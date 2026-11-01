@@ -342,7 +342,7 @@ describe("вырезанные сцены дня: счётчики, хроном
 
 describe("действие сохранения плана", () => {
   test("saveTimeSlotsAction проверяет через checkTimeSlotsSave до записи и пишет через auditMutation", () => {
-    const source = readFileSync(join(process.cwd(), "src/features/day-docs/actions.ts"), "utf8");
+    const source = readFileSync(join(process.cwd(), "src/features/day-docs/actions.ts"), "utf8").replace(/\r\n/g, "\n");
     const start = source.indexOf("export async function saveTimeSlotsAction");
     const end = source.indexOf("export async function", start + 1);
     const body = source.slice(start, end);

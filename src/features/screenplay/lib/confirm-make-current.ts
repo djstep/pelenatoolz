@@ -13,6 +13,7 @@ export function makeCurrentConfirm(
       "Чтобы перенести в него сцены из этой версии, откройте её и нажмите «Обновить либретто».",
     ],
     confirmLabel: "Сделать текущей",
+    tone: "primary",
     action,
   };
 }

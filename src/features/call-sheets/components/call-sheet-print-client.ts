@@ -1,7 +1,7 @@
 "use client";
 
 import { getCallSheetPrintHtmlAction } from "@/features/call-sheets/print-actions";
-import { printServerHtml } from "@/shared/lib/print-window";
+import { openPrintWindow, printServerHtml } from "@/shared/lib/print-window";
 
 /**
  * Печать и Excel вызывного из браузера: меню «Экспорт» и список утверждённых версий.
@@ -68,7 +68,7 @@ export function printCallSheet(
   version?: number,
 ): Promise<{ error?: string }> {
   return printServerHtml(
-    () => window.open("", "_blank"),
+    openPrintWindow,
     () => getCallSheetPrintHtmlAction(projectId, dayId, version),
   );
 }

@@ -385,6 +385,8 @@ export function LibrettoWorkspace({
                           ? `Удалить сцены ${labels.join(", ")}?`
                           : `Удалить ${labels.length} сцен?`,
                     details: () => getScenesDeleteImpactAction(projectId, selectedIds),
+                    // Там только причины отказа: есть хоть одна — «Удалить» неактивна.
+                    detailsAreRefusals: true,
                     action: async () => {
                       const result = await bulkDeleteScenesAction(projectId, selectedIds);
                       if (result.error) return result.error;

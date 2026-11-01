@@ -26,6 +26,7 @@ import { Button } from "@/shared/ui/button";
 import { Checkbox } from "@/shared/ui/checkbox";
 import { Modal } from "@/shared/ui/modal";
 import { useToast } from "@/shared/ui/toast";
+import { printExport } from "@/shared/lib/print-window";
 
 type Format = "docx" | "pdf";
 type PdfPreset = "classic" | "crew";
@@ -42,16 +43,6 @@ function downloadBase64(base64: string, fileName: string, mime: string) {
   a.download = fileName;
   a.click();
   URL.revokeObjectURL(url);
-}
-
-function openPrintHtml(html: string) {
-  const win = window.open("", "_blank");
-  if (!win) return false;
-  win.document.write(html);
-  win.document.close();
-  win.focus();
-  setTimeout(() => win.print(), 250);
-  return true;
 }
 
 function ScopeHint({
@@ -123,6 +114,13 @@ function RegularScriptExportModal({
       pdfPreset: format === "pdf" ? pdfPreset : "classic",
     };
     startTransition(async () => {
+      if (format === "pdf") {
+        // Окно открывается сразу по клику, до ответа сервера (блокировщик всплывающих окон).
+        const printed = await printExport(() => exportSceneScriptAction(projectId, payload));
+        if (printed.error) toast.error(printed.error);
+        else onClose();
+        return;
+      }
       const result = await exportSceneScriptAction(projectId, payload);
       if ("error" in result && result.error) {
         toast.error(result.error);
@@ -130,14 +128,6 @@ function RegularScriptExportModal({
       }
       if ("base64" in result && result.base64) {
         downloadBase64(result.base64, result.fileName, result.mime);
-        onClose();
-        return;
-      }
-      if ("html" in result && result.html) {
-        if (!openPrintHtml(result.html)) {
-          toast.error("Разрешите всплывающие окна для печати PDF");
-          return;
-        }
         onClose();
       }
     });
@@ -296,11 +286,11 @@ function DirectorScriptExportModal({
       return;
     }
     const ready = columnsReadyForExport(columns);
-    startTransition(async () => {
+    const exportScript = async () => {
       if (canSaveLayout) {
         await saveExportLayoutAction(projectId, "directorsScript", columns);
       }
-      const result = await exportSceneScriptAction(projectId, {
+      return exportSceneScriptAction(projectId, {
         sceneIds,
         format,
         mode: "director",
@@ -314,20 +304,22 @@ function DirectorScriptExportModal({
         directorColumns: ready.length > 0 ? ready : columns,
         fieldLabels,
       });
+    };
+    startTransition(async () => {
+      if (format === "pdf") {
+        // Окно — до сохранения раскладки и запроса: иначе блокировщик всплывающих окон.
+        const printed = await printExport(exportScript);
+        if (printed.error) toast.error(printed.error);
+        else onClose();
+        return;
+      }
+      const result = await exportScript();
       if ("error" in result && result.error) {
         toast.error(result.error);
         return;
       }
       if ("base64" in result && result.base64) {
         downloadBase64(result.base64, result.fileName, result.mime);
-        onClose();
-        return;
-      }
-      if ("html" in result && result.html) {
-        if (!openPrintHtml(result.html)) {
-          toast.error("Разрешите всплывающие окна для печати PDF");
-          return;
-        }
         onClose();
       }
     });

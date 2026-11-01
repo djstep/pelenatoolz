@@ -19,7 +19,7 @@ const files = [...sourceFiles(path.join(ROOT, "src")), ...sourceFiles(path.join(
 
 /** Код без комментариев: в них слова «allow-scripts» и «<iframe» встречаются в пояснениях. */
 function code(file: string) {
-  return readFileSync(file, "utf8")
+  return readFileSync(file, "utf8").replace(/\r\n/g, "\n")
     .replace(/\/\*[\s\S]*?\*\//g, "")
     .replace(/^\s*\/\/.*$/gm, "");
 }

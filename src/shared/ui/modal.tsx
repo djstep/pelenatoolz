@@ -3,6 +3,7 @@
 import {
   useCallback,
   useEffect,
+  useId,
   useRef,
   type MouseEvent,
   type ReactNode,
@@ -43,6 +44,7 @@ export function Modal({
 }) {
   const unsaved = useUnsavedChanges();
   const dialogRef = useRef<HTMLDivElement>(null);
+  const titleId = useId();
   const baseline = useRef<string | null>(null);
 
   const isDirty = useCallback(() => {
@@ -128,15 +130,19 @@ export function Modal({
         )}
         role="dialog"
         aria-modal="true"
+        aria-labelledby={titleId}
         onClickCapture={guardUnsaved ? onClickCapture : undefined}
       >
         <div className="flex items-center justify-between border-b border-[var(--border)] px-5 py-4">
-          <h2 className="font-display text-lg font-semibold">{title}</h2>
+          <h2 id={titleId} className="font-display text-lg font-semibold">{title}</h2>
           <Button type="button" variant="ghost" onClick={requestClose} aria-label="Закрыть">
             ×
           </Button>
         </div>
-        <div className="flex-1 overflow-y-auto px-5 py-4">{children}</div>
+        {/* Тела нет — нет и пустой полосы между заголовком и кнопками. */}
+        {children == null || children === false ? null : (
+          <div className="flex-1 overflow-y-auto px-5 py-4">{children}</div>
+        )}
         {footer ? (
           <div className="border-t border-[var(--border)] px-5 py-4">{footer}</div>
         ) : null}

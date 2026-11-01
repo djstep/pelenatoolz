@@ -21,6 +21,7 @@ import { makeCurrentConfirm } from "@/features/screenplay/lib/confirm-make-curre
 import { quickCreateCharacterAction } from "@/features/script/actions";
 import type { TimingMode } from "@prisma/client";
 import { cn } from "@/shared/lib/cn";
+import { printExport } from "@/shared/lib/print-window";
 import { useToast } from "@/shared/ui/toast";
 import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
 import { useUnsavedChanges } from "@/shared/ui/unsaved/unsaved-changes-provider";
@@ -200,6 +201,7 @@ export function ScreenplayWorkspace({
         "Если правки нужны в либретто — сначала сохраните версию.",
       ],
       confirmLabel: "Продолжить",
+      tone: "primary",
       action: async () => syncPage(),
     });
   }
@@ -264,16 +266,10 @@ export function ScreenplayWorkspace({
   async function handleExportPdf() {
     setExporting("pdf");
     try {
-      const result = await exportScreenplayPrintHtmlAction(projectId, version.id);
-      if ("error" in result) return;
-      // Без noopener: с ним window.open возвращает null и печать не открывалась.
-      // В окно пишется только своя страница с экранированным текстом.
-      const printWindow = window.open("", "_blank");
-      if (!printWindow) return;
-      printWindow.document.write(result.html);
-      printWindow.document.close();
-      printWindow.focus();
-      printWindow.print();
+      // Окно открывается сразу по клику, до ответа сервера; в него пишется только своя страница
+      // с экранированным текстом. Ошибка — окно закрывается, сообщение.
+      const printed = await printExport(() => exportScreenplayPrintHtmlAction(projectId, version.id));
+      if (printed.error) toast.error(printed.error);
     } finally {
       setExporting(null);
     }

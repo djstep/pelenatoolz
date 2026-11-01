@@ -47,6 +47,7 @@ export function BudgetReviewActions({
                 "Она станет планом цеха.",
               ],
               confirmLabel: "Утвердить",
+              tone: "primary",
               action: async () => {
                 const result = await approveBudgetAction(projectId, departmentId, { revision });
                 if (result.error) return result.error;

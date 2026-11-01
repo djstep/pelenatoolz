@@ -504,7 +504,7 @@ describe("HTML листа вызывного", () => {
     assert.match(callSheetCsp("embed"), /font-src data:$/);
     // Файлы IBM Plex для листа убраны.
     assert.ok(!existsSync(path.join(process.cwd(), "assets", "fonts", "ibm-plex-sans")));
-    const config = readFileSync(path.join(process.cwd(), "next.config.ts"), "utf8");
+    const config = readFileSync(path.join(process.cwd(), "next.config.ts"), "utf8").replace(/\r\n/g, "\n");
     assert.ok(config.includes("./node_modules/medeo-font/dist/fonts/medeo-sans/MedeoSansVariable.woff2"));
   });
 
@@ -528,7 +528,7 @@ describe("шрифт листа по адресу (просмотр на стр�
   test("имя файла — с версией пакета (та же, что в package.json и node_modules)", () => {
     const pkg = JSON.parse(readFileSync(path.join(process.cwd(), "package.json"), "utf8"));
     const installed = JSON.parse(
-      readFileSync(path.join(process.cwd(), "node_modules", "medeo-font", "package.json"), "utf8"),
+      readFileSync(path.join(process.cwd(), "node_modules", "medeo-font", "package.json"), "utf8").replace(/\r\n/g, "\n"),
     );
     assert.equal(MEDEO_FONT_VERSION, pkg.dependencies["medeo-font"]);
     assert.equal(MEDEO_FONT_VERSION, installed.version);
@@ -547,20 +547,20 @@ describe("шрифт листа по адресу (просмотр на стр�
       const res = await GET(new Request("http://localhost/x"), { params: Promise.resolve({ file }) });
       assert.equal(res.status, 404, file);
     }
-    const config = readFileSync(path.join(process.cwd(), "next.config.ts"), "utf8");
+    const config = readFileSync(path.join(process.cwd(), "next.config.ts"), "utf8").replace(/\r\n/g, "\n");
     assert.match(config, /"\/api\/fonts\/\*\*": \["\.\/node_modules\/medeo-font\/dist\/fonts\/medeo-sans\/MedeoSansVariable\.woff2"\]/);
   });
 
   test("страница вызывного не кладёт HTML листа в свои данные: iframe берёт его маршрутом с проверкой права", () => {
     const pagePath = "src/app/[locale]/projects/[projectId]/call-sheets/[dayId]/page.tsx";
-    const pageSource = readFileSync(path.join(process.cwd(), pagePath), "utf8");
+    const pageSource = readFileSync(path.join(process.cwd(), pagePath), "utf8").replace(/\r\n/g, "\n");
     assert.ok(!pageSource.includes("buildCallSheetHtml"), "страница не собирает HTML");
     assert.ok(!pageSource.includes("loadMedeoFontCss"), "страница не встраивает шрифт");
     assert.ok(pageSource.includes("callSheetPreviewSrc("));
     const route = readFileSync(
       path.join(process.cwd(), "src/app/api/projects/[projectId]/call-sheets/[dayId]/sheet/route.ts"),
       "utf8",
-    );
+    ).replace(/\r\n/g, "\n");
     assert.ok(
       route.includes(
         `return callSheetSheetResponse(

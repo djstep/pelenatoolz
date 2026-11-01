@@ -118,7 +118,7 @@ test.describe("две вкладки одного вызывного", () => {
 test.describe("удаление сцены из дня КПП", () => {
   test.use({ storageState: storageStatePath("producer") });
 
-  test("отказ с причиной до нажатия, сцена на месте", async ({ page }) => {
+  test("причина в окне, «Удалить» неактивна, сцена на месте", async ({ page }) => {
     const before = await db.scene.count({ where: { projectId: ctx.projectId } });
     await page.goto(projectPath(ctx, "/libretto"));
     await page.locator("tbody tr").first().locator('input[type="checkbox"]').check();
@@ -126,10 +126,9 @@ test.describe("удаление сцены из дня КПП", () => {
     await page.getByRole("button", { name: "Удалить", exact: true }).click();
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByText(/стоит в днях КПП/)).toBeVisible();
-    // Кнопка в окне активна — отказ должен прийти с сервера, сцена остаётся.
-    await dialog.getByRole("button", { name: "Удалить", exact: true }).click();
-    await expect(page.getByText(/стоит в днях КПП/).first()).toBeVisible();
-    await page.waitForLoadState("networkidle");
+    // Удалить нельзя — кнопка неактивна, причина в окне (сервер тоже отказывает — модульные тесты).
+    await expect(dialog.getByRole("button", { name: "Удалить", exact: true })).toBeDisabled();
+    await page.keyboard.press("Escape");
     expect(await db.scene.count({ where: { projectId: ctx.projectId } })).toBe(before);
   });
 });

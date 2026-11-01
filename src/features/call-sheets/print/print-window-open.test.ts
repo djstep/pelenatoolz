@@ -20,7 +20,7 @@ import {
  */
 
 function source(relative: string) {
-  return readFileSync(path.join(process.cwd(), relative), "utf8");
+  return readFileSync(path.join(process.cwd(), relative), "utf8").replace(/\r\n/g, "\n");
 }
 
 describe("шрифт листа в сборке Vercel", () => {
@@ -124,7 +124,7 @@ describe("окно печати: сначала окно, потом серве�
     const client = source("src/features/call-sheets/components/call-sheet-print-client.ts");
     assert.match(
       client,
-      /return printServerHtml\(\s*\(\) => window\.open\("", "_blank"\),\s*\(\) => getCallSheetPrintHtmlAction\(projectId, dayId, version\),\s*\);/,
+      /return printServerHtml\(\s*openPrintWindow,\s*\(\) => getCallSheetPrintHtmlAction\(projectId, dayId, version\),\s*\);/,
     );
     const menu = source("src/features/day-docs/components/day-docs-export-menu.tsx");
     const menuPrint = menu.slice(menu.indexOf("async function printCallSheet()"));
