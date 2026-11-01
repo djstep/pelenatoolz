@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { Prisma, type SceneStatus } from "@prisma/client";
 import { sumExtrasPay } from "@/features/payroll/lib/parse-extra-payments";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
+import { cutSceneFactRefusal } from "@/features/reports/lib/cut-scene-fact";
+import { formatSceneNumber } from "@/features/script/lib/libretto-display";
 import { syncShootDayResourceUsages } from "@/features/schedule/lib/sync-shoot-day-resources";
 import { AuditEntityType } from "@/shared/audit/entity-types";
 import { recordAudit } from "@/shared/audit/with-audit";
@@ -230,19 +232,29 @@ export async function saveProductionSceneFactAction(
       number: true,
       postfix: true,
       title: true,
+      cutAt: true,
     },
   });
   if (!scene) return { error: "Сцена не найдена" };
+
+  const dayLink = await prisma.shootDayScene.findFirst({
+    where: { shootDayId, sceneId: data.sceneId },
+    select: { id: true, sortOrder: true },
+  });
+
+  const cutRefusal = (cut: boolean) =>
+    cutSceneFactRefusal({
+      cut,
+      inDay: dayLink !== null,
+      label: formatSceneNumber(scene, gate.ctx.project.type),
+    });
+  const refusal = cutRefusal(scene.cutAt !== null);
+  if (refusal) return { error: refusal };
 
   const report = await prisma.productionReport.upsert({
     where: { shootDayId },
     create: { shootDayId },
     update: {},
-  });
-
-  const dayLink = await prisma.shootDayScene.findFirst({
-    where: { shootDayId, sceneId: data.sceneId },
-    select: { id: true, sortOrder: true },
   });
 
   const ep = scene.episodeNumber > 0 ? `${scene.episodeNumber}-` : "";
@@ -257,7 +269,13 @@ export async function saveProductionSceneFactAction(
 
   const sceneStatus = mapFactStatusToSceneStatus(data.status);
 
-  await prisma.$transaction(async (tx) => {
+  const lockedRefusal = await prisma.$transaction(async (tx) => {
+    // Строка сцены под блокировкой: «Вырезать» в другой вкладке ждёт конца записи.
+    const [locked] = await tx.$queryRaw<{ cutAt: Date | null }[]>`
+      SELECT "cutAt" FROM "Scene" WHERE "id" = ${scene.id} FOR UPDATE`;
+    const late = cutRefusal(locked?.cutAt != null);
+    if (late) return late;
+
     const fact = await tx.productionReportSceneFact.upsert({
       where: {
         reportId_sceneId: { reportId: report.id, sceneId: data.sceneId },
@@ -357,7 +375,9 @@ export async function saveProductionSceneFactAction(
         },
       });
     }
+    return null;
   });
+  if (lockedRefusal) return { error: lockedRefusal };
 
   if (shouldReturnToPool || (!shouldReturnToPool && !dayLink)) {
     await syncShootDayResourceUsages(shootDayId);
