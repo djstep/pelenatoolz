@@ -58,7 +58,7 @@ describe("выборки сцен и дня не берут полные зап�
   ];
 
   for (const file of files) {
-    const source = readFileSync(file, "utf8");
+    const source = readFileSync(file, "utf8").replace(/\r\n/g, "\n");
 
     test(`${file}: персонаж, объект, актёр — не полной записью`, () => {
       assert.equal(/\b(character|location|actor)s?: true\b/.test(source), false);

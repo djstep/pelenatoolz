@@ -91,7 +91,7 @@ describe("явочный лист: вкладка «Цеха»", () => {
   });
 
   test("DepartmentCallTime не загружается и не читается нигде, кроме схемы Prisma", () => {
-    const queries = readFileSync(path.join(process.cwd(), "src/features/day-docs/queries.ts"), "utf8");
+    const queries = readFileSync(path.join(process.cwd(), "src/features/day-docs/queries.ts"), "utf8").replace(/\r\n/g, "\n");
     assert.ok(!queries.includes("departmentCalls"), "день КПП грузится без departmentCalls");
     const sheet = readFileSync(
       path.join(process.cwd(), "src/features/day-docs/lib/export-attendance-sheet.ts"),

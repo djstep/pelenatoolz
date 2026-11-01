@@ -623,7 +623,7 @@ describe("право «Вызывные — утверждение»", () => {
     const dir = path.join(process.cwd(), "prisma/migrations");
     const name = readdirSync(dir).find((d) => d.endsWith("_call_sheet_status_versions"));
     assert.ok(name);
-    const sql = readFileSync(path.join(dir, name, "migration.sql"), "utf8");
+    const sql = readFileSync(path.join(dir, name, "migration.sql"), "utf8").replace(/\r\n/g, "\n");
     assert.doesNotMatch(sql, /\bDROP\b|\bDELETE FROM\b|\bTRUNCATE\b/i, "только добавление");
     const update = sql.slice(sql.indexOf('UPDATE "ProjectRoleDefinition"'));
     assert.ok(update.includes("'callsheet_approve'"));

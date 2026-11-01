@@ -20,7 +20,7 @@ import {
  */
 
 function source(relative: string) {
-  return readFileSync(path.join(process.cwd(), relative), "utf8");
+  return readFileSync(path.join(process.cwd(), relative), "utf8").replace(/\r\n/g, "\n");
 }
 
 describe("шрифт листа в сборке Vercel", () => {

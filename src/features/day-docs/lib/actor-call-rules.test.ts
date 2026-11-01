@@ -111,7 +111,7 @@ describe("тайминги актёров: проверки сохранения
   });
 
   test("действие сохраняет только то, что вернула проверка, право — как у всех таймингов", () => {
-    const source = readFileSync(path.join(process.cwd(), "src/features/day-docs/actions.ts"), "utf8");
+    const source = readFileSync(path.join(process.cwd(), "src/features/day-docs/actions.ts"), "utf8").replace(/\r\n/g, "\n");
     const start = source.indexOf("export async function saveActorCallsAction(");
     const body = source.slice(start, source.indexOf("export async function", start + 10));
     const check = body.indexOf("checkActorCallsSave(");

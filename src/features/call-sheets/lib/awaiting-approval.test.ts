@@ -38,7 +38,7 @@ before(async () => {
   nav = await import("@/features/projects/lib/project-nav-groups");
 });
 
-const source = (file: string) => readFileSync(path.join(process.cwd(), file), "utf8");
+const source = (file: string) => readFileSync(path.join(process.cwd(), file), "utf8").replace(/\r\n/g, "\n");
 const canOnly =
   (...allowed: Permission[]) =>
   (permission: Permission) =>
