@@ -12,6 +12,7 @@
     "e2e": "tsx scripts/e2e-seed.ts && playwright test",
     "e2e:reset": "tsx scripts/e2e-seed.ts --reset",
     "preview:callsheet": "tsx scripts/preview-callsheet.ts",
+    "cloud-stub": "tsx e2e/cloud-stub/run.ts",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate deploy",
     "db:migrate:dev": "prisma migrate dev",
