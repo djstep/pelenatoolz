@@ -28,6 +28,8 @@ export type E2EContext = {
   castingPersonId: string;
   /** Позиция ресурса со ставкой и ставкой за км (игровой транспорт). */
   vehicle: { categoryId: string; itemId: string };
+  /** Текущая версия сценария (в сиде с волны fix/ui-tails; в старом проекте её может не быть). */
+  scriptVersionId: string | null;
 };
 
 /** Id проекта «E2E приёмка», его дней и чужого проекта — для адресов в тестах. */
@@ -45,6 +47,7 @@ export async function loadE2EContext(db: PrismaClient): Promise<E2EContext> {
       characters: { select: { id: true }, where: { name: NAMES.character } },
       castingPeople: { select: { id: true }, take: 1 },
       resourceCategories: { select: { id: true, items: { select: { id: true } } }, where: { tracksMileage: true } },
+      scriptVersions: { select: { id: true }, where: { isCurrent: true }, take: 1 },
     },
   });
   if (!project) throw new Error(`Нет проекта «${E2E_PROJECT_NAME}» — запустите npx tsx scripts/e2e-seed.ts`);
@@ -66,5 +69,6 @@ export async function loadE2EContext(db: PrismaClient): Promise<E2EContext> {
       categoryId: project.resourceCategories[0].id,
       itemId: project.resourceCategories[0].items[0].id,
     },
+    scriptVersionId: project.scriptVersions[0]?.id ?? null,
   };
 }
