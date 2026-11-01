@@ -1,6 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import { ScoutCandidateStatus } from "@prisma/client";
 import type { LocationScoutSnapshot } from "@/features/preproduction/lib/snapshots";
+import { resolveApprovedScoutCost } from "@/features/preproduction/lib/approve-finance";
 import { prisma } from "@/shared/db/prisma";
 
 export function buildScoutSnapshot(candidate: {
@@ -30,9 +31,14 @@ export function buildScoutSnapshot(candidate: {
   };
 }
 
+/**
+ * `canWriteFinance` — фин. правка объектов из серверного контекста (не из браузера):
+ * без неё пустая стоимость кандидата не стирает стоимость той же площадки у объекта.
+ */
 export async function approveScoutCandidate(
   projectId: string,
   candidateId: string,
+  canWriteFinance: boolean,
 ) {
   const candidate = await prisma.scoutCandidate.findFirst({
     where: { id: candidateId, projectId },
@@ -68,11 +74,23 @@ export async function approveScoutCandidate(
       },
     });
 
-    for (const locationId of locationIds) {
+    for (const link of candidate.locationLinks) {
+      const { location } = link;
+      const previous =
+        location.scoutSnapshot && typeof location.scoutSnapshot === "object"
+          ? (location.scoutSnapshot as unknown as LocationScoutSnapshot)
+          : null;
+      // «Та же площадка» — по id: этот кандидат уже утверждён для объекта.
+      const cost = resolveApprovedScoutCost({
+        canWriteFinance,
+        sameCandidate: location.sourceScoutCandidateId === candidateId,
+        candidateCost: snapshot.cost ?? null,
+        existingCost: previous?.cost ?? null,
+      });
       await tx.location.update({
-        where: { id: locationId },
+        where: { id: location.id },
         data: {
-          scoutSnapshot: snapshot as unknown as Prisma.InputJsonValue,
+          scoutSnapshot: { ...snapshot, cost } as unknown as Prisma.InputJsonValue,
           sourceScoutCandidateId: candidateId,
           address: snapshot.address ?? undefined,
           notes: snapshot.notes ?? undefined,

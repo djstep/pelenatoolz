@@ -186,7 +186,11 @@ export async function updateScoutCandidateStatusAction(
 
   if (status === ScoutCandidateStatus.APPROVED) {
     try {
-      const result = await approveScoutCandidate(projectId, candidateId);
+      const result = await approveScoutCandidate(
+        projectId,
+        candidateId,
+        ctx.canFinanceWrite("locations"),
+      );
       revalidateScout(projectId, candidateId, result.locationIds);
       const names = result.locationNames.join(", ");
       return { success: `«${result.scoutTitle}» утверждена для: ${names}` };

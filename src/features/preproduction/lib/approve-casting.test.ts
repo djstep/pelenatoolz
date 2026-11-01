@@ -48,7 +48,8 @@ const person = {
 
 describe("утверждение кандидата кастинга", () => {
   test("в утверждение из браузера приходят только id — ставку прислать некуда", () => {
-    assert.equal(approve.approveCastingCandidate.length, 2);
+    // projectId, candidateId и фин. правка актёров из серверного контекста.
+    assert.equal(approve.approveCastingCandidate.length, 3);
   });
 
   test("ставка и условия снимка — из записи кандидата в базе", () => {

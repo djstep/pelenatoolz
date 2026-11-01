@@ -241,7 +241,11 @@ export async function updateCastingCandidateStatusAction(
 
   if (status === CastingCandidateStatus.APPROVED) {
     try {
-      const result = await approveCastingCandidate(projectId, candidateId);
+      const result = await approveCastingCandidate(
+        projectId,
+        candidateId,
+        ctx.canFinanceWrite("actors"),
+      );
       revalidateCasting(projectId, result.characterId);
       const replaced = result.replacedPrevious;
       return {
