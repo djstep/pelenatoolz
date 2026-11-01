@@ -13,6 +13,8 @@ export type NavItem = {
   matchPrefixes?: string[];
   /** If true, only exact path match (not nested routes). */
   exact?: boolean;
+  /** Счётчик справа (например, вызывные на согласовании); нет — не показывается. */
+  count?: number;
 };
 
 export type NavGroup = {
@@ -83,6 +85,15 @@ function NavLink({
         ) : null}
         {item.label}
       </span>
+      {item.count ? (
+        <span
+          className="min-w-[1.25rem] rounded-full bg-[#eab308] px-1.5 py-0.5 text-center text-[10px] font-semibold leading-none text-black tabular-nums"
+          title="На согласовании"
+          aria-label={`на согласовании: ${item.count}`}
+        >
+          {item.count}
+        </span>
+      ) : null}
       {item.soon ? (
         <span className="rounded-md border border-[var(--border)] bg-[var(--surface-2)] px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-[var(--muted-fg)]">
           скоро

@@ -11,6 +11,13 @@ export type BreakPreset = {
 
 export const DEFAULT_BREAK_PRESETS: BreakPreset[] = [
   {
+    id: "builtin-prep",
+    slotType: "PREP",
+    label: timeSlotTypeLabels.PREP,
+    defaultDuration: "00:30",
+    builtin: true,
+  },
+  {
     id: "builtin-makeup",
     slotType: "MAKEUP_COSTUME",
     label: timeSlotTypeLabels.MAKEUP_COSTUME,
@@ -55,10 +62,17 @@ export function loadBreakPresets(projectId: string): BreakPreset[] {
     const raw = localStorage.getItem(`${STORAGE_PREFIX}:${projectId}`);
     if (!raw) return DEFAULT_BREAK_PRESETS;
     const stored = JSON.parse(raw) as BreakPreset[];
-    return stored.length > 0 ? stored : DEFAULT_BREAK_PRESETS;
+    return stored.length > 0 ? withMissingBuiltins(stored) : DEFAULT_BREAK_PRESETS;
   } catch {
     return DEFAULT_BREAK_PRESETS;
   }
+}
+
+/** Базовые шаблоны, которых нет в сохранённых (например новая «Подготовка»), — в начало списка. */
+export function withMissingBuiltins(stored: BreakPreset[]): BreakPreset[] {
+  const ids = new Set(stored.map((preset) => preset.id));
+  const missing = DEFAULT_BREAK_PRESETS.filter((preset) => !ids.has(preset.id));
+  return missing.length > 0 ? [...missing, ...stored] : stored;
 }
 
 export function saveBreakPresets(projectId: string, presets: BreakPreset[]) {

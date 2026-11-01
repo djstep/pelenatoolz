@@ -134,6 +134,24 @@ enum TimeSlotType {
   LUNCH
   TRAVEL
   IDLE
+  /// Подготовка (служебная строка плана вызывного)
+  PREP
+}
+
+/// Юнит строки плана вызывного.
+enum CallSheetUnit {
+  MAIN
+  SECOND
+}
+
+/// Как актёр добирается на площадку (вызывной).
+enum ActorTransportMode {
+  /// Машина группы
+  CAR
+  /// Сам
+  SELF
+  /// Свой текст
+  CUSTOM
 }
 
 enum ShootDayStatus {
@@ -219,28 +237,32 @@ model User {
   name         String
   passwordHash String
   phone        String?
+  /// Почта для Google (доступы к Диску); может отличаться от почты входа.
+  googleEmail  String?
   avatarUrl    String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  memberships     ProjectMembership[]
-  createdProjects Project[]           @relation("ProjectCreator")
-  ownedProjects   Project[]           @relation("ProjectOwner")
-  createdInvites  ProjectInvite[]     @relation("InviteCreator")
-  auditLogs       AuditLog[]
-  cloudConnections CloudConnection[]
-  passwordResetTokens PasswordResetToken[]
-  scriptVersions  ScriptVersion[]
-  scriptComments  ScriptComment[]
+  memberships              ProjectMembership[]
+  createdProjects          Project[]                 @relation("ProjectCreator")
+  ownedProjects            Project[]                 @relation("ProjectOwner")
+  createdInvites           ProjectInvite[]           @relation("InviteCreator")
+  auditLogs                AuditLog[]
+  cloudConnections         CloudConnection[]
+  passwordResetTokens      PasswordResetToken[]
+  scriptVersions           ScriptVersion[]
+  scriptComments           ScriptComment[]
   castingCandidateComments CastingCandidateComment[]
-  createdBudgets Budget[] @relation("BudgetCreator")
-  submittedBudgets Budget[] @relation("BudgetSubmitter")
-  returnedBudgets Budget[] @relation("BudgetReturner")
-  createdAccruals Accrual[] @relation("AccrualCreator")
-  createdCashPayments CashPayment[] @relation("CashPaymentCreator")
-  lockedCashPayments CashPayment[] @relation("CashPaymentLocker")
-  createdAuditions Audition[]         @relation("AuditionCreator")
-  uploadedFiles   ProjectFile[]       @relation("FileUploader")
+  createdBudgets           Budget[]                  @relation("BudgetCreator")
+  submittedBudgets         Budget[]                  @relation("BudgetSubmitter")
+  returnedBudgets          Budget[]                  @relation("BudgetReturner")
+  createdAccruals          Accrual[]                 @relation("AccrualCreator")
+  createdCashPayments      CashPayment[]             @relation("CashPaymentCreator")
+  lockedCashPayments       CashPayment[]             @relation("CashPaymentLocker")
+  createdAuditions         Audition[]                @relation("AuditionCreator")
+  uploadedFiles            ProjectFile[]             @relation("FileUploader")
+  approvedCallSheets       CallSheet[]               @relation("CallSheetApprover")
+  approvedCallSheetVersions CallSheetApprovedVersion[] @relation("CallSheetVersionApprover")
 }
 
 model Project {
@@ -256,21 +278,21 @@ model Project {
   timezone    String        @default("Europe/Moscow")
   city        String?
 
-  episodeCount         Int?
-  episodeRuntimeMin    Int?
-  shootingDaysCount    Int?
-  cameraUnits          Int?        @default(1)
-  cameraCount          Int?        @default(1)
-  timingMode           TimingMode  @default(MINUTES)
-  pageToMinuteRatio    Decimal     @default(1) @db.Decimal(6, 2)
+  episodeCount          Int?
+  episodeRuntimeMin     Int?
+  shootingDaysCount     Int?
+  cameraUnits           Int?       @default(1)
+  cameraCount           Int?       @default(1)
+  timingMode            TimingMode @default(MINUTES)
+  pageToMinuteRatio     Decimal    @default(1) @db.Decimal(6, 2)
   plannedDailyOutputMin Decimal?   @db.Decimal(8, 2)
-  shootOnFilm          Boolean     @default(false)
-  filmType             String?
-  filmCoefficient      Decimal?    @db.Decimal(6, 2)
-  calcCalendarDays     Boolean     @default(true)
+  shootOnFilm           Boolean    @default(false)
+  filmType              String?
+  filmCoefficient       Decimal?   @db.Decimal(6, 2)
+  calcCalendarDays      Boolean    @default(true)
 
   /// Раскладки столбцов табличных экспортов (либретто, КПП, …)
-  exportSettings       Json?
+  exportSettings Json?
 
   createdById String
   /// Владелец проекта: продюсер, которого нельзя понизить или удалить; меняется только передачей владения.
@@ -278,46 +300,51 @@ model Project {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  createdBy   User                    @relation("ProjectCreator", fields: [createdById], references: [id])
-  owner       User                    @relation("ProjectOwner", fields: [ownerUserId], references: [id])
-  memberships ProjectMembership[]
-  invites     ProjectInvite[]
-  roles       ProjectRoleDefinition[]
-  scenes      Scene[]
-  locations   Location[]
-  characters  Character[]
-  elements    Element[]
-  shootDays   ShootDay[]
-  actors      Actor[]
-  castingPeople CastingPerson[]
-  castingCandidates CastingCandidate[]
-  auditions     Audition[]
-  auditionSchedules AuditionSchedule[]
-  auditionScheduleBreaks AuditionScheduleBreak[]
-  projectFiles  ProjectFile[]
-  scoutCandidates ScoutCandidate[]
-  auditLogs   AuditLog[]
-  budgets     Budget[]
-  budgetItems BudgetItem[]
-  budgetVersions BudgetVersion[]
-  accruals    Accrual[]
-  cashPayments CashPayment[]
-  financeOps  FinanceOperation[]
-  companies   Company[]
-  counterparties Counterparty[]
-  financeVariables ProjectFinanceVariable[]
-  approvalStatuses ProjectApprovalStatus[]
-  ledgerTypes ProjectLedgerType[]
-  contracts   Contract[]
-  certificates Certificate[]
-  postTasks   PostTask[]
-  cloudFiles  CloudFileLink[]
-  scriptVersions ScriptVersion[]
-  scriptBlocks ScriptBlock[]
-  scriptDictionaryRules ScriptDictionaryRule[]
-  resourceCategories ResourceCategory[]
-  actorAvailabilityRows ActorAvailabilityRow[]
-  departments Department[]
+  createdBy                  User                        @relation("ProjectCreator", fields: [createdById], references: [id])
+  owner                      User                        @relation("ProjectOwner", fields: [ownerUserId], references: [id])
+  memberships                ProjectMembership[]
+  invites                    ProjectInvite[]
+  roles                      ProjectRoleDefinition[]
+  scenes                     Scene[]
+  locations                  Location[]
+  characters                 Character[]
+  elements                   Element[]
+  shootDays                  ShootDay[]
+  actors                     Actor[]
+  castingPeople              CastingPerson[]
+  castingCandidates          CastingCandidate[]
+  auditions                  Audition[]
+  auditionSchedules          AuditionSchedule[]
+  auditionScheduleBreaks     AuditionScheduleBreak[]
+  projectFiles               ProjectFile[]
+  scoutCandidates            ScoutCandidate[]
+  auditLogs                  AuditLog[]
+  budgets                    Budget[]
+  budgetItems                BudgetItem[]
+  budgetVersions             BudgetVersion[]
+  accruals                   Accrual[]
+  cashPayments               CashPayment[]
+  financeOps                 FinanceOperation[]
+  companies                  Company[]
+  counterparties             Counterparty[]
+  financeVariables           ProjectFinanceVariable[]
+  approvalStatuses           ProjectApprovalStatus[]
+  ledgerTypes                ProjectLedgerType[]
+  contracts                  Contract[]
+  certificates               Certificate[]
+  postTasks                  PostTask[]
+  cloudFiles                 CloudFileLink[]
+  scriptVersions             ScriptVersion[]
+  scriptBlocks               ScriptBlock[]
+  scriptDictionaryRules      ScriptDictionaryRule[]
+  resourceCategories         ResourceCategory[]
+  actorAvailabilityRows      ActorAvailabilityRow[]
+  departments                Department[]
+  callSheetTemplateLeaders   CallSheetTemplateLeader[]
+  callSheetTemplateCrewCalls CallSheetTemplateCrewCall[]
+  callSheetTemplateBaseItems CallSheetTemplateBaseItem[]
+  callSheets                 CallSheet[]
+  callSheetSections          CallSheetSection[]
 
   @@index([createdById])
   @@index([ownerUserId])
@@ -352,10 +379,12 @@ model ProjectMembership {
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt
 
-  project Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  user    User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  role    ProjectRoleDefinition @relation(fields: [roleId], references: [id])
-  departmentHeads DepartmentHead[]
+  project                  Project                   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user                     User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role                     ProjectRoleDefinition     @relation(fields: [roleId], references: [id])
+  departmentHeads          DepartmentHead[]
+  callSheetTemplateLeaders CallSheetTemplateLeader[]
+  callSheetLeaders         CallSheetLeader[]
 
   @@unique([projectId, userId])
   @@index([userId])
@@ -373,11 +402,13 @@ model Department {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  project     Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  heads       DepartmentHead[]
-  budget      Budget?
-  budgetItems BudgetItem[]
-  budgetVersions BudgetVersion[]
+  project                    Project                     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  heads                      DepartmentHead[]
+  budget                     Budget?
+  budgetItems                BudgetItem[]
+  budgetVersions             BudgetVersion[]
+  callSheetTemplateCrewCalls CallSheetTemplateCrewCall[]
+  callSheetCrewCalls         CallSheetCrewCall[]
 
   @@unique([projectId, name])
   @@unique([projectId, codePrefix])
@@ -450,12 +481,12 @@ model Scene {
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 
-  project        Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  locations      SceneLocation[]
-  characters     SceneCharacter[]
-  elements       SceneElement[]
-  resources      SceneResource[]
-  resourceItems  SceneResourceItem[]
+  project         Project                     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  locations       SceneLocation[]
+  characters      SceneCharacter[]
+  elements        SceneElement[]
+  resources       SceneResource[]
+  resourceItems   SceneResourceItem[]
   shootDayScenes  ShootDayScene[]
   timeSlots       ShootDayTimeSlot[]
   scriptBlocks    ScriptBlock[]
@@ -468,39 +499,48 @@ model Scene {
 }
 
 model Location {
-  id             String        @id @default(cuid())
-  projectId      String
-  name           String
-  sublocation    String?
-  locationKind   LocationKind?
-  hasDecoration  Boolean       @default(false)
-  address        String?
-  tags           String?
-  notes          String?
-  requirementNotes String?
-  scoutSnapshot  Json?
+  id                     String             @id @default(cuid())
+  projectId              String
+  name                   String
+  sublocation            String?
+  locationKind           LocationKind?
+  hasDecoration          Boolean            @default(false)
+  address                String?
+  tags                   String?
+  notes                  String?
+  requirementNotes       String?
+  scoutSnapshot          Json?
   sourceScoutCandidateId String?
-  shiftRate         Decimal? @db.Decimal(12, 2)
-  shiftHoursMin     Int?
-  unpaidOvertimeMin Int?
-  taxPercent        Decimal? @db.Decimal(6, 2)
-  overtimeMode      OvertimeCalcMode   @default(HOURLY_CUMULATIVE)
-  unpaidOvertimeMode UnpaidOvertimeMode @default(FIRST_HOUR)
+  shiftRate              Decimal?           @db.Decimal(12, 2)
+  shiftHoursMin          Int?
+  unpaidOvertimeMin      Int?
+  taxPercent             Decimal?           @db.Decimal(6, 2)
+  overtimeMode           OvertimeCalcMode   @default(HOURLY_CUMULATIVE)
+  unpaidOvertimeMode     UnpaidOvertimeMode @default(FIRST_HOUR)
   /// Статьи сметы для начислений из отчёта смены: основная оплата и переработка (пусто — основная).
-  defaultBudgetItemId  String?
-  overtimeBudgetItemId String?
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
+  defaultBudgetItemId    String?
+  overtimeBudgetItemId   String?
+  /// Координаты объекта (одно поле «Координаты» в карточке). Пусто — солнце по городу проекта.
+  latitude               Float?
+  longitude              Float?
+  /// Схема объекта в вызывном: «как добраться», «парковка», «на месте».
+  directions             String?
+  parking                String?
+  onSiteNotes            String?
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
 
-  project Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  defaultBudgetItem  BudgetItem? @relation("LocationDefaultBudgetItem", fields: [defaultBudgetItemId], references: [id], onDelete: SetNull)
-  overtimeBudgetItem BudgetItem? @relation("LocationOvertimeBudgetItem", fields: [overtimeBudgetItemId], references: [id], onDelete: SetNull)
-  scenes  SceneLocation[]
-  photos  LocationPhoto[]
+  project             Project                   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  defaultBudgetItem   BudgetItem?               @relation("LocationDefaultBudgetItem", fields: [defaultBudgetItemId], references: [id], onDelete: SetNull)
+  overtimeBudgetItem  BudgetItem?               @relation("LocationOvertimeBudgetItem", fields: [overtimeBudgetItemId], references: [id], onDelete: SetNull)
+  scenes              SceneLocation[]
+  photos              LocationPhoto[]
+  points              LocationPoint[]
+  callSheetSchemes    CallSheet[]
   scoutCandidateLinks ScoutCandidateLocation[]
-  workRows ProductionReportWorkRow[]
-  overtimeRates LocationOvertimeRate[]
-  dictionaryRules ScriptDictionaryRule[]
+  workRows            ProductionReportWorkRow[]
+  overtimeRates       LocationOvertimeRate[]
+  dictionaryRules     ScriptDictionaryRule[]
 
   @@index([projectId])
 }
@@ -520,6 +560,22 @@ model LocationOvertimeRate {
   @@unique([locationId, hourNumber])
 }
 
+/// Точка на схеме объекта (номер, название, описание) — правится в карточке объекта.
+model LocationPoint {
+  id          String   @id @default(cuid())
+  locationId  String
+  number      String
+  name        String
+  description String?
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  location Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@index([locationId, sortOrder])
+}
+
 model LocationPhoto {
   id         String   @id @default(cuid())
   locationId String
@@ -534,59 +590,59 @@ model LocationPhoto {
 }
 
 model Character {
-  id          String   @id @default(cuid())
-  projectId   String
-  name        String
-  description String?
-  roleRequirements String?
+  id                       String         @id @default(cuid())
+  projectId                String
+  name                     String
+  description              String?
+  roleRequirements         String?
   /// Тип роли для фильтров кастинга/проб (главная / второго плана / эпизод)
-  roleType         ActorRoleType?
-  makeupOffsetMin  Int?
-  costumeOffsetMin Int?
-  castSnapshot Json?
+  roleType                 ActorRoleType?
+  makeupOffsetMin          Int?
+  costumeOffsetMin         Int?
+  castSnapshot             Json?
   sourceCastingCandidateId String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt                DateTime       @default(now())
+  updatedAt                DateTime       @updatedAt
 
-  project Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  scenes  SceneCharacter[]
-  actors  Actor[]
+  project           Project                @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  scenes            SceneCharacter[]
+  actors            Actor[]
   castingCandidates CastingCandidate[]
-  auditionLinks AuditionActor[]
-  dictionaryRules ScriptDictionaryRule[]
+  auditionLinks     AuditionActor[]
+  dictionaryRules   ScriptDictionaryRule[]
 
   @@index([projectId])
 }
 
 model CastingPerson {
-  id               String   @id @default(cuid())
-  projectId        String
-  photoUrl         String?
-  lastName         String
-  firstName        String?
-  middleName       String?
+  id             String    @id @default(cuid())
+  projectId      String
+  photoUrl       String?
+  lastName       String
+  firstName      String?
+  middleName     String?
   /// Дата рождения — возраст считается на момент экспорта
-  birthDate        DateTime? @db.Date
-  education        String?
-  filmography      String?
-  phone            String?
-  email            String?
-  agentName        String?
-  agentPhone       String?
-  agentEmail       String?
-  physicalParams   Json?
-  skills           String[] @default([])
-  proposedRate     Decimal? @db.Decimal(12, 2)
-  proposedTerms    String?
-  tags             String?
-  notes            String?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  birthDate      DateTime? @db.Date
+  education      String?
+  filmography    String?
+  phone          String?
+  email          String?
+  agentName      String?
+  agentPhone     String?
+  agentEmail     String?
+  physicalParams Json?
+  skills         String[]  @default([])
+  proposedRate   Decimal?  @db.Decimal(12, 2)
+  proposedTerms  String?
+  tags           String?
+  notes          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
-  project    Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  candidates CastingCandidate[]
+  project          Project                @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  candidates       CastingCandidate[]
   availabilityRows ActorAvailabilityRow[]
-  auditionLinks AuditionActor[]
+  auditionLinks    AuditionActor[]
 
   @@index([projectId])
 }
@@ -604,11 +660,11 @@ model CastingCandidate {
   createdAt       DateTime               @default(now())
   updatedAt       DateTime               @updatedAt
 
-  project   Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  character Character     @relation(fields: [characterId], references: [id], onDelete: Cascade)
-  person    CastingPerson @relation(fields: [personId], references: [id], onDelete: Cascade)
+  project       Project                     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  character     Character                   @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  person        CastingPerson               @relation(fields: [personId], references: [id], onDelete: Cascade)
   scheduleLinks AuditionScheduleCandidate[]
-  comments  CastingCandidateComment[]
+  comments      CastingCandidateComment[]
 
   @@unique([characterId, personId])
   @@index([projectId, status])
@@ -648,10 +704,10 @@ model ProjectFile {
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
 
-  project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  createdBy User?      @relation("FileUploader", fields: [createdById], references: [id], onDelete: SetNull)
-  auditions Audition[]
-  contractFiles ContractFile[]
+  project          Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy        User?             @relation("FileUploader", fields: [createdById], references: [id], onDelete: SetNull)
+  auditions        Audition[]
+  contractFiles    ContractFile[]
   certificateFiles CertificateFile[]
 
   @@index([projectId, kind])
@@ -659,26 +715,26 @@ model ProjectFile {
 }
 
 model Audition {
-  id           String   @id @default(cuid())
-  projectId    String
-  videoFileId  String?
+  id          String   @id @default(cuid())
+  projectId   String
+  videoFileId String?
   /// Альтернатива загрузке: YouTube / облако
-  externalUrl  String?
-  date         DateTime @db.Date
-  time         String?
-  sceneId      String?
-  isSelfTape   Boolean  @default(false)
+  externalUrl String?
+  date        DateTime @db.Date
+  time        String?
+  sceneId     String?
+  isSelfTape  Boolean  @default(false)
   /// Избранная проба (для фильтра при экспорте каст-листа)
-  isFavorite   Boolean  @default(false)
-  comment      String?
-  createdById  String
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  isFavorite  Boolean  @default(false)
+  comment     String?
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  project   Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  videoFile ProjectFile?     @relation(fields: [videoFileId], references: [id], onDelete: SetNull)
-  scene     Scene?           @relation(fields: [sceneId], references: [id], onDelete: SetNull)
-  createdBy User             @relation("AuditionCreator", fields: [createdById], references: [id])
+  project   Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  videoFile ProjectFile?    @relation(fields: [videoFileId], references: [id], onDelete: SetNull)
+  scene     Scene?          @relation(fields: [sceneId], references: [id], onDelete: SetNull)
+  createdBy User            @relation("AuditionCreator", fields: [createdById], references: [id])
   actors    AuditionActor[]
 
   @@index([projectId, date])
@@ -765,8 +821,8 @@ model ScoutCandidate {
   createdAt       DateTime             @default(now())
   updatedAt       DateTime             @updatedAt
 
-  project        Project                   @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  locationLinks  ScoutCandidateLocation[]
+  project       Project                  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  locationLinks ScoutCandidateLocation[]
 
   @@index([projectId, status])
 }
@@ -842,57 +898,61 @@ model SceneResource {
 }
 
 model ResourceCategory {
-  id           String   @id @default(cuid())
-  projectId    String
-  name         String
-  sortOrder    Int      @default(0)
-  fillInScenes Boolean  @default(true)
-  perShift     Boolean  @default(false)
-  countable    Boolean  @default(false)
-  showInKpp    Boolean  @default(true)
+  id            String   @id @default(cuid())
+  projectId     String
+  name          String
+  sortOrder     Int      @default(0)
+  fillInScenes  Boolean  @default(true)
+  perShift      Boolean  @default(false)
+  countable     Boolean  @default(false)
+  showInKpp     Boolean  @default(true)
   /// Игровой/спецтранспорт: учитывать километраж в отчёте
-  tracksMileage Boolean @default(false)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  tracksMileage Boolean  @default(false)
+  /// Раздел элементов площадки вызывного; пусто — «Прочее». По умолчанию ставится только
+  /// при создании категории (точное совпадение названия), дальше — только руками.
+  callSheetSectionId String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  project Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  items   ResourceItem[]
+  project          Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  callSheetSection CallSheetSection? @relation(fields: [callSheetSectionId], references: [id], onDelete: SetNull)
+  items            ResourceItem[]
 
   @@unique([projectId, name])
   @@index([projectId, sortOrder])
 }
 
 model ResourceItem {
-  id                String   @id @default(cuid())
-  categoryId        String
-  name              String
-  notes             String?
-  shiftRate         Decimal? @db.Decimal(12, 2)
-  shiftHoursMin     Int?
-  unpaidOvertimeMin Int?
-  arrivalOffsetMin  Int?
-  taxPercent        Decimal? @db.Decimal(6, 2)
-  overtimeMode      OvertimeCalcMode   @default(HOURLY_CUMULATIVE)
-  unpaidOvertimeMode UnpaidOvertimeMode @default(FIRST_HOUR)
+  id                   String             @id @default(cuid())
+  categoryId           String
+  name                 String
+  notes                String?
+  shiftRate            Decimal?           @db.Decimal(12, 2)
+  shiftHoursMin        Int?
+  unpaidOvertimeMin    Int?
+  arrivalOffsetMin     Int?
+  taxPercent           Decimal?           @db.Decimal(6, 2)
+  overtimeMode         OvertimeCalcMode   @default(HOURLY_CUMULATIVE)
+  unpaidOvertimeMode   UnpaidOvertimeMode @default(FIRST_HOUR)
   /// Ставка за километр (для транспорта)
-  kmRate            Decimal? @db.Decimal(12, 2)
+  kmRate               Decimal?           @db.Decimal(12, 2)
   /// Статьи сметы для начислений из отчёта смены: основная оплата (смена, доплаты),
   /// переработка и км. Пустые переработка и км — берётся основная.
   defaultBudgetItemId  String?
   overtimeBudgetItemId String?
   mileageBudgetItemId  String?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
 
-  category      ResourceCategory        @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  defaultBudgetItem  BudgetItem? @relation("ResourceItemDefaultBudgetItem", fields: [defaultBudgetItemId], references: [id], onDelete: SetNull)
-  overtimeBudgetItem BudgetItem? @relation("ResourceItemOvertimeBudgetItem", fields: [overtimeBudgetItemId], references: [id], onDelete: SetNull)
-  mileageBudgetItem  BudgetItem? @relation("ResourceItemMileageBudgetItem", fields: [mileageBudgetItemId], references: [id], onDelete: SetNull)
-  sceneLinks    SceneResourceItem[]
-  shiftUsages   ShootDayResourceUsage[]
-  workRows      ProductionReportWorkRow[]
-  overtimeRates ResourceOvertimeRate[]
-  extraPayments ResourceExtraPayment[]
+  category           ResourceCategory          @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  defaultBudgetItem  BudgetItem?               @relation("ResourceItemDefaultBudgetItem", fields: [defaultBudgetItemId], references: [id], onDelete: SetNull)
+  overtimeBudgetItem BudgetItem?               @relation("ResourceItemOvertimeBudgetItem", fields: [overtimeBudgetItemId], references: [id], onDelete: SetNull)
+  mileageBudgetItem  BudgetItem?               @relation("ResourceItemMileageBudgetItem", fields: [mileageBudgetItemId], references: [id], onDelete: SetNull)
+  sceneLinks         SceneResourceItem[]
+  shiftUsages        ShootDayResourceUsage[]
+  workRows           ProductionReportWorkRow[]
+  overtimeRates      ResourceOvertimeRate[]
+  extraPayments      ResourceExtraPayment[]
 
   @@unique([categoryId, name])
   @@index([categoryId])
@@ -957,35 +1017,35 @@ model ShootDayResourceUsage {
 }
 
 model ShootDay {
-  id          String         @id @default(cuid())
-  projectId   String
-  date        DateTime
-  dayNumber   Int
-  unit        String?        @default("main")
-  shiftNumber Int?
-  dayType     ShootDayType   @default(WORKING)
-  isLocked    Boolean        @default(false)
-  isNightShift Boolean       @default(false)
-  callTime    String?
-  wrapTime    String?
-  shiftStartTime   String?
-  rehearsalTime    String?
-  motorOnTime      String?
-  motorOffTime     String?
-  crewMeetAddress  String?
-  crewMeetTime     String?
-  weatherNote      String?
-  weatherPrecip    String?
-  notes       String?
-  comment     String?
-  prepNote    String?
-  status      ShootDayStatus @default(PLANNED)
-  callSheetSavedAt     DateTime?
-  callSheetPlanLocked Boolean @default(false)
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
+  id                  String         @id @default(cuid())
+  projectId           String
+  date                DateTime
+  dayNumber           Int
+  unit                String?        @default("main")
+  shiftNumber         Int?
+  dayType             ShootDayType   @default(WORKING)
+  isLocked            Boolean        @default(false)
+  isNightShift        Boolean        @default(false)
+  callTime            String?
+  wrapTime            String?
+  shiftStartTime      String?
+  rehearsalTime       String?
+  motorOnTime         String?
+  motorOffTime        String?
+  crewMeetAddress     String?
+  crewMeetTime        String?
+  weatherNote         String?
+  weatherPrecip       String?
+  notes               String?
+  comment             String?
+  prepNote            String?
+  status              ShootDayStatus @default(PLANNED)
+  callSheetSavedAt    DateTime?
+  callSheetPlanLocked Boolean        @default(false)
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
 
-  project          Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project          Project                 @relation(fields: [projectId], references: [id], onDelete: Cascade)
   scenes           ShootDayScene[]
   departmentCalls  DepartmentCallTime[]
   transports       ShootDayTransport[]
@@ -996,6 +1056,7 @@ model ShootDay {
   productionReport ProductionReport?
   shootAttempts    SceneShootAttempt[]
   accruals         Accrual[]
+  callSheet        CallSheet?
 
   @@unique([projectId, dayNumber])
   @@index([projectId, date])
@@ -1021,28 +1082,231 @@ model SceneShootAttempt {
   @@index([shootDayId])
 }
 
+/// Шаблон вызывного: руководитель группы. Человек — участник проекта или свободное имя.
+model CallSheetTemplateLeader {
+  id           String   @id @default(cuid())
+  projectId    String
+  position     String
+  shortTitle   String?
+  membershipId String?
+  /// Свободное имя (если не участник проекта).
+  personName   String?
+  /// Телефон свободного имени. У участника телефон — из профиля.
+  phone        String?
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  project    Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  membership ProjectMembership? @relation(fields: [membershipId], references: [id], onDelete: SetNull)
+
+  @@index([projectId, sortOrder])
+  @@index([membershipId])
+}
+
+/// Шаблон вызывного: вызов цеха. Цех проекта или своя строка (каскадёры, рабочие…).
+/// Цех удалён — строка шаблона удаляется вместе с ним.
+model CallSheetTemplateCrewCall {
+  id           String   @id @default(cuid())
+  projectId    String
+  departmentId String?
+  /// Своя строка (если не цех проекта).
+  label        String?
+  callTime     String?
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  project    Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  department Department? @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, sortOrder])
+  @@index([departmentId])
+}
+
+/// Шаблон вызывного: база и транспорт группы.
+model CallSheetTemplateBaseItem {
+  id        String   @id @default(cuid())
+  projectId String
+  name      String
+  callTime  String?
+  notNeeded Boolean  @default(false)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, sortOrder])
+}
+
+/// Вызывной дня КПП (1 к 1). Создаётся только кнопкой «Создать вызывной».
+model CallSheet {
+  id                String   @id @default(cuid())
+  projectId         String
+  shootDayId        String   @unique
+  /// Когда блоки руководителей, цехов и базы последний раз заполнены из шаблона.
+  templateAppliedAt DateTime @default(now())
+  /// Температура днём и ночью — руками («+18», «+15…+18»).
+  tempDay           String?
+  tempNight         String?
+  /// «Важно» и «Ограничения по актёрам».
+  importantNote     String?
+  actorRestrictions String?
+  /// Объект, чья схема идёт в вызывной.
+  schemeLocationId  String?
+  /// Черновик → на согласовании → утверждён. Утверждённый правится только после «Внести изменения».
+  status            CallSheetStatus @default(DRAFT)
+  /// Номер версии листа: 1, после «Внести изменения» у утверждённого — +1.
+  version           Int             @default(1)
+  /// Номер правки: +1 на каждое сохранение вызывного и данных дня из вызывного.
+  revision          Int             @default(0)
+  /// Текущее утверждение (у черновика — пусто; история — в CallSheetApprovedVersion).
+  approvedAt        DateTime?
+  approvedById      String?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  project          Project                    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  shootDay         ShootDay                   @relation(fields: [shootDayId], references: [id], onDelete: Cascade)
+  schemeLocation   Location?                  @relation(fields: [schemeLocationId], references: [id], onDelete: SetNull)
+  approvedBy       User?                      @relation("CallSheetApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  leaders          CallSheetLeader[]
+  crewCalls        CallSheetCrewCall[]
+  baseItems        CallSheetBaseItem[]
+  elements         CallSheetElement[]
+  approvedVersions CallSheetApprovedVersion[]
+
+  @@index([projectId])
+}
+
+enum CallSheetStatus {
+  DRAFT
+  IN_REVIEW
+  APPROVED
+}
+
+/// Утверждённая версия вызывного: снимок модели листа (CallSheetPrintModel) на момент
+/// утверждения. Пишется при каждом утверждении и больше не меняется.
+model CallSheetApprovedVersion {
+  id           String   @id @default(cuid())
+  callSheetId  String
+  version      Int
+  approvedAt   DateTime @default(now())
+  approvedById String?
+  /// Модель листа целиком — из неё печать и Excel «версии N».
+  snapshot     Json
+  /// Отпечаток модели без прогноза погоды — для плашки «данные дня изменились».
+  modelHash    String
+
+  callSheet  CallSheet @relation(fields: [callSheetId], references: [id], onDelete: Cascade)
+  approvedBy User?     @relation("CallSheetVersionApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+
+  @@unique([callSheetId, version])
+}
+
+/// Руководитель в вызывном — копия строки шаблона: ФИ и телефон участника скопированы.
+model CallSheetLeader {
+  id           String  @id @default(cuid())
+  callSheetId  String
+  position     String
+  shortTitle   String?
+  membershipId String?
+  personName   String?
+  phone        String?
+  sortOrder    Int     @default(0)
+
+  callSheet  CallSheet          @relation(fields: [callSheetId], references: [id], onDelete: Cascade)
+  membership ProjectMembership? @relation(fields: [membershipId], references: [id], onDelete: SetNull)
+
+  @@index([callSheetId, sortOrder])
+  @@index([membershipId])
+}
+
+/// Вызов цеха в вызывном — копия строки шаблона: название цеха скопировано.
+model CallSheetCrewCall {
+  id           String  @id @default(cuid())
+  callSheetId  String
+  departmentId String?
+  label        String
+  callTime     String?
+  sortOrder    Int     @default(0)
+
+  callSheet  CallSheet   @relation(fields: [callSheetId], references: [id], onDelete: Cascade)
+  department Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+
+  @@index([callSheetId, sortOrder])
+  @@index([departmentId])
+}
+
+/// База и транспорт группы в вызывном — копия строки шаблона.
+model CallSheetBaseItem {
+  id          String  @id @default(cuid())
+  callSheetId String
+  name        String
+  callTime    String?
+  notNeeded   Boolean @default(false)
+  sortOrder   Int     @default(0)
+
+  callSheet CallSheet @relation(fields: [callSheetId], references: [id], onDelete: Cascade)
+
+  @@index([callSheetId, sortOrder])
+}
+
+/// Раздел элементов площадки проекта (групповка, реквизит, CG…). `key` — системный раздел
+/// (авто-строки из разбора сцен), null — свой раздел проекта.
+model CallSheetSection {
+  id        String   @id @default(cuid())
+  projectId String
+  key       String?
+  name      String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project            Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  elements           CallSheetElement[]
+  resourceCategories ResourceCategory[]
+
+  @@unique([projectId, key])
+  @@index([projectId, sortOrder])
+}
+
+/// Строка элементов площадки в вызывном: ручная или правка авто-строки (`autoKey`).
+/// `hidden` — авто-строку убрали из этого вызывного.
+model CallSheetElement {
+  id          String   @id @default(cuid())
+  callSheetId String
+  sectionId   String
+  autoKey     String?
+  hidden      Boolean  @default(false)
+  name        String
+  quantity    String?
+  scenes      String?
+  arrivalTime String?
+  readyTime   String?
+  wrapTime    String?
+  notes       String?
+  secondUnit  Boolean  @default(false)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  callSheet CallSheet        @relation(fields: [callSheetId], references: [id], onDelete: Cascade)
+  section   CallSheetSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+
+  @@unique([callSheetId, autoKey])
+  @@index([callSheetId, sortOrder])
+  @@index([sectionId])
+}
+
 model DepartmentCallTime {
-  id         String @id @default(cuid())
+  id         String  @id @default(cuid())
   shootDayId String
   roleLabel  String
   personName String?
   phone      String?
   callTime   String?
-  sortOrder  Int    @default(0)
-
-  shootDay ShootDay @relation(fields: [shootDayId], references: [id], onDelete: Cascade)
-
-  @@index([shootDayId, sortOrder])
-}
-
-model ShootDayTransport {
-  id         String  @id @default(cuid())
-  shootDayId String
-  name       String
-  callTime   String?
-  notes      String?
-  /// Ставка за км (спецтранспорт)
-  kmRate     Decimal? @db.Decimal(12, 2)
   sortOrder  Int     @default(0)
 
   shootDay ShootDay @relation(fields: [shootDayId], references: [id], onDelete: Cascade)
@@ -1050,15 +1314,43 @@ model ShootDayTransport {
   @@index([shootDayId, sortOrder])
 }
 
+model ShootDayTransport {
+  id           String   @id @default(cuid())
+  shootDayId   String
+  name         String
+  callTime     String?
+  notes        String?
+  /// Ставка за км (спецтранспорт)
+  kmRate       Decimal? @db.Decimal(12, 2)
+  /// Сцены (текстом) и конец работы.
+  scenes       String?
+  wrapTime     String?
+  /// Статья сметы: в строку отчёта смены попадает только при создании строки.
+  budgetItemId String?
+  sortOrder    Int      @default(0)
+
+  shootDay   ShootDay    @relation(fields: [shootDayId], references: [id], onDelete: Cascade)
+  budgetItem BudgetItem? @relation("ShootDayTransportBudgetItem", fields: [budgetItemId], references: [id], onDelete: SetNull)
+
+  @@index([shootDayId, sortOrder])
+  @@index([budgetItemId])
+}
+
 model ShootDayTimeSlot {
-  id         String       @id @default(cuid())
-  shootDayId String
-  startTime  String
-  endTime    String?
-  slotType   TimeSlotType
-  sceneId    String?
-  notes      String?
-  sortOrder  Int          @default(0)
+  id             String        @id @default(cuid())
+  shootDayId     String
+  startTime      String
+  endTime        String?
+  slotType       TimeSlotType
+  sceneId        String?
+  notes          String?
+  /// Юнит: второй — строки только руками.
+  unit           CallSheetUnit @default(MAIN)
+  /// «Продолжение сцены» (та же сцена после перерыва).
+  isContinuation Boolean       @default(false)
+  /// Свой текст строки вместо названия типа.
+  customLabel    String?
+  sortOrder      Int           @default(0)
 
   shootDay ShootDay @relation(fields: [shootDayId], references: [id], onDelete: Cascade)
   scene    Scene?   @relation(fields: [sceneId], references: [id], onDelete: SetNull)
@@ -1067,16 +1359,21 @@ model ShootDayTimeSlot {
 }
 
 model ShootDayActorCall {
-  id          String  @id @default(cuid())
-  shootDayId  String
-  actorId     String
-  pickupTime  String?
-  arrivalTime String?
-  makeupTime  String?
-  costumeTime String?
-  readyTime   String?
-  wrapTime    String?
-  notes       String?
+  id            String              @id @default(cuid())
+  shootDayId    String
+  actorId       String
+  pickupTime    String?
+  arrivalTime   String?
+  makeupTime    String?
+  costumeTime   String?
+  readyTime     String?
+  wrapTime      String?
+  notes         String?
+  /// Транспорт: машина / сам / свой текст (`transportText`).
+  transportMode ActorTransportMode?
+  transportText String?
+  /// Подача машины за актёром — только при транспорте «машина».
+  carPickupTime String?
 
   shootDay ShootDay @relation(fields: [shootDayId], references: [id], onDelete: Cascade)
   actor    Actor    @relation(fields: [actorId], references: [id], onDelete: Cascade)
@@ -1085,7 +1382,7 @@ model ShootDayActorCall {
 }
 
 model ShootDayResourceCall {
-  id          String @id @default(cuid())
+  id          String  @id @default(cuid())
   shootDayId  String
   category    String
   name        String
@@ -1135,25 +1432,25 @@ model ProductionReport {
 
 /// Факт по сцене в отчёте — сохраняется даже после возврата сцены в неспланированные.
 model ProductionReportSceneFact {
-  id               String                     @id @default(cuid())
-  reportId         String
-  sceneId          String
-  status           ProductionSceneFactStatus  @default(NOT_SHOT)
-  factSeconds      Int?
-  prepStart        String?
-  prepEnd          String?
-  rehearsalStart   String?
-  rehearsalEnd     String?
-  motorStart       String?
-  motorEnd         String?
-  notes            String?
-  sortOrder        Int                        @default(0)
-  returnedToPool   Boolean                    @default(false)
-  sceneLabel       String?
-  createdAt        DateTime                   @default(now())
-  updatedAt        DateTime                   @updatedAt
+  id             String                    @id @default(cuid())
+  reportId       String
+  sceneId        String
+  status         ProductionSceneFactStatus @default(NOT_SHOT)
+  factSeconds    Int?
+  prepStart      String?
+  prepEnd        String?
+  rehearsalStart String?
+  rehearsalEnd   String?
+  motorStart     String?
+  motorEnd       String?
+  notes          String?
+  sortOrder      Int                       @default(0)
+  returnedToPool Boolean                   @default(false)
+  sceneLabel     String?
+  createdAt      DateTime                  @default(now())
+  updatedAt      DateTime                  @updatedAt
 
-  report      ProductionReport              @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  report      ProductionReport             @relation(fields: [reportId], references: [id], onDelete: Cascade)
   scene       Scene                        @relation(fields: [sceneId], references: [id], onDelete: Cascade)
   montageRows ProductionReportMontageRow[]
 
@@ -1162,17 +1459,17 @@ model ProductionReportSceneFact {
 }
 
 model ProductionReportMontageRow {
-  id           String  @id @default(cuid())
-  sceneFactId  String
-  scenePart    String?
-  frame        String?
-  take         String?
-  takeStatus   String?
-  takeRuntime  String?
+  id          String  @id @default(cuid())
+  sceneFactId String
+  scenePart   String?
+  frame       String?
+  take        String?
+  takeStatus  String?
+  takeRuntime String?
   /// Файлы камер: JSON-массив строк длиной cameraCount проекта
-  cameraFiles  Json?
-  shotSize     String?
-  sortOrder    Int     @default(0)
+  cameraFiles Json?
+  shotSize    String?
+  sortOrder   Int     @default(0)
 
   sceneFact ProductionReportSceneFact @relation(fields: [sceneFactId], references: [id], onDelete: Cascade)
 
@@ -1206,7 +1503,7 @@ enum UnpaidOvertimeMode {
 
 /// Факт работы актёра/ресурса/транспорта/локации в производственном отчёте.
 model ProductionReportWorkRow {
-  id                 String             @id @default(cuid())
+  id                 String              @id @default(cuid())
   reportId           String
   kind               ProductionWorkKind
   actorId            String?
@@ -1219,38 +1516,41 @@ model ProductionReportWorkRow {
   factStart          String?
   factEnd            String?
   /// Т/О — текущий обед (не было часового перерыва)
-  lunchSkipped       Boolean            @default(false)
+  lunchSkipped       Boolean             @default(false)
   workedMin          Int?
   factOvertimeMin    Int?
   payableOvertimeMin Int?
   shiftHoursMin      Int?
   unpaidOvertimeMin  Int?
-  shiftRate          Decimal?           @db.Decimal(12, 2)
-  taxPercent         Decimal?           @db.Decimal(6, 2)
+  shiftRate          Decimal?            @db.Decimal(12, 2)
+  taxPercent         Decimal?            @db.Decimal(6, 2)
   overtimeMode       OvertimeCalcMode?
   unpaidOvertimeMode UnpaidOvertimeMode?
-  shiftPay           Decimal?           @db.Decimal(14, 2)
-  overtimePay        Decimal?           @db.Decimal(14, 2)
-  extrasPay          Decimal?           @db.Decimal(14, 2)
+  shiftPay           Decimal?            @db.Decimal(14, 2)
+  overtimePay        Decimal?            @db.Decimal(14, 2)
+  extrasPay          Decimal?            @db.Decimal(14, 2)
   /// Учитывать километраж (снимок с категории / спецтранспорт)
-  tracksMileage      Boolean            @default(false)
-  factKm             Decimal?           @db.Decimal(10, 2)
-  kmRate             Decimal?           @db.Decimal(12, 2)
-  mileagePay         Decimal?           @db.Decimal(14, 2)
-  totalPay           Decimal?           @db.Decimal(14, 2)
+  tracksMileage      Boolean             @default(false)
+  factKm             Decimal?            @db.Decimal(10, 2)
+  kmRate             Decimal?            @db.Decimal(12, 2)
+  mileagePay         Decimal?            @db.Decimal(14, 2)
+  totalPay           Decimal?            @db.Decimal(14, 2)
   /// Снимок почасовых ставок переработки с карточки: [{ hourNumber, percentRate, amount,
   /// taxPercent }]. Меняется только при «Обновить из КПП» с галочкой «Обновить ставки».
-  overtimeRates      Json               @default("[]")
-  sortOrder          Int                @default(0)
-  createdAt          DateTime           @default(now())
-  updatedAt          DateTime           @updatedAt
+  overtimeRates      Json                @default("[]")
+  /// Статья строки спецтранспорта — снимок при создании строки, дальше не меняется.
+  budgetItemId       String?
+  sortOrder          Int                 @default(0)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
 
-  report  ProductionReport            @relation(fields: [reportId], references: [id], onDelete: Cascade)
-  actor   Actor?                      @relation(fields: [actorId], references: [id], onDelete: SetNull)
-  item    ResourceItem?               @relation(fields: [resourceItemId], references: [id], onDelete: SetNull)
-  location Location?                  @relation(fields: [locationId], references: [id], onDelete: SetNull)
-  extras  ProductionReportWorkExtra[]
-  accruals Accrual[]
+  report     ProductionReport            @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  actor      Actor?                      @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  item       ResourceItem?               @relation(fields: [resourceItemId], references: [id], onDelete: SetNull)
+  location   Location?                   @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  budgetItem BudgetItem?                 @relation("ProductionReportWorkRowBudgetItem", fields: [budgetItemId], references: [id], onDelete: SetNull)
+  extras     ProductionReportWorkExtra[]
+  accruals   Accrual[]
 
   @@unique([reportId, sourceKey])
   @@index([reportId, sortOrder])
@@ -1275,49 +1575,49 @@ model ProductionReportWorkExtra {
 }
 
 model Actor {
-  id               String          @id @default(cuid())
-  projectId        String
-  characterId      String?
-  lastName         String
-  firstName        String?
-  middleName       String?
-  gender           Gender?
-  contractorType   ContractorType  @default(UNKNOWN)
-  roleType         ActorRoleType   @default(SUPPORTING)
-  phone1           String?
-  phone2           String?
-  email            String?
-  agentName        String?
-  agentPhone       String?
-  agentEmail       String?
-  carPickupTime    String?
-  arrivalTime      String?
-  pickupOffsetMin  Int?
-  tags             String?
-  specialConditions String?
-  shiftRate        Decimal?        @db.Decimal(12, 2)
-  shiftHoursMin    Int?
-  unpaidOvertimeMin Int?
-  taxPercent       Decimal?          @db.Decimal(6, 2)
-  overtimeMode      OvertimeCalcMode   @default(HOURLY_CUMULATIVE)
-  unpaidOvertimeMode UnpaidOvertimeMode @default(FIRST_HOUR)
+  id                   String             @id @default(cuid())
+  projectId            String
+  characterId          String?
+  lastName             String
+  firstName            String?
+  middleName           String?
+  gender               Gender?
+  contractorType       ContractorType     @default(UNKNOWN)
+  roleType             ActorRoleType      @default(SUPPORTING)
+  phone1               String?
+  phone2               String?
+  email                String?
+  agentName            String?
+  agentPhone           String?
+  agentEmail           String?
+  carPickupTime        String?
+  arrivalTime          String?
+  pickupOffsetMin      Int?
+  tags                 String?
+  specialConditions    String?
+  shiftRate            Decimal?           @db.Decimal(12, 2)
+  shiftHoursMin        Int?
+  unpaidOvertimeMin    Int?
+  taxPercent           Decimal?           @db.Decimal(6, 2)
+  overtimeMode         OvertimeCalcMode   @default(HOURLY_CUMULATIVE)
+  unpaidOvertimeMode   UnpaidOvertimeMode @default(FIRST_HOUR)
   /// Статьи сметы для начислений из отчёта смены: основная оплата (смена, доплаты) и
   /// переработка (пусто — основная).
   defaultBudgetItemId  String?
   overtimeBudgetItemId String?
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
 
-  project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  character Character? @relation(fields: [characterId], references: [id])
-  defaultBudgetItem  BudgetItem? @relation("ActorDefaultBudgetItem", fields: [defaultBudgetItemId], references: [id], onDelete: SetNull)
-  overtimeBudgetItem BudgetItem? @relation("ActorOvertimeBudgetItem", fields: [overtimeBudgetItemId], references: [id], onDelete: SetNull)
-  overtimeRates ActorOvertimeRate[]
-  extraPayments ActorExtraPayment[]
-  financeOps    FinanceOperation[]
-  shootDayCalls ShootDayActorCall[]
-  availabilityRows ActorAvailabilityRow[]
-  workRows      ProductionReportWorkRow[]
+  project            Project                   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  character          Character?                @relation(fields: [characterId], references: [id])
+  defaultBudgetItem  BudgetItem?               @relation("ActorDefaultBudgetItem", fields: [defaultBudgetItemId], references: [id], onDelete: SetNull)
+  overtimeBudgetItem BudgetItem?               @relation("ActorOvertimeBudgetItem", fields: [overtimeBudgetItemId], references: [id], onDelete: SetNull)
+  overtimeRates      ActorOvertimeRate[]
+  extraPayments      ActorExtraPayment[]
+  financeOps         FinanceOperation[]
+  shootDayCalls      ShootDayActorCall[]
+  availabilityRows   ActorAvailabilityRow[]
+  workRows           ProductionReportWorkRow[]
 
   @@index([projectId])
 }
@@ -1369,13 +1669,13 @@ model ActorOvertimeRate {
 }
 
 model ActorExtraPayment {
-  id           String   @id @default(cuid())
+  id           String    @id @default(cuid())
   actorId      String
   paymentDate  DateTime?
-  amount       Decimal  @db.Decimal(12, 2)
-  taxPercent   Decimal? @db.Decimal(6, 2)
-  taxAmount    Decimal? @db.Decimal(12, 2)
-  totalWithTax Decimal? @db.Decimal(12, 2)
+  amount       Decimal   @db.Decimal(12, 2)
+  taxPercent   Decimal?  @db.Decimal(6, 2)
+  taxAmount    Decimal?  @db.Decimal(12, 2)
+  totalWithTax Decimal?  @db.Decimal(12, 2)
   description  String?
 
   actor Actor @relation(fields: [actorId], references: [id], onDelete: Cascade)
@@ -1414,10 +1714,10 @@ model ScriptVersion {
   createdById     String
   createdAt       DateTime                @default(now())
 
-  project       Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  createdBy     User            @relation(fields: [createdById], references: [id])
-  sourceVersion ScriptVersion?  @relation("ScriptVersionCopy", fields: [sourceVersionId], references: [id], onDelete: SetNull)
-  derivedFrom   ScriptVersion[] @relation("ScriptVersionCopy")
+  project       Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy     User              @relation(fields: [createdById], references: [id])
+  sourceVersion ScriptVersion?    @relation("ScriptVersionCopy", fields: [sourceVersionId], references: [id], onDelete: SetNull)
+  derivedFrom   ScriptVersion[]   @relation("ScriptVersionCopy")
   blocks        ScriptBlock[]
   comments      ScriptComment[]
   importJobs    ScriptImportJob[]
@@ -1533,26 +1833,26 @@ enum AccrualType {
 
 /// Фактически понесённые расходы (метод начисления, не кассовый).
 model Accrual {
-  id             String      @id @default(cuid())
+  id             String             @id @default(cuid())
   projectId      String
   /// Статья сметы цеха. Пусто — «без статьи».
   budgetItemId   String?
-  amount         Decimal     @db.Decimal(14, 2)
-  quantity       Decimal?    @db.Decimal(12, 2)
+  amount         Decimal            @db.Decimal(14, 2)
+  quantity       Decimal?           @db.Decimal(12, 2)
   /// Пусто только у начислений из отчёта смены — «контрагент не указан».
   counterpartyId String?
-  taxPercent     Decimal?    @db.Decimal(5, 2)
-  taxAmount      Decimal?    @db.Decimal(14, 2)
-  amountWithTax  Decimal     @db.Decimal(14, 2)
+  taxPercent     Decimal?           @db.Decimal(5, 2)
+  taxAmount      Decimal?           @db.Decimal(14, 2)
+  amountWithTax  Decimal            @db.Decimal(14, 2)
   date           DateTime
   /// Съёмочная группа (= ShootDay.unit), если групп несколько
   groupUnit      String?
-  type           AccrualType @default(ONE_TIME)
+  type           AccrualType        @default(ONE_TIME)
   shootDayId     String?
   comment        String?
   createdById    String?
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
   contractId     String?
   /// Начисление из отчёта смены: строка отчёта и часть её оплаты. Удалили строку —
   /// ссылка пустеет, часть остаётся.
@@ -1561,14 +1861,14 @@ model Accrual {
   /// Строку отчёта обнулили или удалили: сумма стала 0, начисление не удаляется само.
   reportZeroedAt DateTime?
   /// Статью или контрагента меняли руками — отчёт их больше не перезаписывает.
-  editedManually Boolean     @default(false)
+  editedManually Boolean            @default(false)
 
-  project      Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  budgetItem   BudgetItem?   @relation(fields: [budgetItemId], references: [id], onDelete: SetNull)
-  counterparty Counterparty? @relation(fields: [counterpartyId], references: [id], onDelete: Restrict)
-  shootDay     ShootDay?     @relation(fields: [shootDayId], references: [id], onDelete: SetNull)
-  contract     Contract?     @relation(fields: [contractId], references: [id], onDelete: SetNull)
-  createdBy    User?         @relation("AccrualCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  project      Project                  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  budgetItem   BudgetItem?              @relation(fields: [budgetItemId], references: [id], onDelete: SetNull)
+  counterparty Counterparty?            @relation(fields: [counterpartyId], references: [id], onDelete: Restrict)
+  shootDay     ShootDay?                @relation(fields: [shootDayId], references: [id], onDelete: SetNull)
+  contract     Contract?                @relation(fields: [contractId], references: [id], onDelete: SetNull)
+  createdBy    User?                    @relation("AccrualCreator", fields: [createdById], references: [id], onDelete: SetNull)
   workRow      ProductionReportWorkRow? @relation(fields: [workRowId], references: [id], onDelete: SetNull)
 
   @@unique([workRowId, reportPart])
@@ -1582,31 +1882,31 @@ model Accrual {
 
 /// Кассовый платёж (движение денег). Не путать с Payment из производственного отчёта.
 model CashPayment {
-  id             String   @id @default(cuid())
+  id             String    @id @default(cuid())
   projectId      String
   counterpartyId String
   companyId      String
-  amount         Decimal  @db.Decimal(14, 2)
+  amount         Decimal   @db.Decimal(14, 2)
   date           DateTime
-  taxPercent     Decimal? @db.Decimal(5, 2)
-  taxAmount      Decimal? @db.Decimal(14, 2)
-  amountWithTax  Decimal  @db.Decimal(14, 2)
+  taxPercent     Decimal?  @db.Decimal(5, 2)
+  taxAmount      Decimal?  @db.Decimal(14, 2)
+  amountWithTax  Decimal   @db.Decimal(14, 2)
   contractId     String?
-  isLocked       Boolean  @default(false)
+  isLocked       Boolean   @default(false)
   lockedAt       DateTime?
   lockedById     String?
   comment        String?
   createdById    String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
-  project      Project                 @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  counterparty Counterparty            @relation(fields: [counterpartyId], references: [id], onDelete: Restrict)
-  company      Company                 @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  contract     Contract?               @relation(fields: [contractId], references: [id], onDelete: SetNull)
+  project      Project                @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  counterparty Counterparty           @relation(fields: [counterpartyId], references: [id], onDelete: Restrict)
+  company      Company                @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  contract     Contract?              @relation(fields: [contractId], references: [id], onDelete: SetNull)
   certificates Certificate[]
-  createdBy    User?                   @relation("CashPaymentCreator", fields: [createdById], references: [id], onDelete: SetNull)
-  lockedBy     User?                   @relation("CashPaymentLocker", fields: [lockedById], references: [id], onDelete: SetNull)
+  createdBy    User?                  @relation("CashPaymentCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  lockedBy     User?                  @relation("CashPaymentLocker", fields: [lockedById], references: [id], onDelete: SetNull)
   breakdown    CashPaymentBreakdown[]
 
   @@index([projectId, date])
@@ -1618,13 +1918,13 @@ model CashPayment {
 
 /// Управленческая разбивка кассового платежа по статьям сметы. Сумма строк = сумма платежа.
 model CashPaymentBreakdown {
-  id            String  @id @default(cuid())
-  paymentId     String
+  id           String  @id @default(cuid())
+  paymentId    String
   /// Статья сметы цеха. Пусто — «без статьи».
-  budgetItemId  String?
-  amount        Decimal @db.Decimal(14, 2)
-  comment       String?
-  sortOrder     Int     @default(0)
+  budgetItemId String?
+  amount       Decimal @db.Decimal(14, 2)
+  comment      String?
+  sortOrder    Int     @default(0)
 
   payment    CashPayment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
   budgetItem BudgetItem? @relation(fields: [budgetItemId], references: [id], onDelete: SetNull)
@@ -1669,8 +1969,8 @@ model ProjectApprovalStatus {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  contracts Contract[]
+  project      Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  contracts    Contract[]
   certificates Certificate[]
 
   @@unique([projectId, name])
@@ -1702,32 +2002,32 @@ model ProjectLedgerType {
 
 /// Договор с контрагентом.
 model Contract {
-  id              String   @id @default(cuid())
-  projectId       String
-  date            DateTime
-  number          String
-  companyId       String
-  counterpartyId  String
-  ledgerTypeId    String?
-  amount          Decimal  @db.Decimal(14, 2)
-  vatEnabled      Boolean  @default(true)
-  vatRate         Decimal? @db.Decimal(5, 2)
-  vatAmount       Decimal? @db.Decimal(14, 2)
-  amountWithVat   Decimal  @db.Decimal(14, 2)
-  isPreliminary   Boolean  @default(false)
-  statusId        String
-  tags            String[] @default([])
-  summary         String?
-  comment         String?
-  creditsName     String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id             String   @id @default(cuid())
+  projectId      String
+  date           DateTime
+  number         String
+  companyId      String
+  counterpartyId String
+  ledgerTypeId   String?
+  amount         Decimal  @db.Decimal(14, 2)
+  vatEnabled     Boolean  @default(true)
+  vatRate        Decimal? @db.Decimal(5, 2)
+  vatAmount      Decimal? @db.Decimal(14, 2)
+  amountWithVat  Decimal  @db.Decimal(14, 2)
+  isPreliminary  Boolean  @default(false)
+  statusId       String
+  tags           String[] @default([])
+  summary        String?
+  comment        String?
+  creditsName    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
-  project      Project                @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  company      Company                @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  counterparty Counterparty           @relation(fields: [counterpartyId], references: [id], onDelete: Restrict)
-  ledgerType   ProjectLedgerType?     @relation(fields: [ledgerTypeId], references: [id], onDelete: SetNull)
-  status       ProjectApprovalStatus  @relation(fields: [statusId], references: [id], onDelete: Restrict)
+  project      Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  company      Company               @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  counterparty Counterparty          @relation(fields: [counterpartyId], references: [id], onDelete: Restrict)
+  ledgerType   ProjectLedgerType?    @relation(fields: [ledgerTypeId], references: [id], onDelete: SetNull)
+  status       ProjectApprovalStatus @relation(fields: [statusId], references: [id], onDelete: Restrict)
   files        ContractFile[]
   certificates Certificate[]
   accruals     Accrual[]
@@ -1793,13 +2093,13 @@ model Certificate {
 }
 
 model CertificateFile {
-  id            String   @id @default(cuid())
+  id            String           @id @default(cuid())
   certificateId String
   fileId        String
   /// SCAN | ORIGINAL | OTHER — для фильтров «есть скан / нет файла»
   role          ContractFileRole @default(OTHER)
-  sortOrder     Int      @default(0)
-  createdAt     DateTime @default(now())
+  sortOrder     Int              @default(0)
+  createdAt     DateTime         @default(now())
 
   certificate Certificate @relation(fields: [certificateId], references: [id], onDelete: Cascade)
   file        ProjectFile @relation(fields: [fileId], references: [id], onDelete: Cascade)
@@ -1810,41 +2110,41 @@ model CertificateFile {
 
 /// Смета цеха — книга Univer. Одна книга на цех. Не путать со статьями BudgetLine.
 model Budget {
-  id           String   @id @default(cuid())
-  projectId    String
-  departmentId String   @unique
+  id                   String       @id @default(cuid())
+  projectId            String
+  departmentId         String       @unique
   /// Основной лист: по нему разбираются статьи, удалить нельзя.
-  mainSheetId  String?  @unique
+  mainSheetId          String?      @unique
   /// Растёт при каждом сохранении, в котором книга действительно изменилась.
-  revision     Int      @default(0)
-  status       BudgetStatus @default(DRAFT)
+  revision             Int          @default(0)
+  status               BudgetStatus @default(DRAFT)
   /// Последняя отправка на утверждение. Очищается при утверждении и возврате.
-  submittedAt       DateTime?
-  submittedById     String?
-  submitComment     String?
-  submittedRevision Int?
+  submittedAt          DateTime?
+  submittedById        String?
+  submitComment        String?
+  submittedRevision    Int?
   /// Глава сохранил правку, пока смета была на утверждении: статус стал «черновик»,
   /// смета остаётся в списке продюсера. Очищается при отправке, утверждении и возврате.
   changedAfterSubmitAt DateTime?
   /// Последний возврат. Комментарий показывается, пока статус «возвращена».
-  returnedAt    DateTime?
-  returnedById  String?
-  returnComment String?
-  name         String   @default("Смета")
+  returnedAt           DateTime?
+  returnedById         String?
+  returnComment        String?
+  name                 String       @default("Смета")
   /// Общая карта стилей Univer (workbook-level), на листы ссылаются по id
-  styles       Json     @default("{}")
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  createdById  String?
+  styles               Json         @default("{}")
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
+  createdById          String?
 
-  project    Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  department Department    @relation(fields: [departmentId], references: [id], onDelete: NoAction)
-  createdBy  User?         @relation("BudgetCreator", fields: [createdById], references: [id], onDelete: SetNull)
-  submittedBy User?        @relation("BudgetSubmitter", fields: [submittedById], references: [id], onDelete: SetNull)
-  returnedBy User?         @relation("BudgetReturner", fields: [returnedById], references: [id], onDelete: SetNull)
-  mainSheet  BudgetSheet?  @relation("BudgetMainSheet", fields: [mainSheetId], references: [id], onDelete: NoAction)
-  sheets     BudgetSheet[]
-  versions   BudgetVersion[]
+  project     Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  department  Department      @relation(fields: [departmentId], references: [id], onDelete: NoAction)
+  createdBy   User?           @relation("BudgetCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  submittedBy User?           @relation("BudgetSubmitter", fields: [submittedById], references: [id], onDelete: SetNull)
+  returnedBy  User?           @relation("BudgetReturner", fields: [returnedById], references: [id], onDelete: SetNull)
+  mainSheet   BudgetSheet?    @relation("BudgetMainSheet", fields: [mainSheetId], references: [id], onDelete: NoAction)
+  sheets      BudgetSheet[]
+  versions    BudgetVersion[]
 
   @@index([projectId])
 }
@@ -1898,18 +2198,20 @@ model BudgetItem {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  project    Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  department Department @relation(fields: [departmentId], references: [id], onDelete: NoAction)
-  versionLines BudgetVersionLine[]
-  accruals          Accrual[]
-  paymentBreakdowns CashPaymentBreakdown[]
-  actorsDefault     Actor[]        @relation("ActorDefaultBudgetItem")
-  actorsOvertime    Actor[]        @relation("ActorOvertimeBudgetItem")
-  resourcesDefault  ResourceItem[] @relation("ResourceItemDefaultBudgetItem")
-  resourcesOvertime ResourceItem[] @relation("ResourceItemOvertimeBudgetItem")
-  resourcesMileage  ResourceItem[] @relation("ResourceItemMileageBudgetItem")
-  locationsDefault  Location[]     @relation("LocationDefaultBudgetItem")
-  locationsOvertime Location[]     @relation("LocationOvertimeBudgetItem")
+  project            Project                   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  department         Department                @relation(fields: [departmentId], references: [id], onDelete: NoAction)
+  versionLines       BudgetVersionLine[]
+  accruals           Accrual[]
+  paymentBreakdowns  CashPaymentBreakdown[]
+  actorsDefault      Actor[]                   @relation("ActorDefaultBudgetItem")
+  actorsOvertime     Actor[]                   @relation("ActorOvertimeBudgetItem")
+  resourcesDefault   ResourceItem[]            @relation("ResourceItemDefaultBudgetItem")
+  resourcesOvertime  ResourceItem[]            @relation("ResourceItemOvertimeBudgetItem")
+  resourcesMileage   ResourceItem[]            @relation("ResourceItemMileageBudgetItem")
+  locationsDefault   Location[]                @relation("LocationDefaultBudgetItem")
+  locationsOvertime  Location[]                @relation("LocationOvertimeBudgetItem")
+  shootDayTransports ShootDayTransport[]       @relation("ShootDayTransportBudgetItem")
+  reportWorkRows     ProductionReportWorkRow[] @relation("ProductionReportWorkRowBudgetItem")
 
   @@unique([projectId, code])
   @@index([departmentId, archivedAt])
@@ -1925,30 +2227,30 @@ enum BudgetStatus {
 /// Утверждённая версия сметы цеха. Неизменяема: изменить или удалить её не даёт
 /// триггер в базе (удаляется только вместе со всем проектом).
 model BudgetVersion {
-  id           String   @id @default(cuid())
-  projectId    String
-  departmentId String
-  budgetId     String
+  id              String    @id @default(cuid())
+  projectId       String
+  departmentId    String
+  budgetId        String
   /// Номер версии в цехе: 1, 2, 3…
-  number       Int
+  number          Int
   /// Ревизия черновика, которую видел и утвердил продюсер.
-  revision     Int
+  revision        Int
   /// Кто утвердил и кто отправил: id и имя на тот момент, без связей — версия не меняется.
   approvedById    String
   approvedByName  String
   /// Утвердил продюсер, который сам глава этого цеха.
-  approvedByHead  Boolean  @default(false)
-  approvedAt      DateTime @default(now())
+  approvedByHead  Boolean   @default(false)
+  approvedAt      DateTime  @default(now())
   submittedById   String?
   submittedByName String?
   submittedAt     DateTime?
   submitComment   String?
-  total        Decimal  @db.Decimal(18, 2)
-  itemCount    Int
+  total           Decimal   @db.Decimal(18, 2)
+  itemCount       Int
   /// Снимок основного листа (формулы заменены значениями) и стили книги — для показа.
-  sheetName    String
-  sheetData    Json
-  styles       Json     @default("{}")
+  sheetName       String
+  sheetData       Json
+  styles          Json      @default("{}")
 
   project    Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
   department Department          @relation(fields: [departmentId], references: [id], onDelete: NoAction)
@@ -2012,19 +2314,19 @@ enum CounterpartyType {
 
 /// Наши юрлица — источники платежей в проекте.
 model Company {
-  id          String   @id @default(cuid())
-  projectId   String
-  name        String
-  requisites  String?
-  inn         String?
-  notes       String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id         String   @id @default(cuid())
+  projectId  String
+  name       String
+  requisites String?
+  inn        String?
+  notes      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
-  project    Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  financeOps FinanceOperation[]
+  project      Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  financeOps   FinanceOperation[]
   cashPayments CashPayment[]
-  contracts  Contract[]
+  contracts    Contract[]
   certificates Certificate[]
 
   @@index([projectId, name])
@@ -2042,11 +2344,11 @@ model Counterparty {
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt
 
-  project     Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  financeOps  FinanceOperation[]
-  accruals    Accrual[]
+  project      Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  financeOps   FinanceOperation[]
+  accruals     Accrual[]
   cashPayments CashPayment[]
-  contracts   Contract[]
+  contracts    Contract[]
   certificates Certificate[]
 
   @@index([projectId, name])
@@ -2054,21 +2356,21 @@ model Counterparty {
 }
 
 model FinanceOperation {
-  id            String            @id @default(cuid())
-  projectId     String
-  type          FinanceOpType
-  category      FinanceOpCategory @default(OTHER)
-  title         String
-  amount        Decimal           @db.Decimal(14, 2)
-  operationDate DateTime
+  id             String            @id @default(cuid())
+  projectId      String
+  type           FinanceOpType
+  category       FinanceOpCategory @default(OTHER)
+  title          String
+  amount         Decimal           @db.Decimal(14, 2)
+  operationDate  DateTime
   /// Legacy free-text; prefer counterpartyId / companyId.
-  counterparty  String?
-  companyId     String?
+  counterparty   String?
+  companyId      String?
   counterpartyId String?
-  notes         String?
-  actorId       String?
-  createdAt     DateTime          @default(now())
-  updatedAt     DateTime          @updatedAt
+  notes          String?
+  actorId        String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
 
   project            Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
   actor              Actor?        @relation(fields: [actorId], references: [id], onDelete: SetNull)

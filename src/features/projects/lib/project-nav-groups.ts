@@ -174,6 +174,12 @@ export const projectNavGroups: NavGroupDef[] = [
       },
       { href: "/settings/resources", label: "Ресурсы", visible: anyOf("script:read") },
       {
+        href: "/settings/call-sheet-template",
+        label: "Шаблон вызывного",
+        // Как canEditCallSheets (features/call-sheets/lib/template-rules.ts).
+        visible: anyOf("callsheet:write", "schedule:write"),
+      },
+      {
         href: "/settings/departments",
         label: "Цеха",
         // Как canManageDepartments (features/smeta/lib/smeta-access.ts).
@@ -212,4 +218,13 @@ export function filterNavGroups(
     result.push({ ...group, items: shown });
   }
   return result;
+}
+
+/** Счётчик у пункта меню (`href` — как в `projectNavGroups`); `null` или 0 — без счётчика. */
+export function withNavCount(groups: NavGroup[], href: string, count: number | null): NavGroup[] {
+  if (!count) return groups;
+  return groups.map((group) => ({
+    ...group,
+    items: group.items.map((item) => (item.href === href ? { ...item, count } : item)),
+  }));
 }

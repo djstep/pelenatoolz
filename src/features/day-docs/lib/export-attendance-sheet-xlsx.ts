@@ -3,6 +3,12 @@ import {
   ATTENDANCE_ACTOR_COLUMNS,
   type AttendanceSheetModel,
 } from "@/features/day-docs/lib/export-attendance-sheet";
+import { excelSafe } from "@/shared/lib/excel-safe";
+
+/** Единственная запись строк листа: каждое строковое значение — через `excelSafe`. */
+function addSafeRow(sheet: ExcelJS.Worksheet, values: (string | number)[]) {
+  return sheet.addRow(values.map((value) => excelSafe(value)));
+}
 
 const HEADER_FILL: ExcelJS.Fill = {
   type: "pattern",
@@ -88,13 +94,13 @@ function addActorTableSheet(
   });
 
   // В объединённой ячейке Excel сам высоту не подбирает: считаем строки по длине текста.
-  const title = sheet.addRow([table.title]);
+  const title = addSafeRow(sheet, [table.title]);
   title.getCell(1).font = { bold: true, size: 14, name: "Arial" };
   title.getCell(1).alignment = { vertical: "middle", wrapText: true };
   title.height = 22 * Math.max(1, Math.ceil(table.title.length / 60));
   sheet.mergeCells(1, 1, 1, ACTOR_TITLE_COLUMNS);
 
-  const place = sheet.addRow([table.placeLine]);
+  const place = addSafeRow(sheet, [table.placeLine]);
   place.getCell(1).font = { size: 11, name: "Arial" };
   place.getCell(1).alignment = { vertical: "top", wrapText: true };
   place.height = 16 * Math.max(1, Math.ceil(table.placeLine.length / 90));
@@ -109,9 +115,9 @@ function addActorTableSheet(
     });
   }
 
-  sheet.addRow([]).height = 6;
+  addSafeRow(sheet, []).height = 6;
 
-  const header = sheet.addRow([...ATTENDANCE_ACTOR_COLUMNS]);
+  const header = addSafeRow(sheet, [...ATTENDANCE_ACTOR_COLUMNS]);
   header.eachCell((cell) => {
     cell.font = { bold: true, size: 11, name: "Arial" };
     cell.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
@@ -120,7 +126,7 @@ function addActorTableSheet(
   header.height = 30;
 
   if (table.rows.length === 0) {
-    const empty = sheet.addRow(["В сценах дня нет персонажей"]);
+    const empty = addSafeRow(sheet, ["В сценах дня нет персонажей"]);
     sheet.mergeCells(empty.number, 1, empty.number, columnCount);
     empty.getCell(1).font = { size: 11, name: "Arial" };
     empty.getCell(1).alignment = { vertical: "middle" };
@@ -132,7 +138,7 @@ function addActorTableSheet(
   }
 
   for (const row of table.rows) {
-    const dataRow = sheet.addRow([row.actor, row.character, row.callTime ?? "", "", "", "", ""]);
+    const dataRow = addSafeRow(sheet, [row.actor, row.character, row.callTime ?? "", "", "", "", ""]);
     for (let col = 1; col <= columnCount; col += 1) {
       const cell = dataRow.getCell(col);
       cell.font = { size: 11, name: "Arial" };
@@ -177,24 +183,24 @@ export async function buildAttendanceSheetXlsx(
     sheet.getColumn(5).width = 14;
     sheet.getColumn(6).width = 18;
 
-    const title = sheet.addRow([model.documentTitle]);
+    const title = addSafeRow(sheet, [model.documentTitle]);
     title.getCell(1).font = { bold: true, size: 14, name: "Calibri" };
     sheet.mergeCells(1, 1, 1, 6);
 
-    sheet.addRow([model.projectName]).getCell(1).font = {
+    addSafeRow(sheet, [model.projectName]).getCell(1).font = {
       bold: true,
       size: 12,
       name: "Calibri",
     };
     sheet.mergeCells(2, 1, 2, 6);
 
-    sheet.addRow([
+    addSafeRow(sheet, [
       `${model.dateLabel}${model.city ? ` · ${model.city}` : ""} · ${section.title}`,
     ]);
     sheet.mergeCells(3, 1, 3, 6);
-    sheet.addRow([]);
+    addSafeRow(sheet, []);
 
-    const header = sheet.addRow([
+    const header = addSafeRow(sheet, [
       "№",
       "ФИО / наименование",
       "Детали",
@@ -205,10 +211,10 @@ export async function buildAttendanceSheetXlsx(
     styleHeaderRow(header);
 
     if (section.rows.length === 0) {
-      sheet.addRow(["", "Нет записей в вызывном", "", "", "", ""]);
+      addSafeRow(sheet, ["", section.emptyText ?? "Нет записей в вызывном", "", "", "", ""]);
     } else {
       section.rows.forEach((row, index) => {
-        const dataRow = sheet.addRow([
+        const dataRow = addSafeRow(sheet, [
           index + 1,
           row.name,
           row.detail ?? "",
@@ -233,8 +239,8 @@ export async function buildAttendanceSheetXlsx(
       });
     }
 
-    sheet.addRow([]);
-    sheet.addRow([
+    addSafeRow(sheet, []);
+    addSafeRow(sheet, [
       "Ведомость фактического присутствия на смене. Заполняется и подписывается на площадке в конце смены.",
     ]);
     sheet.mergeCells(sheet.rowCount, 1, sheet.rowCount, 6);

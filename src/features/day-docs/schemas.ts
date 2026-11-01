@@ -1,4 +1,4 @@
-import { TimeSlotType } from "@prisma/client";
+import { ActorTransportMode, CallSheetUnit, TimeSlotType } from "@prisma/client";
 import { z } from "zod";
 
 const timeString = z.string().trim().max(10).optional().or(z.literal(""));
@@ -19,29 +19,23 @@ export const updateCallSheetHeaderSchema = z.object({
   comment: z.string().trim().max(2000).optional(),
 });
 
-export const departmentCallRowSchema = z.object({
-  roleLabel: z.string().trim().min(1).max(120),
-  personName: z.string().trim().max(200).optional(),
-  phone: z.string().trim().max(40).optional(),
-  callTime: timeString,
-});
-
-export const transportRowSchema = z.object({
-  name: z.string().trim().min(1).max(200),
-  callTime: timeString,
-  notes: z.string().trim().max(500).optional(),
-  kmRate: z.preprocess((val) => {
-    if (val == null || val === "") return null;
-    return val;
-  }, z.coerce.number().min(0).nullable().optional()),
-});
-
 export const timeSlotRowSchema = z.object({
   startTime: z.string().trim().min(1).max(10),
   endTime: timeString,
   slotType: z.enum(TimeSlotType),
   sceneId: z.string().cuid().optional().nullable(),
   notes: z.string().trim().max(2000).optional(),
+  /** Юнит строки. Не передан (старые строки, старый редактор) — основной. */
+  unit: z.enum(CallSheetUnit).default(CallSheetUnit.MAIN),
+  /** «Продолжение сцены» — только у строки со сценой (проверка — plan-rules.ts). */
+  isContinuation: z.boolean().default(false),
+  /** Свой текст строки вместо названия типа. Пусто — название типа. */
+  customLabel: z
+    .string()
+    .trim()
+    .max(200, "Свой текст строки плана — до 200 знаков")
+    .nullable()
+    .optional(),
 });
 
 export const actorCallRowSchema = z.object({
@@ -52,7 +46,15 @@ export const actorCallRowSchema = z.object({
   costumeTime: timeString,
   readyTime: timeString,
   wrapTime: timeString,
-});
+  /** Транспорт актёра: машина / сам / свой текст. Пусто — не указан. */
+  transportMode: z.enum(ActorTransportMode).nullable().optional().or(z.literal("")),
+  transportText: z.string().trim().max(200).optional(),
+  /** Подача машины — сохраняется только при транспорте «машина». */
+  carPickupTime: timeString,
+}).refine(
+  (row) => row.transportMode !== ActorTransportMode.CUSTOM || Boolean(row.transportText),
+  { message: "Транспорт актёра: впишите свой текст" },
+);
 
 export const resourceCallRowSchema = z.object({
   category: z.string().trim().min(1).max(40),
@@ -64,16 +66,8 @@ export const resourceCallRowSchema = z.object({
   wrapTime: timeString,
 });
 
-export const saveDepartmentCallsSchema = z.object({
-  rows: z.array(departmentCallRowSchema),
-});
-
-export const saveTransportsSchema = z.object({
-  rows: z.array(transportRowSchema),
-});
-
 export const saveTimeSlotsSchema = z.object({
-  rows: z.array(timeSlotRowSchema),
+  rows: z.array(timeSlotRowSchema).max(500, "Слишком много строк плана"),
 });
 
 export const saveActorCallsSchema = z.object({

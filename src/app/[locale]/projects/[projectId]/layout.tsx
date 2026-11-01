@@ -1,10 +1,13 @@
 import { AppHeader } from "@/features/auth/components/app-header";
+import { awaitingApprovalCount } from "@/features/call-sheets/lib/awaiting-approval";
+import { countCallSheetsAwaitingApproval } from "@/features/call-sheets/queries";
 import { ProjectShell } from "@/features/projects/components/project-shell";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import {
   filterNavGroups,
   navAccessFromContext,
   projectNavGroups,
+  withNavCount,
 } from "@/features/projects/lib/project-nav-groups";
 
 type Props = {
@@ -15,7 +18,15 @@ type Props = {
 export default async function ProjectLayout({ children, params }: Props) {
   const { locale, projectId } = await params;
   const ctx = await requireProjectContext(projectId);
-  const navGroups = filterNavGroups(projectNavGroups, navAccessFromContext(ctx));
+  // Вызывные на согласовании — только тому, кто может утвердить.
+  const inReview = await awaitingApprovalCount(ctx.can, () =>
+    countCallSheetsAwaitingApproval(projectId),
+  );
+  const navGroups = withNavCount(
+    filterNavGroups(projectNavGroups, navAccessFromContext(ctx)),
+    "/call-sheets",
+    inReview,
+  );
 
   return (
     <>

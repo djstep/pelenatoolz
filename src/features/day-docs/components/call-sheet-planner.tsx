@@ -27,19 +27,35 @@ import {
   saveBreakPresets,
 } from "@/features/day-docs/lib/break-presets";
 import {
+  buildPlanSlots,
   cascadeDayPlan,
   durationFromSlotTimes,
   sceneDurationFromPlanSeconds,
   type DayPlanBreakItem,
   type DayPlanItem,
   type DayPlanSceneItem,
+  type SecondUnitRow,
 } from "@/features/day-docs/lib/compute-day-plan";
 import { minutesToDurationHhMm } from "@/features/day-docs/lib/compute-call-timings";
-import { formatSceneLine } from "@/features/day-docs/lib/build-day-doc";
+import {
+  activeDayScenes,
+  formatSceneLine,
+  formatSceneNumber,
+  slotDurationLabel,
+} from "@/features/day-docs/lib/build-day-doc";
 import type { DayDocBundle } from "@/features/day-docs/lib/build-day-doc";
+import {
+  breakFieldsFromSlot,
+  continuationTitle,
+  CONTINUATION_NEEDS_SCENE,
+  cutSceneWarnings,
+  isSceneCut,
+} from "@/features/day-docs/lib/plan-rules";
 import { timeSlotTypeLabels } from "@/features/day-docs/lib/slot-labels";
 import { scenePrimaryAddress } from "@/features/day-docs/lib/travel-time";
 import { normalizeHhMm } from "@/features/day-docs/lib/time-utils";
+import { useCallSheetRevision } from "@/features/call-sheets/components/revision-context";
+import { REVISION_FIELD } from "@/features/call-sheets/lib/revision";
 import { CallSheetToolbar } from "@/features/day-docs/components/call-sheet-toolbar";
 import { reorderScenesAction } from "@/features/schedule/actions";
 import { Button } from "@/shared/ui/button";
@@ -52,42 +68,56 @@ function uid() {
   return Math.random().toString(36).slice(2, 10);
 }
 
-function buildInitialPlan(day: DayDocBundle["day"]): DayPlanItem[] {
-  if (day.timeSlots.length > 0) {
+type Day = DayDocBundle["day"];
+type ProjectSceneOption = DayDocBundle["projectScenes"][number];
+
+/** План основного юнита: из сохранённых строк MAIN, иначе — сцены дня. Вырезанные не берутся. */
+function buildInitialPlan(day: Day): DayPlanItem[] {
+  const activeScenes = activeDayScenes(day.scenes);
+  const mainSlots = day.timeSlots.filter((slot) => slot.unit !== "SECOND");
+  if (mainSlots.length > 0) {
     const items: DayPlanItem[] = [];
-    for (const slot of day.timeSlots) {
+    const seen = new Set<string>();
+    for (const slot of mainSlots) {
       if (slot.slotType === "SHOOTING" && slot.sceneId) {
-        const assignment = day.scenes.find((s) => s.scene.id === slot.sceneId);
+        const assignment = activeScenes.find((s) => s.scene.id === slot.sceneId);
         if (!assignment) continue;
+        // Сцена второй раз в плане — это продолжение (старые строки без отметки тоже).
+        const continuation = slot.isContinuation || seen.has(slot.sceneId);
+        seen.add(slot.sceneId);
         items.push({
           kind: "scene",
-          id: `scene-${slot.sceneId}`,
+          id: continuation ? `cont-${slot.id}` : `scene-${slot.sceneId}`,
           assignmentId: assignment.id,
           sceneId: slot.sceneId,
-          label: formatSceneLine(assignment.scene),
+          label: continuation
+            ? continuationTitle(assignment.scene)
+            : formatSceneLine(assignment.scene),
           duration:
             slot.startTime && slot.endTime
               ? durationFromSlotTimes(slot.startTime, slot.endTime)
               : sceneDurationFromPlanSeconds(assignment.scene.planSeconds),
+          isContinuation: continuation,
         });
       } else if (slot.slotType !== "SHOOTING") {
+        const fields = breakFieldsFromSlot(slot);
         items.push({
           kind: "break",
           id: `break-${slot.id}`,
           slotType: slot.slotType,
-          label: slot.notes?.trim() || timeSlotTypeLabels[slot.slotType],
+          label: fields.label,
           duration:
             slot.startTime && slot.endTime
               ? durationFromSlotTimes(slot.startTime, slot.endTime)
               : "00:30",
-          notes: slot.notes ?? "",
+          notes: fields.notes,
         });
       }
     }
     if (items.length > 0) return items;
   }
 
-  return day.scenes.map((row) => ({
+  return activeScenes.map((row) => ({
     kind: "scene" as const,
     id: `scene-${row.scene.id}`,
     assignmentId: row.id,
@@ -95,6 +125,200 @@ function buildInitialPlan(day: DayDocBundle["day"]): DayPlanItem[] {
     label: formatSceneLine(row.scene),
     duration: sceneDurationFromPlanSeconds(row.scene.planSeconds),
   }));
+}
+
+/** Дорожка «2-й юнит»: сохранённые строки SECOND как есть (строки только руками). */
+function buildInitialSecondRows(day: Day): SecondUnitRow[] {
+  return day.timeSlots
+    .filter((slot) => slot.unit === "SECOND")
+    .map((slot) => ({
+      id: `second-${slot.id}`,
+      startTime: slot.startTime,
+      endTime: slot.endTime ?? "",
+      slotType: slot.slotType,
+      sceneId: slot.sceneId,
+      isContinuation: slot.isContinuation,
+      customLabel: slot.customLabel ?? "",
+      notes: slot.notes ?? "",
+    }));
+}
+
+function SecondUnitRowEditor({
+  row,
+  sceneOptions,
+  savedScenes,
+  onChange,
+  onRemove,
+  disabled,
+}: {
+  row: SecondUnitRow;
+  sceneOptions: ProjectSceneOption[];
+  /** Сцены уже сохранённых строк — чтобы назвать вырезанную. */
+  savedScenes: Map<string, { number: string; postfix: string; episodeNumber: number; cutAt: Date | string | null }>;
+  onChange: (id: string, patch: Partial<SecondUnitRow>) => void;
+  onRemove: (id: string) => void;
+  disabled?: boolean;
+}) {
+  const sceneInOptions = row.sceneId
+    ? sceneOptions.some((scene) => scene.id === row.sceneId)
+    : true;
+  const savedScene = row.sceneId ? savedScenes.get(row.sceneId) : undefined;
+  const cutScene = !sceneInOptions && savedScene && isSceneCut(savedScene) ? savedScene : null;
+
+  return (
+    <div
+      className={cn(
+        "space-y-2 rounded-xl border border-[var(--border)] bg-[var(--inset-bg)] p-3",
+        disabled && "opacity-70",
+      )}
+    >
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="flex w-24 flex-col gap-1 text-xs">
+          <span className="text-[var(--muted-fg)]">Начало</span>
+          <HhMmInput
+            value={row.startTime}
+            disabled={disabled}
+            onChange={(startTime) => onChange(row.id, { startTime })}
+            placeholder="09:00"
+          />
+        </label>
+        <label className="flex w-24 flex-col gap-1 text-xs">
+          <span className="text-[var(--muted-fg)]">Конец</span>
+          <HhMmInput
+            value={row.endTime}
+            disabled={disabled}
+            onChange={(endTime) => onChange(row.id, { endTime })}
+            placeholder="10:00"
+          />
+        </label>
+        <div className="flex flex-col gap-1 pb-2 text-xs">
+          <span className="text-[var(--muted-fg)]">Длительность</span>
+          <span className="font-mono">
+            {isValidHhMm(row.startTime) && isValidHhMm(row.endTime)
+              ? slotDurationLabel(row.startTime, row.endTime)
+              : "—"}
+          </span>
+        </div>
+        <label className="flex min-w-[10rem] flex-1 flex-col gap-1 text-xs">
+          <span className="text-[var(--muted-fg)]">Тип</span>
+          <select
+            className="glass-input w-full rounded-xl px-3 py-2 text-sm"
+            value={row.slotType}
+            disabled={disabled}
+            onChange={(e) => onChange(row.id, { slotType: e.target.value as TimeSlotType })}
+          >
+            {Object.entries(timeSlotTypeLabels).map(([k, v]) => (
+              <option key={k} value={k}>
+                {v}
+              </option>
+            ))}
+          </select>
+        </label>
+        <Button
+          type="button"
+          variant="ghost"
+          disabled={disabled}
+          onClick={() => onRemove(row.id)}
+          aria-label="Удалить строку 2-го юнита"
+        >
+          ✕
+        </Button>
+      </div>
+
+      <div className="grid gap-2 sm:grid-cols-2">
+        <label className="space-y-1 text-xs">
+          <span className="text-[var(--muted-fg)]">Сцена (из либретто)</span>
+          <select
+            className="glass-input w-full rounded-xl px-3 py-2 text-sm"
+            value={row.sceneId ?? ""}
+            disabled={disabled}
+            onChange={(e) => {
+              const sceneId = e.target.value || null;
+              onChange(row.id, {
+                sceneId,
+                isContinuation: sceneId ? row.isContinuation : false,
+              });
+            }}
+          >
+            <option value="">— без сцены —</option>
+            {!sceneInOptions && row.sceneId ? (
+              <option value={row.sceneId} disabled>
+                {savedScene ? `${formatSceneNumber(savedScene)} (вырезана)` : "Сцена не найдена"}
+              </option>
+            ) : null}
+            {sceneOptions.map((scene) => (
+              <option key={scene.id} value={scene.id}>
+                {formatSceneLine(scene)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex items-center gap-2 pt-5 text-xs">
+          <input
+            type="checkbox"
+            checked={row.isContinuation}
+            disabled={disabled || !row.sceneId}
+            onChange={(e) => onChange(row.id, { isContinuation: e.target.checked })}
+          />
+          <span>Продолжение сцены</span>
+        </label>
+      </div>
+      {cutScene ? (
+        <p className="text-xs text-[var(--danger)]">
+          Сцена {formatSceneNumber(cutScene)} вырезана — выберите другую сцену или уберите строку.
+        </p>
+      ) : !sceneInOptions ? (
+        <p className="text-xs text-[var(--danger)]">
+          Сцена не найдена — выберите другую сцену или уберите строку.
+        </p>
+      ) : null}
+
+      <div className="grid gap-2 sm:grid-cols-2">
+        <label className="space-y-1 text-xs">
+          <span className="text-[var(--muted-fg)]">Свой текст строки</span>
+          <Input
+            value={row.customLabel}
+            maxLength={200}
+            disabled={disabled}
+            onChange={(e) => onChange(row.id, { customLabel: e.target.value })}
+            placeholder={timeSlotTypeLabels[row.slotType]}
+          />
+        </label>
+        <label className="space-y-1 text-xs">
+          <span className="text-[var(--muted-fg)]">Примечание</span>
+          <Input
+            value={row.notes}
+            disabled={disabled}
+            onChange={(e) => onChange(row.id, { notes: e.target.value })}
+            placeholder="Необязательно"
+          />
+        </label>
+      </div>
+    </div>
+  );
+}
+
+/** Подпись строки в предпросмотре: свой текст / «Продолжение сцены N» / тип и сцена. */
+function previewSlotText(
+  slot: {
+    slotType: TimeSlotType;
+    sceneId: string | null;
+    isContinuation: boolean;
+    customLabel: string | null;
+    notes: string | null;
+  },
+  sceneById: Map<string, Parameters<typeof formatSceneLine>[0]>,
+): string {
+  const scene = slot.sceneId ? sceneById.get(slot.sceneId) : undefined;
+  const parts: string[] = [];
+  if (scene && slot.isContinuation) {
+    parts.push(slot.customLabel || continuationTitle(scene));
+  } else {
+    parts.push(slot.customLabel || timeSlotTypeLabels[slot.slotType]);
+    if (scene) parts.push(formatSceneLine(scene));
+  }
+  if (slot.notes) parts.push(slot.notes);
+  return parts.join(" · ");
 }
 
 function PlanRowBody({
@@ -116,7 +340,9 @@ function PlanRowBody({
 
       <div className="min-w-0 flex-1 space-y-2">
         {item.kind === "scene" ? (
-          <p className="truncate pt-1.5 text-sm font-medium">Сцена · {item.label}</p>
+          <p className="truncate pt-1.5 text-sm font-medium">
+            {item.isContinuation ? item.label : `Сцена · ${item.label}`}
+          </p>
         ) : (
           <>
             <div className="grid gap-2 sm:grid-cols-2">
@@ -172,14 +398,14 @@ function PlanRowBody({
         </label>
       </div>
 
-      {item.kind === "break" ? (
+      {item.kind === "break" || item.isContinuation ? (
         <Button
           type="button"
           variant="ghost"
           className="mt-1"
           disabled={disabled}
           onClick={() => onRemove(item.id)}
-          aria-label="Удалить перерыв"
+          aria-label={item.kind === "break" ? "Удалить перерыв" : "Удалить продолжение сцены"}
         >
           ✕
         </Button>
@@ -377,6 +603,10 @@ export function CallSheetPlanner({
   const { day } = bundle;
   const planLocked = day.callSheetPlanLocked;
   const [plan, setPlan] = useState<DayPlanItem[]>(() => buildInitialPlan(day));
+  const [secondRows, setSecondRows] = useState<SecondUnitRow[]>(() =>
+    buildInitialSecondRows(day),
+  );
+  const [continuationSceneId, setContinuationSceneId] = useState("");
   const [shiftStart, setShiftStart] = useState(
     day.shiftStartTime ?? day.callTime ?? "08:00",
   );
@@ -384,6 +614,7 @@ export function CallSheetPlanner({
   const [presetsOpen, setPresetsOpen] = useState(false);
   const [message, setMessage] = useState<CallSheetActionState>({});
   const [pending, startTransition] = useTransition();
+  const { revision, track } = useCallSheetRevision();
   const [travelPending, setTravelPending] = useState(false);
   const [dndReady, setDndReady] = useState(false);
 
@@ -405,9 +636,47 @@ export function CallSheetPlanner({
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
   );
 
+  const activeScenes = useMemo(() => activeDayScenes(day.scenes), [day.scenes]);
+  const cutWarnings = useMemo(() => cutSceneWarnings(day.scenes), [day.scenes]);
+  /** Вырезанные сцены дня и строк плана: каскад их пропускает. */
+  const cutSceneIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const row of day.scenes) if (isSceneCut(row.scene)) ids.add(row.scene.id);
+    for (const slot of day.timeSlots) {
+      if (slot.sceneId && isSceneCut(slot.scene)) ids.add(slot.sceneId);
+    }
+    return ids;
+  }, [day.scenes, day.timeSlots]);
+  /** Сцены для подписей: сцены дня, строк плана и список проекта. */
+  const sceneById = useMemo(() => {
+    const map = new Map<string, Parameters<typeof formatSceneLine>[0]>();
+    for (const scene of bundle.projectScenes) map.set(scene.id, scene);
+    for (const slot of day.timeSlots) if (slot.scene) map.set(slot.scene.id, slot.scene);
+    for (const row of day.scenes) map.set(row.scene.id, row.scene);
+    return map;
+  }, [bundle.projectScenes, day.scenes, day.timeSlots]);
+  const savedSecondScenes = useMemo(
+    () =>
+      new Map(
+        day.timeSlots
+          .filter((slot) => slot.scene)
+          .map((slot) => [slot.scene!.id, slot.scene!] as const),
+      ),
+    [day.timeSlots],
+  );
+
   const preview = useMemo(
-    () => (isValidHhMm(shiftStart) ? cascadeDayPlan(shiftStart, plan) : []),
-    [shiftStart, plan],
+    () => (isValidHhMm(shiftStart) ? cascadeDayPlan(shiftStart, plan, cutSceneIds) : []),
+    [shiftStart, plan, cutSceneIds],
+  );
+
+  /** Сцены основного юнита, у которых можно добавить «Продолжение сцены». */
+  const continuationOptions = useMemo(
+    () =>
+      plan.filter(
+        (item): item is DayPlanSceneItem => item.kind === "scene" && !item.isContinuation,
+      ),
+    [plan],
   );
 
   function reorderPlan(activeId: string, overId: string) {
@@ -447,6 +716,45 @@ export function CallSheetPlanner({
     );
   }
 
+  /** «Продолжение сцены N» — ещё одна строка уже стоящей в плане сцены (в конец плана). */
+  function addContinuation() {
+    if (planLocked) return;
+    const original = continuationOptions.find((item) => item.sceneId === continuationSceneId);
+    const scene = original ? sceneById.get(original.sceneId) : undefined;
+    if (!original || !scene) return;
+    const row: DayPlanSceneItem = {
+      kind: "scene",
+      id: `cont-${uid()}`,
+      assignmentId: original.assignmentId,
+      sceneId: original.sceneId,
+      label: continuationTitle(scene),
+      duration: "00:30",
+      isContinuation: true,
+    };
+    setPlan((prev) => [...prev, row]);
+  }
+
+  function addSecondRow() {
+    if (planLocked) return;
+    setSecondRows((prev) => [
+      ...prev,
+      {
+        id: `second-${uid()}`,
+        startTime: prev[prev.length - 1]?.endTime || "",
+        endTime: "",
+        slotType: "SHOOTING",
+        sceneId: null,
+        isContinuation: false,
+        customLabel: "",
+        notes: "",
+      },
+    ]);
+  }
+
+  function updateSecondRow(id: string, patch: Partial<SecondUnitRow>) {
+    setSecondRows((prev) => prev.map((row) => (row.id === id ? { ...row, ...patch } : row)));
+  }
+
   function applyPlan() {
     if (planLocked) return;
     if (!isValidHhMm(shiftStart)) {
@@ -460,53 +768,86 @@ export function CallSheetPlanner({
         return;
       }
     }
+    for (const [index, row] of secondRows.entries()) {
+      const name = `2-й юнит, строка ${index + 1}`;
+      if (!isValidHhMm(row.startTime)) {
+        setMessage({ error: `${name}: начало — в виде ЧЧ:ММ` });
+        return;
+      }
+      if (row.endTime.trim() && !isValidHhMm(row.endTime)) {
+        setMessage({ error: `${name}: конец — в виде ЧЧ:ММ` });
+        return;
+      }
+      if (row.isContinuation && !row.sceneId) {
+        setMessage({ error: `${name}: ${CONTINUATION_NEEDS_SCENE}` });
+        return;
+      }
+    }
 
     startTransition(async () => {
+      // Порядок сцен дня в КПП — по первому появлению сцены (продолжения не считаются).
       const assignmentIds = plan
-        .filter((item): item is DayPlanSceneItem => item.kind === "scene")
+        .filter(
+          (item): item is DayPlanSceneItem =>
+            item.kind === "scene" && !item.isContinuation && !cutSceneIds.has(item.sceneId),
+        )
         .map((item) => item.assignmentId);
-
-      if (assignmentIds.length > 0) {
-        try {
-          await reorderScenesAction(projectId, dayId, assignmentIds);
-        } catch {
-          setMessage({ error: "Не удалось сохранить порядок сцен" });
-          return;
-        }
-      }
 
       const normalizedPlan = plan.map((item) => ({
         ...item,
         duration: normalizeHhMm(item.duration),
       }));
 
-      const slots = cascadeDayPlan(normalizedShift, normalizedPlan);
+      // Основной юнит — каскадом, 2-й юнит — как ввели (не теряется при сохранении планера).
+      const slots = buildPlanSlots(normalizedShift, normalizedPlan, secondRows, cutSceneIds);
       const fd = new FormData();
       fd.set(
         "rows",
         JSON.stringify(
           slots.map((slot) => ({
             startTime: slot.startTime,
-            endTime: slot.endTime,
+            endTime: slot.endTime ?? "",
             slotType: slot.slotType,
             sceneId: slot.sceneId,
             notes: slot.notes ?? "",
+            unit: slot.unit,
+            isContinuation: slot.isContinuation,
+            customLabel: slot.customLabel,
           })),
         ),
       );
 
-      const result = await saveTimeSlotsAction(projectId, dayId, {}, fd);
+      fd.set(REVISION_FIELD, revision === null ? "" : String(revision));
+
+      // Сначала план — он сверяет номер правки и не пишет утверждённый вызывной; порядок сцен
+      // в КПП — только после него, иначе отказ плана оставил бы новый порядок сцен.
+      const result = track(await saveTimeSlotsAction(projectId, dayId, {}, fd));
+      if (!result.error && assignmentIds.length > 0) {
+        try {
+          await reorderScenesAction(projectId, dayId, assignmentIds);
+        } catch {
+          setMessage({ error: "План сохранён, но не удалось сохранить порядок сцен" });
+          return;
+        }
+      }
       setMessage(result);
       if (!result.error) {
         setShiftStart(normalizedShift);
         setPlan(normalizedPlan);
+        setSecondRows((prev) =>
+          prev.map((row) => ({
+            ...row,
+            startTime: normalizeHhMm(row.startTime),
+            endTime: row.endTime.trim() ? normalizeHhMm(row.endTime) : "",
+          })),
+        );
       }
     });
   }
 
   async function insertTravelBreaks() {
     if (planLocked) return;
-    const sceneById = new Map(day.scenes.map((row) => [row.scene.id, row.scene]));
+    const dayScenesById = new Map(day.scenes.map((row) => [row.scene.id, row.scene]));
     setTravelPending(true);
     try {
       const next: DayPlanItem[] = [];
@@ -517,8 +858,8 @@ export function CallSheetPlanner({
         const following = plan[i + 1];
         if (!following || following.kind !== "scene") continue;
 
-        const fromScene = sceneById.get(item.sceneId);
-        const toScene = sceneById.get(following.sceneId);
+        const fromScene = dayScenesById.get(item.sceneId);
+        const toScene = dayScenesById.get(following.sceneId);
         const from = fromScene ? scenePrimaryAddress(fromScene) : null;
         const to = toScene ? scenePrimaryAddress(toScene) : null;
         if (!from || !to || from.toLowerCase() === to.toLowerCase()) continue;
@@ -553,16 +894,31 @@ export function CallSheetPlanner({
     }
   }
 
-  if (day.scenes.length === 0) {
+  const cutWarningsBlock =
+    cutWarnings.length > 0 ? (
+      <div className="space-y-1 rounded-xl border border-[var(--border)] bg-[var(--inset-bg-soft)] p-3 print:hidden">
+        {cutWarnings.map((text) => (
+          <p key={text} className="text-sm text-[var(--tone-warning-strong)]/90">
+            {text}
+          </p>
+        ))}
+      </div>
+    ) : null;
+
+  if (activeScenes.length === 0) {
     return (
-      <p className="text-sm text-[var(--muted-fg)]">
-        В дне нет сцен — добавьте сцены в КПП, чтобы построить план.
-      </p>
+      <div className="space-y-2">
+        {cutWarningsBlock}
+        <p className="text-sm text-[var(--muted-fg)]">
+          В дне нет сцен — добавьте сцены в КПП, чтобы построить план.
+        </p>
+      </div>
     );
   }
 
   return (
     <div className="space-y-4 print:hidden">
+      {cutWarningsBlock}
       {canEdit ? (
         <CallSheetToolbar
           projectId={projectId}
@@ -630,12 +986,41 @@ export function CallSheetPlanner({
         {presetsOpen && !planLocked ? (
           <BreakPresetsEditor presets={presets} onChange={setPresets} />
         ) : null}
+        {continuationOptions.length > 0 ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-[var(--muted-fg)]">Продолжение сцены:</span>
+            <select
+              className="glass-input rounded-xl px-3 py-2 text-sm"
+              value={continuationSceneId}
+              disabled={planLocked}
+              onChange={(e) => setContinuationSceneId(e.target.value)}
+              aria-label="Сцена для продолжения"
+            >
+              <option value="">— выберите сцену —</option>
+              {continuationOptions.map((item) => (
+                <option key={item.id} value={item.sceneId}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={planLocked || !continuationSceneId}
+              onClick={addContinuation}
+            >
+              + Продолжение
+            </Button>
+          </div>
+        ) : null}
       </div>
       ) : null}
 
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="space-y-2">
-          <h4 className="text-sm font-semibold text-[var(--muted-fg)]">План дня</h4>
+          <h4 className="sheet-subhead">
+            План дня — основной юнит
+          </h4>
           {dndReady ? (
           <DndContext
             sensors={sensors}
@@ -676,10 +1061,45 @@ export function CallSheetPlanner({
               ))}
             </div>
           )}
+
+          <div className="space-y-2 pt-2">
+            <h4 className="sheet-subhead">2-й юнит</h4>
+            <p className="text-xs text-[var(--muted-fg)]">
+              Строки 2-го юнита добавляются руками: время, тип, сцена из либретто. Время
+              основного юнита их не сдвигает.
+            </p>
+            {secondRows.length === 0 ? (
+              <p className="text-sm text-[var(--muted-fg)]">Строк нет.</p>
+            ) : (
+              secondRows.map((row) => (
+                <SecondUnitRowEditor
+                  key={row.id}
+                  row={row}
+                  sceneOptions={bundle.projectScenes}
+                  savedScenes={savedSecondScenes}
+                  disabled={planLocked || !canEdit}
+                  onChange={updateSecondRow}
+                  onRemove={(id) =>
+                    setSecondRows((prev) => prev.filter((item) => item.id !== id))
+                  }
+                />
+              ))
+            )}
+            {canEdit ? (
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={planLocked}
+                onClick={addSecondRow}
+              >
+                + Строка 2-го юнита
+              </Button>
+            ) : null}
+          </div>
         </div>
 
         <div className="space-y-2">
-          <h4 className="text-sm font-semibold text-[var(--muted-fg)]">
+          <h4 className="sheet-subhead">
             Предпросмотр тайминга
           </h4>
           {!isValidHhMm(shiftStart) ? (
@@ -699,24 +1119,40 @@ export function CallSheetPlanner({
                     {slot.startTime}–{slot.endTime}
                   </span>
                   <span className="ml-2 text-[var(--muted-fg)]">
-                    {timeSlotTypeLabels[slot.slotType]}
-                    {slot.sceneId
-                      ? ` · ${
-                          day.scenes.find((s) => s.scene.id === slot.sceneId)
-                            ? formatSceneLine(
-                                day.scenes.find((s) => s.scene.id === slot.sceneId)!
-                                  .scene,
-                              )
-                            : ""
-                        }`
-                      : slot.notes
-                        ? ` · ${slot.notes}`
-                        : ""}
+                    {previewSlotText(slot, sceneById)}
                   </span>
                 </div>
               ))}
             </div>
           )}
+          {secondRows.length > 0 ? (
+            <div className="space-y-2 pt-2">
+              <p className="text-xs font-medium text-[var(--muted-fg)]">2-й юнит</p>
+              {secondRows.map((row) => (
+                <div
+                  key={row.id}
+                  className="rounded-lg border border-[var(--border)]/60 px-3 py-2 text-sm"
+                >
+                  <span className="font-mono font-medium">
+                    {row.startTime || "—"}
+                    {row.endTime ? `–${row.endTime}` : ""}
+                  </span>
+                  <span className="ml-2 text-[var(--muted-fg)]">
+                    {previewSlotText(
+                      {
+                        slotType: row.slotType,
+                        sceneId: row.sceneId,
+                        isContinuation: Boolean(row.sceneId) && row.isContinuation,
+                        customLabel: row.customLabel.trim() || null,
+                        notes: row.notes.trim() || null,
+                      },
+                      sceneById,
+                    )}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : null}
         </div>
       </div>
     </div>

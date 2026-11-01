@@ -12,6 +12,7 @@ import {
 } from "@/features/locations/actions";
 import { LocationModal } from "@/features/locations/components/location-modal";
 import { LocationPhotoAddForm } from "@/features/locations/components/location-photo-add-form";
+import { LocationSchemeForm } from "@/features/locations/components/location-scheme-form";
 import {
   formatLocationKind,
   formatLocationTitle,
@@ -301,6 +302,8 @@ export function LocationDetailView({
       ) : (
         <p className="text-sm text-[var(--muted-fg)]">Укажите адрес — появится карта Яндекса.</p>
       )}
+
+      <LocationSchemeForm projectId={projectId} location={location} canWrite={canWrite} />
 
       {canFinanceRead ? (
         <Card className="space-y-4 p-5">

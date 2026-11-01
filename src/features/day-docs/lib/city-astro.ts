@@ -165,50 +165,91 @@ export async function fetchCityAstro(
     const place = geoJson.results?.[0];
     if (!place) return null;
 
-    const iso = calendarDateInTimezone(date, tz);
-    const sun = calculateSunTimes(iso, place.latitude, place.longitude, tz);
-    const offsetDays = daysFromToday(iso, tz);
-
-    let daily: WeatherDaily | null = null;
-    if (offsetDays >= 0 && offsetDays <= FORECAST_HORIZON_DAYS) {
-      daily = await fetchWeatherDaily(
-        "https://api.open-meteo.com/v1/forecast",
-        place.latitude,
-        place.longitude,
-        iso,
-        tz,
-      );
-    } else if (offsetDays < 0) {
-      daily = await fetchWeatherDaily(
-        "https://archive-api.open-meteo.com/v1/archive",
-        place.latitude,
-        place.longitude,
-        iso,
-        tz,
-      );
-    }
-
-    const weather = daily ? buildWeatherSummary(daily) : null;
-    const weatherUnavailable = !weather?.weatherSummary;
-
-    return {
-      sunrise: sun.sunrise,
-      sunset: sun.sunset,
-      label: [place.name, place.country].filter(Boolean).join(", "),
-      weatherCode: weather?.weatherCode ?? null,
-      precipProb: weather?.precipProb ?? null,
-      tempMax: weather?.tempMax ?? null,
-      tempMin: weather?.tempMin ?? null,
-      weatherSummary: weatherUnavailable
-        ? offsetDays > FORECAST_HORIZON_DAYS
-          ? `прогноз погоды доступен за ${FORECAST_HORIZON_DAYS} дней`
-          : null
-        : weather!.weatherSummary,
-      weatherUnavailable,
-    };
+    return await astroAt(
+      { ...place, label: [place.name, place.country].filter(Boolean).join(", ") },
+      date,
+      tz,
+    );
   } catch {
     return null;
   }
+}
+
+/** Солнце и погода по координатам объекта. */
+export async function fetchPointAstro(
+  point: { latitude: number; longitude: number; label: string },
+  date: Date,
+  timezone: string,
+): Promise<DayAstro | null> {
+  try {
+    return await astroAt(point, date, timezone || "Europe/Moscow");
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Солнце и погода дня: по координатам объекта, если они есть, иначе — по городу проекта.
+ */
+export function fetchDayAstro(
+  where: {
+    city: string | null | undefined;
+    point: { latitude: number; longitude: number; label: string } | null;
+  },
+  date: Date,
+  timezone: string,
+): Promise<DayAstro | null> {
+  return where.point
+    ? fetchPointAstro(where.point, date, timezone)
+    : fetchCityAstro(where.city, date, timezone);
+}
+
+async function astroAt(
+  place: { latitude: number; longitude: number; label: string },
+  date: Date,
+  tz: string,
+): Promise<DayAstro> {
+  const iso = calendarDateInTimezone(date, tz);
+  const sun = calculateSunTimes(iso, place.latitude, place.longitude, tz);
+  const offsetDays = daysFromToday(iso, tz);
+
+  let daily: WeatherDaily | null = null;
+  if (offsetDays >= 0 && offsetDays <= FORECAST_HORIZON_DAYS) {
+    daily = await fetchWeatherDaily(
+      "https://api.open-meteo.com/v1/forecast",
+      place.latitude,
+      place.longitude,
+      iso,
+      tz,
+    );
+  } else if (offsetDays < 0) {
+    daily = await fetchWeatherDaily(
+      "https://archive-api.open-meteo.com/v1/archive",
+      place.latitude,
+      place.longitude,
+      iso,
+      tz,
+    );
+  }
+
+  const weather = daily ? buildWeatherSummary(daily) : null;
+  const weatherUnavailable = !weather?.weatherSummary;
+
+  return {
+    sunrise: sun.sunrise,
+    sunset: sun.sunset,
+    label: place.label,
+    weatherCode: weather?.weatherCode ?? null,
+    precipProb: weather?.precipProb ?? null,
+    tempMax: weather?.tempMax ?? null,
+    tempMin: weather?.tempMin ?? null,
+    weatherSummary: weatherUnavailable
+      ? offsetDays > FORECAST_HORIZON_DAYS
+        ? `прогноз погоды доступен за ${FORECAST_HORIZON_DAYS} дней`
+        : null
+      : weather!.weatherSummary,
+    weatherUnavailable,
+  };
 }
 
 function formatClock(isoLocal: string) {

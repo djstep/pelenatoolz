@@ -6,6 +6,14 @@ import {
   locationFormSchema,
   locationPhotoSchema,
 } from "@/features/locations/schemas";
+import { formatLocationTitle } from "@/features/locations/lib/format-location";
+import {
+  canEditLocationScheme,
+  checkLocationSchemeSave,
+  LOCATION_NOT_FOUND,
+  locationSchemeChanges,
+  type LocationSchemeData,
+} from "@/features/locations/lib/scheme-rules";
 import type { LocationScoutSnapshot } from "@/features/preproduction/lib/snapshots";
 import { parseScoutSnapshot } from "@/features/preproduction/lib/snapshots";
 import {
@@ -18,7 +26,7 @@ import { impactLines } from "@/shared/lib/plural";
 import { pickFinanceFields } from "@/shared/lib/finance-fields";
 import { SCOUT_SNAPSHOT_INPUT_FIELDS } from "@/features/locations/lib/location-fields";
 import { AuditEntityType } from "@/shared/audit/entity-types";
-import { recordAudit } from "@/shared/audit/with-audit";
+import { auditMutation, recordAudit } from "@/shared/audit/with-audit";
 import { z } from "zod";
 
 export type LocationActionState = { error?: string; success?: string };
@@ -418,6 +426,110 @@ export async function updateLocationFinancialAction(
 
   revalidateLocations(projectId, locationId);
   return { success: "Финансовые условия сохранены" };
+}
+
+/** Схема объекта для вызывного: координаты, «Как добраться», «Парковка», «На месте», точки. */
+export async function saveLocationSchemeAction(
+  projectId: string,
+  locationId: string,
+  _prev: LocationActionState,
+  formData: FormData,
+): Promise<LocationActionState> {
+  const ctx = await requireProjectContext(projectId);
+  const checked = await checkLocationSchemeSave(
+    {
+      canEdit: canEditLocationScheme(ctx),
+      inProject: async (id) => {
+        try {
+          await assertInProject("Location", id, projectId);
+          return true;
+        } catch (error) {
+          if (isNotInProjectError(error)) return false;
+          throw error;
+        }
+      },
+    },
+    locationId,
+    {
+      coordinates: formData.get("coordinates"),
+      directions: formData.get("directions"),
+      parking: formData.get("parking"),
+      onSiteNotes: formData.get("onSiteNotes"),
+      points: formData.get("points"),
+    },
+  );
+  if ("error" in checked) return { error: checked.error };
+  const { data } = checked;
+
+  const location = await prisma.location.findFirst({
+    where: { id: checked.locationId, projectId },
+    select: {
+      name: true,
+      sublocation: true,
+      latitude: true,
+      longitude: true,
+      directions: true,
+      parking: true,
+      onSiteNotes: true,
+      points: {
+        orderBy: { sortOrder: "asc" },
+        select: { number: true, name: true, description: true },
+      },
+    },
+  });
+  if (!location) return { error: LOCATION_NOT_FOUND };
+
+  const changes = locationSchemeChanges(
+    {
+      latitude: location.latitude,
+      longitude: location.longitude,
+      directions: location.directions,
+      parking: location.parking,
+      onSiteNotes: location.onSiteNotes,
+      points: location.points,
+    },
+    data,
+  );
+  if (!changes) return { success: "Схема сохранена" };
+
+  await auditMutation(
+    ctx,
+    async (next: LocationSchemeData) => {
+      // Точки сохраняются списком целиком: на них ничего не ссылается.
+      await prisma.$transaction(async (tx) => {
+        await tx.location.update({
+          where: { id: checked.locationId, projectId },
+          data: {
+            latitude: next.latitude,
+            longitude: next.longitude,
+            directions: next.directions,
+            parking: next.parking,
+            onSiteNotes: next.onSiteNotes,
+          },
+        });
+        await tx.locationPoint.deleteMany({ where: { locationId: checked.locationId } });
+        await tx.locationPoint.createMany({
+          data: next.points.map((row, index) => ({
+            ...row,
+            locationId: checked.locationId,
+            sortOrder: index,
+          })),
+        });
+      });
+    },
+    data,
+    {
+      projectId,
+      entityType: AuditEntityType.location,
+      entityId: checked.locationId,
+      action: "UPDATE",
+      summary: `Изменена схема объекта «${formatLocationTitle(location.name, location.sublocation)}»`,
+      changes,
+    },
+  );
+
+  revalidateLocations(projectId, checked.locationId);
+  return { success: "Схема сохранена" };
 }
 
 

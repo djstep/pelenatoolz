@@ -5,6 +5,7 @@ import {
   toggleCallSheetPlanLockAction,
   type CallSheetActionState,
 } from "@/features/day-docs/actions";
+import { useCallSheetRevision } from "@/features/call-sheets/components/revision-context";
 import { CallSheetRecalculateModal } from "@/features/day-docs/components/call-sheet-recalculate-modal";
 import { Button } from "@/shared/ui/button";
 import { useActionToast } from "@/shared/ui/toast";
@@ -29,6 +30,7 @@ export function CallSheetToolbar({
   const [recalcOpen, setRecalcOpen] = useState(false);
   const [message, setMessage] = useState<CallSheetActionState>({});
   const [pending, startTransition] = useTransition();
+  const { revision, track } = useCallSheetRevision();
 
   useActionToast(message);
 
@@ -36,10 +38,8 @@ export function CallSheetToolbar({
 
   function toggleLock() {
     startTransition(async () => {
-      const result = await toggleCallSheetPlanLockAction(
-        projectId,
-        dayId,
-        !planLocked,
+      const result = track(
+        await toggleCallSheetPlanLockAction(projectId, dayId, !planLocked, revision),
       );
       setMessage(result);
     });

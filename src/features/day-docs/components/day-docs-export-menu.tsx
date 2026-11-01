@@ -2,10 +2,11 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import {
-  exportAttendanceSheetXlsxAction,
-  exportCallSheetPdfAction,
-  exportCallSheetXlsxAction,
-} from "@/features/day-docs/actions";
+  downloadBlob,
+  fetchCallSheetXlsx,
+  printCallSheet as openCallSheetPrint,
+} from "@/features/call-sheets/components/call-sheet-print-client";
+import { exportAttendanceSheetXlsxAction } from "@/features/day-docs/actions";
 import {
   getAttendanceSheetSettingsAction,
   saveAttendanceSheetSettingsAction,
@@ -22,12 +23,7 @@ import { useActionToast, useToast } from "@/shared/ui/toast";
 
 function downloadBase64(base64: string, fileName: string, mimeType: string) {
   const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
-  const url = URL.createObjectURL(new Blob([bytes], { type: mimeType }));
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = fileName;
-  a.click();
-  URL.revokeObjectURL(url);
+  downloadBlob(new Blob([bytes], { type: mimeType }), fileName);
 }
 
 export type DayDocsExportResourceCategory = {
@@ -83,16 +79,58 @@ export function DayDocsExportMenu({
     }
   }
 
+  /** Окно печати — как в кастинге: HTML с сервера → `document.write` → печать после фото и шрифтов. */
+  async function printCallSheet() {
+    setExporting("print");
+    setOpen(false);
+    try {
+      const result = await openCallSheetPrint(projectId, dayId);
+      if (result.error) setMessage({ error: result.error });
+    } finally {
+      setExporting(null);
+    }
+  }
+
+  async function downloadCallSheetXlsx() {
+    setExporting("xlsx");
+    setOpen(false);
+    try {
+      const result = await fetchCallSheetXlsx(projectId, dayId);
+      if ("error" in result) {
+        setMessage({ error: result.error });
+        return;
+      }
+      downloadBlob(result.blob, result.fileName);
+      setMessage({ success: "Файл Excel сохранён" });
+    } finally {
+      setExporting(null);
+    }
+  }
+
   return (
     <>
-      <span ref={triggerRef} className="inline-flex">
+      <span className="inline-flex gap-2">
+        <span ref={triggerRef} className="inline-flex">
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={exporting != null}
+            aria-haspopup="menu"
+            aria-expanded={open}
+            onClick={() => setOpen((v) => !v)}
+          >
+            {exporting ? "Экспорт…" : "Экспорт ▾"}
+          </Button>
+        </span>
         <Button
           type="button"
           variant="secondary"
-          disabled={exporting != null}
-          onClick={() => setOpen((v) => !v)}
+          className="px-3"
+          title="Настройка явочного листа"
+          aria-label="Настройка явочного листа"
+          onClick={() => setSettingsOpen(true)}
         >
-          {exporting ? "Экспорт…" : "Экспорт ▾"}
+          <GearIcon />
         </Button>
       </span>
       <PortaledMenu
@@ -100,65 +138,29 @@ export function DayDocsExportMenu({
         anchorRef={triggerRef}
         onClose={() => setOpen(false)}
         align="end"
-        className="min-w-[14rem]"
+        role="menu"
+        className="p-1"
       >
         {showCallSheetExports ? (
-          <>
-            <button
-              type="button"
-              className="glass-dropdown-item block w-full px-3 py-2 text-left text-sm"
-              onClick={() =>
-                void runDownload(
-                  "pdf",
-                  () => exportCallSheetPdfAction(projectId, dayId),
-                  "application/pdf",
-                  "Файл PDF сохранён",
-                )
-              }
-            >
-              Вызывной PDF
-            </button>
-            <button
-              type="button"
-              className="glass-dropdown-item block w-full px-3 py-2 text-left text-sm"
-              onClick={() =>
-                void runDownload(
-                  "xlsx",
-                  () => exportCallSheetXlsxAction(projectId, dayId),
-                  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                  "Файл Excel сохранён",
-                )
-              }
-            >
-              Вызывной Excel
-            </button>
-            <div className="my-1 border-t border-[var(--border)]" />
-          </>
+          <MenuGroup label="Вызывной лист">
+            <MenuItem onClick={() => void printCallSheet()}>Печать / PDF</MenuItem>
+            <MenuItem onClick={() => void downloadCallSheetXlsx()}>Excel</MenuItem>
+          </MenuGroup>
         ) : null}
-        <button
-          type="button"
-          className="glass-dropdown-item block w-full px-3 py-2 text-left text-sm"
-          onClick={() =>
-            void runDownload(
-              "attendance",
-              () => exportAttendanceSheetXlsxAction(projectId, dayId),
-              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-              "Явочный лист сохранён",
-            )
-          }
-        >
-          Явочный лист Excel
-        </button>
-        <button
-          type="button"
-          className="glass-dropdown-item block w-full px-3 py-2 text-left text-sm text-[var(--muted-fg)]"
-          onClick={() => {
-            setOpen(false);
-            setSettingsOpen(true);
-          }}
-        >
-          Настройка явочного листа…
-        </button>
+        <MenuGroup label="Явочный лист">
+          <MenuItem
+            onClick={() =>
+              void runDownload(
+                "attendance",
+                () => exportAttendanceSheetXlsxAction(projectId, dayId),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                "Явочный лист сохранён",
+              )
+            }
+          >
+            Excel
+          </MenuItem>
+        </MenuGroup>
       </PortaledMenu>
 
       <AttendanceSheetSettingsModal
@@ -169,6 +171,43 @@ export function DayDocsExportMenu({
         canSave={canSaveAttendanceSettings}
       />
     </>
+  );
+}
+
+/** Группа меню выгрузок: подпись и пункты. Ширина меню — по самому длинному пункту. */
+function MenuGroup({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div role="group" aria-label={label} className="border-t border-[var(--border)] py-1 first:border-t-0">
+      <div className="px-2.5 pb-1 pt-0.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--muted-fg)] whitespace-nowrap">
+        {label}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function MenuItem({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      className="glass-dropdown-item whitespace-nowrap pl-4 text-left text-sm"
+      onClick={onClick}
+    >
+      {children}
+    </button>
+  );
+}
+
+function GearIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden className="h-4 w-4">
+      <path
+        fillRule="evenodd"
+        d="M7.84 1.8A1 1 0 0 1 8.82 1h2.36a1 1 0 0 1 .98.8l.28 1.4c.48.2.93.46 1.35.77l1.36-.46a1 1 0 0 1 1.18.45l1.18 2.04a1 1 0 0 1-.2 1.25l-1.07.95a6.1 6.1 0 0 1 0 1.56l1.07.95a1 1 0 0 1 .2 1.25l-1.18 2.04a1 1 0 0 1-1.18.45l-1.36-.46c-.42.31-.87.57-1.35.77l-.28 1.4a1 1 0 0 1-.98.8H8.82a1 1 0 0 1-.98-.8l-.28-1.4a6 6 0 0 1-1.35-.77l-1.36.46a1 1 0 0 1-1.18-.45L2.49 13.4a1 1 0 0 1 .2-1.25l1.07-.95a6.1 6.1 0 0 1 0-1.56l-1.07-.95a1 1 0 0 1-.2-1.25l1.18-2.04a1 1 0 0 1 1.18-.45l1.36.46c.42-.31.87-.57 1.35-.77l.28-1.4ZM10 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"
+        clipRule="evenodd"
+      />
+    </svg>
   );
 }
 

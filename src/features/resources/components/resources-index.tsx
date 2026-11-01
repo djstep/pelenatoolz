@@ -4,7 +4,10 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { resourceCategoryPath } from "@/features/resources/lib/paths";
 import { deleteResourceCategoryAction } from "@/features/resources/actions";
-import { CategoryModal } from "@/features/resources/components/category-modal";
+import {
+  CategoryModal,
+  type CallSheetSectionOption,
+} from "@/features/resources/components/category-modal";
 import type { ResourceCategoryRow } from "@/features/resources/queries";
 import { useToast } from "@/shared/ui/toast";
 import { Button } from "@/shared/ui/button";
@@ -25,12 +28,16 @@ export function ResourcesIndex({
   locale,
   categories,
   canWrite,
+  sections,
 }: {
   projectId: string;
   locale: string;
   categories: ResourceCategoryRow[];
   canWrite: boolean;
+  /** Разделы вызывного для выбора у категории. */
+  sections: CallSheetSectionOption[];
 }) {
+  const sectionName = new Map(sections.map((s) => [s.ref, s.name]));
   const [search, setSearch] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<ResourceCategoryRow | null>(null);
@@ -80,6 +87,7 @@ export function ResourcesIndex({
                 <th className="px-3 py-3">Категория</th>
                 <th className="px-3 py-3">Элементов</th>
                 <th className="px-3 py-3">Настройки</th>
+                <th className="px-3 py-3">Раздел вызывного</th>
                 {canWrite ? <th className="px-3 py-3" /> : null}
               </tr>
             </thead>
@@ -97,6 +105,11 @@ export function ResourcesIndex({
                   <td className="px-3 py-3">{c._count.items}</td>
                   <td className="px-3 py-3 text-[var(--muted-fg)]">
                     {flagsSummary(c)}
+                  </td>
+                  <td className="px-3 py-3 text-[var(--muted-fg)]">
+                    {c.callSheetSectionId
+                      ? (sectionName.get(c.callSheetSectionId) ?? "Прочее")
+                      : "Прочее"}
                   </td>
                   {canWrite ? (
                     <td className="px-3 py-3 text-right">
@@ -148,6 +161,7 @@ export function ResourcesIndex({
           setEditing(null);
         }}
         category={editing ?? undefined}
+        sections={sections}
       />
     </div>
   );

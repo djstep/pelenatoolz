@@ -1,21 +1,33 @@
 "use client";
 
-import { TimeSlotType } from "@prisma/client";
+import { ActorTransportMode, CallSheetUnit, TimeSlotType } from "@prisma/client";
 import { useRouter } from "next/navigation";
 import { useActionState, useState, useTransition } from "react";
 import {
   addPerShiftResourceAction,
   removePerShiftResourceAction,
   saveActorCallsAction,
-  saveDepartmentCallsAction,
   saveResourceCallsAction,
   saveResourceUsagesAction,
   saveTimeSlotsAction,
-  saveTransportsAction,
   updateCallSheetHeaderAction,
   type CallSheetActionState,
 } from "@/features/day-docs/actions";
-import type { CastRow, DayDocBundle, PerShiftResourceRow, ResourceTableRow } from "@/features/day-docs/lib/build-day-doc";
+import {
+  RevisionField,
+  useCallSheetRevision,
+  useRevisionAction,
+} from "@/features/call-sheets/components/revision-context";
+import { SheetBlock } from "@/features/call-sheets/components/sheet-block";
+import { CallSheetTransportEditor } from "@/features/day-docs/components/call-sheet-transport-editor";
+import type { CallSheetTransportEditorData } from "@/features/day-docs/transport-queries";
+import {
+  activeDayScenes,
+  type CastRow,
+  type DayDocBundle,
+  type PerShiftResourceRow,
+  type ResourceTableRow,
+} from "@/features/day-docs/lib/build-day-doc";
 import {
   isManualActorTiming,
   isManualResourceTiming,
@@ -29,32 +41,27 @@ import { timeSlotTypeLabels } from "@/features/day-docs/lib/slot-labels";
 import { Button } from "@/shared/ui/button";
 import { HhMmInput } from "@/shared/ui/hh-mm-input";
 import { Input } from "@/shared/ui/input";
-import { useActionToast } from "@/shared/ui/toast";
+import { toast, useActionToast } from "@/shared/ui/toast";
 import { cn } from "@/shared/lib/cn";
 import { useActionSuccess } from "@/shared/ui/unsaved/use-action-success";
 import { useFormGuard } from "@/shared/ui/unsaved/use-form-guard";
 import { useUnsavedChanges } from "@/shared/ui/unsaved/unsaved-changes-provider";
 
-type DeptRow = {
-  roleLabel: string;
-  personName: string;
-  phone: string;
-  callTime: string;
-};
-
-type TransportRow = {
-  name: string;
-  callTime: string;
-  notes: string;
-  kmRate: string;
-};
-
 type SlotRow = {
+  unit: CallSheetUnit;
+  isContinuation: boolean;
+  customLabel: string | null;
   startTime: string;
   endTime: string;
   slotType: TimeSlotType;
   sceneId: string;
   notes: string;
+};
+
+const actorTransportLabels: Record<ActorTransportMode, string> = {
+  CAR: "Машина",
+  SELF: "Сам",
+  CUSTOM: "Свой текст",
 };
 
 function ActionMessage({ state }: { state: CallSheetActionState }) {
@@ -71,13 +78,14 @@ function JsonRowsForm({
   rowsJson: string;
   label: string;
 }) {
-  const [state, formAction, pending] = useActionState(action, {});
+  const [state, formAction, pending] = useActionState(useRevisionAction(action), {});
   // Строки таблицы лежат в скрытом поле этой формы — по нему видно несохранённое.
   const { ref: formRef, markClean: markFormClean } = useFormGuard();
   useActionSuccess(state, markFormClean);
   return (
     <form ref={formRef} action={formAction} className="space-y-2">
       <input type="hidden" name="rows" value={rowsJson} />
+      <RevisionField />
       <ActionMessage state={state} />
       <Button type="submit" variant="secondary" disabled={pending}>
         {pending ? "Сохранение…" : label}
@@ -96,6 +104,7 @@ export function CallSheetEditor({
   perShiftCatalog = [],
   timingBaselines = {},
   resourceTimingBaselines = {},
+  transportEditor,
 }: {
   projectId: string;
   dayId: string;
@@ -113,6 +122,8 @@ export function CallSheetEditor({
   perShiftCatalog?: PerShiftCatalogOption[];
   timingBaselines?: ActorTimingBaselines;
   resourceTimingBaselines?: ResourceTimingBaselines;
+  /** Спецтранспорт дня (сохранение по id, статья сметы). null — нет права. */
+  transportEditor: CallSheetTransportEditorData | null;
 }) {
   const router = useRouter();
   const [addPending, startAddTransition] = useTransition();
@@ -129,26 +140,13 @@ export function CallSheetEditor({
     crewMeetTime: day.crewMeetTime ?? "",
   });
 
-  const [depts, setDepts] = useState<DeptRow[]>(
-    day.departmentCalls.map((d) => ({
-      roleLabel: d.roleLabel,
-      personName: d.personName ?? "",
-      phone: d.phone ?? "",
-      callTime: d.callTime ?? "",
-    })),
-  );
-
-  const [transports, setTransports] = useState<TransportRow[]>(
-    day.transports.map((t) => ({
-      name: t.name,
-      callTime: t.callTime ?? "",
-      notes: t.notes ?? "",
-      kmRate: t.kmRate != null ? String(t.kmRate) : "",
-    })),
-  );
-
   const [slots, setSlots] = useState<SlotRow[]>(
     day.timeSlots.map((s) => ({
+      // Поля плана вызывного (юнит, продолжение, свой текст) этот список не правит,
+      // но сохраняет как есть — иначе «удалить и создать» их бы стёрло.
+      unit: s.unit,
+      isContinuation: s.isContinuation,
+      customLabel: s.customLabel,
       startTime: s.startTime,
       endTime: s.endTime ?? "",
       slotType: s.slotType,
@@ -160,16 +158,22 @@ export function CallSheetEditor({
   const [actorTimings, setActorTimings] = useState(
     cast
       .filter((c) => c.actorId)
-      .map((c) => ({
-        actorId: c.actorId!,
-        label: `${c.characterName} · ${c.actorName ?? "—"}`,
-        pickupTime: c.pickup ?? "",
-        arrivalTime: c.arrival ?? "",
-        makeupTime: c.makeup ?? "",
-        costumeTime: c.costume ?? "",
-        readyTime: c.ready ?? "",
-        wrapTime: c.wrap ?? "",
-      })),
+      .map((c) => {
+        const call = day.actorCalls.find((a) => a.actorId === c.actorId);
+        return {
+          actorId: c.actorId!,
+          label: `${c.characterName} · ${c.actorName ?? "—"}`,
+          pickupTime: c.pickup ?? "",
+          arrivalTime: c.arrival ?? "",
+          makeupTime: c.makeup ?? "",
+          costumeTime: c.costume ?? "",
+          readyTime: c.ready ?? "",
+          wrapTime: c.wrap ?? "",
+          transportMode: (call?.transportMode ?? "") as ActorTransportMode | "",
+          transportText: call?.transportText ?? "",
+          carPickupTime: call?.carPickupTime ?? "",
+        };
+      }),
   );
 
   const allResources = [
@@ -208,15 +212,14 @@ export function CallSheetEditor({
   const availableToAdd = perShiftCatalog.filter((item) => !item.added);
 
   const headerAction = updateCallSheetHeaderAction.bind(null, projectId, dayId);
-  const deptAction = saveDepartmentCallsAction.bind(null, projectId, dayId);
-  const transportAction = saveTransportsAction.bind(null, projectId, dayId);
   const slotAction = saveTimeSlotsAction.bind(null, projectId, dayId);
   const actorAction = saveActorCallsAction.bind(null, projectId, dayId);
   const resourceAction = saveResourceCallsAction.bind(null, projectId, dayId);
   const perShiftAction = saveResourceUsagesAction.bind(null, projectId, dayId);
 
+  const { revision, track } = useCallSheetRevision();
   const [headerState, headerFormAction, headerPending] = useActionState(
-    headerAction,
+    useRevisionAction(headerAction),
     {},
   );
   const { ref: headerFormRef, markClean: markHeaderClean } = useFormGuard(open);
@@ -245,17 +248,19 @@ export function CallSheetEditor({
   }
 
   return (
-    <section className="rounded-2xl border border-[var(--accent)]/30 bg-[var(--panel-solid)] p-5 print:hidden">
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <h3 className="font-semibold">Редактирование вызывного</h3>
+    <SheetBlock
+      title="Редактирование вызывного"
+      className="w-full"
+      actions={
         <Button type="button" variant="ghost" onClick={closeEditor}>
           Закрыть
         </Button>
-      </div>
-
+      }
+    >
       <div className="space-y-8">
         <form ref={headerFormRef} action={headerFormAction} className="space-y-3">
-          <h4 className="text-sm font-semibold text-[var(--muted-fg)]">Шапка дня</h4>
+          <RevisionField />
+          <h4 className="sheet-subhead">Шапка дня</h4>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <label className="space-y-1 text-xs">
               <span className="text-[var(--muted-fg)]">№ смены</span>
@@ -360,156 +365,15 @@ export function CallSheetEditor({
           </Button>
         </form>
 
-        <div className="space-y-3">
-          <h4 className="text-sm font-semibold text-[var(--muted-fg)]">Контакты по цехам</h4>
-          {depts.map((row, i) => (
-            <div key={i} className="grid gap-2 sm:grid-cols-5">
-              <Input
-                value={row.roleLabel}
-                onChange={(e) =>
-                  setDepts((p) =>
-                    p.map((r, j) => (j === i ? { ...r, roleLabel: e.target.value } : r)),
-                  )
-                }
-                placeholder="Цех / роль"
-              />
-              <Input
-                value={row.personName}
-                onChange={(e) =>
-                  setDepts((p) =>
-                    p.map((r, j) => (j === i ? { ...r, personName: e.target.value } : r)),
-                  )
-                }
-                placeholder="ФИО"
-              />
-              <Input
-                value={row.phone}
-                onChange={(e) =>
-                  setDepts((p) =>
-                    p.map((r, j) => (j === i ? { ...r, phone: e.target.value } : r)),
-                  )
-                }
-                placeholder="Телефон"
-              />
-              <HhMmInput
-                value={row.callTime}
-                onChange={(callTime) =>
-                  setDepts((p) =>
-                    p.map((r, j) => (j === i ? { ...r, callTime } : r)),
-                  )
-                }
-                placeholder="07:00"
-              />
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => setDepts((p) => p.filter((_, j) => j !== i))}
-              >
-                ✕
-              </Button>
-            </div>
-          ))}
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() =>
-              setDepts((p) => [...p, { roleLabel: "", personName: "", phone: "", callTime: "" }])
-            }
-          >
-            + Строка
-          </Button>
-          <JsonRowsForm
-            action={deptAction}
-            rowsJson={JSON.stringify(depts.filter((r) => r.roleLabel.trim()))}
-            label="Сохранить контакты"
-          />
-        </div>
+        {transportEditor ? (
+          <div className="space-y-3">
+            <h4 className="sheet-subhead">Спецтранспорт</h4>
+            <CallSheetTransportEditor projectId={projectId} dayId={dayId} data={transportEditor} />
+          </div>
+        ) : null}
 
         <div className="space-y-3">
-          <h4 className="text-sm font-semibold text-[var(--muted-fg)]">Спецтранспорт</h4>
-          {transports.map((row, i) => (
-            <div key={i} className="grid gap-2 sm:grid-cols-5">
-              <Input
-                value={row.name}
-                onChange={(e) =>
-                  setTransports((p) =>
-                    p.map((r, j) => (j === i ? { ...r, name: e.target.value } : r)),
-                  )
-                }
-                placeholder="Техника"
-              />
-              <HhMmInput
-                value={row.callTime}
-                onChange={(callTime) =>
-                  setTransports((p) =>
-                    p.map((r, j) => (j === i ? { ...r, callTime } : r)),
-                  )
-                }
-                placeholder="07:00"
-              />
-              <Input
-                type="number"
-                min={0}
-                step="0.01"
-                value={row.kmRate}
-                onChange={(e) =>
-                  setTransports((p) =>
-                    p.map((r, j) =>
-                      j === i ? { ...r, kmRate: e.target.value } : r,
-                    ),
-                  )
-                }
-                placeholder="₽/км"
-                title="Ставка за километр"
-              />
-              <Input
-                value={row.notes}
-                onChange={(e) =>
-                  setTransports((p) =>
-                    p.map((r, j) => (j === i ? { ...r, notes: e.target.value } : r)),
-                  )
-                }
-                placeholder="Примечание"
-              />
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => setTransports((p) => p.filter((_, j) => j !== i))}
-              >
-                ✕
-              </Button>
-            </div>
-          ))}
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() =>
-              setTransports((p) => [
-                ...p,
-                { name: "", callTime: "", notes: "", kmRate: "" },
-              ])
-            }
-          >
-            + Техника
-          </Button>
-          <JsonRowsForm
-            action={transportAction}
-            rowsJson={JSON.stringify(
-              transports
-                .filter((r) => r.name.trim())
-                .map((r) => ({
-                  name: r.name,
-                  callTime: r.callTime,
-                  notes: r.notes,
-                  kmRate: r.kmRate.trim() === "" ? null : Number(r.kmRate),
-                })),
-            )}
-            label="Сохранить спецтранспорт"
-          />
-        </div>
-
-        <div className="space-y-3">
-          <h4 className="text-sm font-semibold text-[var(--muted-fg)]">Расписание по слотам</h4>
+          <h4 className="sheet-subhead">Расписание по слотам</h4>
           {slots.map((row, i) => (
             <div key={i} className="grid gap-2 lg:grid-cols-6">
               <HhMmInput
@@ -557,7 +421,7 @@ export function CallSheetEditor({
                 }
               >
                 <option value="">— сцена —</option>
-                {day.scenes.map((s) => (
+                {activeDayScenes(day.scenes).map((s) => (
                   <option key={s.scene.id} value={s.scene.id}>
                     {s.scene.number}
                     {s.scene.postfix} · {s.scene.locations[0]?.location.name ?? ""}
@@ -580,6 +444,9 @@ export function CallSheetEditor({
               setSlots((p) => [
                 ...p,
                 {
+                  unit: CallSheetUnit.MAIN,
+                  isContinuation: false,
+                  customLabel: null,
                   startTime: "",
                   endTime: "",
                   slotType: TimeSlotType.SHOOTING,
@@ -607,7 +474,7 @@ export function CallSheetEditor({
 
         {actorTimings.length > 0 ? (
           <div className="space-y-3">
-            <h4 className="text-sm font-semibold text-[var(--muted-fg)]">Тайминги актёров</h4>
+            <h4 className="sheet-subhead">Тайминги актёров</h4>
             {actorTimings.map((row, i) => {
               const baseline = timingBaselines[row.actorId];
               return (
@@ -658,21 +525,100 @@ export function CallSheetEditor({
                     );
                   })}
                 </div>
+                <div className="mt-2 grid gap-2 sm:grid-cols-[12rem_1fr]">
+                  <label className="space-y-1 text-xs">
+                    <span className="text-[var(--muted-fg)]">Транспорт</span>
+                    <select
+                      value={row.transportMode}
+                      onChange={(e) =>
+                        setActorTimings((p) =>
+                          p.map((r, j) =>
+                            j === i
+                              ? {
+                                  ...r,
+                                  transportMode: e.target.value as ActorTransportMode | "",
+                                  // Подача машины — только у «машина»: при смене режима стирается.
+                                  carPickupTime:
+                                    e.target.value === ActorTransportMode.CAR ? r.carPickupTime : "",
+                                }
+                              : r,
+                          ),
+                        )
+                      }
+                      className="w-full rounded-lg border border-[var(--border)] bg-[var(--panel-solid)] px-2 py-1.5 text-sm"
+                    >
+                      <option value="">—</option>
+                      {(Object.keys(actorTransportLabels) as ActorTransportMode[]).map((mode) => (
+                        <option key={mode} value={mode}>
+                          {actorTransportLabels[mode]}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  {row.transportMode === ActorTransportMode.CAR ? (
+                    <label className="space-y-1 text-xs">
+                      <span className="text-[var(--muted-fg)]">Подача машины</span>
+                      <HhMmInput
+                        value={row.carPickupTime}
+                        onChange={(v) =>
+                          setActorTimings((p) =>
+                            p.map((r, j) => (j === i ? { ...r, carPickupTime: v } : r)),
+                          )
+                        }
+                        placeholder="00:00"
+                        className="max-w-[8rem]"
+                      />
+                    </label>
+                  ) : null}
+                  {row.transportMode === ActorTransportMode.CUSTOM ? (
+                    <label className="space-y-1 text-xs">
+                      <span className="text-[var(--muted-fg)]">Свой текст</span>
+                      <Input
+                        value={row.transportText}
+                        maxLength={200}
+                        onChange={(e) =>
+                          setActorTimings((p) =>
+                            p.map((r, j) =>
+                              j === i ? { ...r, transportText: e.target.value } : r,
+                            ),
+                          )
+                        }
+                        placeholder="Например: такси за счёт группы"
+                      />
+                    </label>
+                  ) : null}
+                </div>
               </div>
               );
             })}
             <JsonRowsForm
               action={actorAction}
               rowsJson={JSON.stringify(
-                actorTimings.map(({ actorId, pickupTime, arrivalTime, makeupTime, costumeTime, readyTime, wrapTime }) => ({
-                  actorId,
-                  pickupTime,
-                  arrivalTime,
-                  makeupTime,
-                  costumeTime,
-                  readyTime,
-                  wrapTime,
-                })),
+                actorTimings.map(
+                  ({
+                    actorId,
+                    pickupTime,
+                    arrivalTime,
+                    makeupTime,
+                    costumeTime,
+                    readyTime,
+                    wrapTime,
+                    transportMode,
+                    transportText,
+                    carPickupTime,
+                  }) => ({
+                    actorId,
+                    pickupTime,
+                    arrivalTime,
+                    makeupTime,
+                    costumeTime,
+                    readyTime,
+                    wrapTime,
+                    transportMode,
+                    transportText,
+                    carPickupTime,
+                  }),
+                ),
               )}
               label="Сохранить тайминги актёров"
             />
@@ -681,7 +627,7 @@ export function CallSheetEditor({
 
         {resourceTimings.length > 0 ? (
           <div className="space-y-3">
-            <h4 className="text-sm font-semibold text-[var(--muted-fg)]">
+            <h4 className="sheet-subhead">
               Тайминги ресурсов (массовка, трюки, реквизит…)
             </h4>
             {resourceTimings.map((row, i) => {
@@ -751,7 +697,7 @@ export function CallSheetEditor({
         ) : null}
 
         <div className="space-y-3">
-          <h4 className="text-sm font-semibold text-[var(--muted-fg)]">
+          <h4 className="sheet-subhead">
             Посменные ресурсы
           </h4>
           {availableToAdd.length > 0 ? (
@@ -778,7 +724,13 @@ export function CallSheetEditor({
                 onClick={() => {
                   if (!selectedToAdd) return;
                   startAddTransition(async () => {
-                    await addPerShiftResourceAction(projectId, dayId, selectedToAdd);
+                    const result = track(
+                      await addPerShiftResourceAction(projectId, dayId, selectedToAdd, revision),
+                    );
+                    if (result.error) {
+                      toast.error(result.error);
+                      return;
+                    }
                     setSelectedToAdd("");
                     router.refresh();
                   });
@@ -811,7 +763,18 @@ export function CallSheetEditor({
                     disabled={addPending}
                     onClick={() => {
                       startAddTransition(async () => {
-                        await removePerShiftResourceAction(projectId, dayId, row.itemId);
+                        const result = track(
+                          await removePerShiftResourceAction(
+                            projectId,
+                            dayId,
+                            row.itemId,
+                            revision,
+                          ),
+                        );
+                        if (result.error) {
+                          toast.error(result.error);
+                          return;
+                        }
                         router.refresh();
                       });
                     }}
@@ -870,6 +833,6 @@ export function CallSheetEditor({
           )}
         </div>
       </div>
-    </section>
+    </SheetBlock>
   );
 }

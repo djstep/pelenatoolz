@@ -16,6 +16,13 @@ export const LOCATION_FIELDS = {
     "requirementNotes",
     "scoutSnapshot",
     "sourceScoutCandidateId",
+    // Схема объекта для вызывного (волна 3): координаты, тексты, точки.
+    "latitude",
+    "longitude",
+    "directions",
+    "parking",
+    "onSiteNotes",
+    "points",
     "createdAt",
     "updatedAt",
     "scenes",
@@ -48,9 +55,32 @@ const SCENE_LOCATION_KEYS = [
   "notes",
   "requirementNotes",
   "sourceScoutCandidateId",
+  // Восход и закат в вызывном — по координатам объекта сцены (волна 3).
+  "latitude",
+  "longitude",
   "createdAt",
   "updatedAt",
 ] as const satisfies readonly (typeof LOCATION_FIELDS.open)[number][];
+
+/**
+ * Объект схемы в вызывном (волна 3): адрес, координаты, «как добраться», «парковка»,
+ * «на месте». Только открытые поля; точки схемы выбираются отдельно.
+ */
+const CALL_SHEET_SCHEME_LOCATION_KEYS = [
+  "id",
+  "name",
+  "sublocation",
+  "latitude",
+  "longitude",
+  "address",
+  "directions",
+  "parking",
+  "onSiteNotes",
+] as const satisfies readonly (typeof LOCATION_FIELDS.open)[number][];
+
+export const CALL_SHEET_SCHEME_LOCATION_SELECT = Object.fromEntries(
+  CALL_SHEET_SCHEME_LOCATION_KEYS.map((key) => [key, true]),
+) as { readonly [K in (typeof CALL_SHEET_SCHEME_LOCATION_KEYS)[number]]: true };
 
 /**
  * Объект в выборках сцен (либретто, сценарий, КПП, вызывной) — вместо `location: true`.

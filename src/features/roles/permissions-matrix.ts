@@ -2,6 +2,7 @@ export const PERMISSION_SECTIONS = [
   { id: "scenes", label: "Сцены (либретто)" },
   { id: "script_import", label: "Импорт сценария" },
   { id: "schedule", label: "КПП и вызывные" },
+  { id: "callsheet_approve", label: "Вызывные — утверждение" },
   { id: "post_edit_timing", label: "Хронометраж монтажа" },
   { id: "actors", label: "Актёры" },
   { id: "characters", label: "Персонажи" },
@@ -62,6 +63,8 @@ const RESTRICTED_SECTION_FLAGS: Partial<
   Record<PermissionSectionId, readonly (keyof SectionPermissions)[]>
 > = {
   smeta_all: ["access", "read"],
+  // Утвердить вызывной — одно право, без просмотра и правки (их даёт «КПП и вызывные»).
+  callsheet_approve: ["access"],
 };
 
 export function isSectionFlagAllowed(
@@ -162,6 +165,8 @@ export function buildViewerMatrix(): PermissionMatrix {
   for (const section of PERMISSION_SECTIONS) {
     // «Сметы — просмотр всех» наблюдателю не выдаётся: сметы цехов видят продюсер и главы.
     if (section.id === "smeta_all") continue;
+    // Наблюдатель вызывные не утверждает.
+    if (section.id === "callsheet_approve") continue;
     matrix[section.id] = {
       ...emptySectionPermissions(),
       access: true,
@@ -234,6 +239,7 @@ export function can(
   matrix: PermissionMatrix,
   section: PermissionSectionId,
   action:
+    | "access"
     | "read"
     | "write"
     | "manage"
@@ -244,6 +250,9 @@ export function can(
   const s = matrix[section];
   if (!s?.access) return false;
   switch (action) {
+    // Раздел-флаг без колонок (см. RESTRICTED_SECTION_FLAGS): достаточно «Доступа».
+    case "access":
+      return true;
     case "read":
       return s.read;
     case "write":

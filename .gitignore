@@ -45,3 +45,6 @@ next-env.d.ts
 /src/generated/prisma
 
 .vercel
+
+# превью печатных листов (npm run preview:callsheet)
+/preview/

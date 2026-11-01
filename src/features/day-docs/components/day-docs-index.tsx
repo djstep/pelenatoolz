@@ -1,4 +1,8 @@
 import Link from "next/link";
+import { CallSheetStatusBadge } from "@/features/call-sheets/components/call-sheet-status-badge";
+import { AWAITING_APPROVAL_FILTER } from "@/features/call-sheets/lib/awaiting-approval";
+import type { CallSheetStatusValue } from "@/features/call-sheets/lib/revision";
+import { cn } from "@/shared/lib/cn";
 import {
   shootDayStatusLabels,
   shootDayTypeLabels,
@@ -17,6 +21,8 @@ type DayBrief = {
   wrapTime: string | null;
   isNightShift: boolean;
   _count: { scenes: number };
+  /** Вызывной дня: статус и версия; null — ещё не создан. */
+  callSheet?: { status: CallSheetStatusValue; version: number } | null;
 };
 
 export function DayDocsIndex({
@@ -24,11 +30,14 @@ export function DayDocsIndex({
   projectId,
   days,
   kind,
+  awaitingApproval,
 }: {
   locale: string;
   projectId: string;
   days: DayBrief[];
   kind: "call-sheets" | "reports";
+  /** Только у права «Вызывные — утверждение»: «Ждут утверждения: N» и включён ли фильтр. */
+  awaitingApproval?: { count: number; active: boolean };
 }) {
   const title =
     kind === "call-sheets" ? "Вызывные листы" : "Производственные отчёты";
@@ -53,9 +62,33 @@ export function DayDocsIndex({
         </Link>
       </div>
 
+      {awaitingApproval ? (
+        <div className="flex flex-wrap items-center gap-3 text-sm">
+          <Link
+            href={awaitingApproval.active ? base : `${base}?filter=${AWAITING_APPROVAL_FILTER}`}
+            aria-pressed={awaitingApproval.active}
+            className={cn(
+              "rounded-lg border px-3 py-1.5 transition-colors",
+              awaitingApproval.active
+                ? "border-[#eab308]/60 bg-[#eab308]/15 font-medium"
+                : "border-[var(--border)] hover:border-[#eab308]/60",
+            )}
+          >
+            Ждут утверждения: {awaitingApproval.count}
+          </Link>
+          {awaitingApproval.active ? (
+            <Link href={base} className="text-[var(--muted-fg)] hover:text-[rgb(var(--tint-rgb))]">
+              Показать все
+            </Link>
+          ) : null}
+        </div>
+      ) : null}
+
       {days.length === 0 ? (
         <p className="text-sm text-[var(--muted-fg)]">
-          Съёмочных дней пока нет. Создайте их в КПП.
+          {awaitingApproval?.active
+            ? "Вызывных на согласовании нет."
+            : "Съёмочных дней пока нет. Создайте их в КПП."}
         </p>
       ) : (
         <div className="overflow-x-auto rounded-2xl border border-[var(--border)] bg-[var(--panel-solid)]">
@@ -67,6 +100,12 @@ export function DayDocsIndex({
                 <th className="px-4 py-3">Тип</th>
                 <th className="px-4 py-3">Сцены</th>
                 <th className="px-4 py-3">Сбор / конец</th>
+                {kind === "call-sheets" ? (
+                  <>
+                    <th className="px-4 py-3">Статус</th>
+                    <th className="px-4 py-3">Версия</th>
+                  </>
+                ) : null}
                 <th className="px-4 py-3" />
               </tr>
             </thead>
@@ -89,6 +128,20 @@ export function DayDocsIndex({
                     {[day.callTime, day.wrapTime].filter(Boolean).join(" – ") ||
                       "—"}
                   </td>
+                  {kind === "call-sheets" ? (
+                    <>
+                      <td className="px-4 py-3">
+                        {day.callSheet ? (
+                          <CallSheetStatusBadge status={day.callSheet.status} />
+                        ) : (
+                          <span className="text-[var(--muted-fg)]">не создан</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 tabular-nums">
+                        {day.callSheet ? day.callSheet.version : "—"}
+                      </td>
+                    </>
+                  ) : null}
                   <td className="px-4 py-3 text-right">
                     <Link href={`${base}/${day.id}`}>
                       <Button type="button" variant="secondary">

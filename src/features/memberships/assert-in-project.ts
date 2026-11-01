@@ -27,6 +27,7 @@ export type AssertInProjectEntity =
   | "Department"
   | "BudgetItem"
   | "ShootDay"
+  | "CallSheetSection"
   /** Только активный участник (не приглашённый и не удалённый). */
   | "ProjectMembership";
 
@@ -65,6 +66,7 @@ type ProjectDb = Pick<
   | "department"
   | "budgetItem"
   | "shootDay"
+  | "callSheetSection"
   | "projectMembership"
 >;
 
@@ -209,6 +211,10 @@ async function countInProject(
       });
     case "ShootDay":
       return db.shootDay.count({
+        where: { id: { in: ids }, projectId },
+      });
+    case "CallSheetSection":
+      return db.callSheetSection.count({
         where: { id: { in: ids }, projectId },
       });
     case "ProjectMembership":

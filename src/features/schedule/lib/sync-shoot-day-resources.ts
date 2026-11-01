@@ -1,8 +1,14 @@
 import { prisma } from "@/shared/db/prisma";
 
+/** База или её подмена в тесте: только то, что нужно синхронизации. */
+export type SyncResourcesDb = Pick<
+  typeof prisma,
+  "shootDay" | "shootDayScene" | "shootDayResourceUsage"
+>;
+
 /** Синхронизирует посценные ресурсы из сцен дня (каталог §9). */
-async function syncSceneResourceUsages(shootDayId: string) {
-  const day = await prisma.shootDay.findUnique({
+async function syncSceneResourceUsages(db: SyncResourcesDb, shootDayId: string) {
+  const day = await db.shootDay.findUnique({
     where: { id: shootDayId },
     include: {
       scenes: {
@@ -26,7 +32,7 @@ async function syncSceneResourceUsages(shootDayId: string) {
   }
 
   if (desired.size === 0) {
-    await prisma.shootDayResourceUsage.deleteMany({
+    await db.shootDayResourceUsage.deleteMany({
       where: {
         shootDayId,
         item: { category: { fillInScenes: true, perShift: false } },
@@ -35,7 +41,7 @@ async function syncSceneResourceUsages(shootDayId: string) {
     return;
   }
 
-  await prisma.shootDayResourceUsage.deleteMany({
+  await db.shootDayResourceUsage.deleteMany({
     where: {
       shootDayId,
       itemId: { notIn: [...desired] },
@@ -44,7 +50,7 @@ async function syncSceneResourceUsages(shootDayId: string) {
   });
 
   for (const itemId of desired) {
-    await prisma.shootDayResourceUsage.upsert({
+    await db.shootDayResourceUsage.upsert({
       where: { shootDayId_itemId: { shootDayId, itemId } },
       create: { shootDayId, itemId, isUsed: true },
       update: {},
@@ -52,34 +58,41 @@ async function syncSceneResourceUsages(shootDayId: string) {
   }
 }
 
-/** Синхронизирует посменные ресурсы: только удаляет устаревшие записи (без автодобавления). */
-async function prunePerShiftResourceUsages(shootDayId: string) {
-  await prisma.shootDayResourceUsage.deleteMany({
+/**
+ * Убирает устаревшие записи (без автодобавления): категория ресурса теперь ни «из сцен»,
+ * ни «на смену». Посценные записи (их только что поставил syncSceneResourceUsages) и
+ * посменные, добавленные руками, не трогает.
+ */
+async function prunePerShiftResourceUsages(db: SyncResourcesDb, shootDayId: string) {
+  await db.shootDayResourceUsage.deleteMany({
     where: {
       shootDayId,
-      item: { category: { perShift: false } },
+      item: { category: { fillInScenes: false, perShift: false } },
     },
   });
 }
 
 /** Синхронизирует все ресурсы смены: посценные + посменные. */
-export async function syncShootDayResourceUsages(shootDayId: string) {
-  const day = await prisma.shootDay.findUnique({
+export async function syncShootDayResourceUsages(
+  shootDayId: string,
+  db: SyncResourcesDb = prisma,
+) {
+  const day = await db.shootDay.findUnique({
     where: { id: shootDayId },
     select: { projectId: true },
   });
   if (!day) return;
 
-  await syncSceneResourceUsages(shootDayId);
-  await prunePerShiftResourceUsages(shootDayId);
+  await syncSceneResourceUsages(db, shootDayId);
+  await prunePerShiftResourceUsages(db, shootDayId);
 }
 
-export async function syncShootDaysForScene(sceneId: string) {
-  const links = await prisma.shootDayScene.findMany({
+export async function syncShootDaysForScene(sceneId: string, db: SyncResourcesDb = prisma) {
+  const links = await db.shootDayScene.findMany({
     where: { sceneId },
     select: { shootDayId: true },
   });
   for (const link of links) {
-    await syncShootDayResourceUsages(link.shootDayId);
+    await syncShootDayResourceUsages(link.shootDayId, db);
   }
 }

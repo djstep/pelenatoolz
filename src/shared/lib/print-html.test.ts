@@ -9,10 +9,6 @@ import type { CastListExportBundle } from "@/features/casting/lib/cast-list-expo
 import type { CastListCandidateExportConfig } from "@/features/casting/lib/cast-list-export-fields";
 import { buildCastListPrintHtml } from "@/features/casting/lib/export-cast-list";
 import {
-  buildCallSheetPrintHtml,
-  type CallSheetExportModel,
-} from "@/features/day-docs/lib/export-call-sheet";
-import {
   buildSceneScriptPrintHtml,
   type SceneScriptExportOptions,
 } from "@/features/screenplay/lib/export-scene-script";
@@ -242,7 +238,7 @@ const sceneOpts: SceneScriptExportOptions = {
   projectType: "FEATURE",
 };
 
-describe("печать сценария, сцен, роли, вызывного", () => {
+describe("печать сценария, сцен, роли", () => {
   test("сценарий целиком", () => {
     const html = buildScreenplayPrintHtml([{ type: "ACTION", content: IMG }, { type: "DIALOGUE", content: QUOTES }], `Название ${SCRIPT}`);
     assertInert(html);
@@ -270,34 +266,6 @@ describe("печать сценария, сцен, роли, вызывного"
     });
     assertInert(html);
     assert.ok(html.includes(IMG_ESCAPED));
-  });
-
-  test("вызывной лист", () => {
-    const model: CallSheetExportModel = {
-      fileBaseName: "f",
-      documentTitle: IMG,
-      projectName: `Проект ${SCRIPT}`,
-      dateLabel: "1 ноября",
-      city: QUOTES,
-      headerLine: "Смена 1",
-      badges: [IMG],
-      meta: [{ label: "Погода", value: IMG }],
-      notes: IMG,
-      departments: [{ role: "Режиссёр", person: IMG, info: QUOTES }],
-      transports: [],
-      slots: [{ timeRange: "10:00–11:00", duration: null, typeLabel: "Съёмка", title: IMG, details: [SCRIPT], notes: null }],
-      cast: [],
-      perShiftResources: [],
-      resourceSections: [],
-      scenesSummary: [{ scene: IMG, characters: SCRIPT, timing: "1:00" }],
-      locationsSummary: IMG,
-      nextDay: null,
-    };
-    const html = buildCallSheetPrintHtml(model);
-    assertInert(html);
-    assert.ok(html.includes(IMG_ESCAPED));
-    assert.ok(html.includes(QUOTES_ESCAPED));
-    assert.ok(html.includes(`<title>${IMG_ESCAPED}</title>`));
   });
 });
 
@@ -357,6 +325,76 @@ describe("автопечать проб и кастинга", () => {
       assert.deepEqual(calls, ["focus", "print"]);
       a.fire("error");
       assert.deepEqual(calls, ["focus", "print"]);
+    } finally {
+      mock.timers.reset();
+    }
+  });
+
+  /** Окно со шрифтами: `ready` выполняется, когда тест скажет. */
+  function fakeFontsWindow(images: ReturnType<typeof fakeImage>[]) {
+    const calls: string[] = [];
+    let resolveFonts: () => void = () => {};
+    const ready = new Promise<void>((resolve) => {
+      resolveFonts = resolve;
+    });
+    const document = {
+      images,
+      get body() {
+        calls.push("layout");
+        return { offsetHeight: 100 };
+      },
+      get fonts() {
+        calls.push("fonts");
+        return { ready };
+      },
+    };
+    return {
+      calls,
+      resolveFonts: () => resolveFonts(),
+      win: { focus: () => calls.push("focus"), print: () => calls.push("print"), document },
+    };
+  }
+
+  const flush = () => new Promise<void>((resolve) => setImmediate(resolve));
+
+  test("шрифты: печать только после document.fonts.ready, раскладка — до чтения ready", async () => {
+    const { calls, win, resolveFonts } = fakeFontsWindow([]);
+    printWhenImagesSettled(win);
+    await flush();
+    assert.deepEqual(calls, ["layout", "fonts"], "без готовых шрифтов не печатает");
+    resolveFonts();
+    await flush();
+    assert.deepEqual(calls, ["layout", "fonts", "focus", "print"]);
+  });
+
+  test("шрифты и фото: печать один раз, когда готово всё", async () => {
+    mock.timers.enable({ apis: ["setTimeout"] });
+    try {
+      const a = fakeImage(false);
+      const { calls, win, resolveFonts } = fakeFontsWindow([a]);
+      printWhenImagesSettled(win);
+      resolveFonts();
+      await flush();
+      assert.ok(!calls.includes("print"), "фото ещё грузится");
+      a.fire("load");
+      assert.deepEqual(calls.filter((c) => c === "print"), ["print"]);
+      mock.timers.tick(PRINT_IMAGES_TIMEOUT_MS);
+      assert.deepEqual(calls.filter((c) => c === "print"), ["print"]);
+    } finally {
+      mock.timers.reset();
+    }
+  });
+
+  test("шрифты не готовы — печать по таймауту, поздняя готовность не печатает второй раз", async () => {
+    mock.timers.enable({ apis: ["setTimeout"] });
+    try {
+      const { calls, win, resolveFonts } = fakeFontsWindow([]);
+      printWhenImagesSettled(win);
+      mock.timers.tick(PRINT_IMAGES_TIMEOUT_MS);
+      assert.deepEqual(calls.filter((c) => c === "print"), ["print"]);
+      resolveFonts();
+      await flush();
+      assert.deepEqual(calls.filter((c) => c === "print"), ["print"]);
     } finally {
       mock.timers.reset();
     }

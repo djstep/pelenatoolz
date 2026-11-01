@@ -7,6 +7,10 @@ import {
 } from "@/features/accruals/lib/counterparty-hint";
 import { sumExtrasPay } from "@/features/payroll/lib/parse-extra-payments";
 import {
+  budgetItemOnCreate,
+  budgetItemOnUpdate,
+} from "@/features/reports/lib/accrual-budget-item";
+import {
   computeWorkPay,
   overtimeRatesFromJson,
 } from "@/features/reports/lib/compute-work-pay";
@@ -18,8 +22,9 @@ import { dec } from "@/shared/db/serialize-decimal";
 /**
  * Начисления из отчёта смены: по строке отчёта — отдельное начисление на смену, переработку,
  * доплаты и км. Статья — по умолчанию у актёра / ресурса / объекта (переработка и км — свои,
- * если заданы). Строку обнулили или удалили — начисление не удаляется: сумма 0 и пометка
- * «обнулено в отчёте».
+ * если заданы); у спецтранспорта — статья строки отчёта, только при создании начисления
+ * (см. `accrual-budget-item.ts`). Строку обнулили или удалили — начисление не удаляется:
+ * сумма 0 и пометка «обнулено в отчёте».
  */
 
 const PARTS = [
@@ -130,18 +135,6 @@ function partsOf(row: WorkRowWithSources): Map<AccrualReportPart, PartAmounts> {
   return parts;
 }
 
-/** Статья для части оплаты: переработка и км — свои, если заданы, иначе основная. */
-function budgetItemFor(row: WorkRowWithSources, part: AccrualReportPart): string | null {
-  const source = row.actor ?? row.item ?? row.location;
-  if (!source) return null;
-  const main = source.defaultBudgetItemId;
-  if (part === AccrualReportPart.OVERTIME) return source.overtimeBudgetItemId ?? main;
-  if (part === AccrualReportPart.MILEAGE) {
-    return (row.item ? row.item.mileageBudgetItemId : null) ?? main;
-  }
-  return main;
-}
-
 function entityOf(row: WorkRowWithSources) {
   return {
     actorId: row.actorId,
@@ -227,13 +220,12 @@ export async function syncReportAccruals(
         continue;
       }
 
-      const budgetItemId = budgetItemFor(row, part);
       if (!accrual) {
         if (write) {
           await prisma.accrual.create({
             data: {
               projectId,
-              budgetItemId,
+              budgetItemId: budgetItemOnCreate(row, part),
               counterpartyId: await counterpartyFor(row),
               ...sums,
               date: day.date,
@@ -262,8 +254,9 @@ export async function syncReportAccruals(
       if (accrual.date.getTime() !== day.date.getTime()) data.date = day.date;
       if (accrual.shootDayId !== day.id) data.shootDayId = day.id;
       if (accrual.reportZeroedAt) data.reportZeroedAt = null;
+      const budgetItemId = budgetItemOnUpdate(accrual, row, part);
+      if (budgetItemId !== undefined) data.budgetItemId = budgetItemId;
       if (!accrual.editedManually) {
-        if (accrual.budgetItemId !== budgetItemId) data.budgetItemId = budgetItemId;
         if (!accrual.counterpartyId) {
           const counterpartyId = await counterpartyFor(row);
           if (counterpartyId) data.counterpartyId = counterpartyId;

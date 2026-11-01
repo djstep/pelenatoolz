@@ -1,11 +1,11 @@
 import Link from "next/link";
-import { CallSheetDocument } from "@/features/day-docs/components/call-sheet-document";
+import { CallSheetPreview } from "@/features/call-sheets/components/call-sheet-preview";
+import { SheetBlock } from "@/features/call-sheets/components/sheet-block";
 import { CallSheetEditor } from "@/features/day-docs/components/call-sheet-edit";
 import { CallSheetExportButtons } from "@/features/day-docs/components/call-sheet-export-buttons";
 import { CallSheetCharacterScriptsMenu } from "@/features/day-docs/components/call-sheet-character-scripts";
 import { CallSheetMoveDateButton } from "@/features/day-docs/components/call-sheet-move-date-button";
 import { CallSheetPlanner } from "@/features/day-docs/components/call-sheet-planner";
-import { PrintButton } from "@/features/day-docs/components/print-button";
 import {
   buildCastForDay,
   buildPerShiftResources,
@@ -26,25 +26,6 @@ import { Badge } from "@/shared/ui/badge";
 import type { getNextShootDayBrief } from "@/features/day-docs/queries";
 import type { DayDocsExportResourceCategory } from "@/features/day-docs/components/day-docs-export-menu";
 
-function DocSection({
-  title,
-  children,
-  className = "",
-}: {
-  title: string;
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <section
-      className={`call-sheet-section rounded-2xl border border-[var(--border)] bg-[var(--panel-solid)] p-5 ${className}`}
-    >
-      <h3 className="mb-3 font-semibold">{title}</h3>
-      {children}
-    </section>
-  );
-}
-
 export function CallSheetView({
   locale,
   projectId,
@@ -53,11 +34,15 @@ export function CallSheetView({
   nextDay,
   nextDayAstro,
   canEdit,
+  sheetSrc,
+  statusPanel = null,
+  editBlocks = null,
   canSaveAttendanceSettings,
   timingBaselines = {},
   resourceTimingBaselines = {},
   perShiftCatalog = [],
   resourceCategories = [],
+  transportEditor = null,
 }: {
   locale: string;
   projectId: string;
@@ -66,12 +51,19 @@ export function CallSheetView({
   nextDay: Awaited<ReturnType<typeof getNextShootDayBrief>>;
   nextDayAstro: DayAstro | null;
   canEdit: boolean;
+  /** Адрес листа для просмотра (`callSheetPreviewSrc`) — тот же лист, что уходит в печать. */
+  sheetSrc: string;
+  /** Панель статуса (плашка, версия, переходы) — вверху страницы, под заголовком. */
+  statusPanel?: React.ReactNode;
+  /** Блоки правки вызывного (поля листа, элементы площадки) — под шапкой страницы. */
+  editBlocks?: React.ReactNode;
   /** Сохранение настройки явочного листа (правка «КПП и вызывные»). */
   canSaveAttendanceSettings: boolean;
   timingBaselines?: ActorTimingBaselines;
   resourceTimingBaselines?: ResourceTimingBaselines;
   perShiftCatalog?: import("@/features/day-docs/queries").PerShiftCatalogOption[];
   resourceCategories?: DayDocsExportResourceCategory[];
+  transportEditor?: import("@/features/day-docs/transport-queries").CallSheetTransportEditorData | null;
 }) {
   const { day } = bundle;
   const cast = buildCastForDay(bundle);
@@ -79,8 +71,8 @@ export function CallSheetView({
   const perShiftResources = buildPerShiftResources(bundle);
 
   return (
-    <div className="call-sheet-root space-y-6 print:space-y-0">
-      <div className="flex flex-wrap items-start justify-between gap-3 print:hidden">
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-sm text-[var(--muted-fg)]">
             <Link
@@ -116,69 +108,66 @@ export function CallSheetView({
             </p>
           ) : null}
         </div>
-        <div className="flex flex-wrap gap-2">
-          {canEdit ? (
-            <CallSheetEditor
+        <div className="flex flex-col items-end gap-1.5">
+          <div className="flex flex-wrap justify-end gap-2">
+            {canEdit ? (
+              <CallSheetEditor
+                projectId={projectId}
+                dayId={day.id}
+                bundle={bundle}
+                cast={cast}
+                resources={resources}
+                perShiftResources={perShiftResources}
+                perShiftCatalog={perShiftCatalog}
+                timingBaselines={timingBaselines}
+                resourceTimingBaselines={resourceTimingBaselines}
+                transportEditor={transportEditor}
+              />
+            ) : null}
+            <CallSheetMoveDateButton
               projectId={projectId}
               dayId={day.id}
-              bundle={bundle}
-              cast={cast}
-              resources={resources}
-              perShiftResources={perShiftResources}
-              perShiftCatalog={perShiftCatalog}
-              timingBaselines={timingBaselines}
-              resourceTimingBaselines={resourceTimingBaselines}
+              dayNumber={day.dayNumber}
+              currentDate={day.date}
+              locale={locale}
+              canEdit={canEdit}
             />
-          ) : null}
-          <CallSheetMoveDateButton
-            projectId={projectId}
-            dayId={day.id}
-            dayNumber={day.dayNumber}
-            currentDate={day.date}
-            locale={locale}
-            canEdit={canEdit}
-          />
-          <CallSheetCharacterScriptsMenu projectId={projectId} cast={cast} />
-          <CallSheetExportButtons
-            projectId={projectId}
-            dayId={day.id}
-            resourceCategories={resourceCategories}
-            canSaveAttendanceSettings={canSaveAttendanceSettings}
-          />
-          <PrintButton />
+            <CallSheetCharacterScriptsMenu projectId={projectId} cast={cast} />
+            <CallSheetExportButtons
+              projectId={projectId}
+              dayId={day.id}
+              resourceCategories={resourceCategories}
+              canSaveAttendanceSettings={canSaveAttendanceSettings}
+            />
+          </div>
+          <p className="text-right text-xs text-[var(--muted-fg)]">
+            В окне печати откройте „Дополнительные настройки“ и снимите „Колонтитулы“ — Chrome
+            запомнит
+          </p>
         </div>
       </div>
 
+      {statusPanel}
+
+      {editBlocks}
+
       {canEdit ? (
-        <DocSection title="План дня" className="print:hidden">
+        <SheetBlock title="План дня">
           <CallSheetPlanner
             projectId={projectId}
             dayId={day.id}
             bundle={bundle}
             canEdit={canEdit}
           />
-        </DocSection>
+        </SheetBlock>
       ) : null}
 
-      {Object.keys(timingBaselines).length > 0 ? (
-        <p className="text-xs text-[var(--muted-fg)] print:hidden">
-          Жёлтая ячейка — время изменено вручную (наведите, чтобы увидеть
-          расчётное). При печати подсветки нет.
-        </p>
-      ) : null}
-
-      <CallSheetDocument
-        bundle={bundle}
-        astro={astro}
-        cast={cast}
-        resources={resources}
-        perShiftResources={perShiftResources}
-        timingBaselines={timingBaselines}
-        resourceTimingBaselines={resourceTimingBaselines}
-      />
+      <SheetBlock title="Лист вызывного">
+        <CallSheetPreview src={sheetSrc} />
+      </SheetBlock>
 
       {nextDay ? (
-        <DocSection title="Следующий съёмочный день" className="print:hidden">
+        <SheetBlock title="Следующий съёмочный день">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <p className="font-medium">
               День {nextDay.dayNumber} · {formatDateShort(nextDay.date)}
@@ -224,7 +213,7 @@ export function CallSheetView({
               Открыть вызывной →
             </Link>
           </p>
-        </DocSection>
+        </SheetBlock>
       ) : null}
     </div>
   );

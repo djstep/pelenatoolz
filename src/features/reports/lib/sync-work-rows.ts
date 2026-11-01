@@ -14,27 +14,14 @@ import {
 import type { AuditContext } from "@/shared/audit/with-audit";
 import { formatMinutesHhMm } from "@/shared/i18n/domain-labels";
 import { dec } from "@/shared/db/serialize-decimal";
-
-type SeedCandidate = {
-  sourceKey: string;
-  kind: "ACTOR" | "RESOURCE" | "TRANSPORT" | "LOCATION";
-  displayName: string;
-  categoryLabel: string | null;
-  actorId?: string | null;
-  resourceItemId?: string | null;
-  locationId?: string | null;
-  factStart?: string | null;
-  factEnd?: string | null;
-  shiftHoursMin?: number | null;
-  unpaidOvertimeMin?: number | null;
-  shiftRate?: number | null;
-  taxPercent?: number | null;
-  overtimeMode?: "HALF_HOUR" | "HOURLY_CUMULATIVE" | "HOURLY_FLAT" | null;
-  unpaidOvertimeMode?: "FIRST_HOUR" | "EACH_HOUR" | null;
-  tracksMileage?: boolean;
-  kmRate?: number | null;
-  sortOrder: number;
-};
+import {
+  newRowFields,
+  refreshedRowFields,
+  splitWorkRows,
+  timesAfterRefresh,
+  transportCandidate,
+  type SeedCandidate,
+} from "@/features/reports/lib/work-row-sync-rules";
 
 function actorName(a: {
   lastName: string;
@@ -263,21 +250,7 @@ async function loadCandidates(projectId: string, shootDayId: string) {
   }
 
   for (const t of day.transports) {
-    candidates.push({
-      sourceKey: `transport:${t.id}`,
-      kind: "TRANSPORT",
-      displayName: t.name,
-      categoryLabel: "Спецтранспорт",
-      factStart: t.callTime,
-      factEnd: null,
-      shiftHoursMin: null,
-      unpaidOvertimeMin: null,
-      shiftRate: null,
-      taxPercent: null,
-      tracksMileage: true,
-      kmRate: dec(t.kmRate),
-      sortOrder: order++,
-    });
+    candidates.push(transportCandidate({ ...t, kmRate: dec(t.kmRate) }, order++));
   }
 
   const seenLocations = new Set<string>();
@@ -499,15 +472,11 @@ async function loadPlan(
   ]);
   if (!loaded) return null;
   const { candidates, ratesFor } = loaded;
-  const existingByKey = new Map(existing.map((r) => [r.sourceKey, r]));
-  const keepKeys = new Set(candidates.map((c) => c.sourceKey));
+  const split = splitWorkRows(candidates, existing);
 
   const rateChanges: WorkRowRateChange[] = [];
   const otherChanged: string[] = [];
-  for (const c of candidates) {
-    const prev = existingByKey.get(c.sourceKey);
-    if (!prev) continue;
-
+  for (const { prev, c } of split.kept) {
     const before = rowRates(prev);
     const after = candidateRates(c, ratesFor(c), prev);
     const fields = RATE_LABELS.filter((f) => !sameValue(before[f.key], after[f.key])).map(
@@ -543,18 +512,10 @@ async function loadPlan(
     candidates,
     ratesFor,
     existing,
-    added: candidates.filter((c) => !existingByKey.has(c.sourceKey)).map((c) => c.displayName),
-    removed: existing.filter((r) => !keepKeys.has(r.sourceKey)).map((r) => r.displayName),
+    added: split.added.map((c) => c.displayName),
+    removed: split.removed.map((r) => r.displayName),
     rateChanges,
     otherChanged,
-  };
-}
-
-/** Пустое время строки берётся из вызывного; заполненное не трогается. */
-function timesAfterRefresh(prev: ExistingRow, c: SeedCandidate) {
-  return {
-    factStart: prev.factStart?.trim() ? prev.factStart : c.factStart || null,
-    factEnd: prev.factEnd?.trim() ? prev.factEnd : c.factEnd || null,
   };
 }
 
@@ -585,10 +546,9 @@ export async function applyWorkRowSync(
   const plan = await loadPlan(projectId, shootDayId, reportId);
   if (!plan) return null;
   const { candidates, ratesFor, existing } = plan;
-  const existingByKey = new Map(existing.map((r) => [r.sourceKey, r]));
-  const keepKeys = new Set(candidates.map((c) => c.sourceKey));
+  const { kept, removed } = splitWorkRows(candidates, existing);
+  const keptByKey = new Map(kept.map(({ prev }) => [prev.sourceKey, prev]));
 
-  const removed = existing.filter((row) => !keepKeys.has(row.sourceKey));
   await zeroAccrualsOfWorkRows(
     audit,
     projectId,
@@ -599,21 +559,16 @@ export async function applyWorkRowSync(
   }
 
   for (const c of candidates) {
-    const prev = existingByKey.get(c.sourceKey);
+    const prev = keptByKey.get(c.sourceKey);
     if (prev) {
-      const times = timesAfterRefresh(prev, c);
+      // Статья строки (снимок спецтранспорта) и факт км здесь не меняются никогда.
+      const fields = refreshedRowFields(prev, c);
       const rates = options.updateRates ? candidateRates(c, ratesFor(c), prev) : rowRates(prev);
-      const pay = payOf({ ...prev, ...times }, rates);
+      const pay = payOf({ ...prev, ...fields }, rates);
       await prisma.productionReportWorkRow.update({
         where: { id: prev.id },
         data: {
-          displayName: c.displayName,
-          categoryLabel: c.categoryLabel,
-          actorId: c.actorId ?? null,
-          resourceItemId: c.resourceItemId ?? null,
-          locationId: c.locationId ?? null,
-          ...times,
-          sortOrder: c.sortOrder,
+          ...fields,
           ...(options.updateRates ? rateData(rates) : {}),
           workedMin: pay.workedMin,
           factOvertimeMin: pay.factOvertimeMin,
@@ -629,22 +584,11 @@ export async function applyWorkRowSync(
     }
 
     const rates = candidateRates(c, ratesFor(c));
-    const times = { factStart: c.factStart || null, factEnd: c.factEnd || null };
-    const pay = payOf(
-      { ...times, lunchSkipped: false, factKm: null, extras: [] },
-      rates,
-    );
+    // Статья спецтранспорта попадает в строку только здесь — при создании.
+    const fields = newRowFields(reportId, c);
+    const pay = payOf({ ...fields, factKm: null, extras: [] }, rates);
     const data: Prisma.ProductionReportWorkRowUncheckedCreateInput = {
-      reportId,
-      kind: c.kind,
-      sourceKey: c.sourceKey,
-      displayName: c.displayName,
-      categoryLabel: c.categoryLabel,
-      actorId: c.actorId ?? null,
-      resourceItemId: c.resourceItemId ?? null,
-      locationId: c.locationId ?? null,
-      ...times,
-      lunchSkipped: false,
+      ...fields,
       ...rateData(rates),
       workedMin: pay.workedMin,
       factOvertimeMin: pay.factOvertimeMin,
@@ -654,7 +598,6 @@ export async function applyWorkRowSync(
       overtimePay: pay.overtimePay,
       extrasPay: pay.extrasPay,
       totalPay: pay.totalPay,
-      sortOrder: c.sortOrder,
     };
     await prisma.productionReportWorkRow.create({ data });
   }

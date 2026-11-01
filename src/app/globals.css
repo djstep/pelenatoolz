@@ -815,31 +815,6 @@ main {
     background: white !important;
     color: black !important;
   }
-
-  .call-sheet-root {
-    color: black;
-  }
-
-  .call-sheet-section {
-    break-inside: avoid;
-    border-color: #ccc !important;
-    background: white !important;
-    box-shadow: none !important;
-  }
-
-  .call-sheet-section h3 {
-    color: black;
-    font-size: 11pt;
-  }
-
-  .call-sheet-root table {
-    font-size: 9pt;
-  }
-
-  .call-sheet-root .rounded-xl {
-    border-color: #ddd !important;
-    background: #fafafa !important;
-  }
 }
 
 /* Screenplay block editor */
@@ -1605,207 +1580,83 @@ main {
   }
 }
 
-/* Вызывной: печатный лист по образцу FilmTools (call-sheet-document.tsx).
-   Это «бумага», поэтому цвета фиксированные и не зависят от темы. */
-.cs-doc {
-  --cs-bar: #3a2240;
-  --cs-head: #e4dff0;
-  --cs-line: #8f8f8f;
-  --cs-slot: #e8e8e8;
-  --cs-lunch: #cfcfcf;
-  color: #111;
-  font-family: Arial, Helvetica, sans-serif;
+/* Экран вызывного: заголовки блоков в стиле печатного листа — полоса слева, подложка,
+   жирная линия снизу с цветным началом. Чтобы с телефона на площадке блоки читались раздельно. */
+:root,
+[data-theme="dark"] {
+  --sheet-acc: #f07a3a;
 }
 
-.cs-page {
-  margin: 0 auto 1.5rem;
-  padding: 14px;
-  border-radius: 6px;
-  background: #fff;
-  box-shadow: 0 6px 24px rgb(0 0 0 / 0.35);
-  overflow-x: auto;
+[data-theme="light"] {
+  --sheet-acc: #d24a0c;
 }
 
-.cs-page--portrait {
-  max-width: 960px;
+.sheet-block {
+  border: 1px solid var(--border-strong);
+  border-radius: 1rem;
+  background: var(--panel-solid);
+  padding: 1rem;
 }
 
-.cs-page--landscape {
-  max-width: 1280px;
+@media (min-width: 640px) {
+  .sheet-block {
+    padding: 1.25rem;
+  }
 }
 
-.cs-title {
-  margin: 0 0 6px;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.cs-top {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1.1fr;
-  gap: 8px;
-  align-items: start;
-  margin-bottom: 8px;
-}
-
-.cs-top > div {
+.sheet-block-head {
+  position: relative;
   display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 2px solid var(--foreground);
 }
 
-.cs-doc .cs-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 11px;
-  line-height: 1.3;
+.sheet-block-head::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: -2px;
+  width: 5.5rem;
+  height: 2px;
+  background: var(--sheet-acc);
 }
 
-.cs-doc .cs-table + .cs-table {
-  margin-top: 0;
-}
-
-.cs-page > .cs-table {
-  margin-top: 8px;
-}
-
-.cs-doc .cs-table th,
-.cs-doc .cs-table td {
-  border: 1px solid var(--cs-line);
-  padding: 3px 5px;
-  text-align: center;
-  vertical-align: middle;
-  word-break: break-word;
-}
-
-.cs-doc .cs-bar,
-.cs-doc .cs-bar th,
-.cs-doc .cs-bar td {
-  background: var(--cs-bar);
-  color: #fff;
+.sheet-block-head h3,
+.sheet-subhead {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 0.6rem;
+  margin: 0;
+  padding: 0.2rem 0.75rem 0.2rem 0;
   font-weight: 700;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
-  letter-spacing: 0.02em;
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--sheet-acc) 16%, transparent);
 }
 
-.cs-doc .cs-head td,
-.cs-doc .cs-head th {
-  background: var(--cs-head);
-  font-weight: 600;
+.sheet-block-head h3 {
+  font-size: 0.95rem;
 }
 
-.cs-doc .cs-left {
-  text-align: left;
+.sheet-block-head h3::before,
+.sheet-subhead::before {
+  content: "";
+  flex: none;
+  width: 0.5rem;
+  background: var(--sheet-acc);
 }
 
-.cs-doc .cs-strong {
-  font-weight: 700;
+.sheet-subhead {
+  font-size: 0.78rem;
+  gap: 0.5rem;
 }
 
-.cs-doc .cs-note {
-  white-space: pre-wrap;
-  color: #c00000;
-  font-weight: 700;
-  font-size: 12px;
-}
-
-.cs-doc .cs-slot td {
-  background: var(--cs-slot);
-  font-weight: 600;
-}
-
-.cs-doc .cs-slot--lunch td {
-  background: var(--cs-lunch);
-}
-
-/* Время, изменённое вручную, подсвечено только на экране. */
-.cs-doc .cs-manual {
-  background: #fde68a;
-}
-
-.cs-col-name { width: 40%; }
-.cs-col-scenes { width: 24%; }
-.cs-col-time { width: 12%; }
-.cs-table--schedule { min-width: 1100px; table-layout: fixed; }
-.cs-table--schedule td { vertical-align: top; }
-.cs-col-clock { width: 4.2%; }
-.cs-col-num { width: 4.5%; }
-.cs-col-daynight { width: 6%; }
-.cs-col-object { width: 10%; }
-.cs-col-synopsis { width: 19%; }
-.cs-col-people { width: 10%; }
-.cs-col-vehicles { width: 10%; }
-.cs-col-notes { width: 19.5%; }
-
-@media (max-width: 900px) {
-  .cs-top {
-    grid-template-columns: 1fr;
-  }
-}
-
-@page cs-landscape {
-  size: A4 landscape;
-  margin: 8mm;
-}
-
-@media print {
-  @page {
-    size: A4 portrait;
-    margin: 8mm;
-  }
-
-  /* На странице вызывного печатаем только лист: без шапки, меню и обрезки по высоте экрана. */
-  body:has(.cs-doc) .glass-header,
-  body:has(.cs-doc) aside {
-    display: none !important;
-  }
-
-  body:has(.cs-doc) div:has(> main),
-  body:has(.cs-doc) main {
-    display: block !important;
-    height: auto !important;
-    overflow: visible !important;
-    padding: 0 !important;
-  }
-
-  .cs-page {
-    max-width: none;
-    margin: 0;
-    padding: 0;
-    border-radius: 0;
-    box-shadow: none;
-    overflow: visible;
-  }
-
-  .cs-page--landscape {
-    page: cs-landscape;
-    break-before: page;
-  }
-
-  .cs-doc .cs-table {
-    font-size: 8.5pt;
-  }
-
-  .cs-table--schedule {
-    min-width: 0;
-  }
-
-  .cs-doc .cs-table tr {
-    break-inside: avoid;
-  }
-
-  .cs-doc .cs-manual {
-    background: none;
-  }
-
-  .cs-doc .cs-bar,
-  .cs-doc .cs-bar th,
-  .cs-doc .cs-bar td,
-  .cs-doc .cs-head td,
-  .cs-doc .cs-head th,
-  .cs-doc .cs-slot td {
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
-  }
+.sheet-subhead::before {
+  width: 0.35rem;
 }
