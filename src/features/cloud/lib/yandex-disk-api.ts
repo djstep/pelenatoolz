@@ -178,6 +178,33 @@ export async function uploadYandexFile(
   return { path };
 }
 
+/**
+ * Переименовать / перенести файл (`POST /resources/move`): `overwrite` — заменить файл с тем же именем.
+ * 201 — готово, 202 — Яндекс доделает сам (для одного файла почти не бывает).
+ */
+export async function moveYandexResource(
+  accessToken: string,
+  from: string,
+  path: string,
+  opts: { overwrite?: boolean } = {},
+): Promise<void> {
+  const res = await yandexSend(
+    resourcesUrl("/move", path, { from, overwrite: (opts.overwrite ?? true) ? "true" : "false" }),
+    withToken(accessToken, { method: "POST" }),
+  );
+  if (!res.ok) throw await yandexError(res);
+}
+
+/**
+ * Ссылка на папку в веб-версии Яндекс Диска (видна только владельцу диска). Яндекс отдаёт путь
+ * папки приложения как `disk:/Приложения/<приложение>/…`; другой вид — общая ссылка на «Приложения».
+ */
+export function yandexWebFolderUrl(diskPath: string | null | undefined): string {
+  const m = /^disk:\/+(.*)$/.exec(diskPath ?? "");
+  const rest = m ? m[1].split("/").filter(Boolean) : ["Приложения"];
+  return `https://disk.yandex.ru/client/disk/${rest.map(encodeURIComponent).join("/")}`;
+}
+
 /** Публикация (ссылка «для всех, у кого есть ссылка») → адрес публичной ссылки. */
 export async function publishYandexResource(accessToken: string, path: string): Promise<{ publicUrl: string }> {
   const pubRes = await yandexSend(resourcesUrl("/publish", path), withToken(accessToken, { method: "PUT" }));

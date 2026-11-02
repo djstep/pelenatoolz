@@ -263,6 +263,8 @@ model User {
   uploadedFiles             ProjectFile[]              @relation("FileUploader")
   approvedCallSheets        CallSheet[]                @relation("CallSheetApprover")
   approvedCallSheetVersions CallSheetApprovedVersion[] @relation("CallSheetVersionApprover")
+  driveFolderGrants         DriveFolderGrant[]
+  driveExports              DriveExport[]              @relation("DriveExportUploader")
 }
 
 model Project {
@@ -345,6 +347,9 @@ model Project {
   callSheetTemplateBaseItems CallSheetTemplateBaseItem[]
   callSheets                 CallSheet[]
   callSheetSections          CallSheetSection[]
+  projectDrive               ProjectDrive?
+  driveFolders               DriveFolder[]
+  driveExports               DriveExport[]
 
   @@index([createdById])
   @@index([ownerUserId])
@@ -385,6 +390,7 @@ model ProjectMembership {
   departmentHeads          DepartmentHead[]
   callSheetTemplateLeaders CallSheetTemplateLeader[]
   callSheetLeaders         CallSheetLeader[]
+  keptProjectDrives        ProjectDrive[]            @relation("ProjectDriveKeeper")
 
   @@unique([projectId, userId])
   @@index([userId])
@@ -409,6 +415,7 @@ model Department {
   budgetVersions             BudgetVersion[]
   callSheetTemplateCrewCalls CallSheetTemplateCrewCall[]
   callSheetCrewCalls         CallSheetCrewCall[]
+  driveFolders               DriveFolder[]
 
   @@unique([projectId, name])
   @@unique([projectId, codePrefix])
@@ -2459,7 +2466,8 @@ model CloudConnection {
   updatedAt    DateTime      @updatedAt
 
   user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  fileLinks CloudFileLink[]
+  fileLinks    CloudFileLink[]
+  driveFolders DriveFolder[]
 
   @@unique([userId, provider])
   @@index([userId])
@@ -2485,4 +2493,146 @@ model CloudFileLink {
 
   @@index([projectId, createdAt])
   @@index([connectionId])
+}
+
+// ---------- Волна 3, диски: диск проекта, папки, доступы, выгрузки ----------
+
+enum ProjectDriveStatus {
+  ACTIVE
+  /// Хранитель перестал быть продюсером или диск отключили: токены стёрты, система диском не управляет.
+  DETACHED
+}
+
+enum DriveFolderGrantStatus {
+  OK
+  PENDING_ADD
+  PENDING_REMOVE
+  FAILED
+}
+
+enum DriveExportDocType {
+  CALL_SHEET
+  BUDGET
+}
+
+enum DriveExportFormat {
+  GOOGLE_SHEET
+  XLSX
+  PDF
+}
+
+/// Диск проекта (пока только Google): свои токены, отдельно от личного подключения хранителя.
+/// Файлы физически в аккаунте хранителя; хранитель — участие, а не роль «владелец».
+model ProjectDrive {
+  id                 String             @id @default(cuid())
+  projectId          String             @unique
+  provider           CloudProvider      @default(GOOGLE_DRIVE)
+  /// Участие хранителя (подключившего). Участие удалили — пусто; диск к этому времени уже отключён.
+  keeperMembershipId String?
+  accountEmail       String?
+  /// Id аккаунта у провайдера (Google `sub`).
+  accountSubject     String?
+  /// Токены зашифрованы (как у CloudConnection); у отключённого диска — пусто.
+  accessToken        String?
+  refreshToken       String?
+  expiresAt          DateTime?
+  /// Выданные права из ответа OAuth (через пробел).
+  scopes             String?
+  /// Доступ отозван у провайдера (invalid_grant, 401) — нужно переподключить.
+  needsReconnectAt   DateTime?
+  status             ProjectDriveStatus @default(ACTIVE)
+  detachedAt         DateTime?
+  detachReason       String?
+  connectedAt        DateTime           @default(now())
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  project          Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  keeperMembership ProjectMembership? @relation("ProjectDriveKeeper", fields: [keeperMembershipId], references: [id], onDelete: SetNull)
+  folders          DriveFolder[]
+
+  @@index([keeperMembershipId])
+}
+
+/// Папка, созданная системой: на диске проекта (`projectDriveId`) или на личном диске человека
+/// (`cloudConnectionId`) — ровно одно из двух (CHECK в миграции). `key`: `root`, `callsheets`,
+/// `common`, `departments`, `dept:<id>`. `externalId` — id папки Google или путь Яндекса (`app:/…`).
+model DriveFolder {
+  id                String   @id @default(cuid())
+  projectId         String
+  projectDriveId    String?
+  cloudConnectionId String?
+  key               String
+  departmentId      String?
+  externalId        String
+  webUrl            String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  project         Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectDrive    ProjectDrive?      @relation(fields: [projectDriveId], references: [id], onDelete: Cascade)
+  cloudConnection CloudConnection?   @relation(fields: [cloudConnectionId], references: [id], onDelete: Cascade)
+  department      Department?        @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  grants          DriveFolderGrant[]
+  exports         DriveExport[]
+
+  @@unique([projectDriveId, key])
+  @@unique([cloudConnectionId, projectId, key])
+  @@index([projectId])
+  @@index([departmentId])
+}
+
+/// Доступ к папке, выданный самой системой (`permissionId` Google). Выданные руками не хранятся
+/// и не трогаются. `email` — персональные данные: в журнал не пишется.
+model DriveFolderGrant {
+  id           String                 @id @default(cuid())
+  folderId     String
+  userId       String
+  /// Почта, на которую выдан доступ.
+  email        String
+  /// Роль Google: `commenter`.
+  role         String
+  permissionId String?
+  status       DriveFolderGrantStatus @default(PENDING_ADD)
+  lastError    String?
+  createdAt    DateTime               @default(now())
+  updatedAt    DateTime               @updatedAt
+
+  folder DriveFolder @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  user   User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([folderId, userId])
+  @@index([userId])
+}
+
+/// Выгруженный на диск документ: один файл на документ в папке, повторная выгрузка заменяет его.
+/// `docId` без внешнего ключа: у вызывного — id съёмочного дня (вызывной у дня один);
+/// удаление документа файл на диске не удаляет.
+model DriveExport {
+  id           String             @id @default(cuid())
+  projectId    String
+  docType      DriveExportDocType
+  docId        String
+  folderId     String
+  provider     CloudProvider
+  format       DriveExportFormat
+  /// Id файла Google или путь Яндекса (`app:/…`).
+  externalId   String
+  webUrl       String?
+  /// Номер версии листа на момент выгрузки (вызывной ещё не создан — пусто).
+  version      Int?
+  /// «черновик», «на согласовании», «утверждён».
+  statusLabel  String
+  uploadedById String?
+  uploadedAt   DateTime           @default(now())
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  project    Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  folder     DriveFolder @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  uploadedBy User?       @relation("DriveExportUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  @@unique([folderId, docType, docId])
+  @@index([projectId, docType, docId])
+  @@index([uploadedById])
 }

@@ -45,6 +45,8 @@ export const AuditEntityType = {
   cloudFileLink: "cloud_file_link",
   /** Личное подключение Google / Яндекс Диска: пишется без проекта. */
   cloudConnection: "cloud_connection",
+  /** Выгрузка документа (вызывного) на Google / Яндекс Диск и замена файла. */
+  driveExport: "drive_export",
   projectFile: "project_file",
   locationPhoto: "location_photo",
   scriptComment: "script_comment",
@@ -112,6 +114,7 @@ export const auditEntityLabels: Record<string, string> = {
   [AuditEntityType.castingComment]: "Комментарий кастинга",
   [AuditEntityType.cloudFileLink]: "Ссылка на облачный файл",
   [AuditEntityType.cloudConnection]: "Подключение диска",
+  [AuditEntityType.driveExport]: "Выгрузка на диск",
   [AuditEntityType.projectFile]: "Файл проекта",
   [AuditEntityType.locationPhoto]: "Фото локации",
   [AuditEntityType.scriptComment]: "Комментарий к сценарию",

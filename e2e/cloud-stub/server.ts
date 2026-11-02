@@ -10,6 +10,7 @@ import type { AddressInfo } from "node:net";
  *   GET  /__stub/requests   — журнал запросов (бинарные тела — только размер и имя);
  *   GET  /__stub/state      — папки, файлы, доступы, публикации, отозванные токены;
  *   GET  /__stub/google/files/<id>/content, GET /__stub/yandex/content?path= — содержимое файла;
+ *   POST /__stub/google/files/<id>/delete — файл «удалили руками» (дальше Google отвечает 404);
  *   POST /__stub/reset      — всё с нуля;
  *   POST /__stub/config     — аккаунт следующего входа, отказ в окне согласия, `failNext`.
  * Только `node:http`, без пакетов. Слушает 127.0.0.1.
@@ -19,20 +20,23 @@ export type StubProvider = "google" | "yandex";
 
 /**
  * Разовый отказ: следующий запрос `provider` с операцией `match` получит `status` и `body`.
+ * `delayMs` — ответ придёт с задержкой (медленный Google / Яндекс); без `status` — только задержка,
+ * сам запрос выполняется как обычно.
  * `match` — имя операции целиком (`token-refresh`, `permissions.create`, `resources.upload` …),
  * её начало до «-» / «.» (`token`, `files`, `permissions`) или `*`. `times` — сколько раз (по умолчанию 1).
  *
  * Операции Google: authorize, token-code, token-refresh, revoke, files.create, files.get, files.patch,
  *   files.upload, files.update, permissions.create, permissions.delete.
  * Операции Яндекса: authorize, token-code, token-refresh, revoke, info, resources.create, resources.get,
- *   resources.upload-link, resources.upload, resources.publish.
+ *   resources.upload-link, resources.upload, resources.publish, resources.move.
  */
 export type StubFailRule = {
   provider: StubProvider;
   match: string;
-  status: number;
+  status?: number;
   body?: unknown;
   times?: number;
+  delayMs?: number;
 };
 
 export type StubGoogleAccount = { sub: string; email: string; scope: string };
@@ -184,9 +188,17 @@ type Ctx = {
   url: URL;
   body: Buffer;
   log: StubRequestLogEntry;
+  /** Задержка ответа из `failNext` (`delayMs`). */
+  delayMs?: number;
 };
 
 function send(ctx: Ctx, status: number, body: unknown, headers: Record<string, string> = {}) {
+  if (ctx.delayMs) {
+    const ms = ctx.delayMs;
+    ctx.delayMs = 0;
+    setTimeout(() => send(ctx, status, body, headers), ms);
+    return;
+  }
   ctx.log.status = status;
   if (body === undefined || body === null) {
     ctx.res.writeHead(status, headers);
@@ -357,6 +369,8 @@ export async function startCloudStub(opts: { port?: number; appOrigin?: string }
     ctx.log.op = op;
     const rule = takeFail(provider, op);
     if (!rule) return false;
+    if (rule.delayMs) ctx.delayMs = rule.delayMs;
+    if (!rule.status) return false;
     send(ctx, rule.status, rule.body ?? failBody(provider, op, rule.status));
     return true;
   };
@@ -969,17 +983,25 @@ export async function startCloudStub(opts: { port?: number; appOrigin?: string }
       return;
     }
 
-    if (path === "/v1/disk/resources" || path === "/v1/disk/resources/upload" || path === "/v1/disk/resources/publish") {
+    if (
+      path === "/v1/disk/resources" ||
+      path === "/v1/disk/resources/upload" ||
+      path === "/v1/disk/resources/publish" ||
+      path === "/v1/disk/resources/move"
+    ) {
       const sub = path.slice("/v1/disk/resources".length);
       const op =
         sub === "/upload"
           ? "resources.upload-link"
           : sub === "/publish"
             ? "resources.publish"
-            : method === "PUT"
-              ? "resources.create"
-              : "resources.get";
-      const expected = op === "resources.get" || op === "resources.upload-link" ? "GET" : "PUT";
+            : sub === "/move"
+              ? "resources.move"
+              : method === "PUT"
+                ? "resources.create"
+                : "resources.get";
+      const expected =
+        op === "resources.get" || op === "resources.upload-link" ? "GET" : op === "resources.move" ? "POST" : "PUT";
       if (method !== expected) {
         yandexError(ctx, 405, "MethodNotAllowedError", "Method not allowed");
         return;
@@ -1049,6 +1071,40 @@ export async function startCloudStub(opts: { port?: number; appOrigin?: string }
         const id = rand();
         state.yandexUploads.set(id, { ownerId, path: p });
         send(ctx, 200, { operation_id: `op-${id}`, href: `${base}/yandex/__upload/${id}`, method: "PUT", templated: false });
+        return;
+      }
+
+      if (op === "resources.move") {
+        const from = normPath(url.searchParams.get("from"));
+        if (!from || !yandexPathAllowed(ctx, grant, from, true)) {
+          if (!from) yandexError(ctx, 400, "FieldValidationError", "Error validating field \"from\"");
+          return;
+        }
+        const source = state.yandexResources.get(resKey(ownerId, from));
+        if (!source) {
+          yandexError(ctx, 404, "DiskNotFoundError", "Resource not found.");
+          return;
+        }
+        if (!dirExists(ownerId, parentOf(p))) {
+          yandexError(ctx, 409, "DiskPathDoesntExistsError", "Specified path doesn't exists.");
+          return;
+        }
+        if (from !== p && existing && url.searchParams.get("overwrite") !== "true") {
+          yandexError(ctx, 409, "DiskResourceAlreadyExistsError", "Resource already exists.");
+          return;
+        }
+        // Папка переносится вместе со всем, что в ней.
+        for (const r of [...state.yandexResources.values()]) {
+          if (r.ownerId !== ownerId || (r.path !== from && !r.path.startsWith(`${from}/`))) continue;
+          state.yandexResources.delete(resKey(ownerId, r.path));
+          const moved = `${p}${r.path.slice(from.length)}`;
+          state.yandexResources.set(resKey(ownerId, moved), {
+            ...r,
+            path: moved,
+            name: moved.slice(moved.lastIndexOf("/") + 1),
+          });
+        }
+        send(ctx, 201, { href: selfHref, method: "GET", templated: false });
         return;
       }
 
@@ -1123,6 +1179,11 @@ export async function startCloudStub(opts: { port?: number; appOrigin?: string }
       if (!body) return send(ctx, 400, { error: "JSON object expected" });
       applyConfig(body as StubConfigPatch);
       return send(ctx, 200, state.config);
+    }
+    const gDelete = /^\/google\/files\/([^/]+)\/delete$/.exec(path);
+    if (method === "POST" && gDelete) {
+      const removed = state.driveFiles.delete(decodeURIComponent(gDelete[1]));
+      return send(ctx, removed ? 200 : 404, { ok: removed });
     }
     const gContent = /^\/google\/files\/([^/]+)\/content$/.exec(path);
     if (method === "GET" && gContent) {
