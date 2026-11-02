@@ -57,8 +57,14 @@ const AUDIT_ENTITY_VISIBILITY: Record<AuditEntityTypeValue, AuditVisibility> = {
   [AuditEntityType.callSheet]: anyOf("callsheet:read", "schedule:read"),
   [AuditEntityType.callSheetTemplate]: anyOf("callsheet:read", "schedule:read"),
   [AuditEntityType.callSheetStatus]: anyOf("callsheet:read", "schedule:read"),
+  // Пока выгружается только вызывной — как меню вызывных.
+  [AuditEntityType.driveExport]: anyOf("callsheet:read", "schedule:read"),
   // Профиль пишется без проекта и в журнал проекта не попадает. Условие — самое строгое.
   [AuditEntityType.userProfile]: anyOf("members:manage"),
+  // Личное подключение диска — тоже без проекта.
+  [AuditEntityType.cloudConnection]: anyOf("members:manage"),
+  // Диск проекта подключают и отключают продюсеры; хранитель меняется вместе с участниками.
+  [AuditEntityType.projectDrive]: (v) => v.isProducer || v.can("members:manage"),
   [AuditEntityType.availabilityRow]: anyOf("schedule:read", "cast:read"),
   [AuditEntityType.productionReport]: anyOf("report:read", "schedule:read"),
   [AuditEntityType.payment]: anyOf("report:read", "schedule:read"),

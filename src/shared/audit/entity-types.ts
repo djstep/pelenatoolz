@@ -43,6 +43,12 @@ export const AuditEntityType = {
   auditionBreak: "audition_break",
   castingComment: "casting_comment",
   cloudFileLink: "cloud_file_link",
+  /** Личное подключение Google / Яндекс Диска: пишется без проекта. */
+  cloudConnection: "cloud_connection",
+  /** Выгрузка документа (вызывного) на Google / Яндекс Диск и замена файла. */
+  driveExport: "drive_export",
+  /** Диск проекта (Google): подключение, замена, отключение, авто-отключение, «доступ отозван». */
+  projectDrive: "project_drive",
   projectFile: "project_file",
   locationPhoto: "location_photo",
   scriptComment: "script_comment",
@@ -109,6 +115,9 @@ export const auditEntityLabels: Record<string, string> = {
   [AuditEntityType.auditionBreak]: "Перерыв в пробах",
   [AuditEntityType.castingComment]: "Комментарий кастинга",
   [AuditEntityType.cloudFileLink]: "Ссылка на облачный файл",
+  [AuditEntityType.cloudConnection]: "Подключение диска",
+  [AuditEntityType.driveExport]: "Выгрузка на диск",
+  [AuditEntityType.projectDrive]: "Диск проекта",
   [AuditEntityType.projectFile]: "Файл проекта",
   [AuditEntityType.locationPhoto]: "Фото локации",
   [AuditEntityType.scriptComment]: "Комментарий к сценарию",

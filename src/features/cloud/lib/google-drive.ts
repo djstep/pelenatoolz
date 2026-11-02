@@ -1,101 +1,105 @@
-import type { CloudEntry } from "@/features/cloud/lib/types";
+import { googleEndpoints } from "@/features/cloud/lib/endpoints";
+import { CloudApiError, CloudReconnectRequiredError } from "@/features/cloud/lib/errors";
 
-const GOOGLE_FOLDER = "application/vnd.google-apps.folder";
+export type GoogleTokenResponse = {
+  access_token: string;
+  expires_in?: number;
+  refresh_token?: string;
+  /** Выданные права через пробел — человек мог снять галочку в окне согласия. */
+  scope?: string;
+  id_token?: string;
+};
 
-export async function listGoogleDriveFolder(
-  accessToken: string,
-  folderId = "root",
-): Promise<CloudEntry[]> {
-  const q = encodeURIComponent(
-    `'${folderId}' in parents and trashed = false`,
-  );
-  const fields = encodeURIComponent(
-    "files(id,name,mimeType,size,modifiedTime,webViewLink)",
-  );
-  const res = await fetch(
-    `https://www.googleapis.com/drive/v3/files?q=${q}&fields=${fields}&orderBy=folder,name&pageSize=100`,
-    { headers: { Authorization: `Bearer ${accessToken}` } },
-  );
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Google Drive: ${res.status} ${text}`);
+async function postGoogleToken(body: URLSearchParams) {
+  try {
+    return await fetch(googleEndpoints().token, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body,
+    });
+  } catch {
+    throw new CloudApiError("GOOGLE_DRIVE", 0, "Google недоступен — попробуйте позже");
   }
-  const data = (await res.json()) as {
-    files?: Array<{
-      id: string;
-      name: string;
-      mimeType?: string;
-      size?: string;
-      modifiedTime?: string;
-      webViewLink?: string;
-    }>;
-  };
-
-  return (data.files ?? []).map((file) => ({
-    id: file.id,
-    name: file.name,
-    kind: file.mimeType === GOOGLE_FOLDER ? "folder" : "file",
-    mimeType: file.mimeType ?? null,
-    sizeBytes: file.size ? Number(file.size) : null,
-    modifiedAt: file.modifiedTime ?? null,
-    webUrl: file.webViewLink ?? null,
-  }));
 }
 
+export async function exchangeGoogleCode(code: string, redirectUri: string) {
+  const res = await postGoogleToken(
+    new URLSearchParams({
+      code,
+      client_id: process.env.GOOGLE_CLIENT_ID ?? "",
+      client_secret: process.env.GOOGLE_CLIENT_SECRET ?? "",
+      redirect_uri: redirectUri,
+      grant_type: "authorization_code",
+    }),
+  );
+  if (!res.ok) {
+    throw new CloudApiError("GOOGLE_DRIVE", res.status, "Google не выдал доступ — попробуйте подключить ещё раз");
+  }
+  return (await res.json()) as GoogleTokenResponse;
+}
+
+/**
+ * Обновление токена. `invalid_grant` — человек отозвал доступ в аккаунте Google,
+ * сменил пароль или refresh-токен истёк (тестовый режим приложения — 7 дней):
+ * лечится только переподключением.
+ */
 export async function refreshGoogleToken(refreshToken: string) {
-  const body = new URLSearchParams({
-    client_id: process.env.GOOGLE_CLIENT_ID ?? "",
-    client_secret: process.env.GOOGLE_CLIENT_SECRET ?? "",
-    refresh_token: refreshToken,
-    grant_type: "refresh_token",
-  });
-  const res = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body,
-  });
+  const res = await postGoogleToken(
+    new URLSearchParams({
+      client_id: process.env.GOOGLE_CLIENT_ID ?? "",
+      client_secret: process.env.GOOGLE_CLIENT_SECRET ?? "",
+      refresh_token: refreshToken,
+      grant_type: "refresh_token",
+    }),
+  );
   if (!res.ok) {
-    throw new Error(`Google token refresh failed: ${res.status}`);
+    const data = (await res.json().catch(() => null)) as { error?: string } | null;
+    if (data?.error === "invalid_grant" || res.status === 401) {
+      throw new CloudReconnectRequiredError("GOOGLE_DRIVE", data?.error);
+    }
+    throw new CloudApiError("GOOGLE_DRIVE", res.status, "Не удалось обновить доступ к Google Диску — попробуйте позже");
   }
-  return (await res.json()) as {
-    access_token: string;
-    expires_in?: number;
-    refresh_token?: string;
-  };
+  return (await res.json()) as GoogleTokenResponse;
 }
 
-export async function fetchGoogleUserEmail(accessToken: string) {
-  const res = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-  if (!res.ok) return null;
-  const data = (await res.json()) as { email?: string };
-  return data.email ?? null;
+/**
+ * Отзыв доступа у Google. Отзыв любого токена снимает всё разрешение приложения в аккаунте —
+ * поэтому при переподключении старый токен отзывается до окна согласия, а не после.
+ * Не бросает: уже отозванный токен (400) — тоже успех.
+ */
+export async function revokeGoogleToken(token: string): Promise<boolean> {
+  try {
+    const res = await fetch(googleEndpoints().revoke, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ token }),
+    });
+    return res.ok || res.status === 400;
+  } catch {
+    return false;
+  }
 }
 
-export async function downloadGoogleFile(
-  accessToken: string,
-  fileId: string,
-  mimeType?: string | null,
-) {
-  const googleDoc = mimeType?.startsWith("application/vnd.google-apps.");
-  let url = `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`;
-  let outMime = mimeType ?? "application/octet-stream";
-
-  if (googleDoc) {
-    url = `https://www.googleapis.com/drive/v3/files/${fileId}/export?mimeType=${encodeURIComponent(
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    )}`;
-    outMime =
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+/**
+ * Почта и id аккаунта из id_token. Подпись не проверяется: токен пришёл напрямую
+ * от Google в ответ на обмен кода по HTTPS (так допускает документация OpenID Connect Google).
+ */
+export function parseGoogleIdToken(idToken: string | undefined): {
+  sub: string | null;
+  email: string | null;
+} {
+  const payload = idToken?.split(".")[1];
+  if (!payload) return { sub: null, email: null };
+  try {
+    const data = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as {
+      sub?: unknown;
+      email?: unknown;
+    };
+    return {
+      sub: typeof data.sub === "string" ? data.sub : null,
+      email: typeof data.email === "string" ? data.email : null,
+    };
+  } catch {
+    return { sub: null, email: null };
   }
-
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-  if (!res.ok) {
-    throw new Error(`Google download failed: ${res.status}`);
-  }
-  const buffer = Buffer.from(await res.arrayBuffer());
-  return { buffer, mimeType: outMime };
 }

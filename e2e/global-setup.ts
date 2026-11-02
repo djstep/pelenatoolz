@@ -2,6 +2,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { chromium, type FullConfig } from "@playwright/test";
 import { config as loadEnv } from "dotenv";
+import { startCloudStub, type CloudStub } from "./cloud-stub/server";
 import { E2E_ROLES, passwordEnvName, type E2ERoleKey } from "./fixtures/data";
 import { e2eDb, loadE2EContext } from "./helpers/db";
 import { storageStatePath } from "./helpers/session";
@@ -9,8 +10,27 @@ import { storageStatePath } from "./helpers/session";
 const AUTH_DIR = path.join(__dirname, ".auth");
 
 /**
+ * Заглушка дисков для `c3-drive.spec.ts`: `E2E_CLOUD_STUB_URL` (например http://127.0.0.1:4510) —
+ * тот адрес, что у dev-сервера в `CLOUD_STUB_GOOGLE_URL` / `CLOUD_STUB_YANDEX_URL` (без /google).
+ * Уже запущена (`npm run cloud-stub`) — берём её; нет — поднимаем на этом порту до конца прогона.
+ */
+async function ensureCloudStub(): Promise<CloudStub | null> {
+  const raw = process.env.E2E_CLOUD_STUB_URL?.trim();
+  if (!raw) return null;
+  const url = new URL(raw);
+  try {
+    const res = await fetch(`${url.origin}/__stub/state`);
+    if (res.ok) return null;
+  } catch {
+    // не запущена — ниже
+  }
+  return startCloudStub({ port: Number(url.port) });
+}
+
+/**
  * Вход через форму под каждой ролью из `.env.e2e`, сессии — в `e2e/.auth/` (в .gitignore).
  * Трасса и видео здесь не пишутся; ошибка входа — без подробностей (в них мог бы быть пароль).
+ * Возвращает остановку заглушки дисков, если подняли её здесь.
  */
 export default async function globalSetup(config: FullConfig) {
   loadEnv({ path: path.join(process.cwd(), ".env.e2e"), quiet: true });
@@ -47,4 +67,7 @@ export default async function globalSetup(config: FullConfig) {
   } finally {
     await browser.close();
   }
+
+  const stub = await ensureCloudStub();
+  return stub ? () => stub.close() : undefined;
 }

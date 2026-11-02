@@ -4,10 +4,21 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 /**
- * Шапка на телефоне: «Проекты», профиль и «Выйти» — в выпадающем меню по кнопке,
- * чтобы шапка не была шире экрана. На ширине от `sm` не показывается (там всё в строку).
+ * Выпадающее меню аккаунта в шапке.
+ * Без `trigger` — телефон: кнопка-«гамбургер», «Проекты», профиль и «Выйти» (на ширине от `sm` скрыто).
+ * С `trigger` — меню пользователя на компьютере: кнопка с инициалами и именем → «Профиль», «Выйти».
  */
-export function HeaderMenu({ children }: { children: React.ReactNode }) {
+export function HeaderMenu({
+  children,
+  trigger,
+  label = "Меню аккаунта",
+  className = "relative sm:hidden",
+}: {
+  children: React.ReactNode;
+  trigger?: React.ReactNode;
+  label?: string;
+  className?: string;
+}) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
@@ -34,22 +45,28 @@ export function HeaderMenu({ children }: { children: React.ReactNode }) {
   }, [open]);
 
   return (
-    <div ref={ref} className="relative sm:hidden">
+    <div ref={ref} className={className}>
       <button
         type="button"
-        aria-label="Меню аккаунта"
+        aria-label={label}
         aria-expanded={open}
         aria-haspopup="menu"
         onClick={() => setOpen((v) => !v)}
-        className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)] transition hover:bg-[var(--surface-2)]"
+        className={
+          trigger
+            ? "inline-flex max-w-[16rem] items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] py-1 pl-1 pr-3 text-[var(--foreground)] transition hover:bg-[var(--surface-2)]"
+            : "inline-flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)] transition hover:bg-[var(--surface-2)]"
+        }
       >
-        <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5" aria-hidden>
-          <path
-            fillRule="evenodd"
-            d="M2 4.75A.75.75 0 012.75 4h14.5a.75.75 0 010 1.5H2.75A.75.75 0 012 4.75zM2 10a.75.75 0 01.75-.75h14.5a.75.75 0 010 1.5H2.75A.75.75 0 012 10zm0 5.25a.75.75 0 01.75-.75h14.5a.75.75 0 010 1.5H2.75a.75.75 0 01-.75-.75z"
-            clipRule="evenodd"
-          />
-        </svg>
+        {trigger ?? (
+          <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5" aria-hidden>
+            <path
+              fillRule="evenodd"
+              d="M2 4.75A.75.75 0 012.75 4h14.5a.75.75 0 010 1.5H2.75A.75.75 0 012 4.75zM2 10a.75.75 0 01.75-.75h14.5a.75.75 0 010 1.5H2.75A.75.75 0 012 10zm0 5.25a.75.75 0 01.75-.75h14.5a.75.75 0 010 1.5H2.75a.75.75 0 01-.75-.75z"
+              clipRule="evenodd"
+            />
+          </svg>
+        )}
       </button>
       {open ? (
         <div

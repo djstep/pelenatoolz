@@ -1,269 +1,161 @@
 "use client";
 
-import { useCallback, useEffect, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import type { CloudProvider } from "@prisma/client";
 import { disconnectCloudAction } from "@/features/cloud/actions";
 import {
-  cloudProviderLabels,
-  type CloudEntry,
-} from "@/features/cloud/lib/types";
+  reconnectReasonText,
+  type ReconnectReason,
+} from "@/features/cloud/lib/scopes";
+import { cloudProviderLabels } from "@/features/cloud/lib/types";
 import { Button } from "@/shared/ui/button";
-import { Modal } from "@/shared/ui/modal";
-import { cn } from "@/shared/lib/cn";
-import { useOnChange } from "@/shared/hooks/use-on-change";
+import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
+import { useToast } from "@/shared/ui/toast";
 
-type Connection = {
+export type CloudConnectionView = {
   id: string;
   provider: CloudProvider;
   accountEmail: string | null;
   accountLabel: string | null;
+  reconnectReason: ReconnectReason | null;
 };
 
-export function CloudFilePicker({
-  projectId,
-  locale,
-  returnPath,
-  open,
-  onClose,
-  connections,
-  onAttach,
+const AUTHORIZE_PATH: Record<CloudProvider, string> = {
+  GOOGLE_DRIVE: "/api/cloud/google/authorize",
+  YANDEX_DISK: "/api/cloud/yandex/authorize",
+};
+
+const PROVIDERS: CloudProvider[] = ["GOOGLE_DRIVE", "YANDEX_DISK"];
+
+/**
+ * Кнопка «Подключить» / «Переподключить» личный диск. POST-форма, а не ссылка:
+ * переподключение отзывает старый токен, по чужой ссылке этого случиться не должно.
+ */
+export function CloudConnectButton({
+  provider,
+  returnTo,
+  label,
+  variant = "secondary",
 }: {
-  projectId: string;
-  locale: string;
-  returnPath: string;
-  open: boolean;
-  onClose: () => void;
-  connections: Connection[];
-  onAttach: (file: CloudEntry & { provider: CloudProvider }) => void;
+  provider: CloudProvider;
+  returnTo: string;
+  label: string;
+  variant?: "primary" | "secondary";
 }) {
-  const [provider, setProvider] = useState<CloudProvider | null>(
-    connections[0]?.provider ?? null,
-  );
-  const [folderStack, setFolderStack] = useState<
-    { id: string; name: string }[]
-  >([]);
-  const [items, setItems] = useState<CloudEntry[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const currentFolder = folderStack[folderStack.length - 1];
-
-  const load = useCallback(async () => {
-    if (!provider) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const folderKey =
-        provider === "GOOGLE_DRIVE"
-          ? currentFolder?.id ?? "root"
-          : currentFolder?.id ?? "/";
-      const res = await fetch(
-        `/api/cloud/files?provider=${provider}&folder=${encodeURIComponent(folderKey)}`,
-      );
-      const data = (await res.json()) as {
-        items?: CloudEntry[];
-        error?: string;
-      };
-      if (!res.ok) {
-        throw new Error(data.error ?? "Не удалось загрузить файлы");
-      }
-      setItems(data.items ?? []);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка");
-      setItems([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [provider, currentFolder?.id]);
-
-  useEffect(() => {
-    if (!open || !provider) return;
-    void load();
-  }, [open, provider, load]);
-
-  useOnChange([open, connections], () => {
-    if (!open) return;
-    setFolderStack([]);
-    setProvider(connections[0]?.provider ?? null);
-  });
-
-  const returnTo = `/${locale}/projects/${projectId}${returnPath}`;
-
   return (
-    <Modal open={open} onClose={onClose} title="Выбор файла из облака" wide>
-      {connections.length === 0 ? (
-        <div className="space-y-3 text-sm">
-          <p className="text-[var(--muted-fg)]">
-            Сначала подключите Google Диск или Яндекс.Диск.
-          </p>
-          <div className="flex flex-wrap gap-2">
-            <a
-              href={`/api/cloud/google/authorize?projectId=${projectId}&returnTo=${encodeURIComponent(returnTo)}`}
-            >
-              <Button type="button">Google Диск</Button>
-            </a>
-            <a
-              href={`/api/cloud/yandex/authorize?projectId=${projectId}&returnTo=${encodeURIComponent(returnTo)}`}
-            >
-              <Button type="button" variant="secondary">
-                Яндекс.Диск
-              </Button>
-            </a>
-          </div>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          <div className="flex flex-wrap gap-2">
-            {connections.map((c) => (
-              <Button
-                key={c.id}
-                type="button"
-                variant={provider === c.provider ? "primary" : "secondary"}
-                onClick={() => {
-                  setProvider(c.provider);
-                  setFolderStack([]);
-                }}
-              >
-                {cloudProviderLabels[c.provider]}
-              </Button>
-            ))}
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2 text-sm">
-            <Button
-              type="button"
-              variant="ghost"
-              disabled={folderStack.length === 0}
-              onClick={() => setFolderStack((s) => s.slice(0, -1))}
-            >
-              ← Назад
-            </Button>
-            <span className="text-[var(--muted-fg)]">
-              {currentFolder?.name ??
-                (provider === "GOOGLE_DRIVE" ? "Мой диск" : "Диск")}
-            </span>
-          </div>
-
-          {error ? <p className="text-sm text-[var(--danger)]">{error}</p> : null}
-
-          <div className="max-h-80 overflow-y-auto rounded-xl border border-[var(--border)]">
-            {loading ? (
-              <p className="p-4 text-sm text-[var(--muted-fg)]">Загрузка…</p>
-            ) : items.length === 0 ? (
-              <p className="p-4 text-sm text-[var(--muted-fg)]">Пусто</p>
-            ) : (
-              <ul className="divide-y divide-[var(--border)]">
-                {items.map((item) => (
-                  <li key={item.id}>
-                    <button
-                      type="button"
-                      className={cn(
-                        "flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left text-sm hover:bg-[var(--surface-2)]",
-                        item.kind === "folder" && "font-medium",
-                      )}
-                      onClick={() => {
-                        if (item.kind === "folder") {
-                          setFolderStack((s) => [
-                            ...s,
-                            { id: item.id, name: item.name },
-                          ]);
-                          return;
-                        }
-                        if (!provider) return;
-                        onAttach({ ...item, provider });
-                        onClose();
-                      }}
-                    >
-                      <span>
-                        {item.kind === "folder" ? "📁 " : "📄 "}
-                        {item.name}
-                      </span>
-                      {item.kind === "file" && item.sizeBytes != null ? (
-                        <span className="text-xs text-[var(--muted-fg)]">
-                          {Math.round(item.sizeBytes / 1024)} KB
-                        </span>
-                      ) : null}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </div>
-      )}
-    </Modal>
+    <form method="post" action={AUTHORIZE_PATH[provider]}>
+      <input type="hidden" name="purpose" value="personal" />
+      <input type="hidden" name="returnTo" value={returnTo} />
+      <Button type="submit" variant={variant}>
+        {label}
+      </Button>
+    </form>
   );
 }
 
+/** Личные диски в «Профиле»: подключить, переподключить, отключить. */
 export function CloudConnectionsPanel({
-  projectId,
-  locale,
   connections,
+  returnTo,
 }: {
-  projectId: string;
-  locale: string;
-  connections: Connection[];
+  connections: CloudConnectionView[];
+  returnTo: string;
 }) {
-  const returnTo = `/${locale}/projects/${projectId}/files`;
-  const [pending, startTransition] = useTransition();
+  const router = useRouter();
+  const toast = useToast();
+  const confirm = useConfirm();
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap gap-2">
-        <a
-          href={`/api/cloud/google/authorize?projectId=${projectId}&returnTo=${encodeURIComponent(returnTo)}`}
-        >
-          <Button type="button" variant="secondary">
-            {connections.some((c) => c.provider === "GOOGLE_DRIVE")
-              ? "Переподключить Google"
-              : "Подключить Google Диск"}
-          </Button>
-        </a>
-        <a
-          href={`/api/cloud/yandex/authorize?projectId=${projectId}&returnTo=${encodeURIComponent(returnTo)}`}
-        >
-          <Button type="button" variant="secondary">
-            {connections.some((c) => c.provider === "YANDEX_DISK")
-              ? "Переподключить Яндекс"
-              : "Подключить Яндекс.Диск"}
-          </Button>
-        </a>
-      </div>
-
-      {connections.length > 0 ? (
-        <ul className="space-y-2 text-sm">
-          {connections.map((c) => (
-            <li
-              key={c.id}
-              className="flex items-center justify-between gap-3 rounded-xl border border-[var(--border)] px-3 py-2"
-            >
-              <div>
-                <p className="font-medium">{cloudProviderLabels[c.provider]}</p>
-                <p className="text-[var(--muted-fg)]">
-                  {c.accountEmail ?? c.accountLabel ?? "Подключено"}
+    <ul className="space-y-2 text-sm">
+      {PROVIDERS.map((provider) => {
+        const conn = connections.find((c) => c.provider === provider);
+        const label = cloudProviderLabels[provider];
+        return (
+          <li
+            key={provider}
+            className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border)] px-3 py-2"
+            data-testid={`cloud-connection-${provider}`}
+          >
+            <div className="min-w-0">
+              <p className="font-medium">{label}</p>
+              {conn ? (
+                <p className="break-all text-[var(--muted-fg)]">
+                  {conn.accountEmail ?? conn.accountLabel ?? "Подключено"}
                 </p>
-              </div>
-              <Button
-                type="button"
-                variant="ghost"
-                disabled={pending}
-                onClick={() =>
-                  startTransition(async () => {
-                    await disconnectCloudAction(c.id);
-                  })
-                }
-              >
-                Отключить
-              </Button>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="text-sm text-[var(--muted-fg)]">
-          Облака не подключены. После OAuth вы сможете просматривать файлы и
-          прикреплять их к проекту.
-        </p>
-      )}
+              ) : (
+                <p className="text-[var(--muted-fg)]">Не подключён</p>
+              )}
+              {conn?.reconnectReason ? (
+                <p className="text-[var(--danger)]">
+                  {reconnectReasonText(provider, conn.reconnectReason)}
+                </p>
+              ) : null}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <CloudConnectButton
+                provider={provider}
+                returnTo={returnTo}
+                label={conn ? "Переподключить" : "Подключить"}
+                variant={conn?.reconnectReason ? "primary" : "secondary"}
+              />
+              {conn ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() =>
+                    void confirm({
+                      title: `Отключить ${label}?`,
+                      details: [
+                        "Доступ приложения к диску будет отозван.",
+                        "Файлы на диске останутся, ссылки в проектах — тоже.",
+                      ],
+                      confirmLabel: "Отключить",
+                      action: async () => {
+                        const result = await disconnectCloudAction(conn.id);
+                        if (result.error) return result.error;
+                        toast.success(result.success ?? "Диск отключён");
+                        router.refresh();
+                      },
+                    })
+                  }
+                >
+                  Отключить
+                </Button>
+              ) : null}
+            </div>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/** Плашка «переподключите» там, где диск нужен (страница «Файлы», позже — меню выгрузки). */
+export function CloudReconnectNotice({
+  connections,
+  returnTo,
+}: {
+  connections: CloudConnectionView[];
+  returnTo: string;
+}) {
+  const stale = connections.filter((c) => c.reconnectReason);
+  if (stale.length === 0) return null;
+  return (
+    <div className="space-y-2" data-testid="cloud-reconnect-notice">
+      {stale.map((c) => (
+        <div
+          key={c.id}
+          className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[rgba(251,113,133,0.35)] bg-[rgba(251,113,133,0.08)] px-3 py-2 text-sm"
+        >
+          <span>{reconnectReasonText(c.provider, c.reconnectReason!)}</span>
+          <CloudConnectButton
+            provider={c.provider}
+            returnTo={returnTo}
+            label="Переподключить"
+            variant="primary"
+          />
+        </div>
+      ))}
     </div>
   );
 }

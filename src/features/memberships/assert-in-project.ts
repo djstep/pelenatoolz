@@ -28,6 +28,8 @@ export type AssertInProjectEntity =
   | "BudgetItem"
   | "ShootDay"
   | "CallSheetSection"
+  /** Выдача доступа к папке диска проекта — по проекту папки. */
+  | "DriveFolderGrant"
   /** Только активный участник (не приглашённый и не удалённый). */
   | "ProjectMembership";
 
@@ -67,6 +69,7 @@ type ProjectDb = Pick<
   | "budgetItem"
   | "shootDay"
   | "callSheetSection"
+  | "driveFolderGrant"
   | "projectMembership"
 >;
 
@@ -216,6 +219,10 @@ async function countInProject(
     case "CallSheetSection":
       return db.callSheetSection.count({
         where: { id: { in: ids }, projectId },
+      });
+    case "DriveFolderGrant":
+      return db.driveFolderGrant.count({
+        where: { id: { in: ids }, folder: { projectId } },
       });
     case "ProjectMembership":
       return db.projectMembership.count({

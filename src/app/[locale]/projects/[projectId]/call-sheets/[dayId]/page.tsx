@@ -26,6 +26,9 @@ import {
   CallSheetStatusPanel,
   type CallSheetStatusPanelData,
 } from "@/features/call-sheets/components/call-sheet-status-panel";
+import { CloudOAuthNoticeLine } from "@/features/cloud/components/cloud-oauth-notice";
+import { listUserCloudConnections } from "@/features/cloud/lib/cloud-service";
+import { CLOUD_NOTICE_PARAMS, cloudOAuthNotice } from "@/features/cloud/lib/oauth-notice";
 import { CallSheetView } from "@/features/day-docs/components/call-sheet-view";
 import { fetchDayAstro } from "@/features/day-docs/lib/city-astro";
 import { ATTENDANCE_SHEET_WRITE_PERMISSION } from "@/features/exports/lib/column-utils";
@@ -41,12 +44,17 @@ import { listDepartmentsForSmeta } from "@/features/departments/queries";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { listResourceCategories } from "@/features/resources/queries";
 
+// Vercel: выгрузка на диск (предел 50 с), OAuth дисков и пересчёт доступов к папкам после ответа (`after()`) — до 60 с.
+export const maxDuration = 60;
+
 type Props = {
   params: Promise<{ locale: string; projectId: string; dayId: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
-export default async function CallSheetDayPage({ params }: Props) {
+export default async function CallSheetDayPage({ params, searchParams }: Props) {
   const { locale, projectId, dayId } = await params;
+  const query = await searchParams;
   const ctx = await requireProjectContext(projectId);
 
   if (!canReadCallSheet(ctx)) {
@@ -112,6 +120,11 @@ export default async function CallSheetDayPage({ params }: Props) {
     getCallSheetElementsEditor(projectId, dayId),
     getWorkingDayPosition(projectId, bundle.day),
   ]);
+
+  // Возврат из окна согласия (кнопка «Переподключить» в окне «На диск»): строка «подключён» / ошибка.
+  const cloudNotice = CLOUD_NOTICE_PARAMS.some((key) => query[key] !== undefined)
+    ? cloudOAuthNotice(query, await listUserCloudConnections(ctx.user.id!))
+    : null;
 
   const dayLocations = dayLocationsOf(bundle);
 
@@ -187,6 +200,7 @@ export default async function CallSheetDayPage({ params }: Props) {
 
   return (
     <CallSheetRevisionProvider revision={status?.revision ?? null}>
+      {cloudNotice ? <CloudOAuthNoticeLine notice={cloudNotice} /> : null}
       <CallSheetView
         locale={locale}
         projectId={projectId}

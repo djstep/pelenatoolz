@@ -1,5 +1,7 @@
 import { requireProjectContext } from "@/features/projects/lib/project-context";
+import { CloudOAuthNoticeLine } from "@/features/cloud/components/cloud-oauth-notice";
 import { FilesWorkspace } from "@/features/cloud/components/files-workspace";
+import { cloudOAuthNotice } from "@/features/cloud/lib/oauth-notice";
 import {
   listProjectCloudFiles,
   listUserCloudConnections,
@@ -8,10 +10,12 @@ import { listProjectUploadedFiles } from "@/features/files/queries";
 
 type Props = {
   params: Promise<{ locale: string; projectId: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
-export default async function ProjectFilesPage({ params }: Props) {
+export default async function ProjectFilesPage({ params, searchParams }: Props) {
   const { locale, projectId } = await params;
+  const query = await searchParams;
   const ctx = await requireProjectContext(projectId);
 
   if (!ctx.can("script:read") && !ctx.can("project:read")) {
@@ -23,10 +27,13 @@ export default async function ProjectFilesPage({ params }: Props) {
     listProjectCloudFiles(projectId),
     listProjectUploadedFiles(projectId),
   ]);
+  const notice = cloudOAuthNotice(query, connections);
 
   const canWrite = ctx.can("script:write") || ctx.can("project:write");
 
   return (
+    <>
+    {notice ? <CloudOAuthNoticeLine notice={notice} /> : null}
     <FilesWorkspace
       locale={locale}
       projectId={projectId}
@@ -42,5 +49,6 @@ export default async function ProjectFilesPage({ params }: Props) {
       }))}
       canWrite={canWrite}
     />
+    </>
   );
 }

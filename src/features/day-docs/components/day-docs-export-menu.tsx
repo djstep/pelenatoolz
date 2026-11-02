@@ -6,6 +6,7 @@ import {
   fetchCallSheetXlsx,
   printCallSheet as openCallSheetPrint,
 } from "@/features/call-sheets/components/call-sheet-print-client";
+import { CallSheetDriveExportModal } from "@/features/call-sheets/components/call-sheet-drive-export-modal";
 import { exportAttendanceSheetXlsxAction } from "@/features/day-docs/actions";
 import {
   getAttendanceSheetSettingsAction,
@@ -48,6 +49,7 @@ export function DayDocsExportMenu({
 }) {
   const [open, setOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [driveOpen, setDriveOpen] = useState(false);
   const [exporting, setExporting] = useState<string | null>(null);
   const [message, setMessage] = useState<{ error?: string; success?: string }>(
     {},
@@ -145,6 +147,14 @@ export function DayDocsExportMenu({
           <MenuGroup label="Вызывной лист">
             <MenuItem onClick={() => void printCallSheet()}>Печать / PDF</MenuItem>
             <MenuItem onClick={() => void downloadCallSheetXlsx()}>Excel</MenuItem>
+            <MenuItem
+              onClick={() => {
+                setOpen(false);
+                setDriveOpen(true);
+              }}
+            >
+              На диск…
+            </MenuItem>
           </MenuGroup>
         ) : null}
         <MenuGroup label="Явочный лист">
@@ -162,6 +172,15 @@ export function DayDocsExportMenu({
           </MenuItem>
         </MenuGroup>
       </PortaledMenu>
+
+      {showCallSheetExports && driveOpen ? (
+        <CallSheetDriveExportModal
+          open
+          onClose={() => setDriveOpen(false)}
+          projectId={projectId}
+          dayId={dayId}
+        />
+      ) : null}
 
       <AttendanceSheetSettingsModal
         open={settingsOpen}
@@ -227,12 +246,17 @@ function AttendanceSheetSettingsModal({
   const toast = useToast();
   const [pending, startTransition] = useTransition();
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(open);
+  // Окно открыли — «загрузка» сразу, в рендере (не в эффекте): эффект только загружает.
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (open) setLoading(true);
+  }
 
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
-    setLoading(true);
     void getAttendanceSheetSettingsAction(projectId)
       .then((res) => {
         if (cancelled) return;

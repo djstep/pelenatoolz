@@ -1,36 +1,33 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { CloudProvider, ProjectFileKind } from "@prisma/client";
 import {
-  attachCloudFileAction,
+  attachCloudLinkAction,
   deleteCloudFileLinkAction,
 } from "@/features/cloud/actions";
 import {
-  CloudConnectionsPanel,
-  CloudFilePicker,
+  CloudReconnectNotice,
+  type CloudConnectionView,
 } from "@/features/cloud/components/cloud-file-picker";
+import { linkSiteLabel, safeExternalHref } from "@/features/cloud/lib/cloud-link";
 import {
   cloudProviderLabels,
   formatFileSize,
-  type CloudEntry,
 } from "@/features/cloud/lib/types";
 import { deleteProjectUploadedFileAction } from "@/features/files/actions";
 import { Button } from "@/shared/ui/button";
+import { Input } from "@/shared/ui/input";
+import { Label } from "@/shared/ui/label";
+import { Modal } from "@/shared/ui/modal";
 import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
 import { useToast } from "@/shared/ui/toast";
 
-type Connection = {
-  id: string;
-  provider: CloudProvider;
-  accountEmail: string | null;
-  accountLabel: string | null;
-};
-
 type FileLink = {
   id: string;
-  provider: CloudProvider;
+  provider: CloudProvider | null;
   name: string;
   mimeType: string | null;
   sizeBytes: number | null;
@@ -71,7 +68,7 @@ export function FilesWorkspace({
 }: {
   locale: string;
   projectId: string;
-  connections: Connection[];
+  connections: CloudConnectionView[];
   files: FileLink[];
   uploadedFiles: UploadedFile[];
   canWrite: boolean;
@@ -80,24 +77,34 @@ export function FilesWorkspace({
   const toast = useToast();
   const confirmDelete = useConfirm();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [pickerOpen, setPickerOpen] = useState(false);
+  const [linkOpen, setLinkOpen] = useState(false);
+  const [linkName, setLinkName] = useState("");
+  const [linkUrl, setLinkUrl] = useState("");
+  const [linkError, setLinkError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [uploading, setUploading] = useState(false);
 
-  function attach(file: CloudEntry & { provider: CloudProvider }) {
+  function openLinkModal() {
+    setLinkName("");
+    setLinkUrl("");
+    setLinkError(null);
+    setLinkOpen(true);
+  }
+
+  function attachLink() {
     startTransition(async () => {
-      const result = await attachCloudFileAction(projectId, {
-        provider: file.provider,
-        externalId: file.id,
-        path: file.path,
-        name: file.name,
-        mimeType: file.mimeType,
-        sizeBytes: file.sizeBytes,
-        webUrl: file.webUrl,
+      const result = await attachCloudLinkAction(projectId, {
+        name: linkName,
+        url: linkUrl,
       });
-      setMessage(result.success ?? result.error ?? null);
-      if (result.success) router.refresh();
+      if (result.error) {
+        setLinkError(result.error);
+        return;
+      }
+      setLinkOpen(false);
+      toast.success(result.success ?? "Ссылка прикреплена");
+      router.refresh();
     });
   }
 
@@ -152,7 +159,7 @@ export function FilesWorkspace({
         <div>
           <h2 className="font-display text-2xl font-semibold">Файлы</h2>
           <p className="mt-1 text-sm text-[var(--muted-fg)]">
-            Загрузка с устройства · Google Диск и Яндекс.Диск
+            Загрузка с устройства · ссылки на Google Диск, Яндекс Диск и другие сайты
           </p>
         </div>
         {canWrite ? (
@@ -176,10 +183,10 @@ export function FilesWorkspace({
             </Button>
             <Button
               type="button"
-              onClick={() => setPickerOpen(true)}
+              onClick={openLinkModal}
               disabled={busy}
             >
-              + Из облака
+              + Вставить ссылку
             </Button>
           </div>
         ) : null}
@@ -189,16 +196,17 @@ export function FilesWorkspace({
         <p className="text-sm text-[var(--muted-fg)]">{message}</p>
       ) : null}
 
-      <section className="glass-card p-4">
-        <h3 className="mb-3 font-display text-lg font-semibold">
-          Облачные диски
-        </h3>
-        <CloudConnectionsPanel
-          projectId={projectId}
-          locale={locale}
-          connections={connections}
-        />
-      </section>
+      <CloudReconnectNotice
+        connections={connections}
+        returnTo={`/${locale}/projects/${projectId}/files`}
+      />
+      <p className="text-sm text-[var(--muted-fg)]">
+        Личные Google Диск и Яндекс Диск подключаются в{" "}
+        <Link href={`/${locale}/profile`} className="text-[var(--accent)] hover:underline">
+          профиле
+        </Link>
+        .
+      </p>
 
       <section className="glass-card overflow-hidden">
         <div className="border-b border-[var(--border)] px-4 py-3">
@@ -291,12 +299,12 @@ export function FilesWorkspace({
       <section className="glass-card overflow-hidden">
         <div className="border-b border-[var(--border)] px-4 py-3">
           <h3 className="font-display text-lg font-semibold">
-            Прикреплённые из облака
+            Ссылки
           </h3>
         </div>
         {files.length === 0 ? (
           <p className="p-4 text-sm text-[var(--muted-fg)]">
-            Пока нет прикреплённых файлов из облака.
+            Пока нет прикреплённых ссылок. Нажмите «Вставить ссылку».
           </p>
         ) : (
           <div className="overflow-x-auto">
@@ -316,9 +324,9 @@ export function FilesWorkspace({
                     className="border-b border-[var(--border)]/60"
                   >
                     <td className="px-4 py-3">
-                      {file.webUrl ? (
+                      {safeExternalHref(file.webUrl) ? (
                         <a
-                          href={file.webUrl}
+                          href={safeExternalHref(file.webUrl)!}
                           target="_blank"
                           rel="noreferrer"
                           className="text-[var(--accent)] hover:underline"
@@ -330,7 +338,9 @@ export function FilesWorkspace({
                       )}
                     </td>
                     <td className="px-4 py-3 text-[var(--muted-fg)]">
-                      {cloudProviderLabels[file.provider]}
+                      {file.provider
+                        ? cloudProviderLabels[file.provider]
+                        : linkSiteLabel(file.webUrl)}
                     </td>
                     <td className="px-4 py-3 text-[var(--muted-fg)]">
                       {formatFileSize(
@@ -365,15 +375,58 @@ export function FilesWorkspace({
         )}
       </section>
 
-      <CloudFilePicker
-        projectId={projectId}
-        locale={locale}
-        returnPath="/files"
-        open={pickerOpen}
-        onClose={() => setPickerOpen(false)}
-        connections={connections}
-        onAttach={attach}
-      />
+      <Modal
+        open={linkOpen}
+        onClose={() => setLinkOpen(false)}
+        title="Вставить ссылку"
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="ghost" onClick={() => setLinkOpen(false)}>
+              Отмена
+            </Button>
+            <Button type="button" disabled={pending} onClick={attachLink}>
+              {pending ? "Сохранение…" : "Прикрепить"}
+            </Button>
+          </div>
+        }
+      >
+        <form
+          className="space-y-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            attachLink();
+          }}
+        >
+          <div>
+            <Label htmlFor="cloud-link-name">Название</Label>
+            <Input
+              id="cloud-link-name"
+              value={linkName}
+              maxLength={200}
+              onChange={(e) => setLinkName(e.target.value)}
+              placeholder="Например: раскадровка, 1 серия"
+            />
+          </div>
+          <div>
+            <Label htmlFor="cloud-link-url">Адрес</Label>
+            <Input
+              id="cloud-link-url"
+              type="url"
+              value={linkUrl}
+              onChange={(e) => setLinkUrl(e.target.value)}
+              placeholder="https://…"
+            />
+          </div>
+          <p className="text-xs text-[var(--muted-fg)]">
+            Любая ссылка, начинающаяся с https:// — Google Диск, Яндекс Диск и другие сайты. Доступ к самому
+            файлу выдаётся там, где он лежит.
+          </p>
+          {linkError ? (
+            <p className="text-sm text-[var(--danger)]">{linkError}</p>
+          ) : null}
+          <button type="submit" className="hidden" />
+        </form>
+      </Modal>
     </div>
   );
 }
