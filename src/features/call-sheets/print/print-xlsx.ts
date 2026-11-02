@@ -7,6 +7,7 @@ import type {
   CallSheetPrintPlanRow,
 } from "@/features/call-sheets/print/print-model";
 import {
+  leaderNameParts,
   NOT_SPECIFIED,
   shiftTimes,
   shownCallSheetBlocks,
@@ -48,6 +49,15 @@ const LUNCH_FILL: ExcelJS.Fill = { type: "pattern", pattern: "solid", fgColor: {
 const THIN: ExcelJS.Border = { style: "thin", color: { argb: "FFD9D9D4" } };
 /** «не указано» — серым. */
 const MISSING_FONT: Partial<ExcelJS.Font> = { color: { argb: "FF8A8A85" } };
+
+/** Текст ячейки для подбора ширины: строка или rich text (ФИ руководителя); иначе null. */
+function cellText(value: ExcelJS.CellValue): string | null {
+  if (typeof value === "string") return value;
+  if (value && typeof value === "object" && "richText" in value) {
+    return value.richText.map((part) => part.text).join("");
+  }
+  return null;
+}
 
 /** Строка на всю ширину листа (заголовок блока или длинный текст) — объединяется в конце. */
 type WideRow = { row: number; fromCol: number; text: string };
@@ -119,6 +129,17 @@ class SheetWriter {
     return row;
   }
 
+  /** ФИ руководителя: фамилия жирным, имя обычным (части — тоже через `excelSafe`). */
+  leaderName(cell: ExcelJS.Cell, name: string) {
+    const { last, rest } = leaderNameParts(name);
+    cell.value = {
+      richText: [
+        { text: String(excelSafe(last)), font: { bold: true } },
+        ...(rest ? [{ text: ` ${rest}` }] : []),
+      ],
+    };
+  }
+
   /** Пустое поле обязательного блока: «не указано» серым (с подписью — во второй колонке). */
   missing(label?: string) {
     const row = this.text(NOT_SPECIFIED, label);
@@ -135,10 +156,11 @@ class SheetWriter {
       // У широкой строки с подписью меряется только подпись; без подписи — ничего.
       const wide = wideRows.get(rowNumber);
       row.eachCell((cell, col) => {
-        if (typeof cell.value !== "string" || col > lastCol) return;
+        const value = cellText(cell.value);
+        if (value === null || col > lastCol) return;
         if (wide !== undefined && col >= wide) return;
         const max = this.wideCells.has(`${rowNumber}:${col}`) ? WIDE_MAX_WIDTH : MAX_WIDTH;
-        const longest = Math.max(...cell.value.split("\n").map((line) => line.length));
+        const longest = Math.max(...value.split("\n").map((line) => line.length));
         widths[col] = Math.max(widths[col]!, Math.min(max, longest + 2));
       });
     });
@@ -285,8 +307,7 @@ function leadersBlock(w: SheetWriter, model: CallSheetPrintModel) {
     w.missing();
     return;
   }
-  table<CallSheetPrintModel["leaders"][number]>(
-    w,
+  const cols = visibleColumns<CallSheetPrintModel["leaders"][number]>(
     [
       { head: "Должность", value: (r) => r.position, always: true },
       { head: "Фамилия имя", value: (r) => r.name },
@@ -294,6 +315,13 @@ function leadersBlock(w: SheetWriter, model: CallSheetPrintModel) {
     ],
     model.leaders,
   );
+  w.header(cols.map((col) => col.head));
+  const nameCol = cols.findIndex((col) => col.head === "Фамилия имя") + 1;
+  for (const leader of model.leaders) {
+    const row = w.data(cols.map((col) => col.value(leader)));
+    // Фамилия жирным, имя обычным — как на листе печати.
+    if (nameCol > 0 && leader.name) w.leaderName(row.getCell(nameCol), leader.name);
+  }
 }
 
 function crewBlock(w: SheetWriter, model: CallSheetPrintModel) {

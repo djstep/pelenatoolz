@@ -94,6 +94,15 @@ export function shownCallSheetBlocks(model: CallSheetPrintModel): CallSheetBlock
   return CALL_SHEET_BLOCKS.filter((b) => isCallSheetBlockShown(model, b.key)).map((b) => b.key);
 }
 
+/**
+ * ФИ руководителя, как в макете: первое слово (фамилия) — жирным, остальное — обычным.
+ * Одно слово — целиком жирным.
+ */
+export function leaderNameParts(name: string): { last: string; rest: string | null } {
+  const [last, ...rest] = name.trim().split(/\s+/);
+  return { last: last ?? "", rest: rest.length ? rest.join(" ") : null };
+}
+
 /** Полоса времён: все пять, в этом порядке; акцент — мотор и стоп-мотор. */
 export const SHIFT_TIMES = [
   { label: "Смена", accent: false },

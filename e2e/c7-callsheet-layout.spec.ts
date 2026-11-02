@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
-import { FILLED_DAY, LAYOUT_DAYS, NAMES } from "./fixtures/data";
+import ExcelJS from "exceljs";
+import { E2E_PROJECT_NAME, FILLED_DAY, LAYOUT_DAYS, NAMES } from "./fixtures/data";
 import { findLeaks, workbookText } from "./helpers/leaks";
 import { dayId, e2eContext, projectPath, storageStatePath } from "./helpers/session";
 
@@ -85,6 +86,15 @@ test("печать заполненного дня: все блоки макет
   await expect(sheet.locator(".times > div")).toHaveCount(5);
   await expect(sheet.locator(".chip.car")).toHaveText("машина");
   await expect(sheet.getByText(`${FILLED_DAY.element}, 2 шт`).first()).toBeVisible();
+  // Руководитель: фамилия жирным, имя обычным.
+  const [leaderLast, leaderFirst] = FILLED_DAY.leader.split(" ");
+  await expect(sheet.locator("td.nm b", { hasText: leaderLast })).toHaveText(leaderLast!);
+  await expect(sheet.locator("td.nm", { hasText: leaderLast })).toHaveText(`${leaderLast} ${leaderFirst}`);
+  // Подвал каждого листа — поля страницы: проект, дата, смена; статус, версия, «лист N из M».
+  const style = await popup.locator("style").first().innerHTML();
+  const date = LAYOUT_DAYS.filled.date.split("-").reverse().join(".");
+  expect(style).toContain(`@bottom-left{ content:"${E2E_PROJECT_NAME} · вызывной на ${date} · смена 4";`);
+  expect(style).toContain(`@bottom-right{ content:"черновик · версия 1 · лист " counter(page) " из " counter(pages);`);
   await popup.close();
   // Тот же лист без встроенного шрифта (base64 шрифта не мешает поиску сумм).
   const res = await page.request.get(`/api/projects/${ctx.projectId}/call-sheets/${filledDay}/sheet`);
@@ -159,9 +169,27 @@ test("Excel пустого и заполненного дня: те же бло�
     "СХЕМА ОБЪЕКТА",
   ]);
   expect(filled).not.toContain("не указано");
-  for (const text of [FILLED_DAY.leader, FILLED_DAY.crew, FILLED_DAY.base, FILLED_DAY.group, NAMES.actor.lastName, "Манипулятор E2E"]) {
+  for (const text of [FILLED_DAY.crew, FILLED_DAY.base, FILLED_DAY.group, NAMES.actor.lastName, "Манипулятор E2E"]) {
     expect(filled).toContain(text);
   }
+  // Руководитель — rich text: фамилия жирным, имя обычным.
+  const res = await page.request.get(`/api/projects/${ctx.projectId}/call-sheets/${filledDay}/xlsx`);
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load((await res.body()) as unknown as ArrayBuffer);
+  const leaderParts: { text: string; bold: boolean }[][] = [];
+  workbook.worksheets[0]!.eachRow((row) =>
+    row.eachCell((cell) => {
+      const v = cell.value;
+      if (v && typeof v === "object" && "richText" in v && v.richText[0]?.text === FILLED_DAY.leader.split(" ")[0]) {
+        leaderParts.push(v.richText.map((p) => ({ text: p.text, bold: Boolean(p.font?.bold) })));
+      }
+    }),
+  );
+  const [leaderLast, leaderFirst] = FILLED_DAY.leader.split(" ");
+  expect(leaderParts[0]).toEqual([
+    { text: leaderLast, bold: true },
+    { text: ` ${leaderFirst}`, bold: false },
+  ]);
   // Ставка км спецтранспорта дня 4 — в базе есть, в листе её нет.
   expect(findLeaks("xlsx дня 4", filled)).toEqual([]);
   expect(findLeaks("xlsx дня 5", empty)).toEqual([]);

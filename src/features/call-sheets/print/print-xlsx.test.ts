@@ -37,7 +37,12 @@ function cells(workbook: ExcelJS.Workbook): CellInfo[] {
     sheet.eachRow((row, rowNumber) => {
       row.eachCell((cell, col) => {
         if (cell.isMerged && cell.master !== cell) return;
-        out.push({ row: rowNumber, col, value: cell.value, bold: Boolean(cell.font?.bold) });
+        // Rich text (ФИ руководителя) — одной строкой.
+        const value =
+          cell.value && typeof cell.value === "object" && "richText" in cell.value
+            ? cell.value.richText.map((part) => part.text).join("")
+            : cell.value;
+        out.push({ row: rowNumber, col, value, bold: Boolean(cell.font?.bold) });
       });
     });
   });
@@ -124,6 +129,32 @@ describe("вызывной в Excel", () => {
     assert.ok(!text.includes("12345"));
     assert.doesNotMatch(text, /(^|[^а-яё])км([^а-яё]|$)/i);
     assert.doesNotMatch(text, /ставк/i);
+  });
+
+  test("руководители: фамилия жирным, имя обычным (rich text), как на листе печати", () => {
+    const source = clone(IRP_DAY_SOURCE);
+    source.sheet!.leaders[1]!.personName = "Зайцев";
+    const sheet = book(source).worksheets[0]!;
+    const richOf = (text: string) => {
+      let found: ExcelJS.CellRichTextValue | undefined;
+      sheet.eachRow((row) =>
+        row.eachCell((cell) => {
+          const v = cell.value;
+          if (v && typeof v === "object" && "richText" in v && v.richText.map((p) => p.text).join("") === text) {
+            found = v;
+          }
+        }),
+      );
+      assert.ok(found, text);
+      return found.richText;
+    };
+    assert.deepEqual(richOf("Миронова Татьяна"), [
+      { text: "Миронова", font: { bold: true } },
+      { text: " Татьяна" },
+    ]);
+    assert.deepEqual(richOf("Зайцев"), [{ text: "Зайцев", font: { bold: true } }]);
+    // Колонка ФИ шире подписи — ширина считается и по rich text.
+    assert.ok((sheet.getColumn(2).width ?? 0) >= "Миронова Татьяна".length);
   });
 
   test("телефонов актёров нет, телефон руководителя есть", () => {

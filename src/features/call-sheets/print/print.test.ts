@@ -337,10 +337,17 @@ describe("модель листа вызывного", () => {
     assert.ok(!page.includes(">0:37<") && !page.includes(">0:10<"), "старого «м:сс» нет");
   });
 
-  test("руководители: ФИ целиком одним начертанием", () => {
+  test("руководители: фамилия жирным, имя обычным (как в макете); одно слово — целиком жирным", () => {
     const page = html(IRP_DAY_SOURCE);
-    assert.ok(page.includes(`<td class="nm">Миронова Татьяна</td>`));
-    assert.ok(!page.includes("<b>Миронова</b>"));
+    assert.ok(page.includes(`<td class="nm"><b>Миронова</b> Татьяна</td>`));
+    const source = clone(IRP_DAY_SOURCE);
+    source.sheet!.leaders[0]!.personName = "  Миронова   Татьяна Петровна ";
+    source.sheet!.leaders[1]!.personName = "Зайцев";
+    source.sheet!.leaders[2]!.personName = `<b>${SCRIPT}</b> ${QUOTES}`;
+    const edited = html(source);
+    assert.ok(edited.includes(`<td class="nm"><b>Миронова</b> Татьяна Петровна</td>`));
+    assert.ok(edited.includes(`<td class="nm"><b>Зайцев</b></td>`));
+    assert.ok(edited.includes(`<td class="nm"><b>&lt;b&gt;&lt;script&gt;alert(1)&lt;/script&gt;&lt;/b&gt;</b> О&#39;Брайен &amp; &quot;Ко&quot;</td>`));
   });
 
   test("нет плана — сцены дня строками без времени", () => {
@@ -465,13 +472,16 @@ describe("HTML листа вызывного", () => {
     assert.ok(titles.includes("План съёмки · основной юнит"));
   });
 
-  test("разрывы и поля страницы: шапка листов 2+ — @page, не HTML; подвала нет", () => {
+  test("разрывы и поля страницы: шапка листов 2+ и подвал каждого листа — @page, не HTML", () => {
     const style = styleOf(html(IRP_DAY_SOURCE));
-    assert.match(style, /@page\{ size:A4; margin:17mm 9mm 7mm;/);
+    assert.match(style, /@page\{ size:A4; margin:17mm 9mm 12mm;/);
     assert.match(style, /@top-left\{ content:"ИРП · пт 11\.09\.2026 · смена 40"/);
     assert.match(style, /@page :first\{[^}]*@top-left\{ content:none;/);
-    assert.ok(!style.includes("@bottom-left"));
-    assert.ok(!style.includes("@bottom-right"));
+    // Подвал, как в макете: проект · вызывной на дату · смена; номер листа считает браузер.
+    assert.match(style, /@bottom-left\{ content:"ИРП · вызывной на 11\.09\.2026 · смена 40";/);
+    assert.match(style, /@bottom-right\{ content:"лист " counter\(page\) " из " counter\(pages\);/);
+    assert.ok(!/@page :first\{[^}]*@bottom/.test(style), "подвал и на первом листе");
+    assert.ok(!html(IRP_DAY_SOURCE).includes("лист 1 из"), "в HTML номеров нет — только поле страницы");
     assert.match(style, /thead\{ display:table-header-group; \}/);
     assert.match(style, /tr\{ break-inside:avoid; \}/);
     assert.match(style, /\.bh\{[^}]*break-after:avoid;/);
