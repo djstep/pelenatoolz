@@ -75,11 +75,40 @@ function ExistingExport({ view }: { view: DriveExportView }) {
   );
 }
 
+/** Назначение в окне: свой диск (`personal:<провайдер>`), «Общая» или папка цеха на диске проекта. */
+type Destination = `personal:${CloudProvider}` | "common" | "department";
+
+function personalDestination(provider: CloudProvider): Destination {
+  return `personal:${provider}`;
+}
+
+function personalProvider(dest: Destination | null): CloudProvider | null {
+  return dest?.startsWith("personal:") ? (dest.slice("personal:".length) as CloudProvider) : null;
+}
+
+/** Первое доступное назначение: свой подключённый диск, затем «Общая», затем папка цеха. */
+function firstDestination(state: CallSheetDriveState): Destination | null {
+  const usable = state.connections.find((c) => !c.reconnectReason);
+  if (usable) return personalDestination(usable.provider);
+  const drive = state.projectDrive;
+  if (!drive || drive.unavailable) return null;
+  if (drive.common) return "common";
+  return drive.departments.length > 0 ? "department" : null;
+}
+
+/** Ключ папки диска проекта (`DriveFolder.key`) — как у сервера: `common` / `dept:<id>`. */
+function projectKeyOf(dest: Destination | null, departmentId: string | null): string | null {
+  if (dest === "common") return "common";
+  if (dest === "department" && departmentId) return `dept:${departmentId}`;
+  return null;
+}
+
 /**
  * «Экспорт → На диск»: вызывной на свой личный Google Диск (Google Таблица) или Яндекс Диск
- * (.xlsx). Выбор диска — только подключённые без «переподключите»; версия — по умолчанию
- * утверждённая (у утверждённого) или текущая с меткой. Права и всё остальное проверяет сервер.
- * Монтируется при открытии: каждое открытие — с чистого листа и свежим состоянием с сервера.
+ * (.xlsx), в «Общую» или папку цеха на диске проекта (Google Таблица). Назначения — только те,
+ * что доступны человеку (их считает сервер); личные — только подключённые без «переподключите».
+ * Версия — по умолчанию утверждённая (у утверждённого) или текущая с меткой. Права и всё
+ * остальное проверяет сервер. Монтируется при открытии: каждое открытие — с чистого листа.
  */
 export function CallSheetDriveExportModal({
   open,
@@ -97,12 +126,23 @@ export function CallSheetDriveExportModal({
   const pathname = usePathname();
   const [state, setState] = useState<CallSheetDriveState | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [provider, setProvider] = useState<CloudProvider | null>(null);
+  const [dest, setDest] = useState<Destination | null>(null);
+  const [departmentId, setDepartmentId] = useState<string | null>(null);
   const [version, setVersion] = useState<string>(CURRENT);
   const [done, setDone] = useState<{ message: string; view: DriveExportView } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [pending, startTransition] = useTransition();
+
+  function applyState(next: CallSheetDriveState) {
+    setState(next);
+    setDest(firstDestination(next));
+    setDepartmentId((prev) =>
+      next.projectDrive?.departments.some((d) => d.id === prev)
+        ? prev
+        : (next.projectDrive?.departments[0]?.id ?? null),
+    );
+  }
 
   useEffect(() => {
     if (!open) return;
@@ -113,8 +153,7 @@ export function CallSheetDriveExportModal({
         setLoadError(res.error);
         return;
       }
-      setState(res);
-      setProvider(res.connections.find((c) => !c.reconnectReason)?.provider ?? null);
+      applyState(res);
       setVersion(res.defaultVersion ? String(res.defaultVersion) : CURRENT);
     });
     return () => {
@@ -123,38 +162,58 @@ export function CallSheetDriveExportModal({
   }, [open, projectId, dayId]);
 
   const usable = state?.connections.filter((c) => !c.reconnectReason) ?? [];
-  const existing = state?.exports.find((e) => e.provider === provider) ?? null;
+  const drive = state?.projectDrive ?? null;
+  const driveReady = drive != null && !drive.unavailable;
+  const provider = personalProvider(dest);
+  const projectKey = projectKeyOf(dest, departmentId);
+  const department = drive?.departments.find((d) => d.id === departmentId) ?? null;
+  const existing = provider
+    ? (state?.exports.find((e) => e.provider === provider) ?? null)
+    : (state?.projectExports.find((e) => e.key === projectKey)?.view ?? null);
   const approved = state?.sheet?.status === "APPROVED";
+  const canUpload = provider != null || (driveReady && projectKey != null);
+
+  function choose(next: Destination) {
+    setDest(next);
+    setDone(null);
+    setError(null);
+  }
 
   function upload() {
-    if (!provider) return;
+    if (!canUpload) return;
     setError(null);
     setDone(null);
     setCopied(false);
+    const versionValue = version === CURRENT ? null : Number(version);
+    const input = provider
+      ? { destination: "personal", provider, version: versionValue }
+      : dest === "common"
+        ? { destination: "common", version: versionValue }
+        : { destination: "department", departmentId, version: versionValue };
     startTransition(async () => {
-      const res = await exportCallSheetToDriveAction(projectId, dayId, {
-        provider,
-        version: version === CURRENT ? null : Number(version),
-      });
+      const res = await exportCallSheetToDriveAction(projectId, dayId, input);
       if ("error" in res) {
         setError(res.error);
-        if (res.reconnect) {
-          // Подключение помечено «переподключите» — обновить окно, чтобы показать плашку.
+        if (res.reconnect || res.projectDrive) {
+          // Подключение помечено «переподключите» или диск проекта недоступен — обновить окно.
           const fresh = await getCallSheetDriveStateAction(projectId, dayId);
-          if (!("error" in fresh)) {
-            setState(fresh);
-            setProvider(fresh.connections.find((c) => !c.reconnectReason)?.provider ?? null);
-          }
+          if (!("error" in fresh)) applyState(fresh);
         }
         return;
       }
       setDone({ message: res.message, view: res.export });
       toast.success(res.message);
-      setState((prev) =>
-        prev
-          ? { ...prev, exports: [...prev.exports.filter((e) => e.provider !== res.export.provider), res.export] }
-          : prev,
-      );
+      const key = res.projectKey;
+      setState((prev) => {
+        if (!prev) return prev;
+        if (key) {
+          return {
+            ...prev,
+            projectExports: [...prev.projectExports.filter((e) => e.key !== key), { key, view: res.export }],
+          };
+        }
+        return { ...prev, exports: [...prev.exports.filter((e) => e.provider !== res.export.provider), res.export] };
+      });
     });
   }
 
@@ -167,7 +226,10 @@ export function CallSheetDriveExportModal({
     }
   }
 
-  const profileHref = `/${params.locale ?? "ru"}/profile`;
+  const locale = params.locale ?? "ru";
+  const profileHref = `/${locale}/profile`;
+  const settingsHref = `/${locale}/projects/${projectId}/settings`;
+  const hasAnyDestination = usable.length > 0 || driveReady;
 
   return (
     <Modal
@@ -176,8 +238,8 @@ export function CallSheetDriveExportModal({
       title="Вызывной на диск"
       footer={
         <div className="flex gap-2">
-          {usable.length > 0 ? (
-            <Button type="button" disabled={pending || !provider} onClick={upload}>
+          {hasAnyDestination ? (
+            <Button type="button" disabled={pending || !canUpload} onClick={upload}>
               {pending ? "Выгрузка…" : existing ? "Выгрузить и заменить" : "Выгрузить"}
             </Button>
           ) : null}
@@ -195,42 +257,120 @@ export function CallSheetDriveExportModal({
           <>
             <CloudReconnectNotice connections={state.connections} returnTo={pathname} />
 
-            {usable.length === 0 ? (
-              <p className="text-[var(--muted-fg)]">
-                {state.connections.length === 0 ? "Личный диск не подключён. " : null}
-                Подключите Google Диск или Яндекс Диск в{" "}
-                <a href={profileHref} className="text-[var(--accent)] hover:underline">
-                  Профиле
-                </a>
-                .
-              </p>
-            ) : (
-              <>
-                <fieldset className="space-y-2">
-                  <legend className="mb-1 font-medium">Куда</legend>
-                  {usable.map((c) => (
-                    <label key={c.provider} className="flex cursor-pointer items-center gap-2">
+            <fieldset className="space-y-2">
+              <legend className="mb-1 font-medium">Куда</legend>
+              {usable.map((c) => (
+                <label key={c.provider} className="flex cursor-pointer items-center gap-2">
+                  <input
+                    type="radio"
+                    name="drive-destination"
+                    value={personalDestination(c.provider)}
+                    checked={dest === personalDestination(c.provider)}
+                    onChange={() => choose(personalDestination(c.provider))}
+                  />
+                  <span>
+                    Мой {cloudProviderLabels[c.provider]}
+                    {c.accountEmail ? (
+                      <span className="text-[var(--muted-fg)]"> · {c.accountEmail}</span>
+                    ) : null}
+                  </span>
+                </label>
+              ))}
+              {usable.length === 0 ? (
+                <p className="text-[var(--muted-fg)]">
+                  {state.connections.length === 0 ? "Личный диск не подключён. " : null}
+                  Подключите Google Диск или Яндекс Диск в{" "}
+                  <a href={profileHref} className="text-[var(--accent)] hover:underline">
+                    Профиле
+                  </a>
+                  .
+                </p>
+              ) : null}
+
+              {drive && driveReady ? (
+                <>
+                  {drive.common ? (
+                    <label className="flex cursor-pointer items-start gap-2">
                       <input
                         type="radio"
-                        name="drive-provider"
-                        value={c.provider}
-                        checked={provider === c.provider}
-                        onChange={() => {
-                          setProvider(c.provider);
-                          setDone(null);
-                          setError(null);
-                        }}
+                        name="drive-destination"
+                        value="common"
+                        className="mt-1"
+                        checked={dest === "common"}
+                        onChange={() => choose("common")}
                       />
                       <span>
-                        Мой {cloudProviderLabels[c.provider]}
-                        {c.accountEmail ? (
-                          <span className="text-[var(--muted-fg)]"> · {c.accountEmail}</span>
+                        Диск проекта — Общая
+                        <span className="block text-[var(--muted-fg)]" data-testid="drive-export-audience-common">
+                          Кто увидит: {drive.common.audience}
+                        </span>
+                      </span>
+                    </label>
+                  ) : null}
+                  {drive.departments.length > 0 ? (
+                    <label className="flex cursor-pointer items-start gap-2">
+                      <input
+                        type="radio"
+                        name="drive-destination"
+                        value="department"
+                        className="mt-1"
+                        checked={dest === "department"}
+                        onChange={() => choose("department")}
+                      />
+                      <span>
+                        Диск проекта — папка цеха
+                        {dest !== "department" && department ? (
+                          <span className="text-[var(--muted-fg)]"> · {department.name}</span>
                         ) : null}
                       </span>
                     </label>
-                  ))}
-                </fieldset>
+                  ) : null}
+                  {dest === "department" && department ? (
+                    <div className="space-y-1 pl-6">
+                      <Label htmlFor="drive-export-department">Цех</Label>
+                      <Select
+                        id="drive-export-department"
+                        value={department.id}
+                        onChange={(e) => {
+                          setDepartmentId(e.target.value);
+                          setDone(null);
+                          setError(null);
+                        }}
+                      >
+                        {drive.departments.map((d) => (
+                          <option key={d.id} value={d.id}>
+                            {d.name}
+                          </option>
+                        ))}
+                      </Select>
+                      <p className="text-[var(--muted-fg)]" data-testid="drive-export-audience-department">
+                        Кто увидит: {department.audience}
+                      </p>
+                    </div>
+                  ) : null}
+                </>
+              ) : null}
 
+              {drive?.notice ? (
+                <p
+                  className="rounded-lg border border-amber-500/30 bg-[var(--tone-warning-bg)] px-3 py-2 text-[var(--tone-warning-soft)]"
+                  data-testid="drive-export-project-unavailable"
+                >
+                  {drive.notice}
+                  {drive.canOpenSettings ? (
+                    <>
+                      {" "}
+                      <a href={settingsHref} className="font-medium underline underline-offset-2">
+                        Открыть настройки проекта
+                      </a>
+                    </>
+                  ) : null}
+                </p>
+              ) : null}
+            </fieldset>
+
+            {hasAnyDestination ? (
+              <>
                 <div>
                   <Label htmlFor="drive-export-version">Версия</Label>
                   <Select
@@ -256,7 +396,11 @@ export function CallSheetDriveExportModal({
                 <p className="text-[var(--muted-fg)]">
                   {provider === "YANDEX_DISK"
                     ? "Файл .xlsx — в папке приложения «<Проект> · <код проекта>/Вызывные»."
-                    : "Google Таблица — в папке «PELENA · <Проект>/Вызывные» на вашем диске."}{" "}
+                    : dest === "common"
+                      ? "Google Таблица — в папке «PELENA · <Проект>/Вызывные/Общая» на диске проекта."
+                      : dest === "department"
+                        ? `Google Таблица — в папке «PELENA · <Проект>/Вызывные/Цеха/${department?.name ?? "<Цех>"}» на диске проекта.`
+                        : "Google Таблица — в папке «PELENA · <Проект>/Вызывные» на вашем диске."}{" "}
                   Повторная выгрузка заменяет тот же файл.
                 </p>
                 {provider === "YANDEX_DISK" ? (
@@ -267,7 +411,7 @@ export function CallSheetDriveExportModal({
 
                 {existing && !done ? <ExistingExport view={existing} /> : null}
               </>
-            )}
+            ) : null}
 
             {error ? (
               <p role="alert" className="text-[var(--danger)]">

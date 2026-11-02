@@ -86,12 +86,57 @@ export function parseDriveExportInput(
   if (typeof provider !== "string" || !PROVIDERS.includes(provider as CloudProvider)) {
     return { error: DRIVE_EXPORT_BAD_INPUT };
   }
-  // Как `?version=N` у печати и Excel: пусто — текущая, иначе целое ≥ 1.
-  if (version === undefined || version === null) return { provider: provider as CloudProvider, version: undefined };
+  const parsedVersion = parseVersion(version);
+  if (parsedVersion === false) return { error: DRIVE_EXPORT_BAD_INPUT };
+  return { provider: provider as CloudProvider, version: parsedVersion };
+}
+
+/** Как `?version=N` у печати и Excel: пусто — текущая (undefined), иначе целое ≥ 1; false — мусор. */
+function parseVersion(version: unknown): number | undefined | false {
+  if (version === undefined || version === null) return undefined;
   if (typeof version !== "number" || !Number.isInteger(version) || version < 1 || version > 999_999) {
-    return { error: DRIVE_EXPORT_BAD_INPUT };
+    return false;
   }
-  return { provider: provider as CloudProvider, version };
+  return version;
+}
+
+/** Куда выгрузить: свой личный диск, «Общая» или папка цеха на диске проекта (только Google). */
+export type DriveExportDestination =
+  | { kind: "personal"; provider: CloudProvider }
+  | { kind: "common" }
+  | { kind: "department"; departmentId: string };
+
+/**
+ * Что пришло из браузера (шаг 6): вид назначения (`personal` / `common` / `department`; нет —
+ * `personal`, как в шаге 3), id цеха, провайдер (только для `personal`), номер утверждённой версии.
+ * Почты, id папок и файлов из браузера не принимаются; права и цех проверяет сервер.
+ */
+export function parseDriveExportRequest(
+  raw: unknown,
+): { destination: DriveExportDestination; version: number | undefined } | { error: string } {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { error: DRIVE_EXPORT_BAD_INPUT };
+  const { destination, departmentId, version } = raw as {
+    destination?: unknown;
+    departmentId?: unknown;
+    version?: unknown;
+  };
+  if (destination === undefined || destination === "personal") {
+    const personal = parseDriveExportInput(raw);
+    if ("error" in personal) return personal;
+    return { destination: { kind: "personal", provider: personal.provider }, version: personal.version };
+  }
+  const parsedVersion = parseVersion(version);
+  if (parsedVersion === false) return { error: DRIVE_EXPORT_BAD_INPUT };
+  if (destination === "common") return { destination: { kind: "common" }, version: parsedVersion };
+  if (
+    destination === "department" &&
+    typeof departmentId === "string" &&
+    departmentId.trim() !== "" &&
+    departmentId.length <= 100
+  ) {
+    return { destination: { kind: "department", departmentId }, version: parsedVersion };
+  }
+  return { error: DRIVE_EXPORT_BAD_INPUT };
 }
 
 export type DrivePutOutcome = "created" | "replaced" | "recreated";

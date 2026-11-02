@@ -105,6 +105,31 @@ export async function putCallSheetToGoogle(
 }
 
 /**
+ * Google, готовая папка (диск проекта: «Общая» / папка цеха — `ensureProjectFolderChain`): один файл
+ * на вызывной. Есть файл — то же id, новое содержимое и имя; папку пересоздали — файл новый.
+ */
+export async function putCallSheetInGoogleFolder(
+  accessToken: string,
+  input: {
+    folderId: string;
+    folderRecreated: boolean;
+    existingFileId: string | null;
+    fileName: string;
+    content: Buffer;
+  },
+): Promise<DrivePutResult> {
+  const put = await putGoogleSheetFromXlsx(accessToken, {
+    existingFileId: input.folderRecreated ? null : input.existingFileId,
+    name: input.fileName,
+    parentId: input.folderId,
+    content: input.content,
+  });
+  const outcome: DrivePutOutcome =
+    input.existingFileId && (input.folderRecreated || put.outcome !== "replaced") ? "recreated" : put.outcome;
+  return { externalId: put.id, webUrl: put.webUrl, outcome };
+}
+
+/**
  * Яндекс: папка приложения `<Проект> · <id>/Вызывные`, файл `.xlsx`. Есть прежний файл — переименовать
  * в новое имя и записать поверх; нет — новый. Ссылка — на папку в веб-версии Диска (видна только
  * владельцу: публиковать файл по ссылке для всех нельзя, в вызывном телефоны).
