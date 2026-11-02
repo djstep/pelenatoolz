@@ -7,6 +7,12 @@ import type {
   CallSheetPrintPlanRow,
 } from "@/features/call-sheets/print/print-model";
 import {
+  NOT_SPECIFIED,
+  shiftTimes,
+  shownCallSheetBlocks,
+  type CallSheetBlockKey,
+} from "@/features/call-sheets/print/print-blocks";
+import {
   stampMark,
   stampVersion,
   type CallSheetStamp,
@@ -19,7 +25,9 @@ import { excelSafe } from "@/shared/lib/excel-safe";
  * погода, объекты, ограничения по актёрам, «Важно», руководители, вызов цехов, база,
  * актёры, групповка, элементы, план основного юнита, второй юнит, схема объекта.
  * У блока — строка-заголовок жирным, строка шапки колонок и строки данных; между блоками —
- * пустая строка. Пустые блоки и колонки без единого значения не выводятся (как в HTML).
+ * пустая строка. Пустые блоки — по правилу `print-blocks.ts`, как в HTML: обязательные всегда,
+ * пустое в них — «не указано» серым; необязательные пустые не выводятся. Колонки без единого
+ * значения скрыты.
  * Все строки ячеек — через `excelSafe`. Ставки км в модели нет, телефонов актёров — тоже.
  */
 
@@ -38,6 +46,8 @@ const HEAD_FILL: ExcelJS.Fill = { type: "pattern", pattern: "solid", fgColor: { 
 const SERVICE_FILL: ExcelJS.Fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEFEFEB" } };
 const LUNCH_FILL: ExcelJS.Fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFDF1EA" } };
 const THIN: ExcelJS.Border = { style: "thin", color: { argb: "FFD9D9D4" } };
+/** «не указано» — серым. */
+const MISSING_FONT: Partial<ExcelJS.Font> = { color: { argb: "FF8A8A85" } };
 
 /** Строка на всю ширину листа (заголовок блока или длинный текст) — объединяется в конце. */
 type WideRow = { row: number; fromCol: number; text: string };
@@ -106,6 +116,13 @@ class SheetWriter {
     }
     row.getCell(fromCol).alignment = { vertical: "top", wrapText: true };
     this.wide.push({ row: row.number, fromCol, text: value });
+    return row;
+  }
+
+  /** Пустое поле обязательного блока: «не указано» серым (с подписью — во второй колонке). */
+  missing(label?: string) {
+    const row = this.text(NOT_SPECIFIED, label);
+    row.getCell(label ? 2 : 1).font = MISSING_FONT;
     return row;
   }
 
@@ -180,26 +197,36 @@ function headBlock(w: SheetWriter, model: CallSheetPrintModel, stamp: CallSheetS
     stampVersion(stamp),
   ].filter(Boolean);
   if (meta.length) w.text(meta.join(" · "));
+  // Время и место сбора — обязательные.
   if (model.crewCall.time) w.text(model.crewCall.time, "Сбор группы");
+  else w.missing("Сбор группы");
   if (model.crewCall.address) {
     w.text(`${model.crewCall.address}${model.scheme ? " (схема — в конце)" : ""}`, "Место сбора");
+  } else {
+    w.missing("Место сбора");
   }
 }
 
+/** Полоса времён — всегда все пять. */
 function timesBlock(w: SheetWriter, model: CallSheetPrintModel) {
-  if (model.times.length === 0) return;
+  const times = shiftTimes(model);
   w.title("ВРЕМЕНА");
-  w.header(model.times.map((time) => time.label));
-  const row = w.data(model.times.map((time) => time.value));
-  model.times.forEach((time, i) => {
-    row.getCell(i + 1).font = { bold: true, color: time.accent ? { argb: "FFD24A0C" } : undefined };
+  w.header(times.map((time) => time.label));
+  const row = w.data(times.map((time) => time.value ?? NOT_SPECIFIED));
+  times.forEach((time, i) => {
+    row.getCell(i + 1).font = time.value
+      ? { bold: true, color: time.accent ? { argb: "FFD24A0C" } : undefined }
+      : MISSING_FONT;
   });
 }
 
 function weatherBlock(w: SheetWriter, model: CallSheetPrintModel) {
   const weather = model.weather;
-  if (!weather) return;
   w.title("ПОГОДА");
+  if (!weather) {
+    w.missing();
+    return;
+  }
   table<NonNullable<CallSheetPrintModel["weather"]>>(
     w,
     [
@@ -214,7 +241,11 @@ function weatherBlock(w: SheetWriter, model: CallSheetPrintModel) {
 }
 
 function locationsBlock(w: SheetWriter, model: CallSheetPrintModel) {
-  if (model.locations.length === 0) return;
+  if (model.locations.length === 0) {
+    w.title("ОБЪЕКТ");
+    w.missing();
+    return;
+  }
   const several = model.locations.length > 1 || model.locations[0]!.rows.length > 1;
   w.title(several ? "ОБЪЕКТЫ" : "ОБЪЕКТ");
   type Row = { address: string | null; name: string; scenes: string | null };
@@ -236,20 +267,24 @@ function locationsBlock(w: SheetWriter, model: CallSheetPrintModel) {
   );
 }
 
-function textBlocks(w: SheetWriter, model: CallSheetPrintModel) {
-  if (model.actorRestrictions) {
-    w.title("ОГРАНИЧЕНИЯ ПО АКТЁРАМ");
-    w.text(model.actorRestrictions);
-  }
-  if (model.important) {
-    w.title("ВАЖНО");
-    w.text(model.important).getCell(1).font = { bold: true };
-  }
+function restrictionsBlock(w: SheetWriter, model: CallSheetPrintModel) {
+  w.title("ОГРАНИЧЕНИЯ ПО АКТЁРАМ");
+  if (model.actorRestrictions) w.text(model.actorRestrictions);
+  else w.missing();
+}
+
+function importantBlock(w: SheetWriter, model: CallSheetPrintModel) {
+  if (!model.important) return;
+  w.title("ВАЖНО");
+  w.text(model.important).getCell(1).font = { bold: true };
 }
 
 function leadersBlock(w: SheetWriter, model: CallSheetPrintModel) {
-  if (model.leaders.length === 0) return;
   w.title("РУКОВОДИТЕЛИ ГРУППЫ");
+  if (model.leaders.length === 0) {
+    w.missing();
+    return;
+  }
   table<CallSheetPrintModel["leaders"][number]>(
     w,
     [
@@ -262,8 +297,11 @@ function leadersBlock(w: SheetWriter, model: CallSheetPrintModel) {
 }
 
 function crewBlock(w: SheetWriter, model: CallSheetPrintModel) {
-  if (model.crewCalls.length === 0) return;
   w.title("ВЫЗОВ ЦЕХОВ");
+  if (model.crewCalls.length === 0) {
+    w.missing();
+    return;
+  }
   table<CallSheetPrintModel["crewCalls"][number]>(
     w,
     [
@@ -288,8 +326,11 @@ function baseBlock(w: SheetWriter, model: CallSheetPrintModel) {
 }
 
 function castBlock(w: SheetWriter, model: CallSheetPrintModel) {
-  if (model.cast.length === 0) return;
   w.title("АКТЁРЫ");
+  if (model.cast.length === 0) {
+    w.missing();
+    return;
+  }
   table<CallSheetPrintCastRow>(
     w,
     [
@@ -410,8 +451,11 @@ function planRows(w: SheetWriter, rows: CallSheetPrintPlanRow[]) {
 }
 
 function planBlock(w: SheetWriter, model: CallSheetPrintModel) {
-  if (model.plan.length === 0) return;
   w.title("ПЛАН СЪЁМКИ · ОСНОВНОЙ ЮНИТ");
+  if (model.plan.length === 0) {
+    w.missing();
+    return;
+  }
   planRows(w, model.plan);
   if (model.totals.mainTiming) {
     const total = w.addRow([null, null, null, "Итого хронометраж основного юнита", null, model.totals.mainTiming]);
@@ -469,20 +513,25 @@ export function buildCallSheetWorkbook(
     },
   });
   const w = new SheetWriter(sheet);
-  headBlock(w, model, stamp);
-  timesBlock(w, model);
-  weatherBlock(w, model);
-  locationsBlock(w, model);
-  textBlocks(w, model);
-  leadersBlock(w, model);
-  crewBlock(w, model);
-  baseBlock(w, model);
-  castBlock(w, model);
-  groupsBlock(w, model);
-  elementsBlock(w, model);
-  planBlock(w, model);
-  secondUnitBlock(w, model);
-  schemeBlock(w, model);
+  const writers: Record<CallSheetBlockKey, () => void> = {
+    head: () => headBlock(w, model, stamp),
+    times: () => timesBlock(w, model),
+    weather: () => weatherBlock(w, model),
+    locations: () => locationsBlock(w, model),
+    restrictions: () => restrictionsBlock(w, model),
+    important: () => importantBlock(w, model),
+    leaders: () => leadersBlock(w, model),
+    crewCalls: () => crewBlock(w, model),
+    base: () => baseBlock(w, model),
+    cast: () => castBlock(w, model),
+    groups: () => groupsBlock(w, model),
+    elements: () => elementsBlock(w, model),
+    plan: () => planBlock(w, model),
+    secondUnit: () => secondUnitBlock(w, model),
+    scheme: () => schemeBlock(w, model),
+  };
+  // Блоки и порядок — общие с печатью.
+  for (const key of shownCallSheetBlocks(model)) writers[key]();
   w.finish();
   return workbook;
 }

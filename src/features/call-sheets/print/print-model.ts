@@ -10,6 +10,7 @@ import {
   SPECIAL_TRANSPORT_KEY,
   type ElementValues,
 } from "@/features/call-sheets/lib/sections";
+import { SHIFT_TIMES } from "@/features/call-sheets/print/print-blocks";
 import { timeSlotTypeLabels } from "@/features/day-docs/lib/slot-labels";
 import { minutesBetweenTimes } from "@/features/day-docs/lib/time-utils";
 import { dayNightLabels } from "@/shared/i18n/domain-labels";
@@ -676,12 +677,23 @@ function buildPlan(
     .map((slot) => planRow(slot, sections, unit === "SECOND"));
 }
 
+/**
+ * Из сводки прогноза («Пасмурно, -1…2°C, осадки 27%») — только описание неба: температура
+ * на листе — своими полями «днём / ночью», осадки добавляются один раз ниже.
+ */
+function forecastCondition(summary: string) {
+  return joinText(
+    summary.split(",").filter((part) => !/°C$|^осадки\s+\d+\s*%$/i.test(part.trim())),
+    ", ",
+  );
+}
+
 function buildWeather(source: CallSheetPrintSource): CallSheetPrintModel["weather"] {
   const { astro, day, sheet } = source;
   const forecast = astro && !astro.weatherUnavailable ? text(astro.weatherSummary) : null;
   const precip =
     text(day.weatherPrecip) ?? (forecast && astro?.precipProb ? `осадки ${astro.precipProb}%` : null);
-  const summary = joinText([forecast ?? text(day.weatherNote), precip], ", ");
+  const summary = joinText([(forecast && forecastCondition(forecast)) ?? text(day.weatherNote), precip], ", ");
   // t руками важнее прогноза; не заполнена — из прогноза.
   const weather = {
     summary,
@@ -781,13 +793,13 @@ export function buildCallSheetPrintModel(source: CallSheetPrintSource): CallShee
   const lunch = day.timeSlots.find((slot) => slot.slotType === "LUNCH" && slot.unit === "MAIN");
   const shiftStart = text(day.shiftStartTime) ?? text(day.callTime);
   const shiftEnd = text(day.wrapTime);
-  const timeEntries: [string, string | null, boolean][] = [
-    ["Смена", joinText([shiftStart, shiftEnd], "–"), false],
-    ["Репетиция", text(day.rehearsalTime), false],
-    ["Мотор", text(day.motorOnTime), true],
-    ["Обед", lunch ? joinText([lunch.startTime, lunch.endTime], "–") : null, false],
-    ["Стоп-мотор", text(day.motorOffTime), true],
-  ];
+  const timeValues: Record<(typeof SHIFT_TIMES)[number]["label"], string | null> = {
+    Смена: joinText([shiftStart, shiftEnd], "–"),
+    Репетиция: text(day.rehearsalTime),
+    Мотор: text(day.motorOnTime),
+    Обед: lunch ? joinText([lunch.startTime, lunch.endTime], "–") : null,
+    "Стоп-мотор": text(day.motorOffTime),
+  };
 
   const sections = buildElementSections(source);
   const plan = buildPlan(source, "MAIN", sections, scenes);
@@ -831,9 +843,10 @@ export function buildCallSheetPrintModel(source: CallSheetPrintSource): CallShee
       time: text(day.crewMeetTime) ?? text(day.callTime),
       address: text(day.crewMeetAddress),
     },
-    times: timeEntries
-      .filter((entry): entry is [string, string, boolean] => Boolean(entry[1]))
-      .map(([label, value, accent]) => ({ label, value, accent })),
+    times: SHIFT_TIMES.flatMap(({ label, accent }) => {
+      const value = timeValues[label];
+      return value ? [{ label, value, accent }] : [];
+    }),
     weather: buildWeather(source),
     locations: buildLocations(scenes, secondUnitScenes),
     important: text(sheet?.importantNote),

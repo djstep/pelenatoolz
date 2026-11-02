@@ -429,12 +429,16 @@ describe("HTML листа вызывного", () => {
     assert.equal(page.match(/<style>/g)?.length, 1);
   });
 
-  test("пустые блоки не печатаются; заполненные — на месте", () => {
+  test("пустые необязательные блоки не печатаются, обязательные — всегда; заполненные — на месте", () => {
     const minimal = blockTitles(html(MIN_DAY_SOURCE));
-    assert.deepEqual(minimal, ["Руководители группы", "Актёры", "План съёмки · основной юнит"]);
+    assert.deepEqual(minimal, ["Руководители группы", "Вызов цехов", "Актёры", "План съёмки · основной юнит"]);
     const page = html(MIN_DAY_SOURCE);
-    for (const text of ["Важно", "Погода", "Место сбора", "Ограничения", "Второй юнит", "Схема объекта"]) {
+    for (const text of ["Важно", "Второй юнит", "Схема объекта", "База и транспорт", "Групповка"]) {
       assert.ok(!page.includes(text), `нет «${text}»`);
+    }
+    // Обязательные пустые поля — «не указано»: место сбора, погода, ограничения (пробелы — пусто).
+    for (const label of ["Место сбора", "Погода", "Ограничения по актёрам"]) {
+      assert.match(page, new RegExp(`${label}</(span|div)><span class="nv">не указано</span>`), label);
     }
     // Колонки без единого значения скрыты: у актёра нет времён и транспорта.
     assert.ok(!page.includes(">Транспорт</th>"));
@@ -446,11 +450,14 @@ describe("HTML листа вызывного", () => {
     }
   });
 
-  test("вызывной не создан — блоков из шаблона, текстов и схемы нет, данные дня есть", () => {
+  test("вызывной не создан — руководители и цеха «не указано», базы, текстов и схемы нет, данные дня есть", () => {
     const page = html({ ...clone(FULL_DAY_SOURCE), sheet: null, elements: null });
     const titles = blockTitles(page);
-    for (const title of ["Руководители группы", "Вызов цехов", "База и транспорт группы", "Групповка и дублёры", "Схема объекта"]) {
+    for (const title of ["База и транспорт группы", "Групповка и дублёры", "Схема объекта"]) {
       assert.ok(!titles.includes(title), `нет блока «${title}»`);
+    }
+    for (const title of ["Руководители группы", "Вызов цехов"]) {
+      assert.ok(page.includes(`<h2>${title}</h2></div><div class="empty"><span class="nv">не указано</span></div>`), title);
     }
     assert.ok(!page.includes("Важно"));
     assert.ok(titles.includes("Актёры"));

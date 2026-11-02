@@ -6,6 +6,11 @@ import type {
 } from "@/features/call-sheets/print/print-model";
 import { loadMedeoFontCss, medeoFontUrlCss } from "@/features/call-sheets/print/medeo-font";
 import {
+  isCallSheetBlockShown,
+  NOT_SPECIFIED,
+  shiftTimes,
+} from "@/features/call-sheets/print/print-blocks";
+import {
   stampMark,
   stampVersion,
   type CallSheetStamp,
@@ -18,7 +23,8 @@ import { escapeHtml } from "@/shared/lib/escape-html";
  * владельца (`docs/callsheet-mockup-v5.html`). Страницы — поток: принудительный разрыв только
  * перед схемой объекта; бегущая шапка листов 2+ — поле страницы (`@page`). Подвала нет: статус и
  * версия — в шапке первого листа.
- * Пустые поля и блоки не выводятся, колонки таблиц без единого значения — тоже.
+ * Пустые блоки — по правилу `print-blocks.ts`: обязательные выводятся всегда, пустое поле в них —
+ * «не указано» серым; необязательные пустые не выводятся. Колонки таблиц без единого значения скрыты.
  */
 
 const e = escapeHtml;
@@ -54,8 +60,16 @@ function tOrDash(value: string | null) {
 
 const U2_TAG = `<span class="u2tag">2-й юнит</span>`;
 
+/** Пустое поле обязательного блока. */
+const NV = `<span class="nv">${NOT_SPECIFIED}</span>`;
+
 function blockHead(title: string, extra = "", cls = "") {
   return `<div class="bh${cls ? ` ${cls}` : ""}"><h2>${e(title)}</h2>${extra}</div>`;
+}
+
+/** Пустой обязательный блок-таблица: заголовок и «не указано». */
+function emptyBlock(title: string) {
+  return `${blockHead(title)}<div class="empty">${NV}</div>`;
 }
 
 function count(n: number) {
@@ -87,14 +101,13 @@ function headHtml(model: CallSheetPrintModel, stamp: CallSheetStamp | undefined)
   const mark = stampMark(stamp);
 
   const { crewCall } = model;
-  const dark = crewCall.time
-    ? `<div class="dark"><span class="lbl">Сбор группы</span>${t(crewCall.time)}</div>`
-    : "";
-  const place = crewCall.address
-    ? `<div class="place"><span class="lbl">Место сбора</span><b>${e(crewCall.address)}</b>${
-        model.scheme ? `<span class="mute">схема — в конце</span>` : ""
-      }</div>`
-    : "";
+  // Обязательный блок: время и место сбора — всегда, пустое — «не указано».
+  const dark = `<div class="dark"><span class="lbl">Сбор группы</span>${
+    crewCall.time ? t(crewCall.time) : NV
+  }</div>`;
+  const place = `<div class="place"><span class="lbl">Место сбора</span>${
+    crewCall.address ? `<b>${e(crewCall.address)}</b>` : NV
+  }${model.scheme ? `<span class="mute">схема — в конце</span>` : ""}</div>`;
 
   return `<div class="head">
   <div>
@@ -103,24 +116,29 @@ function headHtml(model: CallSheetPrintModel, stamp: CallSheetStamp | undefined)
     <div class="date">${e(model.dateLabel)}</div>
     ${meta.length ? `<div class="meta">${meta.join(" · ")}</div>` : ""}
   </div>
-  ${dark || place ? `<div class="callbox">${dark}${place}</div>` : ""}
+  <div class="callbox">${dark}${place}</div>
 </div>`;
 }
 
+/** Полоса времён — всегда все пять. */
 function timesHtml(model: CallSheetPrintModel) {
-  if (model.times.length === 0) return "";
-  return `<div class="times">${model.times
+  return `<div class="times">${shiftTimes(model)
     .map(
       (time) =>
-        `<div${time.accent ? ` class="hot"` : ""}><span class="lbl">${e(time.label)}</span>${t(time.value)}</div>`,
+        `<div${time.accent ? ` class="hot"` : ""}><span class="lbl">${e(time.label)}</span>${
+          time.value ? t(time.value) : NV
+        }</div>`,
     )
     .join("")}</div>`;
 }
 
+/** Погода, объекты, ограничения — обязательные: всегда три колонки. */
 function infoHtml(model: CallSheetPrintModel) {
   const cols: string[] = [];
   const w = model.weather;
-  if (w) {
+  if (!w) {
+    cols.push(`<div class="w"><div class="lbl">Погода</div>${NV}</div>`);
+  } else {
     const kv = (
       [
         ["днём", w.tempDay],
@@ -152,17 +170,19 @@ function infoHtml(model: CallSheetPrintModel) {
       )
       .join("");
     cols.push(`<div class="o"><div class="lbl">${several ? "Объекты" : "Объект"}</div>${objects}</div>`);
+  } else {
+    cols.push(`<div class="o"><div class="lbl">Объект</div>${NV}</div>`);
   }
-  if (model.actorRestrictions) {
-    cols.push(
-      `<div class="r"><div class="lbl">Ограничения по актёрам</div><div class="pre">${e(model.actorRestrictions)}</div></div>`,
-    );
-  }
-  return cols.length ? `<div class="info">${cols.join("")}</div>` : "";
+  cols.push(
+    `<div class="r"><div class="lbl">Ограничения по актёрам</div>${
+      model.actorRestrictions ? `<div class="pre">${e(model.actorRestrictions)}</div>` : NV
+    }</div>`,
+  );
+  return `<div class="info">${cols.join("")}</div>`;
 }
 
 function importantHtml(model: CallSheetPrintModel) {
-  if (!model.important) return "";
+  if (!model.important || !isCallSheetBlockShown(model, "important")) return "";
   return `<div class="important"><span class="lbl">Важно</span><p>${e(model.important)}</p></div>`;
 }
 
@@ -170,7 +190,7 @@ function importantHtml(model: CallSheetPrintModel) {
 
 function leadersHtml(model: CallSheetPrintModel) {
   const rows = model.leaders;
-  if (rows.length === 0) return "";
+  if (rows.length === 0) return `<div>${emptyBlock("Руководители группы")}</div>`;
   const withName = rows.some((r) => r.name);
   const withPhone = rows.some((r) => r.phone);
   const head = `<tr><th>Должность</th>${withName ? "<th>Фамилия имя</th>" : ""}${
@@ -189,7 +209,7 @@ function leadersHtml(model: CallSheetPrintModel) {
 
 function crewHtml(model: CallSheetPrintModel) {
   const rows = model.crewCalls;
-  if (rows.length === 0) return "";
+  if (rows.length === 0) return `<div>${emptyBlock("Вызов цехов")}</div>`;
   const withTime = rows.some((r) => r.time);
   const body = rows
     .map((r) => {
@@ -204,17 +224,14 @@ function crewHtml(model: CallSheetPrintModel) {
   }</tr></thead><tbody>${body}</tbody></table></div>`;
 }
 
+/** Руководители и вызов цехов — обязательные: всегда рядом, двумя колонками. */
 function leadersCrewHtml(model: CallSheetPrintModel) {
-  const leaders = leadersHtml(model);
-  const crew = crewHtml(model);
-  if (!leaders && !crew) return "";
-  if (!leaders || !crew) return `<div class="block">${leaders || crew}</div>`;
-  return `<div class="two block">${leaders}${crew}</div>`;
+  return `<div class="two block">${leadersHtml(model)}${crewHtml(model)}</div>`;
 }
 
 function baseHtml(model: CallSheetPrintModel) {
   const rows = model.baseItems;
-  if (rows.length === 0) return "";
+  if (!isCallSheetBlockShown(model, "base")) return "";
   const cellsHtml = rows
     .map((r) =>
       r.notNeeded
@@ -269,7 +286,7 @@ function transportCell(row: CallSheetPrintCastRow) {
 
 function castHtml(model: CallSheetPrintModel) {
   const rows = model.cast;
-  if (rows.length === 0) return "";
+  if (rows.length === 0) return `<div class="block">${emptyBlock("Актёры")}</div>`;
   const time = (
     head: string,
     get: (r: CallSheetPrintCastRow) => string | null,
@@ -323,7 +340,7 @@ function rowTimeColumns(): Column<CallSheetPrintElementRow>[] {
 
 function groupsHtml(model: CallSheetPrintModel) {
   const rows = model.groups;
-  if (rows.length === 0) return "";
+  if (!isCallSheetBlockShown(model, "groups")) return "";
   const columns: Column<CallSheetPrintElementRow>[] = [
     { head: "Кто", has: () => true, cell: (r) => elementName(r, false) },
     {
@@ -339,7 +356,7 @@ function groupsHtml(model: CallSheetPrintModel) {
 
 function elementsHtml(model: CallSheetPrintModel) {
   const sections = model.elementSections;
-  if (sections.length === 0) return "";
+  if (!isCallSheetBlockShown(model, "elements")) return "";
   const all = sections.flatMap((s) => s.rows);
   const cols = columnsFor(
     [{ head: "Что", has: () => true, cell: (r) => elementName(r, true) }, ...rowTimeColumns()],
@@ -403,7 +420,7 @@ function planRowHtml(row: CallSheetPrintPlanRow) {
 const PLAN_HEAD = `<thead><tr><th>Время</th><th>Сцена</th><th>Объект · содержание · элементы</th><th>Персонажи</th><th class="r">Хрон.</th></tr></thead>`;
 
 function planHtml(model: CallSheetPrintModel) {
-  if (model.plan.length === 0) return "";
+  if (model.plan.length === 0) return `<div class="block">${emptyBlock("План съёмки · основной юнит")}</div>`;
   const total = model.totals.mainTiming
     ? `<tr class="total"><td colspan="4" class="r">Итого хронометраж основного юнита</td><td class="r">${t(model.totals.mainTiming)}</td></tr>`
     : "";
@@ -414,7 +431,7 @@ function planHtml(model: CallSheetPrintModel) {
 
 function secondUnitHtml(model: CallSheetPrintModel) {
   const { rows, range } = model.secondUnit;
-  if (rows.length === 0) return "";
+  if (!isCallSheetBlockShown(model, "secondUnit")) return "";
   return `<div class="block">${blockHead(
     "Второй юнит",
     range ? `<span class="sub t">${e(range)}</span>` : "",
@@ -426,7 +443,7 @@ function secondUnitHtml(model: CallSheetPrintModel) {
 
 function schemeHtml(model: CallSheetPrintModel) {
   const s = model.scheme;
-  if (!s) return "";
+  if (!s || !isCallSheetBlockShown(model, "scheme")) return "";
   const points = s.points
     .map(
       (p, i) =>
@@ -512,6 +529,8 @@ h1,h2,p{ margin:0; }
 .t{ font-weight:600; white-space:nowrap; font-variant-numeric:tabular-nums; letter-spacing:.01em; }
 .mute{ color:var(--mute); }
 .none{ color:var(--faint); font-weight:400; }
+.nv{ color:var(--faint); font-weight:400; font-size:8pt; letter-spacing:0; text-transform:none; white-space:nowrap; }
+.empty{ padding:.9mm 1mm; border-bottom:.5pt solid var(--line); }
 .pre{ white-space:pre-line; }
 .lbl{ font-size:6.5pt; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--mute); }
 .sheet{ margin:0 auto; }
@@ -536,6 +555,8 @@ h1,h2,p{ margin:0; }
 .callbox .place{ padding:2.2mm 4mm; max-width:52mm; }
 .callbox .place .lbl, .callbox .place .mute{ display:block; }
 .callbox .place b{ display:block; font-size:9pt; margin-top:1.2mm; }
+.callbox .dark .nv{ display:block; margin-top:1mm; font-size:11pt; color:#8a8a85; }
+.callbox .place .nv{ display:block; margin-top:1.2mm; font-size:9pt; }
 
 .times{ display:flex; border-top:2.4pt solid var(--ink); border-bottom:1pt solid var(--ink); break-inside:avoid; }
 .times > div{ flex:1 1 0; padding:1.4mm 2.5mm 1.6mm; border-right:.6pt solid var(--line2); }
@@ -543,6 +564,7 @@ h1,h2,p{ margin:0; }
 .times .lbl{ display:block; }
 .times .t{ font-weight:700; font-size:13pt; display:block; margin-top:.4mm; }
 .times .hot .t{ color:var(--acc); }
+.times .nv{ display:block; margin-top:.4mm; font-size:9pt; line-height:16.6pt; }
 
 .info{ display:flex; gap:5mm; padding:2.4mm 0 2.6mm; border-bottom:.6pt solid var(--line2); break-inside:avoid; }
 .info > div{ min-width:0; }

@@ -164,13 +164,17 @@ describe("вызывной в Excel", () => {
     assert.equal(titleRow(workbook, "ВЫЗЫВНОЙ ЛИСТ")!.row, 1);
   });
 
-  test("пустые блоки не выводятся", () => {
+  test("пустые необязательные блоки не выводятся, обязательные — всегда, пустое — «не указано»", () => {
     const workbook = book(MIN_DAY_SOURCE);
-    for (const title of ["ВЫЗОВ ЦЕХОВ", "ВАЖНО", "ОГРАНИЧЕНИЯ ПО АКТЁРАМ", "СХЕМА ОБЪЕКТА", "ВТОРОЙ ЮНИТ", "ПОГОДА"]) {
+    for (const title of ["ВАЖНО", "СХЕМА ОБЪЕКТА", "ВТОРОЙ ЮНИТ", "БАЗА И ТРАНСПОРТ ГРУППЫ", "ГРУППОВКА И ДУБЛЁРЫ"]) {
       assert.equal(titleRow(workbook, title), undefined, title);
     }
-    assert.ok(titleRow(workbook, "РУКОВОДИТЕЛИ ГРУППЫ"));
-    assert.ok(titleRow(workbook, "АКТЁРЫ"));
+    for (const title of ["РУКОВОДИТЕЛИ ГРУППЫ", "АКТЁРЫ", "ВЫЗОВ ЦЕХОВ", "ОГРАНИЧЕНИЯ ПО АКТЁРАМ", "ПОГОДА"]) {
+      assert.ok(titleRow(workbook, title), title);
+    }
+    // Под пустым обязательным блоком — «не указано».
+    const crew = titleRow(workbook, "ВЫЗОВ ЦЕХОВ")!;
+    assert.ok(cells(workbook).some((c) => c.row === crew.row + 1 && c.value === "не указано"));
   });
 
   test("план: время, хронометраж строками как в модели", () => {

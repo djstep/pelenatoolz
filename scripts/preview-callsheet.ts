@@ -1,7 +1,7 @@
 /**
  * Превью печатного листа вызывного без входа и без базы: HTML из фикстур — день «ИРП» из
- * макета владельца, насыщенный и минимальный день → `preview/callsheet-irp.html`,
- * `preview/callsheet-full.html`, `preview/callsheet-min.html`.
+ * макета владельца, насыщенный, минимальный и пустой день → `preview/callsheet-irp.html`,
+ * `preview/callsheet-full.html`, `preview/callsheet-min.html`, `preview/callsheet-empty.html`.
  * Если найден Chrome / Chromium (переменная `CHROME_PATH` или обычные места установки) —
  * ещё PDF A4 и PNG рядом и PDF самого макета (`preview/mockup-v5.pdf`) для сверки по страницам.
  * Ничего не ставит и в базу не ходит.
@@ -16,6 +16,7 @@ import { loadMedeoFontCss } from "../src/features/call-sheets/print/medeo-font";
 import { buildCallSheetHtml } from "../src/features/call-sheets/print/print-html";
 import { buildCallSheetPrintModel } from "../src/features/call-sheets/print/print-model";
 import {
+  EMPTY_DAY_SOURCE,
   FULL_DAY_SOURCE,
   IRP_DAY_SOURCE,
   MIN_DAY_SOURCE,
@@ -68,6 +69,7 @@ function main() {
     { name: "callsheet-irp", source: IRP_DAY_SOURCE },
     { name: "callsheet-full", source: FULL_DAY_SOURCE },
     { name: "callsheet-min", source: MIN_DAY_SOURCE },
+    { name: "callsheet-empty", source: EMPTY_DAY_SOURCE },
   ];
   for (const { name, source } of variants) {
     const html = buildCallSheetHtml(buildCallSheetPrintModel(source), { font: "embed" });

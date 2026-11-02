@@ -69,6 +69,29 @@ export const DAYS = [
   { dayNumber: 3, date: "2026-11-12", dayType: "OFF" },
 ] as const;
 
+/**
+ * Дни для вида печатного листа (сид дописывает их и в уже созданный проект): 4 — вызывной
+ * заполнен целиком (все блоки макета), 5 — рабочий день без данных и без вызывного.
+ */
+export const LAYOUT_DAYS = {
+  filled: { dayNumber: 4, date: "2026-11-13" },
+  empty: { dayNumber: 5, date: "2026-11-14" },
+} as const;
+
+/** Тексты заполненного дня 4 — по ним e2e проверяет блоки листа. */
+export const FILLED_DAY = {
+  crewMeetAddress: "Москва, ул. Тестовая, 1, проходная 3",
+  important: "Всем иметь при себе паспорт: вход по пропускам",
+  restrictions: "Тестов — не позже 20:00",
+  leader: "Иванова Ольга",
+  crew: "Операторский цех",
+  base: "Фудтрак E2E",
+  group: "Дублёр Ивана E2E",
+  element: "Зонт чёрный E2E",
+  secondUnit: "Детали интерьера E2E",
+  schemePoint: "Основной караван E2E",
+} as const;
+
 export const NAMES = {
   actor: { lastName: "Тестов", firstName: "Пётр" },
   actor2: { lastName: "Проверкина", firstName: "Анна" },
