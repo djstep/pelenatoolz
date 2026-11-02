@@ -3,6 +3,7 @@ import type { ScreenplayBlock } from "@/features/screenplay/lib/block-types";
 import { NON_PRINTABLE_BLOCK_TYPES } from "@/features/screenplay/lib/block-types";
 import { estimateTotalPages } from "@/features/screenplay/lib/page-layout";
 import { blockPlainText } from "@/features/screenplay/lib/plain-text";
+import { formatSecondsMmSs } from "@/shared/i18n/domain-labels";
 
 const TIMING_BLOCK_TYPES = new Set([
   "ACTION",
@@ -21,12 +22,6 @@ export type SceneTimingRef = {
   /** Сцена вырезана — не входит в итог сценария. */
   cut?: boolean;
 };
-
-function formatMmSs(sec: number) {
-  const m = Math.floor(sec / 60);
-  const s = sec % 60;
-  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
-}
 
 function timingText(blocks: ScreenplayBlock[]) {
   return blocks
@@ -94,31 +89,31 @@ export function estimateScreenplayTiming(
 
   if (timingMode === "MANUAL") {
     const seconds = sumScenePlanSeconds(blocks, sceneTimings);
-    return { seconds, label: formatMmSs(seconds), pages: 0 };
+    return { seconds, label: formatSecondsMmSs(seconds), pages: 0 };
   }
 
   if (timingMode === "IMPORTED") {
     const fromScenes = sumScenePlanSeconds(blocks, sceneTimings);
     if (fromScenes > 0) {
-      return { seconds: fromScenes, label: formatMmSs(fromScenes), pages: 0 };
+      return { seconds: fromScenes, label: formatSecondsMmSs(fromScenes), pages: 0 };
     }
     const text = timingText(blocks);
     const imported = extractImportedTimingSeconds(text);
     if (imported != null) {
-      return { seconds: imported, label: formatMmSs(imported), pages: 0 };
+      return { seconds: imported, label: formatSecondsMmSs(imported), pages: 0 };
     }
     const seconds = calcByWords(blocks);
-    return { seconds, label: formatMmSs(seconds), pages: 0 };
+    return { seconds, label: formatSecondsMmSs(seconds), pages: 0 };
   }
 
   if (timingMode === "PAGES") {
     const pages = estimateTotalPages(blocks);
     const seconds = calcByPages(blocks, pageToMinuteRatio);
-    return { seconds, label: formatMmSs(seconds), pages };
+    return { seconds, label: formatSecondsMmSs(seconds), pages };
   }
 
   const seconds = calcByWords(blocks);
-  return { seconds, label: formatMmSs(seconds), pages: 0 };
+  return { seconds, label: formatSecondsMmSs(seconds), pages: 0 };
 }
 
 export function estimateSceneTiming(
@@ -130,20 +125,20 @@ export function estimateSceneTiming(
 ) {
   if (timingMode === "MANUAL") {
     const seconds = scenePlanSeconds ?? 0;
-    return { seconds, label: formatMmSs(seconds), pages: 0 };
+    return { seconds, label: formatSecondsMmSs(seconds), pages: 0 };
   }
 
   if (timingMode === "IMPORTED") {
     if (scenePlanSeconds != null && scenePlanSeconds > 0) {
       return {
         seconds: scenePlanSeconds,
-        label: formatMmSs(scenePlanSeconds),
+        label: formatSecondsMmSs(scenePlanSeconds),
         pages: 0,
       };
     }
     const imported = extractImportedTimingSeconds(scriptText);
     if (imported != null) {
-      return { seconds: imported, label: formatMmSs(imported), pages: 0 };
+      return { seconds: imported, label: formatSecondsMmSs(imported), pages: 0 };
     }
   }
 

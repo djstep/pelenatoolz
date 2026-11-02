@@ -30,13 +30,14 @@ import {
   ruleText,
   visibleOptions,
 } from "@/features/import/review/question-text";
-import { formatMmSs, previewTimings } from "@/features/import/review/timing";
+import { previewTimings } from "@/features/import/review/timing";
 import {
   formatFileSize,
   type ScriptImportState,
   type ScriptReviewData,
 } from "@/features/import/review/types";
 import { blockingQuestions } from "@/features/import/write/plan";
+import { formatSecondsMmSs } from "@/shared/i18n/domain-labels";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
@@ -148,8 +149,8 @@ export function ScriptReview({
     const update = result.timingUpdates.find((u) => u.sceneIndex === index);
     if (!update) return "текст изменился; хронометраж в либретто остаётся";
     return update.mode === "fill"
-      ? `хронометраж будет записан: ${formatMmSs(update.seconds)}`
-      : `хронометраж пересчитан: ${formatMmSs(update.seconds)}`;
+      ? `хронометраж будет записан: ${formatSecondsMmSs(update.seconds)}`
+      : `хронометраж пересчитан: ${formatSecondsMmSs(update.seconds)}`;
   };
   const fileKeys = useMemo(
     () =>

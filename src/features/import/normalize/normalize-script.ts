@@ -48,7 +48,8 @@ import {
   type VersionScene,
 } from "@/features/import/normalize/scene-match";
 import { parseTitlePage, type TitlePage } from "@/features/import/normalize/title-page";
-import { formatMmSs, previewTimings } from "@/features/import/review/timing";
+import { previewTimings } from "@/features/import/review/timing";
+import { formatSecondsMmSs } from "@/shared/i18n/domain-labels";
 
 /**
  * Типы вопросов. Код постоянного вопроса — «тип:ключ», ключ из содержимого
@@ -678,7 +679,7 @@ function matchedTimings(
       suggested: "keep",
       acceptAll: false,
       paragraphIndex: scene.paragraphIndex,
-      detail: `${formatMmSs(before)} → ${formatMmSs(seconds)}`,
+      detail: `${formatSecondsMmSs(before)} → ${formatSecondsMmSs(seconds)}`,
     });
     if (answer === "recalc") updates.push({ sceneIndex: scene.index, seconds, mode: "set" });
   }

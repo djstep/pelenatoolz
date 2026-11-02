@@ -6,6 +6,8 @@ import { buildCallSheetHtml } from "@/features/call-sheets/print/print-html";
 import { buildCallSheetPrintModel } from "@/features/call-sheets/print/print-model";
 import { buildCallSheetWorkbook } from "@/features/call-sheets/print/print-xlsx";
 import { IRP_DAY_SOURCE } from "@/features/call-sheets/print/preview-fixtures";
+import { previewTimings } from "@/features/import/review/timing";
+import { estimateSceneTiming, estimateScreenplayTiming } from "@/features/screenplay/lib/timing";
 import { formatSecondsMmSs } from "@/shared/i18n/domain-labels";
 
 describe("хронометраж «М:СС» — одна функция для всей системы", () => {
@@ -61,5 +63,31 @@ describe("хронометраж «М:СС» — одна функция для 
       const source = read(file);
       assert.ok(!/planSeconds|formatTiming|% 60/.test(source), `${file} — хрон только из модели`);
     }
+  });
+
+  test("редактор сценария и предпросмотр импорта — тоже общей функцией, своих форматтеров нет", () => {
+    const read = (file: string) => readFileSync(path.join(process.cwd(), file), "utf8");
+    for (const file of [
+      "src/features/screenplay/lib/timing.ts",
+      "src/features/import/review/timing.ts",
+      "src/features/import/components/script-review.tsx",
+      "src/features/import/normalize/normalize-script.ts",
+    ]) {
+      const source = read(file);
+      assert.ok(source.includes("formatSecondsMmSs("), `${file} — через общую функцию`);
+      assert.ok(!source.includes("formatMmSs"), `${file} — своей formatMmSs нет`);
+      assert.doesNotMatch(source, /padStart\(2, "0"\)/, `${file} — своего «ММ:СС» нет`);
+    }
+  });
+
+  test("сценарий и импорт: «0:23», ноль и пусто — «—»", () => {
+    // Ручной режим: хрон сцены — как задан.
+    assert.equal(estimateSceneTiming([], "MANUAL", 1, 23).label, "0:23");
+    assert.equal(estimateSceneTiming([], "MANUAL", 1, 725).label, "12:05");
+    assert.equal(estimateSceneTiming([], "MANUAL", 1, 0).label, "—");
+    assert.equal(estimateSceneTiming([], "MANUAL", 1, null).label, "—");
+    // Итог сценария без сцен и предпросмотр импорта пустого файла — «—», не «00:00».
+    assert.equal(estimateScreenplayTiming([], "MANUAL", 1).label, "—");
+    assert.equal(previewTimings({ blocks: [], scenes: [] }, "MANUAL", 1).total.label, "—");
   });
 });
