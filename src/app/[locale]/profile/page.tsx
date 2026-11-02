@@ -9,6 +9,9 @@ import { ProfileForm } from "@/features/profile/components/profile-form";
 import { prisma } from "@/shared/db/prisma";
 import { Card } from "@/shared/ui/card";
 
+// Vercel: выгрузка на диск (предел 50 с), OAuth дисков и пересчёт доступов к папкам после ответа (`after()`) — до 60 с.
+export const maxDuration = 60;
+
 type Props = {
   params: Promise<{ locale: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;

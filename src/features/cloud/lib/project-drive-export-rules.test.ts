@@ -280,7 +280,24 @@ describe("сервер: проверки до выгрузки на диск п�
     assert.ok(projectPart.indexOf("getProjectDriveAccessToken(projectId, userId)") < tx);
     const txEnd = projectPart.indexOf("{ maxWait: 10_000, timeout: TX_TIMEOUT_MS }");
     assert.ok(projectPart.indexOf("markProjectDriveNeedsReconnect(") > txEnd);
-    assert.ok(projectPart.indexOf("scheduleNewProjectFolderAccess(") > txEnd);
+    assert.ok(projectPart.indexOf("scheduleProjectFolderAccessAfterExport(") > txEnd);
+  });
+
+  test("доступы папки пересчитываются после каждой выгрузки, не только при создании папки", () => {
+    const txEnd = projectPart.indexOf("{ maxWait: 10_000, timeout: TX_TIMEOUT_MS }");
+    const tail = projectPart.slice(txEnd);
+    const unavailable = tail.indexOf('if ("unavailable" in result) return');
+    const schedule = tail.indexOf("scheduleProjectFolderAccessAfterExport(projectId, drive.id, target, userId)");
+    const failure = tail.indexOf("const e = result.failure;");
+    // Диск недоступен — не пересчитываем; иначе — до разбора неудачи (и при неудачной выгрузке).
+    assert.ok(unavailable > 0 && unavailable < schedule && schedule < failure);
+    assert.doesNotMatch(projectPart, /outcome !== "existing"/);
+    // Пересчёт ищет папку по ключу назначения, а не по тому, что успела вернуть цепочка папок.
+    const folders = readFileSync(new URL("./project-drive-folders.ts", import.meta.url), "utf8");
+    const fn = folders.slice(folders.indexOf("export function scheduleProjectFolderAccessAfterExport("));
+    assert.match(fn, /after\(async \(\) =>/);
+    assert.match(fn, /projectDriveId_key: \{ projectDriveId: driveId, key \}/);
+    assert.match(fn, /trigger: "folder_export", folderIds: \[folder\.id\]/);
   });
 
   test("запросы к Google — через предел; после предела папки не пишутся", () => {

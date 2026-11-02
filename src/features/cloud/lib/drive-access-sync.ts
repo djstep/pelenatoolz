@@ -52,7 +52,8 @@ export type DriveSyncTrigger =
   | "department_deleted"
   | "google_email"
   | "drive_connected"
-  | "folder_created";
+  | "folder_created"
+  | "folder_export";
 
 export type DriveSyncResult = {
   /** skipped — диска нет / отключён / папок ещё нет; reconnect — доступ к диску отозван. */
@@ -377,6 +378,7 @@ const TRIGGER_TEXT: Record<DriveSyncTrigger, string> = {
   google_email: "изменена «Почта для Google»",
   drive_connected: "подключение диска проекта",
   folder_created: "создана папка",
+  folder_export: "выгрузка в папку",
 };
 
 /**

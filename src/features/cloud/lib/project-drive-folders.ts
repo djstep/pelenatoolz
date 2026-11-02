@@ -187,13 +187,26 @@ export async function ensureProjectFolderChain(
 }
 
 /**
- * Выгрузка создала или пересоздала конечную папку — выдать ей доступы после ответа (`after()`):
- * выгрузка держит блокировку диска проекта, а выдача — по запросу на человека. Не бросает.
+ * После выгрузки в папку диска проекта — пересчитать доступы этой папки (после ответа, `after()`:
+ * выгрузка держит блокировку диска проекта, а выдача — по запросу на человека). Новой папке —
+ * выдать; существующей — догнать невыданное (предел выгрузки вышел сразу после создания папки,
+ * Google отказал в прошлый раз). Папки в базе нет — ничего. Не бросает.
  */
-export function scheduleNewProjectFolderAccess(projectId: string, folderId: string, actorUserId: string) {
+export function scheduleProjectFolderAccessAfterExport(
+  projectId: string,
+  driveId: string,
+  target: ProjectFolderTarget,
+  actorUserId: string,
+) {
+  const key = target.kind === "department" ? departmentFolderKey(target.departmentId) : PROJECT_FOLDER_KEYS.common;
   after(async () => {
     try {
-      await syncProjectDriveAccess(projectId, { actorUserId, trigger: "folder_created", folderIds: [folderId] });
+      const folder = await prisma.driveFolder.findUnique({
+        where: { projectDriveId_key: { projectDriveId: driveId, key } },
+        select: { id: true },
+      });
+      if (!folder) return;
+      await syncProjectDriveAccess(projectId, { actorUserId, trigger: "folder_export", folderIds: [folder.id] });
     } catch (e) {
       console.error("[drive folder access]", projectId, e instanceof Error ? e.message : e);
     }

@@ -1,9 +1,5 @@
 import type { CloudConnection, CloudProvider } from "@prisma/client";
-import {
-  downloadGoogleFile,
-  refreshGoogleToken,
-  revokeGoogleToken,
-} from "@/features/cloud/lib/google-drive";
+import { refreshGoogleToken, revokeGoogleToken } from "@/features/cloud/lib/google-drive";
 import { CloudReconnectRequiredError, isCloudReconnectRequiredError } from "@/features/cloud/lib/errors";
 import {
   revokeIsAccountWide,
@@ -13,11 +9,7 @@ import {
 import { connectionReconnectReason } from "@/features/cloud/lib/scopes";
 import { decryptSecret, encryptSecret } from "@/features/cloud/lib/token-crypto";
 import { cloudProviderLabels } from "@/features/cloud/lib/types";
-import {
-  downloadYandexFile,
-  refreshYandexToken,
-  revokeYandexToken,
-} from "@/features/cloud/lib/yandex-disk";
+import { refreshYandexToken, revokeYandexToken } from "@/features/cloud/lib/yandex-disk";
 import { AuditEntityType } from "@/shared/audit/entity-types";
 import { recordAudit } from "@/shared/audit/with-audit";
 import { prisma } from "@/shared/db/prisma";
@@ -305,20 +297,6 @@ export async function saveCloudConnection(input: {
     },
   );
   return saved;
-}
-
-export async function downloadCloudFileForUser(
-  userId: string,
-  provider: CloudProvider,
-  externalId: string,
-  mimeType?: string | null,
-) {
-  return withCloudAccessToken(userId, provider, (token) => {
-    if (provider === "GOOGLE_DRIVE") {
-      return downloadGoogleFile(token, externalId, mimeType);
-    }
-    return downloadYandexFile(token, externalId);
-  });
 }
 
 export async function listProjectCloudFiles(projectId: string) {

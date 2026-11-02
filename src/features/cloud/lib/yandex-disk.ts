@@ -103,24 +103,3 @@ export async function fetchYandexAccount(accessToken: string) {
     return { id: null, email: null };
   }
 }
-
-export async function downloadYandexFile(accessToken: string, path: string) {
-  const hrefUrl = new URL(`${yandexEndpoints().diskApi}/resources/download`);
-  hrefUrl.searchParams.set("path", path);
-
-  const meta = await fetch(hrefUrl, {
-    headers: { Authorization: `OAuth ${accessToken}` },
-  });
-  if (!meta.ok) {
-    throw new Error(`Yandex download meta failed: ${meta.status}`);
-  }
-  const { href } = (await meta.json()) as { href: string };
-  const fileRes = await fetch(href);
-  if (!fileRes.ok) {
-    throw new Error(`Yandex download failed: ${fileRes.status}`);
-  }
-  const buffer = Buffer.from(await fileRes.arrayBuffer());
-  const mimeType =
-    fileRes.headers.get("content-type") ?? "application/octet-stream";
-  return { buffer, mimeType };
-}

@@ -44,6 +44,9 @@ import { listDepartmentsForSmeta } from "@/features/departments/queries";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { listResourceCategories } from "@/features/resources/queries";
 
+// Vercel: выгрузка на диск (предел 50 с), OAuth дисков и пересчёт доступов к папкам после ответа (`after()`) — до 60 с.
+export const maxDuration = 60;
+
 type Props = {
   params: Promise<{ locale: string; projectId: string; dayId: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;

@@ -236,7 +236,6 @@ export async function finishCloudConnect(request: Request, provider: CloudProvid
   try {
     if (provider === "GOOGLE_DRIVE") {
       const tokens = await exchangeGoogleCode(code, callbackUri(provider));
-      logTokenResponse(slug, tokens);
       const scopes = tokens.scope ?? "";
       const account = parseGoogleIdToken(tokens.id_token);
       // Человек снял галочку «файлы, созданные приложением» — такой токен не годится.
@@ -259,7 +258,6 @@ export async function finishCloudConnect(request: Request, provider: CloudProvid
       });
     } else {
       const tokens = await exchangeYandexCode(code);
-      logTokenResponse(slug, tokens);
       // Яндекс обычно не присылает scope: права — ровно запрошенные в окне (и отмеченные
       // в приложении). Если прислал и в нём нет папки приложения — такой токен не годится.
       const scopes = tokens.scope?.trim() ? tokens.scope : YANDEX_APP_FOLDER_SCOPE;
@@ -312,7 +310,6 @@ async function finishProjectDriveConnect(
   let account: ReturnType<typeof parseGoogleIdToken>;
   try {
     const tokens = await exchangeGoogleCode(code, callbackUri(provider));
-    logTokenResponse("google project", tokens);
     const scopes = tokens.scope ?? "";
     freshToken = tokens.refresh_token ?? tokens.access_token;
     account = parseGoogleIdToken(tokens.id_token);
@@ -351,18 +348,4 @@ async function finishProjectDriveConnect(
   // Тот же аккаунт переподключён — папки сохранились: догнать доступы (после ответа).
   scheduleProjectDriveAccessSync(projectId, userId, "drive_connected");
   return NextResponse.redirect(withParam(returnTo, "cloud_connected", "project"));
-}
-
-/**
- * В лог сервера — какие поля прислал провайдер при обмене кода и выданные права.
- * Значения токенов не пишутся никогда.
- */
-function logTokenResponse(slug: string, tokens: object) {
-  const fields = Object.keys(tokens).sort().join(", ");
-  const scope = (tokens as { scope?: unknown }).scope;
-  console.info(
-    `[cloud ${slug} callback] ответ на обмен кода: поля ${fields}; scope: ${
-      typeof scope === "string" ? scope || "(пусто)" : "(нет)"
-    }`,
-  );
 }

@@ -267,6 +267,15 @@ test("удаление участника → доступ снят; возвр�
   await stub(`/google/files/${common.externalId}/permissions`, { email: MANUAL_EMAIL, role: "reader" });
 
   await page.goto(projectPath(ctx, "/members"));
+  const removalSyncs = () =>
+    db.auditLog.count({
+      where: {
+        projectId: ctx.projectId,
+        entityType: "project_drive",
+        changes: { path: ["trigger"], equals: "member_removed" },
+      },
+    });
+  const syncsBefore = await removalSyncs();
   const row = page.locator("tr").filter({ hasText: email("nofin") });
   await row.getByRole("button", { name: "Удалить" }).click();
   const dialog = page.getByRole("dialog", { name: /Удалить участника/ });
@@ -275,6 +284,9 @@ test("удаление участника → доступ снят; возвр�
 
   await expectSystemGrants(common.externalId, [email("producer")]);
   expect(await emailsOf(common.externalId, { manual: true })).toEqual([MANUAL_EMAIL]);
+  // Пересчёт после удаления закончен (запись в журнале) — иначе его следующий проход увидит
+  // возвращённого ниже участника и выдаст доступ сам, раньше кнопки.
+  await expect.poll(removalSyncs, { timeout: 45_000 }).toBe(syncsBefore + 1);
 
   // Вернули в проект (как после повторного приглашения) — кнопка синхронизации выдаёт доступ.
   const m = await membership("nofin");

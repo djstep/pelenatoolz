@@ -14,10 +14,14 @@ import {
 } from "@/features/cloud/lib/project-drive-service";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { canOpenProjectSettings } from "@/features/projects/lib/project-list-access";
+import { projectSettingsValues } from "@/features/projects/lib/project-settings-values";
 import { ProjectDangerZone } from "@/features/projects/components/project-danger-zone";
 import { ProjectSettingsForm } from "@/features/projects/components/project-settings-form";
 import { Card } from "@/shared/ui/card";
 import { Button } from "@/shared/ui/button";
+
+// Vercel: выгрузка на диск (предел 50 с), OAuth дисков и пересчёт доступов к папкам после ответа (`after()`) — до 60 с.
+export const maxDuration = 60;
 
 type Props = {
   params: Promise<{ locale: string; projectId: string }>;
@@ -67,7 +71,7 @@ export default async function ProjectSettingsPage({ params, searchParams }: Prop
           <h3 className="mb-4 font-display text-lg font-semibold">
             Основные параметры
           </h3>
-          <ProjectSettingsForm project={ctx.project} />
+          <ProjectSettingsForm project={projectSettingsValues(ctx.project)} />
         </Card>
       ) : null}
 

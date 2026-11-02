@@ -246,12 +246,17 @@ function AttendanceSheetSettingsModal({
   const toast = useToast();
   const [pending, startTransition] = useTransition();
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(open);
+  // Окно открыли — «загрузка» сразу, в рендере (не в эффекте): эффект только загружает.
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (open) setLoading(true);
+  }
 
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
-    setLoading(true);
     void getAttendanceSheetSettingsAction(projectId)
       .then((res) => {
         if (cancelled) return;

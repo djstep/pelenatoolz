@@ -103,31 +103,3 @@ export function parseGoogleIdToken(idToken: string | undefined): {
     return { sub: null, email: null };
   }
 }
-
-export async function downloadGoogleFile(
-  accessToken: string,
-  fileId: string,
-  mimeType?: string | null,
-) {
-  const googleDoc = mimeType?.startsWith("application/vnd.google-apps.");
-  const driveApi = googleEndpoints().driveApi;
-  let url = `${driveApi}/files/${fileId}?alt=media`;
-  let outMime = mimeType ?? "application/octet-stream";
-
-  if (googleDoc) {
-    url = `${driveApi}/files/${fileId}/export?mimeType=${encodeURIComponent(
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    )}`;
-    outMime =
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-  }
-
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-  if (!res.ok) {
-    throw new Error(`Google download failed: ${res.status}`);
-  }
-  const buffer = Buffer.from(await res.arrayBuffer());
-  return { buffer, mimeType: outMime };
-}

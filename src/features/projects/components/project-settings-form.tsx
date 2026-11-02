@@ -1,16 +1,12 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import {
-  ProjectStatus,
-  ProjectType,
-  TimingMode,
-  type Project,
-} from "@prisma/client";
+import { ProjectStatus, ProjectType, TimingMode } from "@prisma/client";
 import {
   updateProjectAction,
   type ActionState,
 } from "@/features/projects/actions";
+import type { ProjectSettingsValues } from "@/features/projects/lib/project-settings-values";
 import {
   formatMinutesHhMm,
   projectStatusLabels,
@@ -37,7 +33,7 @@ function formatDateInput(value: Date | null | undefined) {
   return new Date(value).toISOString().slice(0, 10);
 }
 
-export function ProjectSettingsForm({ project }: { project: Project }) {
+export function ProjectSettingsForm({ project }: { project: ProjectSettingsValues }) {
   const bound = updateProjectAction.bind(null, project.id);
   const [state, action, pending] = useActionState(bound, initial);
   useActionToast(state);

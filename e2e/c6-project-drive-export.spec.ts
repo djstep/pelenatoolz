@@ -286,6 +286,34 @@ test("две первые выгрузки одновременно → одна
   expect((await exportIn(common.id, 2))?.externalId).toBe(files[0].id);
 });
 
+test("папка осталась без доступов → следующая выгрузка в неё выдаёт их сама", async ({ page }) => {
+  // С чистого листа; Google отказывает в выдаче всем трём — новая «Общая» без доступов.
+  const drive = await db.projectDrive.findUniqueOrThrow({ where: { projectId: ctx.projectId }, select: { id: true } });
+  await db.driveFolder.deleteMany({ where: { projectDriveId: drive.id } });
+  const refuse = {
+    provider: "google",
+    match: "permissions.create",
+    status: 400,
+    times: 3,
+    body: { error: { code: 400, message: "Bad Request", errors: [{ reason: "invalidSharingRequest" }] } },
+  };
+  await stub("/config", { failNext: [refuse] });
+  const dialog = await openDriveDialog(page, 2);
+  expect(await uploadCommon(dialog)).toContain("Вызывной выгружен на диск проекта — «Общая»");
+  const common = (await driveFolder("common"))!;
+  const failedRows = () => db.driveFolderGrant.count({ where: { folderId: common.id, status: "FAILED" } });
+  await expect.poll(failedRows, { timeout: 20_000 }).toBe(3);
+  expect(await grantedEmails(common.externalId)).toEqual([]);
+
+  // Повторная выгрузка (папка уже есть) — после ответа доступы догоняются без «Повторить».
+  const again = await openDriveDialog(page, 2);
+  expect(await uploadCommon(again)).toContain("обновлён — ссылка прежняя");
+  await expect
+    .poll(() => grantedEmails(common.externalId), { timeout: 20_000 })
+    .toEqual([email("nocallsheet"), email("nofin"), email("producer")].sort());
+  expect(await failedRows()).toBe(0);
+});
+
 test("глава «Звука» выгружает в «Звук»; в чужой цех и в «Общую» без правки — отказ на сервере", async ({ browser }) => {
   const head = await openAs(browser, "nocallsheet");
   const dialog = await openDriveDialog(head.page, 1);

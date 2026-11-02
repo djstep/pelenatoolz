@@ -28,7 +28,7 @@ import { isCloudApiError, isCloudReconnectRequiredError } from "@/features/cloud
 import {
   ensureProjectFolderChain,
   ProjectFolderDepartmentGoneError,
-  scheduleNewProjectFolderAccess,
+  scheduleProjectFolderAccessAfterExport,
   type ProjectFolderTarget,
 } from "@/features/cloud/lib/project-drive-folders";
 import {
@@ -467,8 +467,6 @@ export async function putCallSheetOnProjectDrive(input: {
     return { error: SLOW_OR_FAILED };
   }
 
-  // Папка, созданная в транзакции, — чтобы выдать ей доступы и при неудаче с файлом.
-  const ensuredRef: { folder: EnsuredFolder | null } = { folder: null };
   let result:
     | { saved: Parameters<typeof toView>[0]; outcome: DrivePutOutcome; placeLabel: string }
     | { failure: Error }
@@ -529,7 +527,6 @@ export async function putCallSheetOnProjectDrive(input: {
             }),
             deadlineAt,
           );
-          ensuredRef.folder = folder;
           // Выдачи прежней (удалённой руками) папки умерли вместе с ней — выдаются заново после ответа.
           if (folder.outcome === "recreated") {
             await tx.driveFolderGrant.deleteMany({ where: { folderId: folder.folderId } });
@@ -622,13 +619,12 @@ export async function putCallSheetOnProjectDrive(input: {
     return { error: SLOW_OR_FAILED };
   }
 
-  // Папку создали (или пересоздали) — доступы ей выдаются после ответа, даже если файл не лёг.
-  const created = ensuredRef.folder;
-  if (created && created.outcome !== "existing") {
-    scheduleNewProjectFolderAccess(projectId, created.folderId, userId);
-  }
-
   if ("unavailable" in result) return { unavailable: result.unavailable };
+  // После каждой выгрузки в папку — пересчёт её доступов после ответа, и когда файл не лёг: папка
+  // могла создаться, а предел выйти до выдачи. Доступ отозван — пересчитывать нечем.
+  if (!("failure" in result && isCloudReconnectRequiredError(result.failure))) {
+    scheduleProjectFolderAccessAfterExport(projectId, drive.id, target, userId);
+  }
   if ("failure" in result) {
     const e = result.failure;
     if (isCloudReconnectRequiredError(e)) {
