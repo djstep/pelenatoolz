@@ -2,11 +2,17 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, test } from "node:test";
 import {
+  assertBudgetFileFolderKey,
   assertShareableFolderKey,
+  BUDGET_FOLDER_KEYS,
+  budgetDepartmentFolderKey,
   departmentFolderKey,
+  departmentIdFromBudgetFolderKey,
+  departmentIdFromFolderKey,
   desiredFolderGrants,
   diffFolderGrants,
   grantEmailFor,
+  isBudgetFileFolderKey,
   isKnownGoogleEmail,
   isShareableFolderKey,
   profileDriveEmailNotice,
@@ -132,11 +138,106 @@ describe("кому какая папка", () => {
   });
 });
 
+describe("папки смет (BUDGET_DRIVE_NOTES, решения 6в, 7)", () => {
+  const SUMMARY: AccessFolder = { id: "f-bsum", key: BUDGET_FOLDER_KEYS.summary, departmentId: null };
+  const B_ART: AccessFolder = { id: "f-bart", key: budgetDepartmentFolderKey("d-art"), departmentId: "d-art" };
+  const B_SOUND: AccessFolder = {
+    id: "f-bsound",
+    key: budgetDepartmentFolderKey("d-sound"),
+    departmentId: "d-sound",
+  };
+  const BUDGETS: AccessFolder = { id: "f-budgets", key: BUDGET_FOLDER_KEYS.budgets, departmentId: null };
+  const B_DEPS: AccessFolder = { id: "f-bdeps", key: BUDGET_FOLDER_KEYS.departments, departmentId: null };
+  /** «Сметы — просмотр всех» (бухгалтер): в AccessMember такого признака нет вовсе — он не участвует. */
+  const READ_ALL = member("read-all");
+
+  function budgetGrants(input: Partial<Parameters<typeof desiredFolderGrants>[0]> = {}) {
+    return grants({
+      folders: [SUMMARY, B_ART, B_SOUND, BUDGETS, B_DEPS],
+      members: [PRODUCER, ART_HEAD, READ_ALL, NO_CALLSHEETS, INVITED, REMOVED],
+      ...input,
+    });
+  }
+
+  test("глава без «Финансы: просмотр» видит папку сметы своего цеха, но не чужого и не «Сводную»", () => {
+    // В AccessMember нет признака финансов: условие «Финансы: просмотр» к папкам смет не применяется.
+    const list = budgetGrants();
+    assert.deepEqual(who(list, B_ART.id), ["u-art-head", "u-producer"]);
+    assert.deepEqual(who(list, B_SOUND.id), ["u-producer"]);
+    assert.deepEqual(who(list, SUMMARY.id), ["u-producer"]);
+  });
+
+  test("глава цеха без просмотра вызывных — папка сметы своего цеха всё равно есть", () => {
+    const head = member("head-nocs", { canReadCallSheets: false });
+    const list = budgetGrants({
+      members: [head],
+      departmentHeads: [{ departmentId: "d-sound", membershipId: head.membershipId }],
+    });
+    assert.deepEqual(list.map((g) => g.folderId), [B_SOUND.id]);
+  });
+
+  test("«Сводная» — только продюсеры; участники с вызывными и «просмотр всех» — ничего", () => {
+    const list = budgetGrants();
+    for (const m of [READ_ALL, NO_CALLSHEETS]) {
+      assert.equal(list.some((g) => g.userId === m.userId), false, m.userId);
+    }
+  });
+
+  test("приглашённый и удалённый — ничего, даже продюсер или записанный главой", () => {
+    const list = budgetGrants({
+      departmentHeads: [
+        ...HEADS,
+        { departmentId: "d-art", membershipId: INVITED.membershipId },
+        { departmentId: "d-art", membershipId: REMOVED.membershipId },
+      ],
+      members: [PRODUCER, ART_HEAD, { ...INVITED, isProducer: true }, { ...REMOVED, isProducer: true }],
+    });
+    assert.equal(list.some((g) => g.userId === INVITED.userId || g.userId === REMOVED.userId), false);
+  });
+
+  test("budgets / budget-departments / root — никому, даже продюсеру", () => {
+    const list = budgetGrants({ folders: [ROOT, BUDGETS, B_DEPS, SUMMARY] });
+    assert.deepEqual([...new Set(list.map((g) => g.folderId))], [SUMMARY.id]);
+  });
+
+  test("цех удалили (departmentId обнулился) — у папки сметы доступов нет", () => {
+    const orphan: AccessFolder = { ...B_ART, departmentId: null };
+    assert.deepEqual(who(budgetGrants({ folders: [orphan] }), orphan.id), []);
+  });
+
+  test("ключ папки цеха смет не путается с папкой цеха вызывных", () => {
+    assert.equal(departmentIdFromFolderKey(budgetDepartmentFolderKey("d1")), null);
+    assert.equal(departmentIdFromBudgetFolderKey(departmentFolderKey("d1")), null);
+    assert.equal(departmentIdFromBudgetFolderKey(budgetDepartmentFolderKey("d1")), "d1");
+  });
+
+  test("файл сметы — только в «Сводную» и папки цехов смет, никогда в папки вызывных", () => {
+    assert.equal(isBudgetFileFolderKey(BUDGET_FOLDER_KEYS.summary), true);
+    assert.equal(isBudgetFileFolderKey(budgetDepartmentFolderKey("d1")), true);
+    for (const key of [
+      "root",
+      "callsheets",
+      "common",
+      "departments",
+      departmentFolderKey("d1"),
+      "budgets",
+      "budget-departments",
+      "budget-dept:",
+      "",
+    ]) {
+      assert.equal(isBudgetFileFolderKey(key), false, key);
+      assert.throws(() => assertBudgetFileFolderKey(key), /не кладётся/);
+    }
+  });
+});
+
 describe("риск 9: доступ — только конечным папкам", () => {
   test("ключи", () => {
     assert.equal(isShareableFolderKey(PROJECT_FOLDER_KEYS.common), true);
     assert.equal(isShareableFolderKey(departmentFolderKey("d1")), true);
-    for (const key of ["root", "callsheets", "departments", "dept:", "budgets", ""]) {
+    assert.equal(isShareableFolderKey(BUDGET_FOLDER_KEYS.summary), true);
+    assert.equal(isShareableFolderKey(budgetDepartmentFolderKey("d1")), true);
+    for (const key of ["root", "callsheets", "departments", "dept:", "budgets", "budget-departments", "budget-dept:", ""]) {
       assert.equal(isShareableFolderKey(key), false, key);
       assert.throws(() => assertShareableFolderKey(key), /не выдаётся/);
     }
