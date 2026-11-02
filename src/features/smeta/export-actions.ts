@@ -1,17 +1,37 @@
 "use server";
 
+import { summaryDriveModeLabel } from "@/features/cloud/lib/budget-drive-export-rules";
+import {
+  assertInProject,
+  isNotInProjectError,
+} from "@/features/memberships/assert-in-project";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
+import { loadDepartmentBudgetExport } from "@/features/smeta/export-queries";
+import {
+  buildDepartmentBudgetWorkbook,
+  departmentExportFileName,
+  departmentExportInfo,
+  departmentExportLabel,
+  parseDepartmentExportVersion,
+} from "@/features/smeta/lib/export-department-xlsx";
+import { addExportInfoSheet, formatExportDateTime } from "@/features/smeta/lib/export-info-sheet";
 import {
   buildPlanFactWorkbook,
   workbookToBase64,
 } from "@/features/smeta/lib/export-plan-fact-xlsx";
 import { buildSummaryWorkbook } from "@/features/smeta/lib/export-summary-xlsx";
 import { planFactPeriodLabel } from "@/features/smeta/lib/plan-fact";
-import { canOpenSmeta, canReadAllSmeta } from "@/features/smeta/lib/smeta-access";
+import {
+  canOpenSmeta,
+  canReadAllSmeta,
+  canReadDepartmentSmeta,
+} from "@/features/smeta/lib/smeta-access";
 import { getPlanFact, resolvePlanFactFilters } from "@/features/smeta/plan-fact-queries";
 import { getSummaryBook } from "@/features/smeta/summary-queries";
 import { AuditEntityType } from "@/shared/audit/entity-types";
+import { auditMemberName } from "@/shared/audit/member-name";
 import { recordAudit } from "@/shared/audit/with-audit";
+import { prisma } from "@/shared/db/prisma";
 import { formatFileDate } from "@/shared/i18n/format-date";
 
 const NO_RIGHTS = "Недостаточно прав";
@@ -84,7 +104,17 @@ export async function exportSummaryBookAction(
     payload && typeof payload === "object" && (payload as { drafts?: unknown }).drafts === true,
   );
   const book = await getSummaryBook(projectId, ctx, { drafts });
-  const base64 = await workbookToBase64(buildSummaryWorkbook(book.workbook));
+  const workbook = buildSummaryWorkbook(book.workbook);
+  addExportInfoSheet(workbook, {
+    document: "Сводная смета",
+    project: ctx.project.name,
+    status: summaryDriveModeLabel(drafts),
+    version: null,
+    approved: null,
+    exportedBy: auditMemberName(ctx.user.name),
+    exportedAt: formatExportDateTime(new Date(), ctx.project.timezone),
+  });
+  const base64 = await workbookToBase64(workbook);
   if (base64.length * 0.75 > MAX_EXPORT_BYTES) {
     return { error: "Выгрузка слишком большая" };
   }
@@ -100,4 +130,73 @@ export async function exportSummaryBookAction(
     changes: { export: "summary_book", drafts },
   });
   return { base64, fileName: `summary-book-${stamp(ctx.project.timezone)}.xlsx` };
+}
+
+/**
+ * Смета цеха в Excel: основной лист (утверждённая версия или текущий лист со значениями вместо
+ * формул) + «О выгрузке». Права — как у просмотра сметы цеха (глава этого цеха, продюсер,
+ * «Сметы — просмотр всех»). Из браузера — только id цеха и номер версии. Журнал — без сумм.
+ */
+export async function exportDepartmentBudgetAction(
+  projectId: string,
+  departmentId: string,
+  payload: unknown,
+): Promise<SmetaExportResult> {
+  const ctx = await requireProjectContext(projectId);
+  if (typeof departmentId !== "string" || !departmentId) return { error: "Цех не найден" };
+  // Нет права на смету этого цеха — отказ до поиска цеха (как у страницы).
+  if (!canReadDepartmentSmeta(ctx, departmentId)) return { error: NO_RIGHTS };
+  try {
+    await assertInProject("Department", departmentId, projectId);
+  } catch (error) {
+    if (isNotInProjectError(error)) return { error: "Цех не найден" };
+    throw error;
+  }
+  const version = parseDepartmentExportVersion(payload);
+  if (version === false) return { error: "Некорректные данные" };
+
+  const department = await prisma.department.findFirst({
+    where: { id: departmentId, projectId },
+    select: { name: true, codePrefix: true },
+  });
+  if (!department) return { error: "Цех не найден" };
+  const loaded = await loadDepartmentBudgetExport(prisma, projectId, departmentId, version);
+  if ("error" in loaded) return { error: loaded.error };
+
+  const now = new Date();
+  const workbook = buildDepartmentBudgetWorkbook(
+    loaded.sheet,
+    departmentExportInfo({
+      projectName: ctx.project.name,
+      departmentName: department.name,
+      source: loaded.source,
+      approved: loaded.approved,
+      exportedBy: auditMemberName(ctx.user.name),
+      exportedAt: now,
+      timezone: ctx.project.timezone,
+    }),
+  );
+  const base64 = await workbookToBase64(workbook);
+  if (base64.length * 0.75 > MAX_EXPORT_BYTES) {
+    return { error: "Выгрузка слишком большая" };
+  }
+
+  const label = departmentExportLabel(loaded.source);
+  await recordAudit(ctx, {
+    projectId,
+    entityType: AuditEntityType.smetaExport,
+    entityId: departmentId,
+    action: "CREATE",
+    summary: `Выгрузка сметы цеха «${department.name}» в Excel: ${label}`,
+    changes: {
+      export: "department",
+      departmentId,
+      version: loaded.source.kind === "version" ? loaded.source.number : null,
+      status: loaded.status,
+    },
+  });
+  return {
+    base64,
+    fileName: departmentExportFileName(department.codePrefix, loaded.source, now, ctx.project.timezone),
+  };
 }

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getDepartmentVersion } from "@/features/smeta/approval-queries";
+import { BudgetExcelExportButton } from "@/features/smeta/components/budget-excel-export-button";
 import { BudgetVersionView } from "@/features/smeta/components/budget-version-view";
 import { formatRub } from "@/features/smeta/lib/money";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
@@ -35,9 +36,16 @@ export default async function BudgetVersionPage({ params }: Props) {
         ← Версии сметы
       </Link>
       <div className="space-y-1">
-        <h2 className="font-display text-2xl font-semibold">
-          Смета — {department.name} · версия {version.number}
-        </h2>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="font-display text-2xl font-semibold">
+            Смета — {department.name} · версия {version.number}
+          </h2>
+          <BudgetExcelExportButton
+            projectId={projectId}
+            departmentId={department.id}
+            version={version.number}
+          />
+        </div>
         <p className="text-sm text-[var(--muted-fg)]">
           Утверждена {formatDateTimeShort(version.approvedAt)}, {version.approvedByName}
           {version.approvedByHead ? " (утвердил глава цеха)" : ""}. Статей: {version.itemCount},

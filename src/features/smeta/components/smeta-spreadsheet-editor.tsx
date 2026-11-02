@@ -26,6 +26,7 @@ import {
   type NavSheetItem,
 } from "@/features/smeta/components/smeta-sheet-nav";
 import { SmetaChecksPanel } from "@/features/smeta/components/smeta-checks-panel";
+import { BudgetExcelExportButton } from "@/features/smeta/components/budget-excel-export-button";
 import {
   SmetaApprovalBanner,
   SmetaApprovalControls,
@@ -1209,6 +1210,18 @@ export function SmetaSpreadsheetEditor({
             >
               {statusLabel}
             </span>
+          ) : null}
+          {mode === "draft" ? (
+            <BudgetExcelExportButton
+              projectId={projectId}
+              departmentId={department.id}
+              className="h-9"
+              beforeExport={
+                canWrite
+                  ? async () => (await flushSave()) !== null && !dirtyRef.current
+                  : undefined
+              }
+            />
           ) : null}
           {canWrite ? (
             <>
