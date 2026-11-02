@@ -13,7 +13,7 @@ import {
 import { SHIFT_TIMES } from "@/features/call-sheets/print/print-blocks";
 import { timeSlotTypeLabels } from "@/features/day-docs/lib/slot-labels";
 import { minutesBetweenTimes } from "@/features/day-docs/lib/time-utils";
-import { dayNightLabels } from "@/shared/i18n/domain-labels";
+import { dayNightLabels, formatSecondsMmSs } from "@/shared/i18n/domain-labels";
 
 /**
  * Модель печатного листа вызывного — всё, из чего строится HTML (и позже Excel и снимок
@@ -323,15 +323,13 @@ function formatDayDate(value: Date | string) {
   };
 }
 
-/** Хронометраж «м:сс». */
 /**
- * Хронометраж «11′40″»: минуты (сколько угодно, без часов) со штрихом, секунды двумя цифрами
- * с двойным штрихом (U+2032 / U+2033) — чтобы не путать со временем суток.
+ * Хронометраж листа — общей функцией системы `formatSecondsMmSs` («0:23», «12:05»).
+ * Пусто — null: в модели пустые поля — null, на листе их не печатают.
  */
 export function formatTiming(seconds: number): string | null {
   if (!Number.isFinite(seconds) || seconds <= 0) return null;
-  const total = Math.round(seconds);
-  return `${Math.floor(total / 60)}′${String(total % 60).padStart(2, "0")}″`;
+  return formatSecondsMmSs(seconds);
 }
 
 /** Длительность строки плана «ч:мм». */
