@@ -124,11 +124,17 @@ export const actorRoleTypeLabels: Record<ActorRoleType, string> = {
   EPISODIC: "Эпизодическая",
 };
 
+/**
+ * Хронометраж «М:СС» — одна функция для всей системы (КПП, вызывной на экране, печать, Excel):
+ * минуты без нуля впереди и без часов, секунды двумя цифрами — 0:23, 12:05, 62:05.
+ * Пусто, 0 и меньше — «—».
+ */
 export function formatSecondsMmSs(seconds: number | null | undefined): string {
-  if (seconds == null || seconds <= 0) return "—";
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  if (seconds == null || !Number.isFinite(seconds) || seconds <= 0) return "—";
+  const total = Math.round(seconds);
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m}:${String(s).padStart(2, "0")}`;
 }
 
 /** Total minutes as HH:mm (e.g. 720 → "12:00"). */
