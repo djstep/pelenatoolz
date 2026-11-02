@@ -530,21 +530,22 @@ describe("статус и версия на листе", () => {
     assert.ok(!html.includes('class="stamp"'));
   });
 
-  test("подвал каждого листа: проект, дата, смена; статус, версия, «лист N из M»; бегущая шапка листов 2+ — есть", () => {
+  test("подвала нет ни в одном режиме (просмотр, печать, версии); бегущая шапка листов 2+ — есть", () => {
     const stamps = [
-      [undefined, `"лист "`],
-      [{ status: "DRAFT", version: null }, `"черновик · лист "`],
-      [{ status: "DRAFT", version: 1 }, `"черновик · версия 1 · лист "`],
-      [{ status: "IN_REVIEW", version: 1 }, `"на согласовании · версия 1 · лист "`],
-      [{ status: "APPROVED", version: 2, approvedAtLabel: "10.09 17:46" }, `"утверждён 10.09, 17:46 · версия 2 · лист "`],
+      undefined,
+      { status: "DRAFT", version: null },
+      { status: "DRAFT", version: 1 },
+      { status: "IN_REVIEW", version: 1 },
+      { status: "APPROVED", version: 2, approvedAtLabel: "10.09 17:46" },
     ] as const;
-    for (const [stamp, right] of stamps) {
+    for (const stamp of stamps) {
       // embed — печать, url — просмотр на странице (маршрут листа).
       for (const font of ["embed", "url"] as const) {
         const html = buildCallSheetHtml(model, { stamp, font });
         const label = `${stamp?.status ?? "без статуса"} ${font}`;
-        assert.ok(html.includes(`@bottom-left{ content:"ИРП · вызывной на 11.09.2026 · смена 40";`), label);
-        assert.ok(html.includes(`@bottom-right{ content:${right} counter(page) " из " counter(pages);`), label);
+        assert.ok(!html.includes("@bottom-left"), label);
+        assert.ok(!html.includes("@bottom-right"), label);
+        assert.ok(!html.includes("counter(page"), label);
         assert.match(html, /@top-left\{ content:"ИРП · /, label);
         assert.match(html, /@page :first\{[^}]*@top-left\{ content:none;/, label);
       }

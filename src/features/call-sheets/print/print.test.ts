@@ -472,16 +472,14 @@ describe("HTML листа вызывного", () => {
     assert.ok(titles.includes("План съёмки · основной юнит"));
   });
 
-  test("разрывы и поля страницы: шапка листов 2+ и подвал каждого листа — @page, не HTML", () => {
+  test("разрывы и поля страницы: шапка листов 2+ — @page, не HTML; подвала нет (решение владельца)", () => {
     const style = styleOf(html(IRP_DAY_SOURCE));
-    assert.match(style, /@page\{ size:A4; margin:17mm 9mm 12mm;/);
+    assert.match(style, /@page\{ size:A4; margin:17mm 9mm 7mm;/);
     assert.match(style, /@top-left\{ content:"ИРП · пт 11\.09\.2026 · смена 40"/);
     assert.match(style, /@page :first\{[^}]*@top-left\{ content:none;/);
-    // Подвал, как в макете: проект · вызывной на дату · смена; номер листа считает браузер.
-    assert.match(style, /@bottom-left\{ content:"ИРП · вызывной на 11\.09\.2026 · смена 40";/);
-    assert.match(style, /@bottom-right\{ content:"лист " counter\(page\) " из " counter\(pages\);/);
-    assert.ok(!/@page :first\{[^}]*@bottom/.test(style), "подвал и на первом листе");
-    assert.ok(!html(IRP_DAY_SOURCE).includes("лист 1 из"), "в HTML номеров нет — только поле страницы");
+    assert.ok(!style.includes("@bottom-left"));
+    assert.ok(!style.includes("@bottom-right"));
+    assert.ok(!style.includes("counter(page"));
     assert.match(style, /thead\{ display:table-header-group; \}/);
     assert.match(style, /tr\{ break-inside:avoid; \}/);
     assert.match(style, /\.bh\{[^}]*break-after:avoid;/);
