@@ -30,6 +30,7 @@ import {
 } from "@/features/call-sheets/print/preview-fixtures";
 import type { DayAstro } from "@/features/day-docs/lib/city-astro";
 import type { DayDocBundle } from "@/features/day-docs/lib/build-day-doc";
+import { formatSecondsMmSs } from "@/shared/i18n/domain-labels";
 import { PRINT_HTML_CSP_META } from "@/shared/lib/escape-html";
 
 /**
@@ -135,8 +136,8 @@ describe("модель листа вызывного", () => {
       },
     ]);
     assert.equal(m.totals.sceneCount, 3);
-    assert.equal(m.totals.dayTiming, "0′37″");
-    assert.equal(m.totals.mainTiming, "0′37″", "продолжение сцены не считается второй раз");
+    assert.equal(m.totals.dayTiming, "0:37");
+    assert.equal(m.totals.mainTiming, "0:37", "продолжение сцены не считается второй раз");
   });
 
   test("вызов цехов — по строке на цех, порядок из вызывного, смена времени и самое раннее", () => {
@@ -216,7 +217,7 @@ describe("модель листа вызывного", () => {
     const m = model(source);
     assert.ok(!m.plan.some((r) => r.kind === "scene" && r.sceneNumber === "16"));
     assert.equal(m.totals.sceneCount, 6);
-    assert.equal(m.totals.dayTiming, "11′40″");
+    assert.equal(m.totals.dayTiming, "11:40");
     assert.ok(!m.cast.some((c) => c.character === "Сосед снизу"));
     assert.ok(!m.cast.some((c) => c.scenes.split(", ").includes("16")));
     assert.ok(!m.locations.some((g) => g.rows.some((r) => r.name.startsWith("Подвал"))));
@@ -251,7 +252,7 @@ describe("модель листа вызывного", () => {
     );
     assert.equal(scene129.elements[2]!.value, "Зонт чёрный для коллекторов, 2 шт");
     assert.equal(scene129.elements[3]!.value, "Steadicam Trinity, GoPro, 5 шт");
-    assert.equal(scene129.timing, "0′10″");
+    assert.equal(scene129.timing, "0:10");
     const cont = m.plan.find((r) => r.kind === "scene" && r.continuation);
     assert.ok(cont && cont.kind === "scene");
     assert.equal(cont.title, "Продолжение сцены 130");
@@ -315,26 +316,22 @@ describe("модель листа вызывного", () => {
     assert.equal(styleOf(page).match(/break-before:page/g)?.length, 1);
   });
 
-  test("хронометраж — минуты ′ секунды ″, без часов, не «м:сс»", () => {
-    assert.equal(formatTiming(37), "0′37″");
-    assert.equal(formatTiming(700), "11′40″");
-    assert.equal(formatTiming(65), "1′05″");
-    assert.equal(formatTiming(3600), "60′00″");
-    assert.equal(formatTiming(3725), "62′05″");
-    assert.equal(formatTiming(6000), "100′00″");
+  test("хронометраж — «М:СС» общей функцией системы, без часов; пусто — не печатается", () => {
+    assert.equal(formatTiming(37), "0:37");
+    assert.equal(formatTiming(700), "11:40");
+    assert.equal(formatTiming(65), "1:05");
+    assert.equal(formatTiming(3725), "62:05");
     assert.equal(formatTiming(0), null);
     assert.equal(formatTiming(-5), null);
-    assert.equal("′".codePointAt(0), 0x2032);
-    assert.equal("″".codePointAt(0), 0x2033);
+    for (const sec of [37, 59, 60, 605, 3725]) assert.equal(formatTiming(sec), formatSecondsMmSs(sec));
 
     // Везде на листе: строка сцены, итог юнита, шапка, бегущая шапка.
     const page = html(IRP_DAY_SOURCE);
-    assert.ok(page.includes(`<td class="chr r"><span class="t">0′10″</span></td>`), "строка сцены");
-    assert.ok(page.includes(`основного юнита</td><td class="r"><span class="t">0′37″</span>`), "итог юнита");
-    assert.ok(page.includes(`хронометраж дня <span class="t">0′37″</span>`), "шапка");
-    assert.ok(styleOf(page).includes("хрон. 0′37″"), "бегущая шапка");
-    assert.ok(!styleOf(page).includes("хрон. 0:37"));
-    assert.ok(!page.includes(">0:37<") && !page.includes(">0:10<"), "старого «м:сс» нет");
+    assert.ok(page.includes(`<td class="chr r"><span class="t">0:10</span></td>`), "строка сцены");
+    assert.ok(page.includes(`основного юнита</td><td class="r"><span class="t">0:37</span>`), "итог юнита");
+    assert.ok(page.includes(`хронометраж дня <span class="t">0:37</span>`), "шапка");
+    assert.ok(styleOf(page).includes("хрон. 0:37"), "бегущая шапка");
+    assert.doesNotMatch(page, /[′″]/, "штрихов нет");
   });
 
   test("руководители: фамилия жирным, имя обычным (как в макете); одно слово — целиком жирным", () => {

@@ -90,6 +90,11 @@ test("печать заполненного дня: все блоки макет
   const [leaderLast, leaderFirst] = FILLED_DAY.leader.split(" ");
   await expect(sheet.locator("td.nm b", { hasText: leaderLast })).toHaveText(leaderLast!);
   await expect(sheet.locator("td.nm", { hasText: leaderLast })).toHaveText(`${leaderLast} ${leaderFirst}`);
+  // Хронометраж — «М:СС», как везде в системе: у сцены 2 минуты, у дня и юнита — 4.
+  await expect(sheet.locator("td.chr .t").first()).toHaveText("2:00");
+  await expect(sheet.locator("tr.total .t")).toHaveText("4:00");
+  await expect(sheet.locator(".head .meta")).toContainText("хронометраж дня 4:00");
+  expect(await sheet.innerText()).not.toMatch(/[′″]/);
   // Подвала нет (решение владельца), бегущая шапка листов 2+ — есть.
   const style = await popup.locator("style").first().innerHTML();
   expect(style).not.toContain("@bottom-");
@@ -169,6 +174,10 @@ test("Excel пустого и заполненного дня: те же бло�
     "СХЕМА ОБЪЕКТА",
   ]);
   expect(filled).not.toContain("не указано");
+  // Хронометраж — «М:СС»: строки сцен и итог основного юнита.
+  expect(filled.split("\n")).toContain("2:00");
+  expect(filled.split("\n")).toContain("4:00");
+  expect(filled).not.toMatch(/[′″]/);
   for (const text of [FILLED_DAY.crew, FILLED_DAY.base, FILLED_DAY.group, NAMES.actor.lastName, "Манипулятор E2E"]) {
     expect(filled).toContain(text);
   }
