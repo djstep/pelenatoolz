@@ -66,11 +66,35 @@ export function cloudOAuthNotice(
         tone: "error",
         text: "Нет прав на подключение диска проекта: подключает владелец проекта или продюсер",
       };
+    case "not_keeper":
+      return {
+        tone: "error",
+        text: "Диск проекта уже подключён: заменить его может хранитель диска или владелец проекта",
+      };
     case "unsupported":
-      return { tone: "error", text: "Диск проекта пока не подключается" };
+      return { tone: "error", text: "Диск проекта подключается только Google" };
     case "state":
       return { tone: "error", text: "Подключение устарело или начато под другим входом — начните заново" };
     default:
       return { tone: "error", text: "Не удалось подключить диск — попробуйте ещё раз" };
   }
+}
+
+/**
+ * Сообщение на странице настроек после окна согласия для диска проекта (`?cloud_connected=project`).
+ * «Подключён» — только если в базе действительно рабочий диск проекта; ошибки — общие тексты.
+ */
+export function projectDriveOAuthNotice(
+  params: {
+    cloud_connected?: string | string[];
+    cloud_error?: string | string[];
+  },
+  drive: { status: "ACTIVE" | "DETACHED"; needsReconnect: boolean } | null,
+): { tone: "success" | "error"; text: string } | null {
+  if (params.cloud_connected === "project") {
+    return drive?.status === "ACTIVE" && !drive.needsReconnect
+      ? { tone: "success", text: "Диск проекта подключён" }
+      : { tone: "error", text: "Диск проекта не подключён: подключение не сохранилось — подключите ещё раз" };
+  }
+  return cloudOAuthNotice({ cloud_error: params.cloud_error }, []);
 }

@@ -4,6 +4,7 @@ import type { CloudProvider } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import {
+  canRevokeAtProvider,
   revokeBeforeReconnect,
   saveCloudConnection,
 } from "@/features/cloud/lib/cloud-service";
@@ -17,6 +18,11 @@ import {
   cloudConnectRefusal,
   cloudConnectRefusalText,
 } from "@/features/cloud/lib/oauth-access";
+import {
+  getProjectDriveState,
+  revokeProjectDriveTokens,
+  saveProjectDrive,
+} from "@/features/cloud/lib/project-drive-service";
 import {
   connectionReconnectReason,
   GOOGLE_REQUESTED_SCOPE,
@@ -54,6 +60,7 @@ export type CloudOAuthErrorCode =
   | "scope"
   | "scope_yandex"
   | "forbidden"
+  | "not_keeper"
   | "unsupported"
   | "config_google"
   | "config_yandex"
@@ -76,14 +83,41 @@ async function connectRefusal(
   projectId: string | null,
 ) {
   const project = projectId ? await getProjectForUser(projectId, userId) : null;
+  const membership = project?.memberships[0] ?? null;
+  const drive = project && purpose === "project" ? await getProjectDriveState(project.id) : null;
   return cloudConnectRefusal({
     purpose,
     projectId,
     userId,
-    project: project
-      ? { ownerUserId: project.ownerUserId, role: project.memberships[0]?.role ?? null }
-      : null,
+    project:
+      project && membership
+        ? {
+            ownerUserId: project.ownerUserId,
+            role: membership.role,
+            membershipId: membership.id,
+            drive,
+          }
+        : null,
   });
+}
+
+/** Отказ в подключении → код ошибки в адресе возврата. */
+function refusalCode(refusal: string): CloudOAuthErrorCode {
+  return refusal === "not_keeper" ? "not_keeper" : "forbidden";
+}
+
+/**
+ * Отозвать только что выданный токен, который не годится (не те права, отказ под блокировкой),
+ * — если этот аккаунт больше нигде в системе не подключён (Google отзывает весь аккаунт).
+ */
+async function revokeFreshToken(
+  provider: CloudProvider,
+  token: string,
+  account: { accountSubject: string | null; accountEmail: string | null },
+) {
+  if (!(await canRevokeAtProvider({ provider, ...account }))) return;
+  if (provider === "GOOGLE_DRIVE") await revokeGoogleToken(token);
+  else await revokeYandexToken(token);
 }
 
 /**
@@ -124,9 +158,9 @@ export async function startCloudConnect(request: Request, provider: CloudProvide
   if (refusal === "not_member") {
     return NextResponse.json({ error: cloudConnectRefusalText[refusal] }, { status: 403 });
   }
-  if (refusal) return back(returnTo, "forbidden");
-  // Хранение токенов диска проекта — шаг 4 (ProjectDrive). До него — только личные диски.
-  if (purpose === "project") return back(returnTo, "unsupported");
+  if (refusal) return back(returnTo, refusalCode(refusal));
+  // Диск проекта — только Google: на Яндексе нельзя выдать доступ конкретным людям.
+  if (purpose === "project" && provider !== "GOOGLE_DRIVE") return back(returnTo, "unsupported");
 
   const clientId =
     provider === "GOOGLE_DRIVE" ? process.env.GOOGLE_CLIENT_ID : process.env.YANDEX_CLIENT_ID;
@@ -137,7 +171,9 @@ export async function startCloudConnect(request: Request, provider: CloudProvide
     return back(returnTo, provider === "GOOGLE_DRIVE" ? "config_google" : "config_yandex");
   }
 
-  await revokeBeforeReconnect(userId, provider);
+  // Личный диск: старый токен отзывается до окна согласия. Диск проекта работает до возврата
+  // из окна, прежние токены отзываются после сохранения нового (saveProjectDrive).
+  if (purpose === "personal") await revokeBeforeReconnect(userId, provider);
 
   const state = signOAuthState({ userId, purpose, projectId, provider, returnTo });
 
@@ -189,8 +225,11 @@ export async function finishCloudConnect(request: Request, provider: CloudProvid
   if (searchParams.get("error") || !code) return fail(returnTo, slug);
 
   const refusal = await connectRefusal(state.userId, state.purpose, state.projectId);
-  if (refusal) return fail(returnTo, "forbidden");
-  if (state.purpose === "project") return fail(returnTo, "unsupported");
+  if (refusal) return fail(returnTo, refusalCode(refusal));
+  if (state.purpose === "project") {
+    if (provider !== "GOOGLE_DRIVE" || !state.projectId) return fail(returnTo, "unsupported");
+    return finishProjectDriveConnect(code, state.userId, state.projectId, returnTo);
+  }
 
   let saved: Awaited<ReturnType<typeof saveCloudConnection>>;
   try {
@@ -198,12 +237,15 @@ export async function finishCloudConnect(request: Request, provider: CloudProvid
       const tokens = await exchangeGoogleCode(code, callbackUri(provider));
       logTokenResponse(slug, tokens);
       const scopes = tokens.scope ?? "";
+      const account = parseGoogleIdToken(tokens.id_token);
       // Человек снял галочку «файлы, созданные приложением» — такой токен не годится.
       if (!hasRequiredScope(provider, scopes)) {
-        await revokeGoogleToken(tokens.refresh_token ?? tokens.access_token);
+        await revokeFreshToken(provider, tokens.refresh_token ?? tokens.access_token, {
+          accountSubject: account.sub,
+          accountEmail: account.email,
+        });
         return fail(returnTo, "scope");
       }
-      const account = parseGoogleIdToken(tokens.id_token);
       saved = await saveCloudConnection({
         userId: state.userId,
         provider,
@@ -221,6 +263,7 @@ export async function finishCloudConnect(request: Request, provider: CloudProvid
       // в приложении). Если прислал и в нём нет папки приложения — такой токен не годится.
       const scopes = tokens.scope?.trim() ? tokens.scope : YANDEX_APP_FOLDER_SCOPE;
       if (!hasRequiredScope(provider, scopes)) {
+        // У Яндекса отзыв — только токен этого устройства, других подключений не задевает.
         await revokeYandexToken(tokens.access_token);
         return fail(returnTo, "scope_yandex");
       }
@@ -247,6 +290,64 @@ export async function finishCloudConnect(request: Request, provider: CloudProvid
     return fail(returnTo, provider === "GOOGLE_DRIVE" ? "scope" : "scope_yandex");
   }
   return NextResponse.redirect(withParam(returnTo, "cloud_connected", slug));
+}
+
+/**
+ * Диск проекта (только Google) после окна согласия. Право подключать уже проверено по `state`;
+ * `saveProjectDrive` проверяет его ещё раз под блокировкой проекта перед записью.
+ */
+async function finishProjectDriveConnect(
+  code: string,
+  userId: string,
+  projectId: string,
+  returnTo: string,
+) {
+  const provider = "GOOGLE_DRIVE" as const;
+  const fail = (code: CloudOAuthErrorCode) =>
+    NextResponse.redirect(withParam(returnTo, "cloud_error", code));
+
+  let saved: Awaited<ReturnType<typeof saveProjectDrive>>;
+  let freshToken: string;
+  let account: ReturnType<typeof parseGoogleIdToken>;
+  try {
+    const tokens = await exchangeGoogleCode(code, callbackUri(provider));
+    logTokenResponse("google project", tokens);
+    const scopes = tokens.scope ?? "";
+    freshToken = tokens.refresh_token ?? tokens.access_token;
+    account = parseGoogleIdToken(tokens.id_token);
+    if (!hasRequiredScope(provider, scopes)) {
+      await revokeFreshToken(provider, freshToken, {
+        accountSubject: account.sub,
+        accountEmail: account.email,
+      });
+      return fail("scope");
+    }
+    saved = await saveProjectDrive({
+      projectId,
+      userId,
+      accessToken: tokens.access_token,
+      refreshToken: tokens.refresh_token ?? null,
+      expiresIn: tokens.expires_in ?? null,
+      scopes,
+      accountEmail: account.email,
+      accountSubject: account.sub,
+    });
+  } catch (e) {
+    console.error("[cloud google project callback]", e instanceof Error ? e.message : e);
+    return fail("token");
+  }
+
+  if ("error" in saved) {
+    // Пока человек был в окне Google, его удалили / понизили или диск подключил другой.
+    await revokeFreshToken(provider, freshToken, {
+      accountSubject: account.sub,
+      accountEmail: account.email,
+    });
+    return fail(refusalCode(saved.error));
+  }
+  // Прежние токены заменённого диска — после записи, с правилом «аккаунт ещё подключён — не отзывать».
+  await revokeProjectDriveTokens(saved.released);
+  return NextResponse.redirect(withParam(returnTo, "cloud_connected", "project"));
 }
 
 /**

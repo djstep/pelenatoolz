@@ -32,6 +32,10 @@ import {
   transferRefusal,
 } from "@/features/projects/lib/owner";
 import { prisma } from "@/shared/db/prisma";
+import {
+  detachProjectDriveIfKeeperLeft,
+  revokeProjectDriveTokens,
+} from "@/features/cloud/lib/project-drive-service";
 import { DEFAULT_APPROVAL_STATUSES } from "@/features/finance/lib/approval-statuses";
 import { DEFAULT_LEDGER_TYPES } from "@/features/contracts/lib/vat";
 import { getDefaultProjectRoles } from "@/features/roles/default-roles";
@@ -561,25 +565,25 @@ export async function updateMemberRoleAction(
   const memberName = auditMemberName(target.user.name);
   // Владелец и «последний продюсер» проверяются под блокировкой проекта —
   // одновременная передача владения или второе понижение ждут и видят результат.
-  const refusal = await prisma.$transaction(async (tx) => {
+  const outcome = await prisma.$transaction(async (tx) => {
     const ownerRefusal = memberChangeRefusal(
       target.userId,
       await lockProjectOwner(tx, projectId),
     );
-    if (ownerRefusal) return ownerRefusal;
+    if (ownerRefusal) return { error: ownerRefusal };
 
     const current = await tx.projectMembership.findFirst({
       where: { id: target.id, projectId },
       include: { role: true },
     });
-    if (!current) return "Участник не найден";
+    if (!current) return { error: "Участник не найден" };
     if (
       current.status === MembershipStatus.ACTIVE &&
       isProducerRole(current.role) &&
       !isProducerRole(newRole) &&
       (await countActiveProducers(projectId, tx)) <= 1
     ) {
-      return "В проекте должен остаться хотя бы один продюсер";
+      return { error: "В проекте должен остаться хотя бы один продюсер" };
     }
 
     await auditMutation(
@@ -605,11 +609,20 @@ export async function updateMemberRoleAction(
       },
       { db: tx },
     );
-    return null;
+    // Хранитель диска проекта больше не продюсер — диск отключается в этой же транзакции.
+    const releasedDrive = await detachProjectDriveIfKeeperLeft(tx, {
+      projectId,
+      membershipId: target.id,
+      actorUserId: user.id!,
+    });
+    return { releasedDrive };
   });
-  if (refusal) return { error: refusal };
+  if ("error" in outcome) return { error: outcome.error };
+  // Отзыв у Google — после транзакции (и только если аккаунт больше нигде не подключён).
+  await revokeProjectDriveTokens(outcome.releasedDrive);
 
   revalidatePath(`/ru/projects/${projectId}/members`);
+  if (outcome.releasedDrive) revalidatePath(`/ru/projects/${projectId}`, "layout");
   return { success: "Роль обновлена" };
 }
 
@@ -698,12 +711,21 @@ export async function removeMemberAction(
       },
       { db: tx },
     );
-    return { removedHeads };
+    // Удалён хранитель диска проекта — диск отключается в этой же транзакции.
+    const releasedDrive = await detachProjectDriveIfKeeperLeft(tx, {
+      projectId,
+      membershipId,
+      actorUserId: user.id!,
+    });
+    return { removedHeads, releasedDrive };
   });
   if ("error" in outcome) return { error: outcome.error };
-  const { removedHeads } = outcome;
+  const { removedHeads, releasedDrive } = outcome;
+  // Отзыв у Google — после транзакции (и только если аккаунт больше нигде не подключён).
+  await revokeProjectDriveTokens(releasedDrive);
 
   revalidatePath(`/ru/projects/${projectId}/members`);
+  if (releasedDrive) revalidatePath(`/ru/projects/${projectId}`, "layout");
   if (removedHeads.length > 0) {
     revalidatePath(`/ru/projects/${projectId}/settings/departments`);
   }

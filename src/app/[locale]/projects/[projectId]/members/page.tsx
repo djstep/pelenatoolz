@@ -1,5 +1,6 @@
 import { MembershipStatus } from "@prisma/client";
 import { getTranslations } from "next-intl/server";
+import { getProjectDriveState } from "@/features/cloud/lib/project-drive-service";
 import { isProducerRole } from "@/features/roles/role-rules";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { canManageMembers } from "@/features/memberships/permissions";
@@ -29,13 +30,17 @@ export default async function ProjectMembersPage({ params }: Props) {
   }
 
   const manage = canManageMembers(ctx.matrix);
-  const [members, invites, roles] = await Promise.all([
+  const [members, invites, roles, drive] = await Promise.all([
     listProjectMembers(projectId),
     manage ? listProjectInvites(projectId) : Promise.resolve([]),
     listProjectRoles(projectId),
+    // Хранитель активного диска проекта — предупреждение в окнах смены роли и удаления.
+    manage ? getProjectDriveState(projectId) : Promise.resolve(null),
   ]);
+  const driveKeeperMembershipId =
+    drive?.status === "ACTIVE" ? drive.keeperMembershipId : null;
 
-  const roleOptions = roles.map((r) => ({ id: r.id, name: r.name }));
+  const roleOptions = roles.map((r) => ({ id: r.id, name: r.name, isProducer: isProducerRole(r) }));
   const appUrl = await inviteOrigin();
   const ownerUserId = ctx.project.ownerUserId;
   const viewerIsOwner = ownerUserId === ctx.user.id;
@@ -58,6 +63,7 @@ export default async function ProjectMembersPage({ params }: Props) {
               role: { id: m.role.id, name: m.role.name },
               user: m.user,
               isOwner: m.userId === ownerUserId,
+              isDriveKeeper: m.id === driveKeeperMembershipId,
               // Кому можно передать владение — считается только для владельца.
               canReceiveOwnership:
                 viewerIsOwner &&
@@ -77,7 +83,10 @@ export default async function ProjectMembersPage({ params }: Props) {
               <h3 className="mb-4 font-display text-lg font-semibold">
                 {t("invite")}
               </h3>
-              <InviteForm projectId={projectId} roles={roleOptions} />
+              <InviteForm
+                projectId={projectId}
+                roles={roleOptions.map((r) => ({ id: r.id, name: r.name }))}
+              />
             </Card>
             <InvitesList
               projectId={projectId}

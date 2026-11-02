@@ -7,22 +7,25 @@ import {
   transferOwnershipAction,
   updateMemberRoleAction,
 } from "@/features/projects/actions";
+import { DRIVE_KEEPER_WARNING } from "@/features/cloud/lib/project-drive-rules";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
 import { Select } from "@/shared/ui/select";
 import { useToast } from "@/shared/ui/toast";
 
-type RoleOption = { id: string; name: string };
+type RoleOption = { id: string; name: string; isProducer: boolean };
 
 type MemberRow = {
   id: string;
-  role: RoleOption;
+  role: { id: string; name: string };
   user: { id: string; name: string; email: string };
   /** Владелец проекта: его роль не меняется и он не удаляется. */
   isOwner: boolean;
   /** Смотрит владелец, а это активный продюсер — ему можно передать владение. */
   canReceiveOwnership: boolean;
+  /** Хранитель диска проекта: смена роли на не продюсерскую и удаление отключат диск. */
+  isDriveKeeper: boolean;
 };
 
 export function MembersTable({
@@ -49,6 +52,23 @@ export function MembersTable({
     const formData = new FormData();
     formData.set("membershipId", member.id);
     formData.set("roleId", roleId);
+    const newRole = roles.find((r) => r.id === roleId);
+    // Хранитель диска проекта перестаёт быть продюсером — сначала окно с предупреждением.
+    if (member.isDriveKeeper && newRole && !newRole.isProducer) {
+      void confirmDelete({
+        title: `Сменить роль «${member.user.name}» на «${newRole.name}»?`,
+        details: [DRIVE_KEEPER_WARNING],
+        confirmLabel: "Сменить роль",
+        action: async () => {
+          const result = await updateMemberRoleAction(projectId, {}, formData);
+          if (result.error) return result.error;
+          if (result.success) toast.success(result.success);
+        },
+      }).then((done) => {
+        if (!done) setResetVersion((v) => v + 1);
+      });
+      return;
+    }
     startTransition(async () => {
       const result = await updateMemberRoleAction(projectId, {}, formData);
       if (result.error) {
@@ -100,6 +120,11 @@ export function MembersTable({
                     Владелец
                   </Badge>
                 ) : null}
+                {member.isDriveKeeper ? (
+                  <Badge className="ml-2" title="Подключил диск проекта: файлы лежат в его аккаунте Google">
+                    Хранитель диска
+                  </Badge>
+                ) : null}
               </td>
               <td className="py-3 pr-3 text-[var(--muted-fg)]">
                 {member.user.email}
@@ -143,7 +168,10 @@ export function MembersTable({
                       onClick={() =>
                         void confirmDelete({
                           title: `Удалить участника „${member.user.name}“ из проекта?`,
-                          details: ["Доступ к проекту отключится, его данные в проекте останутся."],
+                          details: [
+                            "Доступ к проекту отключится, его данные в проекте останутся.",
+                            ...(member.isDriveKeeper ? [DRIVE_KEEPER_WARNING] : []),
+                          ],
                           action: async () =>
                             (await removeMemberAction(member.id, projectId)).error,
                         })

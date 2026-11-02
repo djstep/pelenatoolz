@@ -63,6 +63,8 @@ const AUDIT_ENTITY_VISIBILITY: Record<AuditEntityTypeValue, AuditVisibility> = {
   [AuditEntityType.userProfile]: anyOf("members:manage"),
   // Личное подключение диска — тоже без проекта.
   [AuditEntityType.cloudConnection]: anyOf("members:manage"),
+  // Диск проекта подключают и отключают продюсеры; хранитель меняется вместе с участниками.
+  [AuditEntityType.projectDrive]: (v) => v.isProducer || v.can("members:manage"),
   [AuditEntityType.availabilityRow]: anyOf("schedule:read", "cast:read"),
   [AuditEntityType.productionReport]: anyOf("report:read", "schedule:read"),
   [AuditEntityType.payment]: anyOf("report:read", "schedule:read"),

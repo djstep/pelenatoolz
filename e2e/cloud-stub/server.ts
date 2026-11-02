@@ -396,8 +396,18 @@ export async function startCloudStub(opts: { port?: number; appOrigin?: string }
   const revokeToken = (provider: StubProvider, token: string) => {
     const t = state.tokens.get(token);
     if (!t || t.grant.provider !== provider) return false;
-    // Как у Google: отзыв любого токена отзывает всё разрешение (и токен обновления).
+    // Как у Google: отзыв любого токена отзывает всё разрешение приложения в аккаунте —
+    // все выдачи этого аккаунта этому клиенту (и токены обновления). У Яндекса — только эта выдача
+    // (токен одного устройства).
     t.grant.revoked = true;
+    if (provider === "google") {
+      for (const other of state.tokens.values()) {
+        const g = other.grant;
+        if (g.provider === "google" && g.google?.sub === t.grant.google?.sub && g.clientId === t.grant.clientId) {
+          g.revoked = true;
+        }
+      }
+    }
     state.revokedTokens.push({ provider, token });
     return true;
   };

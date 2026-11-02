@@ -10,7 +10,7 @@ import {
   refreshGoogleToken,
   revokeGoogleToken,
 } from "@/features/cloud/lib/google-drive";
-import { cloudOAuthNotice } from "@/features/cloud/lib/oauth-notice";
+import { cloudOAuthNotice, projectDriveOAuthNotice } from "@/features/cloud/lib/oauth-notice";
 import { cloudProviderLabels } from "@/features/cloud/lib/types";
 import {
   connectionReconnectReason,
@@ -162,15 +162,15 @@ describe("кто может подключить", () => {
 
   test("диск проекта — владелец или продюсер", () => {
     assert.equal(
-      cloudConnectRefusal({ purpose: "project", projectId: "p1", userId: "u1", project: { ownerUserId: "u1", role: director } }),
+      cloudConnectRefusal({ purpose: "project", projectId: "p1", userId: "u1", project: { ownerUserId: "u1", role: director, membershipId: "m1" } }),
       null,
     );
     assert.equal(
-      cloudConnectRefusal({ purpose: "project", projectId: "p1", userId: "u1", project: { ownerUserId: "u9", role: producer } }),
+      cloudConnectRefusal({ purpose: "project", projectId: "p1", userId: "u1", project: { ownerUserId: "u9", role: producer, membershipId: "m1" } }),
       null,
     );
     assert.equal(
-      cloudConnectRefusal({ purpose: "project", projectId: "p1", userId: "u1", project: { ownerUserId: "u9", role: director } }),
+      cloudConnectRefusal({ purpose: "project", projectId: "p1", userId: "u1", project: { ownerUserId: "u9", role: director, membershipId: "m1" } }),
       "not_producer",
     );
     // Обычная роль с именем «Продюсер» — не продюсер (имя системной роли занято, но проверка — по isSystem).
@@ -179,11 +179,40 @@ describe("кто может подключить", () => {
         purpose: "project",
         projectId: "p1",
         userId: "u1",
-        project: { ownerUserId: "u9", role: { isSystem: false, name: "Продюсер" } },
+        project: { ownerUserId: "u9", role: { isSystem: false, name: "Продюсер" }, membershipId: "m1" },
       }),
       "not_producer",
     );
     assert.equal(cloudConnectRefusal({ purpose: "project", projectId: null, userId: "u1", project: null }), "no_project");
+  });
+
+  test("диск проекта уже подключён — заменить может только хранитель или владелец", () => {
+    const drive = { status: "ACTIVE" as const, keeperMembershipId: "m-keeper" };
+    const as = (membershipId: string, ownerUserId: string) =>
+      cloudConnectRefusal({
+        purpose: "project",
+        projectId: "p1",
+        userId: "u1",
+        project: { ownerUserId, role: producer, membershipId, drive },
+      });
+    assert.equal(as("m-keeper", "u9"), null);
+    assert.equal(as("m-other", "u1"), null);
+    assert.equal(as("m-other", "u9"), "not_keeper");
+    // Отключённый диск — новый подключает любой продюсер.
+    assert.equal(
+      cloudConnectRefusal({
+        purpose: "project",
+        projectId: "p1",
+        userId: "u1",
+        project: {
+          ownerUserId: "u9",
+          role: producer,
+          membershipId: "m-other",
+          drive: { status: "DETACHED", keeperMembershipId: "m-keeper" },
+        },
+      }),
+      null,
+    );
   });
 });
 
@@ -349,11 +378,28 @@ describe("сообщение после окна согласия", () => {
     assert.equal(cloudOAuthNotice({}, []), null);
   });
 
+  test("диск проекта: «подключён» — только если в базе рабочий диск", () => {
+    const ok = { status: "ACTIVE" as const, needsReconnect: false };
+    assert.deepEqual(projectDriveOAuthNotice({ cloud_connected: "project" }, ok), {
+      tone: "success",
+      text: "Диск проекта подключён",
+    });
+    assert.equal(projectDriveOAuthNotice({ cloud_connected: "project" }, null)?.tone, "error");
+    assert.equal(
+      projectDriveOAuthNotice({ cloud_connected: "project" }, { status: "DETACHED", needsReconnect: false })?.tone,
+      "error",
+    );
+    assert.match(projectDriveOAuthNotice({ cloud_error: "forbidden" }, ok)?.text ?? "", /владелец проекта или продюсер/);
+    // Личный диск на странице настроек «подключён» не показывает.
+    assert.equal(projectDriveOAuthNotice({ cloud_connected: "google" }, ok), null);
+  });
+
   test("не настроен клиент, нет прав, диск проекта — понятные тексты, не код", () => {
     assert.match(cloudOAuthNotice({ cloud_error: "config_google" }, [])?.text ?? "", /Google Диска не настроено/);
     assert.match(cloudOAuthNotice({ cloud_error: "config_yandex" }, [])?.text ?? "", /Яндекс Диска не настроено/);
     assert.match(cloudOAuthNotice({ cloud_error: "forbidden" }, [])?.text ?? "", /владелец проекта или продюсер/);
-    assert.match(cloudOAuthNotice({ cloud_error: "unsupported" }, [])?.text ?? "", /пока не подключается/);
+    assert.match(cloudOAuthNotice({ cloud_error: "unsupported" }, [])?.text ?? "", /только Google/);
+    assert.match(cloudOAuthNotice({ cloud_error: "not_keeper" }, [])?.text ?? "", /хранитель диска или владелец/);
     assert.equal(cloudOAuthNotice({ cloud_error: "bad_request" }, [])?.tone, "error");
   });
 

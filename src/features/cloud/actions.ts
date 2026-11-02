@@ -5,7 +5,7 @@ import { requireUser } from "@/features/auth/session";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { AuditEntityType } from "@/shared/audit/entity-types";
 import { recordAudit } from "@/shared/audit/with-audit";
-import { revokeCloudConnectionTokens } from "@/features/cloud/lib/cloud-service";
+import { revokeTokensUnlessShared } from "@/features/cloud/lib/cloud-service";
 import {
   linkSiteLabel,
   MAX_LINK_NAME_LENGTH,
@@ -29,7 +29,9 @@ export async function disconnectCloudAction(
   }
   await prisma.cloudConnection.delete({ where: { id: conn.id } });
   // После удаления: даже если отзыв не удался, система токеном больше не пользуется.
-  const revoked = await revokeCloudConnectionTokens(conn);
+  // Аккаунт ещё подключён в системе (диск проекта, другой человек) — у Google не отзываем.
+  const outcome = await revokeTokensUnlessShared(conn);
+  const revoked = outcome === "revoked";
   await recordAudit(
     { user: { id: user.id! } },
     {
@@ -38,15 +40,22 @@ export async function disconnectCloudAction(
       entityId: conn.id,
       action: "DELETE",
       summary: `Отключён личный ${cloudProviderLabels[conn.provider]}`,
-      changes: { provider: conn.provider, tokenRevoked: revoked },
+      changes: {
+        provider: conn.provider,
+        tokenRevoked: revoked,
+        ...(outcome === "shared" ? { tokenKeptShared: true } : {}),
+      },
     },
   );
   revalidatePath("/ru/profile");
   revalidatePath("/ru/projects", "layout");
   return {
-    success: revoked
-      ? "Диск отключён"
-      : "Диск отключён. Отозвать доступ у провайдера не удалось — уберите приложение в настройках аккаунта",
+    success:
+      outcome === "revoked"
+        ? "Диск отключён"
+        : outcome === "shared"
+          ? "Диск отключён. Доступ у Google не отозван: этот аккаунт ещё подключён в системе (диск проекта или у другого участника)"
+          : "Диск отключён. Отозвать доступ у провайдера не удалось — уберите приложение в настройках аккаунта",
   };
 }
 

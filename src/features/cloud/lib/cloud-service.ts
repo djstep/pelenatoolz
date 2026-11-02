@@ -5,6 +5,11 @@ import {
   revokeGoogleToken,
 } from "@/features/cloud/lib/google-drive";
 import { CloudReconnectRequiredError, isCloudReconnectRequiredError } from "@/features/cloud/lib/errors";
+import {
+  revokeIsAccountWide,
+  shouldRevokeAtProvider,
+  type ProviderAccount,
+} from "@/features/cloud/lib/revoke-rule";
 import { connectionReconnectReason } from "@/features/cloud/lib/scopes";
 import { decryptSecret, encryptSecret } from "@/features/cloud/lib/token-crypto";
 import { cloudProviderLabels } from "@/features/cloud/lib/types";
@@ -153,19 +158,69 @@ export async function withCloudAccessToken<T>(
 }
 
 /**
- * Отозвать токены подключения у провайдера. Не бросает: подключение в базе удаляется /
- * переподключается в любом случае. Google: отзыв refresh-токена снимает всё разрешение.
+ * Другие активные подключения того же аккаунта: личные (не помеченные «переподключить») и диски
+ * проектов (активные, с токенами). Вызывать после того, как своё подключение уже удалено /
+ * отключено / помечено — тогда оно в выборку не попадает.
  */
-export async function revokeCloudConnectionTokens(
-  conn: Pick<CloudConnection, "provider" | "accessToken" | "refreshToken">,
-) {
+export async function otherActiveAccounts(account: ProviderAccount): Promise<ProviderAccount[]> {
+  if (!revokeIsAccountWide(account.provider)) return [];
+  const subject = account.accountSubject;
+  const email = account.accountEmail?.trim() || null;
+  if (!subject && !email) return [];
+  const match = [
+    ...(subject ? [{ accountSubject: subject }] : []),
+    ...(email ? [{ accountEmail: { equals: email, mode: "insensitive" as const } }] : []),
+  ];
+  const select = { provider: true, accountSubject: true, accountEmail: true } as const;
+  const [connections, drives] = await Promise.all([
+    prisma.cloudConnection.findMany({
+      where: { provider: account.provider, needsReconnectAt: null, OR: match },
+      select,
+    }),
+    prisma.projectDrive.findMany({
+      where: {
+        provider: account.provider,
+        status: "ACTIVE",
+        needsReconnectAt: null,
+        accessToken: { not: null },
+        OR: match,
+      },
+      select,
+    }),
+  ]);
+  return [...connections, ...drives];
+}
+
+/**
+ * Можно ли отозвать токен этого аккаунта у провайдера, не сломав другие подключения
+ * (правило — `shouldRevokeAtProvider`). Своё подключение к этому моменту уже не активно.
+ */
+export async function canRevokeAtProvider(account: ProviderAccount): Promise<boolean> {
+  return shouldRevokeAtProvider(account, await otherActiveAccounts(account));
+}
+
+/** Итог отзыва: отозван; не отзывался — аккаунт ещё подключён в системе; не удалось. */
+export type RevokeOutcome = "revoked" | "shared" | "failed";
+
+/**
+ * Отозвать токены у провайдера — только если у этого аккаунта нет другого активного
+ * подключения (у Google отзыв снимает разрешение во всём аккаунте). Не бросает: подключение
+ * в базе удаляется / отключается в любом случае. Токены — зашифрованные, как в базе.
+ */
+export async function revokeTokensUnlessShared(
+  conn: ProviderAccount & { accessToken: string | null; refreshToken: string | null },
+): Promise<RevokeOutcome> {
+  if (!(await canRevokeAtProvider(conn))) {
+    console.info(`[cloud] токен ${conn.provider} не отозван: этот аккаунт ещё подключён в системе`);
+    return "shared";
+  }
   let ok = false;
   try {
     if (conn.provider === "GOOGLE_DRIVE") {
-      const token = decryptSecret(conn.refreshToken ?? conn.accessToken);
-      ok = await revokeGoogleToken(token);
+      const token = conn.refreshToken ?? conn.accessToken;
+      ok = token ? await revokeGoogleToken(decryptSecret(token)) : false;
     } else {
-      ok = await revokeYandexToken(decryptSecret(conn.accessToken));
+      ok = conn.accessToken ? await revokeYandexToken(decryptSecret(conn.accessToken)) : false;
     }
   } catch {
     // Не расшифровался (сменили ключ) — отзывать нечего, токен у провайдера истечёт сам.
@@ -174,22 +229,23 @@ export async function revokeCloudConnectionTokens(
   if (!ok) {
     console.warn(`[cloud] не удалось отозвать токен ${conn.provider} — отзовите доступ в аккаунте вручную`);
   }
-  return ok;
+  return ok ? "revoked" : "failed";
 }
 
 /**
- * Перед окном согласия при переподключении: старый токен отзывается сразу (у Google отзыв
- * после получения нового снял бы и новый), подключение — «нужно переподключить», пока не
- * вернётся новое. Уже помеченное — не трогаем.
+ * Перед окном согласия при переподключении: подключение — «нужно переподключить», пока не
+ * вернётся новое, и старый токен отзывается сразу (у Google отзыв после получения нового снял
+ * бы и новый) — если этот аккаунт больше нигде в системе не подключён. Уже помеченное — не трогаем.
  */
 export async function revokeBeforeReconnect(userId: string, provider: CloudProvider) {
   const conn = await getCloudConnection(userId, provider);
   if (!conn || conn.needsReconnectAt) return;
-  await revokeCloudConnectionTokens(conn);
-  await prisma.cloudConnection.updateMany({
+  const { count } = await prisma.cloudConnection.updateMany({
     where: { id: conn.id, needsReconnectAt: null },
     data: { needsReconnectAt: new Date() },
   });
+  if (count === 0) return;
+  await revokeTokensUnlessShared(conn);
 }
 
 /** Сохранить подключение после окна согласия; журнал — «подключён» или «переподключён». */
