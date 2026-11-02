@@ -30,6 +30,8 @@ import {
   E2E_PROJECT_NAME,
   E2E_ROLE_NAMES,
   E2E_ROLES,
+  FILLED_DAY,
+  LAYOUT_DAYS,
   MONEY,
   NAMES,
   passwordEnvName,
@@ -450,6 +452,158 @@ async function createProject(users: Record<E2ERoleKey, string>) {
   );
 }
 
+/**
+ * Дни 4 и 5 для вида листа вызывного (`LAYOUT_DAYS`): дописываются и в уже созданный проект,
+ * если их нет; есть — не трогаются. День 4 — все блоки макета (сбор, времена, погода,
+ * руководители, цеха, база, актёры с подачей машины, групповка, элементы, 2-й юнит, схема);
+ * у спецтранспорта — ставка км (её в листе быть не должно). День 5 — пустой рабочий день.
+ */
+async function ensureLayoutDays(projectId: string) {
+  const exists = await prisma.shootDay.findFirst({
+    where: { projectId, dayNumber: LAYOUT_DAYS.filled.dayNumber },
+    select: { id: true },
+  });
+  if (exists) return;
+  await prisma.$transaction(
+    async (tx) => {
+      const [scenes, actors, sections, location] = await Promise.all([
+        tx.scene.findMany({ where: { projectId, number: { in: ["1", "2"] } }, orderBy: { sortOrder: "asc" } }),
+        tx.actor.findMany({ where: { projectId }, orderBy: { lastName: "desc" } }),
+        tx.callSheetSection.findMany({ where: { projectId }, select: { id: true, key: true } }),
+        tx.location.findFirst({ where: { projectId, name: NAMES.location }, select: { id: true } }),
+      ]);
+      const [scene1, scene2] = scenes;
+      const actor = actors.find((a) => a.lastName === NAMES.actor.lastName);
+      const actor2 = actors.find((a) => a.lastName === NAMES.actor2.lastName);
+      if (!scene1 || !scene2 || !actor || !actor2 || !location) {
+        throw new Error("В проекте нет сцен, актёров или объекта сида — npx tsx scripts/e2e-seed.ts --reset");
+      }
+      const section = (key: string) => {
+        const id = sections.find((s) => s.key === key)?.id;
+        if (!id) throw new Error(`Нет раздела элементов ${key}`);
+        return id;
+      };
+      await tx.location.update({
+        where: { id: location.id },
+        data: {
+          onSiteNotes: "Администратор у проходной с 07:00",
+          points: {
+            create: [
+              { number: "1", name: "Проходная 3 · место сбора", description: "Вход по пропускам", sortOrder: 0 },
+              { number: "2", name: FILLED_DAY.schemePoint, description: "Штаб, грим, костюм", sortOrder: 1 },
+              { number: "3", name: "Съёмочная площадка", description: "Сцены 1, 2", sortOrder: 2 },
+            ],
+          },
+        },
+      });
+
+      const filled = await tx.shootDay.create({
+        data: {
+          projectId,
+          dayNumber: LAYOUT_DAYS.filled.dayNumber,
+          date: day(LAYOUT_DAYS.filled.date),
+          dayType: "WORKING",
+          shiftNumber: 4,
+          callTime: "07:30",
+          shiftStartTime: "07:30",
+          wrapTime: "19:30",
+          rehearsalTime: "09:00",
+          motorOnTime: "09:30",
+          motorOffTime: "19:30",
+          crewMeetTime: "07:30",
+          crewMeetAddress: FILLED_DAY.crewMeetAddress,
+          weatherNote: "Переменная облачность",
+          weatherPrecip: "небольшой дождь",
+        },
+      });
+      await tx.shootDay.create({
+        data: {
+          projectId,
+          dayNumber: LAYOUT_DAYS.empty.dayNumber,
+          date: day(LAYOUT_DAYS.empty.date),
+          dayType: "WORKING",
+        },
+      });
+      const shootDayId = filled.id;
+      await tx.shootDayScene.createMany({
+        data: [
+          { shootDayId, sceneId: scene1.id, sortOrder: 0 },
+          { shootDayId, sceneId: scene2.id, sortOrder: 1 },
+        ],
+      });
+      await tx.shootDayTimeSlot.createMany({
+        data: [
+          { shootDayId, startTime: "07:30", endTime: "09:00", slotType: "MAKEUP_COSTUME", customLabel: "Грим, костюм, техническое освоение", sortOrder: 0 },
+          { shootDayId, startTime: "09:00", endTime: "09:30", slotType: "REHEARSAL", sortOrder: 1 },
+          { shootDayId, startTime: "09:30", endTime: "12:00", slotType: "SHOOTING", sceneId: scene1.id, notes: "Держать два зонта", sortOrder: 2 },
+          { shootDayId, startTime: "12:00", endTime: "12:30", slotType: "PREP", sortOrder: 3 },
+          { shootDayId, startTime: "12:30", endTime: "13:30", slotType: "SHOOTING", sceneId: scene2.id, sortOrder: 4 },
+          { shootDayId, startTime: "13:30", endTime: "14:30", slotType: "LUNCH", sortOrder: 5 },
+          { shootDayId, startTime: "14:30", endTime: "16:00", slotType: "SHOOTING", sceneId: scene2.id, isContinuation: true, sortOrder: 6 },
+          { shootDayId, startTime: "16:00", endTime: "19:30", slotType: "SHOOTING", unit: "SECOND", customLabel: FILLED_DAY.secondUnit, sortOrder: 7 },
+        ],
+      });
+      await tx.shootDayActorCall.createMany({
+        data: [
+          { shootDayId, actorId: actor.id, transportMode: "CAR", carPickupTime: "07:15", arrivalTime: "08:00", costumeTime: "08:00", makeupTime: "08:30", readyTime: "09:00", wrapTime: "19:30" },
+          { shootDayId, actorId: actor2.id, transportMode: "SELF", arrivalTime: "08:00", costumeTime: "08:15", makeupTime: "08:30", readyTime: "09:00", wrapTime: "16:00" },
+        ],
+      });
+      await tx.shootDayTransport.create({
+        data: { shootDayId, name: "Манипулятор E2E", callTime: "08:00", wrapTime: "19:30", scenes: "2", kmRate: dec(MONEY.transportKmRate) },
+      });
+      await tx.callSheet.create({
+        data: {
+          projectId,
+          shootDayId,
+          tempDay: "+16",
+          tempNight: "+12",
+          importantNote: FILLED_DAY.important,
+          actorRestrictions: FILLED_DAY.restrictions,
+          schemeLocationId: location.id,
+          leaders: {
+            create: [
+              { position: "Режиссёр-постановщик", personName: "Зайцев Кирилл", phone: "+7 900 000-00-11", sortOrder: 0 },
+              { position: "Второй режиссёр", personName: FILLED_DAY.leader, phone: "+7 900 000-00-12", sortOrder: 1 },
+              { position: "Директор группы", personName: "Гусев Павел", phone: "+7 900 000-00-13", sortOrder: 2 },
+              { position: "Администратор", personName: "Никитин Олег", phone: "+7 900 000-00-14", sortOrder: 3 },
+            ],
+          },
+          crewCalls: {
+            create: [
+              { label: "Администрация", callTime: "06:30", sortOrder: 0 },
+              { label: "Режиссёрская группа", callTime: "07:30", sortOrder: 1 },
+              { label: FILLED_DAY.crew, callTime: "07:30", sortOrder: 2 },
+              { label: "Костюм, грим", callTime: "08:00", sortOrder: 3 },
+              { label: "Звук", callTime: "08:20", sortOrder: 4 },
+            ],
+          },
+          baseItems: {
+            create: [
+              { name: FILLED_DAY.base, callTime: "06:10", sortOrder: 0 },
+              { name: "Штаб", callTime: "07:30", sortOrder: 1 },
+              { name: "Грим, костюм", callTime: "07:30", sortOrder: 2 },
+              { name: "Гриптрак", notNeeded: true, sortOrder: 3 },
+            ],
+          },
+        },
+      });
+      const sheet = await tx.callSheet.findUniqueOrThrow({ where: { shootDayId }, select: { id: true } });
+      await tx.callSheetElement.createMany({
+        data: [
+          { callSheetId: sheet.id, sectionId: section("GROUP"), name: FILLED_DAY.group, quantity: "1", scenes: "1, 2", readyTime: "09:00", wrapTime: "19:30", sortOrder: 0 },
+          { callSheetId: sheet.id, sectionId: section("GROUP"), name: "Руки героя", quantity: "1", readyTime: "16:00", wrapTime: "19:30", secondUnit: true, sortOrder: 1 },
+          { callSheetId: sheet.id, sectionId: section("PROPS"), name: FILLED_DAY.element, quantity: "2", scenes: "1", readyTime: "09:00", wrapTime: "19:30", sortOrder: 2 },
+          { callSheetId: sheet.id, sectionId: section("STUNTS"), name: "Падение на лестнице", scenes: "2", readyTime: "12:30", wrapTime: "16:00", sortOrder: 3 },
+          { callSheetId: sheet.id, sectionId: section("CAMERA"), name: "GoPro", quantity: "5", scenes: "1, 2", arrivalTime: "08:00", readyTime: "09:00", wrapTime: "19:30", sortOrder: 4 },
+        ],
+      });
+    },
+    { timeout: 60_000, maxWait: 20_000 },
+  );
+  console.log(`Дни ${LAYOUT_DAYS.filled.dayNumber} (заполненный вызывной) и ${LAYOUT_DAYS.empty.dayNumber} (пустой) добавлены`);
+}
+
 async function main() {
   guardDatabase();
   const reset = process.argv.includes("--reset");
@@ -463,6 +617,7 @@ async function main() {
   });
   if (existing.length > 0 && !reset) {
     console.log(`Проект «${E2E_PROJECT_NAME}» уже есть: ${existing.map((p) => p.id).join(", ")} (--reset — создать заново)`);
+    for (const { id } of existing) await ensureLayoutDays(id);
     return;
   }
   if (existing.length > 0) {
@@ -472,6 +627,7 @@ async function main() {
   }
   const projectId = await createProject(users);
   console.log(`Проект «${E2E_PROJECT_NAME}» создан: ${projectId}`);
+  await ensureLayoutDays(projectId);
 }
 
 main()

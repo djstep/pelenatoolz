@@ -623,3 +623,32 @@ export const MIN_DAY_SOURCE: CallSheetPrintSource = {
   },
   elements: { sections: SECTIONS, autoRows: [], manual: [] },
 };
+
+/** Рабочий день без данных и без вызывного: только обязательные блоки, везде «не указано». */
+export const EMPTY_DAY_SOURCE: CallSheetPrintSource = {
+  project: { name: "Пустой день", fullName: null },
+  day: {
+    date: new Date("2026-11-06T00:00:00.000Z"),
+    shiftNumber: null,
+    isNightShift: false,
+    callTime: null,
+    wrapTime: null,
+    shiftStartTime: null,
+    rehearsalTime: null,
+    motorOnTime: null,
+    motorOffTime: null,
+    crewMeetAddress: null,
+    crewMeetTime: null,
+    weatherNote: null,
+    weatherPrecip: null,
+    scenes: [],
+    timeSlots: [],
+    actorCalls: [],
+    transports: [],
+  },
+  actors: [],
+  workingDay: null,
+  astro: null,
+  sheet: null,
+  elements: null,
+};

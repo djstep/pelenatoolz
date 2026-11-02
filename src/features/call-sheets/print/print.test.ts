@@ -337,10 +337,17 @@ describe("модель листа вызывного", () => {
     assert.ok(!page.includes(">0:37<") && !page.includes(">0:10<"), "старого «м:сс» нет");
   });
 
-  test("руководители: ФИ целиком одним начертанием", () => {
+  test("руководители: фамилия жирным, имя обычным (как в макете); одно слово — целиком жирным", () => {
     const page = html(IRP_DAY_SOURCE);
-    assert.ok(page.includes(`<td class="nm">Миронова Татьяна</td>`));
-    assert.ok(!page.includes("<b>Миронова</b>"));
+    assert.ok(page.includes(`<td class="nm"><b>Миронова</b> Татьяна</td>`));
+    const source = clone(IRP_DAY_SOURCE);
+    source.sheet!.leaders[0]!.personName = "  Миронова   Татьяна Петровна ";
+    source.sheet!.leaders[1]!.personName = "Зайцев";
+    source.sheet!.leaders[2]!.personName = `<b>${SCRIPT}</b> ${QUOTES}`;
+    const edited = html(source);
+    assert.ok(edited.includes(`<td class="nm"><b>Миронова</b> Татьяна Петровна</td>`));
+    assert.ok(edited.includes(`<td class="nm"><b>Зайцев</b></td>`));
+    assert.ok(edited.includes(`<td class="nm"><b>&lt;b&gt;&lt;script&gt;alert(1)&lt;/script&gt;&lt;/b&gt;</b> О&#39;Брайен &amp; &quot;Ко&quot;</td>`));
   });
 
   test("нет плана — сцены дня строками без времени", () => {
@@ -429,12 +436,16 @@ describe("HTML листа вызывного", () => {
     assert.equal(page.match(/<style>/g)?.length, 1);
   });
 
-  test("пустые блоки не печатаются; заполненные — на месте", () => {
+  test("пустые необязательные блоки не печатаются, обязательные — всегда; заполненные — на месте", () => {
     const minimal = blockTitles(html(MIN_DAY_SOURCE));
-    assert.deepEqual(minimal, ["Руководители группы", "Актёры", "План съёмки · основной юнит"]);
+    assert.deepEqual(minimal, ["Руководители группы", "Вызов цехов", "Актёры", "План съёмки · основной юнит"]);
     const page = html(MIN_DAY_SOURCE);
-    for (const text of ["Важно", "Погода", "Место сбора", "Ограничения", "Второй юнит", "Схема объекта"]) {
+    for (const text of ["Важно", "Второй юнит", "Схема объекта", "База и транспорт", "Групповка"]) {
       assert.ok(!page.includes(text), `нет «${text}»`);
+    }
+    // Обязательные пустые поля — «не указано»: место сбора, погода, ограничения (пробелы — пусто).
+    for (const label of ["Место сбора", "Погода", "Ограничения по актёрам"]) {
+      assert.match(page, new RegExp(`${label}</(span|div)><span class="nv">не указано</span>`), label);
     }
     // Колонки без единого значения скрыты: у актёра нет времён и транспорта.
     assert.ok(!page.includes(">Транспорт</th>"));
@@ -446,11 +457,14 @@ describe("HTML листа вызывного", () => {
     }
   });
 
-  test("вызывной не создан — блоков из шаблона, текстов и схемы нет, данные дня есть", () => {
+  test("вызывной не создан — руководители и цеха «не указано», базы, текстов и схемы нет, данные дня есть", () => {
     const page = html({ ...clone(FULL_DAY_SOURCE), sheet: null, elements: null });
     const titles = blockTitles(page);
-    for (const title of ["Руководители группы", "Вызов цехов", "База и транспорт группы", "Групповка и дублёры", "Схема объекта"]) {
+    for (const title of ["База и транспорт группы", "Групповка и дублёры", "Схема объекта"]) {
       assert.ok(!titles.includes(title), `нет блока «${title}»`);
+    }
+    for (const title of ["Руководители группы", "Вызов цехов"]) {
+      assert.ok(page.includes(`<h2>${title}</h2></div><div class="empty"><span class="nv">не указано</span></div>`), title);
     }
     assert.ok(!page.includes("Важно"));
     assert.ok(titles.includes("Актёры"));
@@ -458,13 +472,16 @@ describe("HTML листа вызывного", () => {
     assert.ok(titles.includes("План съёмки · основной юнит"));
   });
 
-  test("разрывы и поля страницы: шапка листов 2+ — @page, не HTML; подвала нет", () => {
+  test("разрывы и поля страницы: шапка листов 2+ и подвал каждого листа — @page, не HTML", () => {
     const style = styleOf(html(IRP_DAY_SOURCE));
-    assert.match(style, /@page\{ size:A4; margin:17mm 9mm 7mm;/);
+    assert.match(style, /@page\{ size:A4; margin:17mm 9mm 12mm;/);
     assert.match(style, /@top-left\{ content:"ИРП · пт 11\.09\.2026 · смена 40"/);
     assert.match(style, /@page :first\{[^}]*@top-left\{ content:none;/);
-    assert.ok(!style.includes("@bottom-left"));
-    assert.ok(!style.includes("@bottom-right"));
+    // Подвал, как в макете: проект · вызывной на дату · смена; номер листа считает браузер.
+    assert.match(style, /@bottom-left\{ content:"ИРП · вызывной на 11\.09\.2026 · смена 40";/);
+    assert.match(style, /@bottom-right\{ content:"лист " counter\(page\) " из " counter\(pages\);/);
+    assert.ok(!/@page :first\{[^}]*@bottom/.test(style), "подвал и на первом листе");
+    assert.ok(!html(IRP_DAY_SOURCE).includes("лист 1 из"), "в HTML номеров нет — только поле страницы");
     assert.match(style, /thead\{ display:table-header-group; \}/);
     assert.match(style, /tr\{ break-inside:avoid; \}/);
     assert.match(style, /\.bh\{[^}]*break-after:avoid;/);

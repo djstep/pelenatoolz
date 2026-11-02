@@ -37,7 +37,12 @@ function cells(workbook: ExcelJS.Workbook): CellInfo[] {
     sheet.eachRow((row, rowNumber) => {
       row.eachCell((cell, col) => {
         if (cell.isMerged && cell.master !== cell) return;
-        out.push({ row: rowNumber, col, value: cell.value, bold: Boolean(cell.font?.bold) });
+        // Rich text (ФИ руководителя) — одной строкой.
+        const value =
+          cell.value && typeof cell.value === "object" && "richText" in cell.value
+            ? cell.value.richText.map((part) => part.text).join("")
+            : cell.value;
+        out.push({ row: rowNumber, col, value, bold: Boolean(cell.font?.bold) });
       });
     });
   });
@@ -126,6 +131,32 @@ describe("вызывной в Excel", () => {
     assert.doesNotMatch(text, /ставк/i);
   });
 
+  test("руководители: фамилия жирным, имя обычным (rich text), как на листе печати", () => {
+    const source = clone(IRP_DAY_SOURCE);
+    source.sheet!.leaders[1]!.personName = "Зайцев";
+    const sheet = book(source).worksheets[0]!;
+    const richOf = (text: string) => {
+      let found: ExcelJS.CellRichTextValue | undefined;
+      sheet.eachRow((row) =>
+        row.eachCell((cell) => {
+          const v = cell.value;
+          if (v && typeof v === "object" && "richText" in v && v.richText.map((p) => p.text).join("") === text) {
+            found = v;
+          }
+        }),
+      );
+      assert.ok(found, text);
+      return found.richText;
+    };
+    assert.deepEqual(richOf("Миронова Татьяна"), [
+      { text: "Миронова", font: { bold: true } },
+      { text: " Татьяна" },
+    ]);
+    assert.deepEqual(richOf("Зайцев"), [{ text: "Зайцев", font: { bold: true } }]);
+    // Колонка ФИ шире подписи — ширина считается и по rich text.
+    assert.ok((sheet.getColumn(2).width ?? 0) >= "Миронова Татьяна".length);
+  });
+
   test("телефонов актёров нет, телефон руководителя есть", () => {
     const source = clone(FULL_DAY_SOURCE);
     for (const actor of source.actors) {
@@ -164,13 +195,17 @@ describe("вызывной в Excel", () => {
     assert.equal(titleRow(workbook, "ВЫЗЫВНОЙ ЛИСТ")!.row, 1);
   });
 
-  test("пустые блоки не выводятся", () => {
+  test("пустые необязательные блоки не выводятся, обязательные — всегда, пустое — «не указано»", () => {
     const workbook = book(MIN_DAY_SOURCE);
-    for (const title of ["ВЫЗОВ ЦЕХОВ", "ВАЖНО", "ОГРАНИЧЕНИЯ ПО АКТЁРАМ", "СХЕМА ОБЪЕКТА", "ВТОРОЙ ЮНИТ", "ПОГОДА"]) {
+    for (const title of ["ВАЖНО", "СХЕМА ОБЪЕКТА", "ВТОРОЙ ЮНИТ", "БАЗА И ТРАНСПОРТ ГРУППЫ", "ГРУППОВКА И ДУБЛЁРЫ"]) {
       assert.equal(titleRow(workbook, title), undefined, title);
     }
-    assert.ok(titleRow(workbook, "РУКОВОДИТЕЛИ ГРУППЫ"));
-    assert.ok(titleRow(workbook, "АКТЁРЫ"));
+    for (const title of ["РУКОВОДИТЕЛИ ГРУППЫ", "АКТЁРЫ", "ВЫЗОВ ЦЕХОВ", "ОГРАНИЧЕНИЯ ПО АКТЁРАМ", "ПОГОДА"]) {
+      assert.ok(titleRow(workbook, title), title);
+    }
+    // Под пустым обязательным блоком — «не указано».
+    const crew = titleRow(workbook, "ВЫЗОВ ЦЕХОВ")!;
+    assert.ok(cells(workbook).some((c) => c.row === crew.row + 1 && c.value === "не указано"));
   });
 
   test("план: время, хронометраж строками как в модели", () => {
