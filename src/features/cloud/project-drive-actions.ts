@@ -2,7 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import type { CloudActionState } from "@/features/cloud/actions";
+import {
+  driveSyncResultText,
+  syncProjectDriveAccess,
+  type DriveSyncResult,
+} from "@/features/cloud/lib/drive-access-sync";
 import { isCloudApiError, isCloudReconnectRequiredError } from "@/features/cloud/lib/errors";
+import { assertInProject, isNotInProjectError } from "@/features/memberships/assert-in-project";
+import { prisma } from "@/shared/db/prisma";
 import { canSeeProjectDrive } from "@/features/cloud/lib/project-drive-rules";
 import {
   disconnectProjectDrive,
@@ -51,4 +58,49 @@ export async function checkProjectDriveAction(projectId: string): Promise<CloudA
     console.error("[project drive check]", e instanceof Error ? e.message : e);
     return { error: "Не удалось проверить диск проекта — обновите страницу и попробуйте ещё раз" };
   }
+}
+
+function syncState(result: DriveSyncResult): CloudActionState {
+  const { ok, text } = driveSyncResultText(result);
+  return ok ? { success: text } : { error: text };
+}
+
+/**
+ * «Синхронизировать доступы» — владелец и продюсеры. Пересчёт идёт сразу (человек ждёт итог);
+ * ошибки Google остаются строками «не синхронизировано».
+ */
+export async function syncProjectDriveAccessAction(projectId: string): Promise<CloudActionState> {
+  const ctx = await requireProjectContext(projectId);
+  if (!canSeeProjectDrive(projectDriveActor(ctx))) return { error: "Недостаточно прав" };
+  const result = await syncProjectDriveAccess(projectId, { actorUserId: ctx.user.id!, trigger: "manual" });
+  revalidateProjectDrive(projectId);
+  return syncState(result);
+}
+
+/** «Повторить» у строки «не синхронизировано» — пересчёт папки этой строки. Владелец и продюсеры. */
+export async function retryProjectDriveGrantAction(
+  projectId: string,
+  grantId: string,
+): Promise<CloudActionState> {
+  const ctx = await requireProjectContext(projectId);
+  if (!canSeeProjectDrive(projectDriveActor(ctx))) return { error: "Недостаточно прав" };
+  if (typeof grantId !== "string" || !grantId) return { error: "Запись не найдена" };
+  try {
+    await assertInProject("DriveFolderGrant", grantId, projectId);
+  } catch (e) {
+    if (isNotInProjectError(e)) return { error: "Запись не найдена — обновите страницу" };
+    throw e;
+  }
+  const grant = await prisma.driveFolderGrant.findFirst({
+    where: { id: grantId, folder: { projectId } },
+    select: { folderId: true },
+  });
+  if (!grant) return { error: "Запись не найдена — обновите страницу" };
+  const result = await syncProjectDriveAccess(projectId, {
+    actorUserId: ctx.user.id!,
+    trigger: "retry",
+    folderIds: [grant.folderId],
+  });
+  revalidateProjectDrive(projectId);
+  return syncState(result);
 }

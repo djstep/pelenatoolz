@@ -32,6 +32,7 @@ import {
   transferRefusal,
 } from "@/features/projects/lib/owner";
 import { prisma } from "@/shared/db/prisma";
+import { scheduleProjectDriveAccessSync } from "@/features/cloud/lib/drive-access-sync";
 import {
   detachProjectDriveIfKeeperLeft,
   revokeProjectDriveTokens,
@@ -620,6 +621,8 @@ export async function updateMemberRoleAction(
   if ("error" in outcome) return { error: outcome.error };
   // Отзыв у Google — после транзакции (и только если аккаунт больше нигде не подключён).
   await revokeProjectDriveTokens(outcome.releasedDrive);
+  // Доступы к папкам диска проекта — после ответа (просмотр вызывных, продюсер).
+  scheduleProjectDriveAccessSync(projectId, user.id!, "member_role");
 
   revalidatePath(`/ru/projects/${projectId}/members`);
   if (outcome.releasedDrive) revalidatePath(`/ru/projects/${projectId}`, "layout");
@@ -723,6 +726,8 @@ export async function removeMemberAction(
   const { removedHeads, releasedDrive } = outcome;
   // Отзыв у Google — после транзакции (и только если аккаунт больше нигде не подключён).
   await revokeProjectDriveTokens(releasedDrive);
+  // Снять доступы к папкам диска проекта — после ответа.
+  scheduleProjectDriveAccessSync(projectId, user.id!, "member_removed");
 
   revalidatePath(`/ru/projects/${projectId}/members`);
   if (releasedDrive) revalidatePath(`/ru/projects/${projectId}`, "layout");
@@ -828,6 +833,8 @@ export async function acceptInviteAction(token: string): Promise<ActionState> {
         : {}),
     },
   });
+  // Новый участник или возврат — доступы к уже созданным папкам диска проекта, после ответа.
+  scheduleProjectDriveAccessSync(invite.projectId, user.id!, "member_joined");
 
   redirect(`/ru/projects/${invite.projectId}`);
 }

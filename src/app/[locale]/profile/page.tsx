@@ -3,6 +3,7 @@ import { requireUser } from "@/features/auth/session";
 import { CloudConnectionsPanel } from "@/features/cloud/components/cloud-file-picker";
 import { CloudOAuthNoticeLine } from "@/features/cloud/components/cloud-oauth-notice";
 import { listUserCloudConnections } from "@/features/cloud/lib/cloud-service";
+import { profileDriveEmailNotice } from "@/features/cloud/lib/drive-access-rules";
 import { cloudOAuthNotice } from "@/features/cloud/lib/oauth-notice";
 import { ProfileForm } from "@/features/profile/components/profile-form";
 import { prisma } from "@/shared/db/prisma";
@@ -25,6 +26,15 @@ export default async function ProfilePage({ params, searchParams }: Props) {
     listUserCloudConnections(sessionUser.id!),
   ]);
   const notice = cloudOAuthNotice(query, connections);
+  // Риск 4: на какую почту выдаются папки дисков проектов и не опечатка ли это.
+  const driveEmail = user
+    ? profileDriveEmailNotice({
+        email: user.email,
+        googleEmail: user.googleEmail,
+        connectedGoogleEmail:
+          connections.find((c) => c.provider === "GOOGLE_DRIVE")?.accountEmail ?? null,
+      })
+    : null;
 
   return (
     <>
@@ -44,6 +54,21 @@ export default async function ProfilePage({ params, searchParams }: Props) {
           ) : (
             <p className="text-sm text-[var(--danger)]">Пользователь не найден</p>
           )}
+          {driveEmail ? (
+            <div className="mt-4 space-y-1 text-sm" data-testid="profile-drive-email">
+              <p>
+                Доступ к папкам проекта будет выдан на{" "}
+                <span className="font-medium break-all">{driveEmail.grantEmail}</span>
+                {user?.googleEmail ? null : " (почта входа — «Почта для Google» не указана)"}
+              </p>
+              {driveEmail.mismatch ? (
+                <p className="text-[var(--danger)]" data-testid="profile-drive-email-mismatch">
+                  Не совпадает с подключённым Google-аккаунтом ({driveEmail.mismatch}). Проверьте, нет ли
+                  опечатки: в вызывных — телефоны людей, по ошибке они уйдут постороннему.
+                </p>
+              ) : null}
+            </div>
+          ) : null}
         </Card>
         <section className="mt-6" id="cloud">
           <Card>

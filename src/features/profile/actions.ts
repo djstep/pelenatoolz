@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/features/auth/session";
+import { scheduleUserDriveAccessSync } from "@/features/cloud/lib/drive-access-sync";
 import { profileAuditChanges, profileSchema } from "@/features/profile/schemas";
 import { AuditEntityType } from "@/shared/audit/entity-types";
 import { auditMutation } from "@/shared/audit/with-audit";
@@ -64,6 +65,9 @@ export async function updateProfileAction(
       changes,
     },
   );
+
+  // Доступы к папкам дисков проектов — на новую почту, во всех проектах, после ответа.
+  if (changes.googleEmailChanged) scheduleUserDriveAccessSync(userId, "google_email");
 
   revalidatePath("/ru/profile");
   // Имя в шапке и в списках участников.

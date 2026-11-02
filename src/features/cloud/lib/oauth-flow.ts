@@ -8,6 +8,7 @@ import {
   revokeBeforeReconnect,
   saveCloudConnection,
 } from "@/features/cloud/lib/cloud-service";
+import { scheduleProjectDriveAccessSync } from "@/features/cloud/lib/drive-access-sync";
 import { googleEndpoints, yandexEndpoints } from "@/features/cloud/lib/endpoints";
 import {
   exchangeGoogleCode,
@@ -347,6 +348,8 @@ async function finishProjectDriveConnect(
   }
   // Прежние токены заменённого диска — после записи, с правилом «аккаунт ещё подключён — не отзывать».
   await revokeProjectDriveTokens(saved.released);
+  // Тот же аккаунт переподключён — папки сохранились: догнать доступы (после ответа).
+  scheduleProjectDriveAccessSync(projectId, userId, "drive_connected");
   return NextResponse.redirect(withParam(returnTo, "cloud_connected", "project"));
 }
 

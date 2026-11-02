@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { CloudOAuthNoticeLine } from "@/features/cloud/components/cloud-oauth-notice";
+import { ProjectDriveAccess } from "@/features/cloud/components/project-drive-access";
 import { ProjectDrivePanel } from "@/features/cloud/components/project-drive-panel";
+import { getDriveAccessOverview } from "@/features/cloud/lib/drive-access-sync";
 import { projectDriveOAuthNotice } from "@/features/cloud/lib/oauth-notice";
 import {
   canManageProjectDrive,
@@ -39,6 +41,8 @@ export default async function ProjectSettingsPage({ params, searchParams }: Prop
   const showDrive = canSeeProjectDrive(driveActor);
   const drive = showDrive ? await getProjectDriveView(projectId) : null;
   const driveNotice = showDrive ? projectDriveOAuthNotice(query, drive) : null;
+  // Доступы к папкам и почты в списке «не синхронизировано» — тоже только им.
+  const driveAccess = showDrive && drive?.status === "ACTIVE" ? await getDriveAccessOverview(projectId) : null;
   const formatWhen = (value: Date) =>
     value.toLocaleString("ru-RU", {
       day: "2-digit",
@@ -91,6 +95,11 @@ export default async function ProjectSettingsPage({ params, searchParams }: Prop
                 : null
             }
           />
+          {driveAccess ? (
+            <div className="mt-4">
+              <ProjectDriveAccess projectId={projectId} overview={driveAccess} />
+            </div>
+          ) : null}
         </Card>
       ) : null}
 

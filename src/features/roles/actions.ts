@@ -2,6 +2,7 @@
 
 import { MembershipStatus } from "@prisma/client";
 import { revalidatePath } from "next/cache";
+import { scheduleProjectDriveAccessSync } from "@/features/cloud/lib/drive-access-sync";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { OWNER_ROLE_ERROR } from "@/features/projects/lib/owner";
 import {
@@ -240,6 +241,8 @@ export async function updateRoleAction(
         ? `Изменена роль «${role.name}»`
         : `Изменена роль «${role.name}» → «${parsed.data.name}»`,
   });
+  // Просмотр вызывных у роли мог смениться — доступы к «Общей» на диске проекта, после ответа.
+  scheduleProjectDriveAccessSync(projectId, ctx.user.id!, "role_permissions");
 
   revalidateRoles(projectId);
   return { success: "Роль сохранена" };

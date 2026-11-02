@@ -8,6 +8,7 @@ import {
   createDrivePermission,
   deleteDrivePermission,
   getDriveFile,
+  listDrivePermissions,
   putGoogleSheetFromXlsx,
 } from "@/features/cloud/lib/google-drive-api";
 import {
@@ -153,10 +154,25 @@ describe("заглушка: Google", () => {
       [[common.id, perm.permissionId, "commenter", "head@example.com"]],
     );
 
+    // Список доступов: владелец, выданный системой и выданный «руками» (через управление заглушкой).
+    await control(`/google/files/${common.id}/permissions`, { email: "friend@gmail.com", role: "writer" });
+    const listed = await listDrivePermissions(token, common.id);
+    assert.deepEqual(
+      listed.map((p) => [p.role, p.email]),
+      [
+        ["owner", "stub-google@example.com"],
+        ["commenter", "head@example.com"],
+        ["writer", "friend@gmail.com"],
+      ],
+    );
+    assert.equal(listed[1].id, perm.permissionId);
+    await assert.rejects(listDrivePermissions(token, "no-such-folder"), (e: unknown) => e instanceof CloudApiError && e.status === 404);
+    await control(`/google/files/${common.id}/permissions`, { email: "friend@gmail.com" });
+
     assert.deepEqual(await deleteDrivePermission(token, common.id, perm.permissionId), { alreadyGone: false });
     assert.deepEqual(await deleteDrivePermission(token, common.id, perm.permissionId), { alreadyGone: true });
     state = await control<StubState>("/state");
-    assert.equal(state.google.permissions.length, 0);
+    assert.deepEqual(state.google.permissions.map((p) => p.emailAddress), ["friend@gmail.com"]);
 
     // Журнал: загрузка без бинарного содержимого — метаданные и размер.
     const log = await control<LogEntry[]>("/requests");

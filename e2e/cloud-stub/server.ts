@@ -11,6 +11,7 @@ import type { AddressInfo } from "node:net";
  *   GET  /__stub/state      — папки, файлы, доступы, публикации, отозванные токены;
  *   GET  /__stub/google/files/<id>/content, GET /__stub/yandex/content?path= — содержимое файла;
  *   POST /__stub/google/files/<id>/delete — файл «удалили руками» (дальше Google отвечает 404);
+ *   POST /__stub/google/files/<id>/permissions {email, role} — доступ, выданный хранителем «руками»;
  *   POST /__stub/reset      — всё с нуля;
  *   POST /__stub/config     — аккаунт следующего входа, отказ в окне согласия, `failNext`.
  * Только `node:http`, без пакетов. Слушает 127.0.0.1.
@@ -26,7 +27,7 @@ export type StubProvider = "google" | "yandex";
  * её начало до «-» / «.» (`token`, `files`, `permissions`) или `*`. `times` — сколько раз (по умолчанию 1).
  *
  * Операции Google: authorize, token-code, token-refresh, revoke, files.create, files.get, files.patch,
- *   files.upload, files.update, permissions.create, permissions.delete.
+ *   files.upload, files.update, permissions.list, permissions.create, permissions.delete.
  * Операции Яндекса: authorize, token-code, token-refresh, revoke, info, resources.create, resources.get,
  *   resources.upload-link, resources.upload, resources.publish, resources.move.
  */
@@ -81,6 +82,11 @@ const SHEET_SOURCES = new Set([
 ]);
 const MAX_BODY = 25 * 1024 * 1024;
 
+/** У Google id доступа пользователя один и тот же для всех файлов. */
+function permissionIdFor(email: string) {
+  return `perm-${createHash("sha256").update(email.trim().toLowerCase()).digest("hex").slice(0, 16)}`;
+}
+
 function defaultConfig(): StubConfig {
   return {
     google: {
@@ -134,6 +140,8 @@ type DrivePermission = {
   role: string;
   emailAddress: string;
   sendNotificationEmail: boolean;
+  /** Выдан «руками» через `/__stub/...`, а не приложением. */
+  manual?: boolean;
 };
 
 type YandexResource = {
@@ -659,6 +667,21 @@ export async function startCloudStub(opts: { port?: number; appOrigin?: string }
     }
 
     const permList = /^\/drive\/v3\/files\/([^/]+)\/permissions$/.exec(path);
+    if (permList && method === "GET") {
+      if (failed(ctx, "google", "permissions.list")) return;
+      const grant = driveAuth(ctx, "read");
+      if (!grant) return;
+      const fileId = decodeURIComponent(permList[1]);
+      const f = ownFile(ctx, grant, fileId);
+      if (!f) return;
+      // Как у Google: владелец — тоже доступ (role owner), потом выданные.
+      const owner = { id: permissionIdFor(f.ownerEmail), type: "user", role: "owner", emailAddress: f.ownerEmail };
+      const perms = state.drivePermissions
+        .filter((p) => p.fileId === fileId)
+        .map((p) => ({ id: p.id, type: p.type, role: p.role, emailAddress: p.emailAddress }));
+      send(ctx, 200, { kind: "drive#permissionList", permissions: [owner, ...perms] });
+      return;
+    }
     if (permList && method === "POST") {
       if (failed(ctx, "google", "permissions.create")) return;
       const grant = driveAuth(ctx, "write");
@@ -673,7 +696,7 @@ export async function startCloudStub(opts: { port?: number; appOrigin?: string }
         return;
       }
       // У Google id доступа пользователя один и тот же для всех файлов; повтор — обновление роли.
-      const id = `perm-${createHash("sha256").update(email.toLowerCase()).digest("hex").slice(0, 16)}`;
+      const id = permissionIdFor(email);
       const existing = state.drivePermissions.find((p) => p.fileId === fileId && p.id === id);
       const sendNotificationEmail = url.searchParams.get("sendNotificationEmail") !== "false";
       if (existing) {
@@ -1192,8 +1215,30 @@ export async function startCloudStub(opts: { port?: number; appOrigin?: string }
     }
     const gDelete = /^\/google\/files\/([^/]+)\/delete$/.exec(path);
     if (method === "POST" && gDelete) {
-      const removed = state.driveFiles.delete(decodeURIComponent(gDelete[1]));
+      const fileId = decodeURIComponent(gDelete[1]);
+      const removed = state.driveFiles.delete(fileId);
+      // Доступы удалённого файла исчезают вместе с ним.
+      state.drivePermissions = state.drivePermissions.filter((p) => p.fileId !== fileId);
       return send(ctx, removed ? 200 : 404, { ok: removed });
+    }
+    const gManual = /^\/google\/files\/([^/]+)\/permissions$/.exec(path);
+    if (method === "POST" && gManual) {
+      const fileId = decodeURIComponent(gManual[1]);
+      const body = jsonOf(ctx) ?? {};
+      const email = typeof body.email === "string" ? body.email.trim() : "";
+      if (!state.driveFiles.has(fileId) || !email) return send(ctx, 400, { error: "file and email expected" });
+      const id = permissionIdFor(email);
+      state.drivePermissions = state.drivePermissions.filter((p) => !(p.fileId === fileId && p.id === id));
+      state.drivePermissions.push({
+        id,
+        fileId,
+        type: "user",
+        role: typeof body.role === "string" ? body.role : "writer",
+        emailAddress: email,
+        sendNotificationEmail: false,
+        manual: true,
+      });
+      return send(ctx, 200, { id });
     }
     const gContent = /^\/google\/files\/([^/]+)\/content$/.exec(path);
     if (method === "GET" && gContent) {

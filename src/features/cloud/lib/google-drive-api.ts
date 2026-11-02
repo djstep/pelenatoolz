@@ -305,6 +305,35 @@ export async function createDrivePermission(
   return { permissionId: json.id };
 }
 
+export type DrivePermission = { id: string; type: string; role: string; email: string | null };
+
+type PermissionListJson = {
+  nextPageToken?: string;
+  permissions?: Array<{ id?: string; type?: string; role?: string; emailAddress?: string }>;
+};
+
+/** Все доступы файла или папки (и выданные системой, и руками). Папки нет — ошибка `notFound`. */
+export async function listDrivePermissions(accessToken: string, fileId: string): Promise<DrivePermission[]> {
+  const { driveApi } = googleEndpoints();
+  const out: DrivePermission[] = [];
+  let pageToken: string | null = null;
+  // Страниц у папки проекта — одна-две; предел — от зацикливания на кривом ответе.
+  for (let page = 0; page < 20; page++) {
+    const url: string =
+      `${fileUrl(driveApi, fileId)}/permissions` +
+      `?fields=${encodeURIComponent("nextPageToken,permissions(id,type,role,emailAddress)")}&pageSize=100` +
+      (pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : "");
+    const json: PermissionListJson = await readJson<PermissionListJson>(await googleFetch(accessToken, url));
+    for (const p of json.permissions ?? []) {
+      if (!p.id) continue;
+      out.push({ id: p.id, type: p.type ?? "", role: p.role ?? "", email: p.emailAddress ?? null });
+    }
+    pageToken = json.nextPageToken ?? null;
+    if (!pageToken) break;
+  }
+  return out;
+}
+
 /** Снять доступ. 404 — уже снят (руками или вместе с файлом), не ошибка: `alreadyGone: true`. */
 export async function deleteDrivePermission(
   accessToken: string,

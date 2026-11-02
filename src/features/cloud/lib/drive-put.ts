@@ -38,13 +38,13 @@ export type DrivePutResult = {
   outcome: DrivePutOutcome;
 };
 
-type GoogleFolder = { id: string; webUrl: string | null; recreated: boolean };
+export type GoogleFolder = { id: string; name: string; webUrl: string | null; recreated: boolean };
 
 /**
  * Папка по ключу: запомненная жива (есть, не в корзине, лежит в `parentId`) — она; иначе новая.
  * `recreated` — запомненную удалили руками.
  */
-async function ensureGoogleFolder(
+export async function ensureGoogleFolder(
   accessToken: string,
   folders: DriveFolderStore,
   key: string,
@@ -55,12 +55,12 @@ async function ensureGoogleFolder(
   if (saved) {
     const file = await getDriveFile(accessToken, saved.externalId);
     if (file && !file.trashed && (!parentId || file.parents.includes(parentId))) {
-      return { id: file.id, webUrl: file.webUrl ?? saved.webUrl, recreated: false };
+      return { id: file.id, name: file.name, webUrl: file.webUrl ?? saved.webUrl, recreated: false };
     }
   }
   const created = await createDriveFolder(accessToken, { name, parentId });
   await folders.save(key, { externalId: created.id, webUrl: created.webUrl });
-  return { id: created.id, webUrl: created.webUrl, recreated: saved !== null };
+  return { id: created.id, name, webUrl: created.webUrl, recreated: saved !== null };
 }
 
 /**

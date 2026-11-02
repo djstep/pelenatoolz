@@ -7,6 +7,8 @@ import {
   reorderDepartmentsSchema,
 } from "@/features/departments/schemas";
 import { memberLabelsById } from "@/features/departments/queries";
+import { scheduleProjectDriveAccessSync } from "@/features/cloud/lib/drive-access-sync";
+import { scheduleDepartmentFolderRename } from "@/features/cloud/lib/project-drive-folders";
 import {
   assertInProject,
   isNotInProjectError,
@@ -252,6 +254,11 @@ export async function updateDepartmentAction(
       changes,
     });
   }
+  // Диск проекта (после ответа): главы — доступ к папке цеха; новое название — имя папки.
+  if (added.length > 0 || removed.length > 0) {
+    scheduleProjectDriveAccessSync(projectId, ctx.user.id!, "department_heads");
+  }
+  if (before.name !== name) scheduleDepartmentFolderRename(projectId, departmentId, ctx.user.id!);
 
   revalidateDepartments(projectId);
   return { success: "Цех сохранён" };
@@ -356,6 +363,8 @@ export async function deleteDepartmentAction(
     summary: `Удалён цех «${department.name}»`,
     changes: { name: department.name, codePrefix: department.codePrefix, heads },
   });
+  // Папка цеха на диске проекта остаётся, доступы к ней снимаются — после ответа.
+  scheduleProjectDriveAccessSync(projectId, ctx.user.id!, "department_deleted");
 
   revalidateDepartments(projectId);
   return {};
