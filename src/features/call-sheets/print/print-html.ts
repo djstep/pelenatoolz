@@ -12,7 +12,6 @@ import {
   shiftTimes,
 } from "@/features/call-sheets/print/print-blocks";
 import {
-  stampFooter,
   stampMark,
   stampVersion,
   type CallSheetStamp,
@@ -23,9 +22,8 @@ import { escapeHtml } from "@/shared/lib/escape-html";
  * Печатный лист вызывного: модель → HTML-строка. Без скриптов и обработчиков (с диска читается только файл шрифта в режиме `embed`);
  * весь текст — через `escapeHtml`, строки в CSS `content` — через `cssString`. Вид — по макету
  * владельца (`docs/callsheet-mockup-v5.html`). Страницы — поток: принудительный разрыв только
- * перед схемой объекта; бегущая шапка листов 2+ и подвал каждого листа (проект, дата, смена;
- * статус, версия, «лист N из M») — поля страницы (`@page`): их рисует браузер при печати,
- * на экране их нет. Статус и версия — ещё и в шапке первого листа.
+ * перед схемой объекта; бегущая шапка листов 2+ — поле страницы (`@page`). Подвала нет (решение
+ * владельца): статус и версия — в шапке первого листа.
  * Пустые блоки — по правилу `print-blocks.ts`: обязательные выводятся всегда, пустое поле в них —
  * «не указано» серым; необязательные пустые не выводятся. Колонки таблиц без единого значения скрыты.
  */
@@ -485,9 +483,7 @@ function schemeHtml(model: CallSheetPrintModel) {
 
 // ---- Страница ----
 
-function pageCss(model: CallSheetPrintModel, stamp: CallSheetStamp | undefined) {
-  const rule = `vertical-align:bottom; border-bottom:2.4pt solid #121212;`;
-  const font = `"Medeo Sans",Arial,sans-serif`;
+function pageCss(model: CallSheetPrintModel) {
   const shift = model.shiftNumber ? `смена ${model.shiftNumber}` : null;
   const scenes = model.totals.sceneCount
     ? `${model.totals.sceneCount} ${sceneWord(model.totals.sceneCount)}`
@@ -509,18 +505,12 @@ function pageCss(model: CallSheetPrintModel, stamp: CallSheetStamp | undefined) 
   const schemeRight = [meet, model.scheme?.address ?? model.crewCall.address]
     .filter(Boolean)
     .join(" · ");
-  // Подвал каждого листа, как в макете: слева проект, дата и смена; справа статус, версия и
-  // «лист N из M» (номера считает браузер при печати).
-  const footLeft = [model.projectName, `вызывной на ${model.numericDate}`, shift].filter(Boolean).join(" · ");
-  const status = stampFooter(stamp);
-  const footRight = `${cssString(`${status ? `${status} · ` : ""}лист `)} counter(page) " из " counter(pages)`;
-  const foot = `font:400 7pt ${font}; color:#6e6e6a; vertical-align:top; padding-top:2.4mm;`;
-  return `@page{ size:A4; margin:17mm 9mm 12mm;
+  const rule = `vertical-align:bottom; border-bottom:2.4pt solid #121212;`;
+  const font = `"Medeo Sans",Arial,sans-serif`;
+  return `@page{ size:A4; margin:17mm 9mm 7mm;
   @top-left{ content:${cssString(runLeft)}; font:700 10pt ${font}; color:#121212; padding-bottom:1.4mm; ${rule} white-space:nowrap; }
   @top-center{ content:""; ${rule} }
   @top-right{ content:${cssString(runRight)}; font:600 7.4pt ${font}; color:#3a3a3a; padding-bottom:1.7mm; text-align:right; ${rule} }
-  @bottom-left{ content:${cssString(footLeft)}; ${foot} white-space:nowrap; }
-  @bottom-right{ content:${footRight}; ${foot} text-align:right; white-space:nowrap; }
 }
 @page :first{ margin-top:9mm;
   @top-left{ content:none; border:0; } @top-center{ content:none; border:0; } @top-right{ content:none; border:0; }
@@ -736,7 +726,7 @@ function fontCss(font: CallSheetFontMode): string {
 
 /**
  * Модель → HTML листа. Без скриптов и обработчиков; шрифт — см. `CallSheetFontMode`.
- * `stamp` — статус и версия (шапка первого листа и подвал); без него — лист без статуса.
+ * `stamp` — статус и версия (шапка первого листа); без него — лист без статуса.
  */
 export function buildCallSheetHtml(
   model: CallSheetPrintModel,
@@ -767,7 +757,7 @@ export function buildCallSheetHtml(
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${e(model.documentTitle)}</title>
 <style>${fontCss(font)}
-${pageCss(model, stamp)}
+${pageCss(model)}
 ${SHEET_CSS}</style>
 </head><body><main class="sheet">
 ${body}

@@ -90,11 +90,11 @@ test("печать заполненного дня: все блоки макет
   const [leaderLast, leaderFirst] = FILLED_DAY.leader.split(" ");
   await expect(sheet.locator("td.nm b", { hasText: leaderLast })).toHaveText(leaderLast!);
   await expect(sheet.locator("td.nm", { hasText: leaderLast })).toHaveText(`${leaderLast} ${leaderFirst}`);
-  // Подвал каждого листа — поля страницы: проект, дата, смена; статус, версия, «лист N из M».
+  // Подвала нет (решение владельца), бегущая шапка листов 2+ — есть.
   const style = await popup.locator("style").first().innerHTML();
-  const date = LAYOUT_DAYS.filled.date.split("-").reverse().join(".");
-  expect(style).toContain(`@bottom-left{ content:"${E2E_PROJECT_NAME} · вызывной на ${date} · смена 4";`);
-  expect(style).toContain(`@bottom-right{ content:"черновик · версия 1 · лист " counter(page) " из " counter(pages);`);
+  expect(style).not.toContain("@bottom-");
+  expect(style).not.toContain("counter(page");
+  expect(style).toContain(`@top-left{ content:"${E2E_PROJECT_NAME} · `);
   await popup.close();
   // Тот же лист без встроенного шрифта (base64 шрифта не мешает поиску сумм).
   const res = await page.request.get(`/api/projects/${ctx.projectId}/call-sheets/${filledDay}/sheet`);

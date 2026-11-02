@@ -1,6 +1,6 @@
 /**
- * Статус и версия на листе вызывного (печать, просмотр, Excel) — в шапке первого листа и в
- * подвале каждого листа печати. В модель листа не входят:
+ * Статус и версия на листе вызывного (печать, просмотр, Excel) — в шапке первого листа, подвала
+ * у листа нет. В модель листа не входят:
  * снимок утверждения и отпечаток данных дня от статуса не зависят.
  */
 
@@ -32,20 +32,6 @@ export function stampVersion(stamp: CallSheetStamp | undefined): string | null {
     return `версия ${stamp.version} · утверждён ${stamp.approvedAtLabel}`;
   }
   return `версия ${stamp.version}`;
-}
-
-/**
- * Подвал листа справа, перед «лист N из M» (как в макете): «черновик · версия 1»,
- * «на согласовании · версия 1», «утверждён 10.09, 17:46 · версия 2». Вызывного ещё нет — только
- * статус; без статуса — пусто.
- */
-export function stampFooter(stamp: CallSheetStamp | undefined): string | null {
-  if (!stamp) return null;
-  const status =
-    stamp.status === "APPROVED"
-      ? `утверждён ${stamp.approvedAtLabel.replace(/^(\S+)\s+/, "$1, ")}`
-      : CALL_SHEET_STATUS_LABELS[stamp.status].toLowerCase();
-  return [status, stamp.version ? `версия ${stamp.version}` : null].filter(Boolean).join(" · ");
 }
 
 /** «10.09 17:46» в часовом поясе проекта. */
