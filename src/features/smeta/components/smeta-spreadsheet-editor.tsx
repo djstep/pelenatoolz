@@ -122,6 +122,9 @@ type UniverAPI = {
     BeforeSheetDelete?: unknown;
   };
   Enum?: { RangePermissionPoint?: Record<string, string> };
+  getFormula?: () => {
+    calculationResultApplied?: (cb: () => void) => { dispose?: () => void };
+  };
 };
 
 /** Событие Univer CommandExecuted: команда, операция или мутация. */
@@ -607,6 +610,16 @@ export function SmetaSpreadsheetEditor({
     return run;
   }
 
+  /**
+   * Перед «Экспорт Excel» и «На диск…»: досохранить, только если есть настоящие правки (или
+   * идёт сохранение). Без правок файл и так собирается из базы, а лишнее сохранение сбросило бы
+   * «на утверждении» / «утверждена» в черновик.
+   */
+  async function saveEditsBeforeExport(): Promise<boolean> {
+    if (!dirtyRef.current && inFlightRef.current === null) return true;
+    return (await flushSave()) !== null && !dirtyRef.current;
+  }
+
   const flushSaveRef = useRef(flushSave);
   flushSaveRef.current = flushSave;
 
@@ -966,9 +979,28 @@ export function SmetaSpreadsheetEditor({
         };
 
         // Книга при открытии — точка отсчёта: сохраняется только то, что от неё отличается.
+        // Univer пересчитывает формулы уже после загрузки (записи `onlyLocal`). Пока глава ничего
+        // не правил, точка отсчёта снимается заново после каждого пересчёта — иначе расхождение
+        // сохранённых значений формул с пересчётом (СЕГОДНЯ(), импорт из Excel) считалось бы
+        // правкой и уходило на сервер с первым же сохранением.
         if (canWriteRef.current) {
           const parts = currentParts();
           if (parts) baselineRef.current = baselineOf(parts);
+          const openedRevision = revisionRef.current;
+          try {
+            const sub = api.getFormula?.().calculationResultApplied?.(() => {
+              setTimeout(() => {
+                if (disposed || conflictRef.current) return;
+                if (dirtyRef.current || inFlightRef.current !== null) return;
+                if (revisionRef.current !== openedRevision) return;
+                const next = currentParts();
+                if (next) baselineRef.current = baselineOf(next);
+              }, 0);
+            });
+            if (sub) disposables.push(sub);
+          } catch {
+            /* optional */
+          }
         }
 
         listen(api.Event?.CommandExecuted, (event) => {
@@ -1221,11 +1253,7 @@ export function SmetaSpreadsheetEditor({
               projectId={projectId}
               departmentId={department.id}
               className="h-9"
-              beforeExport={
-                canWrite
-                  ? async () => (await flushSave()) !== null && !dirtyRef.current
-                  : undefined
-              }
+              beforeExport={canWrite ? saveEditsBeforeExport : undefined}
             />
           ) : null}
           {mode === "draft" ? (
@@ -1234,11 +1262,7 @@ export function SmetaSpreadsheetEditor({
               departmentId={department.id}
               button={driveButton}
               className="h-9"
-              beforeExport={
-                canWrite
-                  ? async () => (await flushSave()) !== null && !dirtyRef.current
-                  : undefined
-              }
+              beforeExport={canWrite ? saveEditsBeforeExport : undefined}
             />
           ) : null}
           {canWrite ? (

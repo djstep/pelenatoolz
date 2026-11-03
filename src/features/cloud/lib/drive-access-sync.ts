@@ -1,6 +1,6 @@
 import "server-only";
 
-import { MembershipStatus, ProjectDriveStatus, type DriveFolderGrant } from "@prisma/client";
+import { MembershipStatus, Prisma, ProjectDriveStatus, type DriveFolderGrant } from "@prisma/client";
 import { after } from "next/server";
 import {
   assertShareableFolderKey,
@@ -29,6 +29,7 @@ import {
   createDrivePermission,
   deleteDrivePermission,
   listDrivePermissions,
+  type DrivePermission,
 } from "@/features/cloud/lib/google-drive-api";
 import { withProjectDriveAccessToken } from "@/features/cloud/lib/project-drive-service";
 import { hasPermission } from "@/features/memberships/permissions";
@@ -83,6 +84,11 @@ const MAX_ATTEMPTS = 4;
 const BACKOFF_BASE_MS = 1_000;
 /** Сколько раз пересчитать «нужно» заново, если за время пересчёта что-то поменялось. */
 const MAX_PASSES = 3;
+/**
+ * Сколько запросов к Google (и записей в базу на выдачах) идёт одновременно. По одному — сотни
+ * запросов при 40 цехах не помещаются в пересчёт; больше — чаще упираемся в лимит частоты Google.
+ */
+const CONCURRENCY = 4;
 
 const RATE_LIMIT_REASONS = new Set(["sharingRateLimitExceeded", "userRateLimitExceeded", "rateLimitExceeded"]);
 
@@ -117,6 +123,29 @@ function isRetryable(e: unknown) {
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Для каждого элемента — `fn`, не больше `limit` одновременно. Первая ошибка останавливает запуск
+ * новых; начатые доделываются, затем первая ошибка бросается дальше.
+ */
+async function eachLimited<T>(items: readonly T[], limit: number, fn: (item: T) => Promise<void>) {
+  const state = { next: 0, failed: false, error: null as unknown };
+  const worker = async () => {
+    while (!state.failed && state.next < items.length) {
+      const item = items[state.next++]!;
+      try {
+        await fn(item);
+      } catch (e) {
+        if (!state.failed) {
+          state.failed = true;
+          state.error = e;
+        }
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  if (state.failed) throw state.error;
+}
 
 /** Лимит частоты, 5xx, сеть — повтор с паузой 1, 2, 4 с; не успеваем до конца времени — `SyncOutOfTimeError`. */
 async function withRetry<T>(fn: () => Promise<T>, deadline: number): Promise<T> {
@@ -198,28 +227,32 @@ async function loadPeople(projectId: string) {
 
 type Folder = AccessFolder & { externalId: string };
 
-/** Доступы папок у Google. Папку удалили (404) — её выдачи умерли вместе с ней. */
+/**
+ * Доступы папок у Google (как есть, с владельцем), несколько папок одновременно. Папку удалили
+ * (404) — её выдачи умерли вместе с ней.
+ */
 async function readFolderPermissions(
   accessToken: string,
   folders: readonly Folder[],
   deadline: number,
-): Promise<{ google: Map<string, FolderPermission[]>; gone: Set<string> }> {
-  const google = new Map<string, FolderPermission[]>();
+): Promise<{ lists: Map<string, DrivePermission[]>; gone: Set<string> }> {
+  const lists = new Map<string, DrivePermission[]>();
   const gone = new Set<string>();
-  for (const folder of folders) {
+  await eachLimited(folders, CONCURRENCY, async (folder) => {
     try {
-      const list = await withRetry(() => listDrivePermissions(accessToken, folder.externalId), deadline);
-      google.set(
-        folder.id,
-        list.filter((p) => p.role !== "owner").map((p) => ({ id: p.id, email: p.email })),
-      );
+      lists.set(folder.id, await withRetry(() => listDrivePermissions(accessToken, folder.externalId), deadline));
     } catch (e) {
       if (isCloudReconnectRequiredError(e) || e instanceof SyncOutOfTimeError) throw e;
       if (isFolderGone(e)) gone.add(folder.id);
       // Иная ошибка — Google не спросили, строкам базы верим как есть.
     }
-  }
-  return { google, gone };
+  });
+  return { lists, gone };
+}
+
+/** Для сверки с выдачами системы — без владельца. */
+function grantablePermissions(list: readonly DrivePermission[]): FolderPermission[] {
+  return list.filter((p) => p.role !== "owner").map((p) => ({ id: p.id, email: p.email }));
 }
 
 // ---------- выполнение ----------
@@ -240,10 +273,28 @@ function opKey(op: GrantOp) {
   return op.kind === "add" || op.kind === "regrant" ? pairKey(op.folderId, op.userId) : op.grantId;
 }
 
-/** Отметить заранее всё, что будем делать: что не успеем — останется видно «не синхронизировано». */
+/**
+ * Отметить заранее всё, что будем делать: что не успеем — останется видно «не синхронизировано».
+ * Перевыдачи и снятия — двумя запросами на всех, новые выдачи — по строке, несколько сразу.
+ */
 async function premark(ops: readonly GrantOp[]) {
-  for (const op of ops) {
-    if (op.kind === "add") {
+  const regrant = ops.flatMap((op) => (op.kind === "regrant" ? [op.grantId] : []));
+  const remove = ops.flatMap((op) => (op.kind === "remove" ? [op.grantId] : []));
+  const add = ops.flatMap((op) => (op.kind === "add" ? [op] : []));
+  await Promise.all([
+    regrant.length > 0
+      ? prisma.driveFolderGrant.updateMany({
+          where: { id: { in: regrant } },
+          data: { status: "PENDING_ADD", lastError: null },
+        })
+      : null,
+    remove.length > 0
+      ? prisma.driveFolderGrant.updateMany({
+          where: { id: { in: remove } },
+          data: { status: "PENDING_REMOVE", lastError: null },
+        })
+      : null,
+    eachLimited(add, CONCURRENCY, async (op) => {
       await prisma.driveFolderGrant.upsert({
         where: { folderId_userId: { folderId: op.folderId, userId: op.userId } },
         create: {
@@ -255,32 +306,45 @@ async function premark(ops: readonly GrantOp[]) {
         },
         update: { email: op.email, role: DRIVE_GRANT_ROLE, permissionId: null, status: "PENDING_ADD", lastError: null },
       });
-    } else if (op.kind === "regrant") {
-      await prisma.driveFolderGrant.update({
-        where: { id: op.grantId },
-        data: { status: "PENDING_ADD", lastError: null },
-      });
-    } else if (op.kind === "remove") {
-      await prisma.driveFolderGrant.update({
-        where: { id: op.grantId },
-        data: { status: "PENDING_REMOVE", lastError: null },
-      });
-    }
+    }),
+  ]);
+}
+
+type GrantWhere = { id: string } | { folderId: string; userId: string };
+
+const grantUnique = (where: GrantWhere): Prisma.DriveFolderGrantWhereUniqueInput =>
+  "id" in where ? { id: where.id } : { folderId_userId: where };
+
+const isRowGone = (e: unknown) => e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2025";
+
+/**
+ * Записать одну выдачу, если строка ещё есть (её мог убрать параллельный пересчёт). Одиночный
+ * `update` / `delete` — один запрос к базе, `updateMany` — три (с транзакцией): на сотнях выдач
+ * это и было главное время пересчёта.
+ */
+async function updateGrant(where: GrantWhere, data: Prisma.DriveFolderGrantUpdateInput) {
+  try {
+    await prisma.driveFolderGrant.update({ where: grantUnique(where), data, select: { id: true } });
+  } catch (e) {
+    if (!isRowGone(e)) throw e;
   }
 }
 
-async function failGrant(where: { id: string } | { folderId: string; userId: string }, e: unknown, stats: Stats) {
+async function deleteGrant(id: string) {
+  try {
+    await prisma.driveFolderGrant.delete({ where: { id }, select: { id: true } });
+  } catch (e) {
+    if (!isRowGone(e)) throw e;
+  }
+}
+
+async function failGrant(where: GrantWhere, e: unknown, stats: Stats) {
   const text = errorText(e);
   const outOfTime = e instanceof SyncOutOfTimeError;
   if (!outOfTime) stats.failed++;
   stats.errors.add(text);
   stats.failedKeys.add("id" in where ? where.id : pairKey(where.folderId, where.userId));
-  const status = outOfTime ? undefined : ("FAILED" as const);
-  if ("id" in where) {
-    await prisma.driveFolderGrant.updateMany({ where: { id: where.id }, data: { status, lastError: text } });
-  } else {
-    await prisma.driveFolderGrant.updateMany({ where, data: { status, lastError: text } });
-  }
+  await updateGrant(where, { status: outOfTime ? undefined : "FAILED", lastError: text });
 }
 
 /**
@@ -313,43 +377,35 @@ async function applyOp(
   stats: Stats,
 ) {
   if (op.kind === "drop") {
-    await prisma.driveFolderGrant.deleteMany({ where: { id: op.grantId } });
+    await deleteGrant(op.grantId);
     return;
   }
   if (op.kind === "markOk") {
-    await prisma.driveFolderGrant.updateMany({
-      where: { id: op.grantId },
-      data: { status: "OK", lastError: null },
-    });
+    await updateGrant({ id: op.grantId }, { status: "OK", lastError: null });
     return;
   }
   const folder = folders.get(op.folderId);
   if (!folder) return;
   const pair = op.kind === "remove" ? { id: op.grantId } : { folderId: op.folderId, userId: op.userId };
+  let revoked = false;
   try {
     if (op.kind === "remove") {
       await revokeFolderAccess(accessToken, folder, op.permissionId, deadline);
-      await prisma.driveFolderGrant.deleteMany({ where: { id: op.grantId } });
+      await deleteGrant(op.grantId);
       stats.removed++;
       return;
     }
     if (op.kind === "regrant" && op.oldPermissionId) {
       await revokeFolderAccess(accessToken, folder, op.oldPermissionId, deadline);
-    }
-    if (op.kind === "regrant") {
-      await prisma.driveFolderGrant.updateMany({
-        where: { id: op.grantId },
-        data: { email: op.email, permissionId: null },
-      });
+      revoked = true;
     }
     const { permissionId } = await grantFolderAccess(accessToken, folder, op.email, deadline);
-    await prisma.driveFolderGrant.updateMany({
-      where: { folderId: op.folderId, userId: op.userId },
-      data: { email: op.email, permissionId, status: "OK", lastError: null },
-    });
+    await updateGrant(pair, { email: op.email, permissionId, status: "OK", lastError: null });
     if (op.kind === "regrant") stats.regranted++;
     else stats.added++;
   } catch (e) {
+    // Прежний доступ уже снят, новый не выдан — строка не должна ссылаться на снятый.
+    if (revoked) await updateGrant(pair, { email: op.kind === "remove" ? undefined : op.email, permissionId: null });
     if (isCloudReconnectRequiredError(e)) throw e;
     await failGrant(pair, e, stats);
     if (e instanceof SyncOutOfTimeError) throw e;
@@ -421,36 +477,61 @@ export async function syncProjectDriveAccess(
   } else {
     try {
       await withProjectDriveAccessToken(projectId, options.actorUserId, async (accessToken) => {
+        // Доступы папок у Google. Следующий проход перечитывает только папки, где мы что-то
+        // выдали или сняли: у остальных Google с прошлого чтения не менялся.
+        const lists = new Map<string, DrivePermission[]>();
+        const gone = new Set<string>();
+        let touched: Set<string> | null = null;
+        let settled = false;
         for (let pass = 0; pass < MAX_PASSES; pass++) {
           // Каждый проход — заново из базы: за время запросов к Google люди и роли могли поменяться.
-          const folders = await shareableFolders(projectId, drive.id, folderIds);
+          const folders = pass === 0 ? initialFolders : await shareableFolders(projectId, drive.id, folderIds);
           const byId = new Map(folders.map((f) => [f.id, f]));
-          const { google, gone } = await readFolderPermissions(accessToken, folders, deadline);
-          if (gone.size > 0) {
+          const toRead = folders.filter(
+            (f) => !gone.has(f.id) && (!lists.has(f.id) || (touched?.has(f.id) ?? true)),
+          );
+          const [read, { members, heads }, allStored] = await Promise.all([
+            readFolderPermissions(accessToken, toRead, deadline),
+            loadPeople(projectId),
+            prisma.driveFolderGrant.findMany({
+              where: { folderId: { in: folders.map((f) => f.id) } },
+              select: { id: true, folderId: true, userId: true, email: true, permissionId: true, status: true },
+            }),
+          ]);
+          for (const [id, list] of read.lists) lists.set(id, list);
+          if (read.gone.size > 0) {
             // Папку удалили руками: её доступов больше нет; создастся заново при выгрузке.
-            await prisma.driveFolderGrant.deleteMany({ where: { folderId: { in: [...gone] } } });
+            for (const id of read.gone) gone.add(id);
+            await prisma.driveFolderGrant.deleteMany({ where: { folderId: { in: [...read.gone] } } });
           }
           const live = folders.filter((f) => !gone.has(f.id));
-          const { members, heads } = await loadPeople(projectId);
+          const google = new Map(
+            live.flatMap((f) => {
+              const list = lists.get(f.id);
+              return list ? [[f.id, grantablePermissions(list)] as const] : [];
+            }),
+          );
           const desired = desiredFolderGrants({
             folders: live,
             members,
             departmentHeads: heads,
             driveAccountEmail: drive.accountEmail,
           });
-          const stored = await prisma.driveFolderGrant.findMany({
-            where: { folderId: { in: live.map((f) => f.id) } },
-            select: { id: true, folderId: true, userId: true, email: true, permissionId: true, status: true },
-          });
+          const stored = allStored.filter((g) => !gone.has(g.folderId));
           const ops = diffFolderGrants({ desired, stored, google }).filter(
             (op) => !stats.failedKeys.has(opKey(op)),
           );
-          if (ops.length === 0) break;
+          if (ops.length === 0) {
+            settled = true;
+            break;
+          }
           await premark(ops);
-          for (const op of ops) await applyOp(accessToken, op, byId, deadline, stats);
+          await eachLimited(ops, CONCURRENCY, (op) => applyOp(accessToken, op, byId, deadline, stats));
+          touched = new Set(ops.flatMap((op) => ("folderId" in op ? [op.folderId] : [])));
         }
-        // После выдач: свои доступы уже записаны — всё остальное у папок смет чужое.
-        await checkBudgetForeignAccess(accessToken, projectId, drive.id, options, deadline);
+        // После выдач: свои доступы уже записаны — всё остальное у папок смет чужое. Если последний
+        // проход ничего не менял, его списки у Google свежие — их не перечитываем.
+        await checkBudgetForeignAccess(accessToken, projectId, drive.id, options, deadline, settled ? lists : null);
       });
     } catch (e) {
       if (isCloudReconnectRequiredError(e)) {
@@ -505,61 +586,92 @@ async function checkBudgetForeignAccess(
   driveId: string,
   options: { actorUserId: string; trigger: DriveSyncTrigger; folderIds?: readonly string[] },
   deadline: number,
+  /** Свежие списки доступов, уже прочитанные пересчётом (конечные папки), — не перечитывать. */
+  known: ReadonlyMap<string, readonly DrivePermission[]> | null,
 ) {
-  const rows = await prisma.driveFolder.findMany({
-    where: { projectId, projectDriveId: driveId },
-    select: {
-      id: true,
-      key: true,
-      externalId: true,
-      foreignAccess: true,
-      department: { select: { name: true } },
-    },
-  });
+  // Папки и выдачи системы по всему диску проекта — двумя запросами сразу.
+  const [rows, ours] = await Promise.all([
+    prisma.driveFolder.findMany({
+      where: { projectId, projectDriveId: driveId },
+      select: {
+        id: true,
+        key: true,
+        externalId: true,
+        foreignAccess: true,
+        department: { select: { name: true } },
+      },
+    }),
+    prisma.driveFolderGrant.findMany({
+      where: { folder: { projectId, projectDriveId: driveId }, permissionId: { not: null } },
+      select: { folderId: true, permissionId: true },
+    }),
+  ]);
   const tree = rows.filter((f) => isBudgetTreeFolderKey(f.key));
   if (tree.length === 0) return;
   if (options.folderIds && !tree.some((f) => options.folderIds!.includes(f.id))) return;
   const root = rows.find((f) => f.key === PROJECT_FOLDER_KEYS.root);
   const folders = root ? [root, ...tree] : tree;
-  const project = await prisma.project.findUniqueOrThrow({ where: { id: projectId }, select: { name: true } });
+
+  // Доступы у Google — несколько папок сразу.
+  const lists = new Map<string, readonly DrivePermission[]>();
+  const toRead = folders.filter((f) => {
+    const list = known?.get(f.id);
+    if (list) lists.set(f.id, list);
+    return !list;
+  });
+  await eachLimited(toRead, CONCURRENCY, async (folder) => {
+    try {
+      lists.set(folder.id, await withRetry(() => listDrivePermissions(accessToken, folder.externalId), deadline));
+    } catch (e) {
+      if (isCloudReconnectRequiredError(e)) throw e;
+      // Не успели, папку удалили (404) или Google не ответил — прежняя отметка остаётся до следующей сверки.
+    }
+  });
 
   let before = 0;
   let after = 0;
-  const report: { folder: string; count: number }[] = [];
+  const found: { key: string; department: string | null; count: number }[] = [];
+  const unchanged: string[] = [];
+  const changed: { id: string; foreign: ReturnType<typeof foreignFolderPermissions> }[] = [];
   for (const folder of folders) {
-    let list;
-    try {
-      list = await withRetry(() => listDrivePermissions(accessToken, folder.externalId), deadline);
-    } catch (e) {
-      if (isCloudReconnectRequiredError(e)) throw e;
-      if (e instanceof SyncOutOfTimeError) break;
-      // Папку удалили (404) или Google не ответил — прежняя отметка остаётся до следующей сверки.
-      continue;
-    }
-    const ours = await prisma.driveFolderGrant.findMany({
-      where: { folderId: folder.id, permissionId: { not: null } },
-      select: { permissionId: true },
-    });
+    const list = lists.get(folder.id);
+    if (!list) continue;
     const foreign = foreignFolderPermissions(
       list,
-      ours.map((g) => g.permissionId!),
+      ours.flatMap((g) => (g.folderId === folder.id ? [g.permissionId!] : [])),
     );
     before += parseForeignAccess(folder.foreignAccess).length;
     after += foreign.length;
     if (foreign.length > 0) {
-      const label = budgetTreeFolderLabel(folder.key, {
-        project: googleProjectFolderName(project.name),
-        department: folder.department?.name ?? null,
-      });
-      report.push({ folder: label, count: foreign.length });
+      found.push({ key: folder.key, department: folder.department?.name ?? null, count: foreign.length });
     }
-    await prisma.driveFolder.update({
-      where: { id: folder.id },
-      data: { foreignAccess: foreign, foreignAccessCheckedAt: new Date() },
-    });
+    // Ключи в JSONB переставляются — сравниваем разобранное; ни разу не сверяли (null) — записать.
+    const same =
+      folder.foreignAccess != null &&
+      JSON.stringify(parseForeignAccess(folder.foreignAccess)) === JSON.stringify(parseForeignAccess(foreign));
+    if (same) unchanged.push(folder.id);
+    else changed.push({ id: folder.id, foreign });
   }
+  // Запись — только где отметка изменилась; время сверки остальным — одним запросом.
+  const checkedAt = new Date();
+  await Promise.all([
+    unchanged.length > 0
+      ? prisma.driveFolder.updateMany({ where: { id: { in: unchanged } }, data: { foreignAccessCheckedAt: checkedAt } })
+      : null,
+    ...changed.map((c) =>
+      prisma.driveFolder.update({
+        where: { id: c.id },
+        data: { foreignAccess: c.foreign, foreignAccessCheckedAt: checkedAt },
+      }),
+    ),
+  ]);
   if (before === after) return;
 
+  const project = await prisma.project.findUniqueOrThrow({ where: { id: projectId }, select: { name: true } });
+  const report = found.map((f) => ({
+    folder: budgetTreeFolderLabel(f.key, { project: googleProjectFolderName(project.name), department: f.department }),
+    count: f.count,
+  }));
   const summary =
     after > 0
       ? `К папкам смет на диске проекта есть доступы, выданные не системой: ${after} (${report
