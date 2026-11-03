@@ -26,6 +26,9 @@ import {
   type NavSheetItem,
 } from "@/features/smeta/components/smeta-sheet-nav";
 import { SmetaChecksPanel } from "@/features/smeta/components/smeta-checks-panel";
+import { BudgetExcelExportButton } from "@/features/smeta/components/budget-excel-export-button";
+import { BudgetDriveExport } from "@/features/smeta/components/budget-drive-export";
+import type { BudgetDriveButton } from "@/features/smeta/drive-queries";
 import {
   SmetaApprovalBanner,
   SmetaApprovalControls,
@@ -119,6 +122,9 @@ type UniverAPI = {
     BeforeSheetDelete?: unknown;
   };
   Enum?: { RangePermissionPoint?: Record<string, string> };
+  getFormula?: () => {
+    calculationResultApplied?: (cb: () => void) => { dispose?: () => void };
+  };
 };
 
 /** Событие Univer CommandExecuted: команда, операция или мутация. */
@@ -285,6 +291,7 @@ export function SmetaSpreadsheetEditor({
   approval,
   mode = "draft",
   title,
+  driveButton = null,
 }: {
   projectId: string;
   department: { id: string; name: string; codePrefix: string };
@@ -298,6 +305,8 @@ export function SmetaSpreadsheetEditor({
   /** «version» — просмотр утверждённой версии: только чтение, без сохранения и проверок. */
   mode?: "draft" | "version" | "summary";
   title?: string;
+  /** «На диск…» сметы цеха: null — права выгружать нет. */
+  driveButton?: BudgetDriveButton | null;
 }) {
   const canWrite = mode === "draft" ? canWriteProp : false;
   const [approvalInfo, setApprovalInfo] = useState(approval?.info);
@@ -599,6 +608,16 @@ export function SmetaSpreadsheetEditor({
     })();
     inFlightRef.current = run;
     return run;
+  }
+
+  /**
+   * Перед «Экспорт Excel» и «На диск…»: досохранить, только если есть настоящие правки (или
+   * идёт сохранение). Без правок файл и так собирается из базы, а лишнее сохранение сбросило бы
+   * «на утверждении» / «утверждена» в черновик.
+   */
+  async function saveEditsBeforeExport(): Promise<boolean> {
+    if (!dirtyRef.current && inFlightRef.current === null) return true;
+    return (await flushSave()) !== null && !dirtyRef.current;
   }
 
   const flushSaveRef = useRef(flushSave);
@@ -960,9 +979,28 @@ export function SmetaSpreadsheetEditor({
         };
 
         // Книга при открытии — точка отсчёта: сохраняется только то, что от неё отличается.
+        // Univer пересчитывает формулы уже после загрузки (записи `onlyLocal`). Пока глава ничего
+        // не правил, точка отсчёта снимается заново после каждого пересчёта — иначе расхождение
+        // сохранённых значений формул с пересчётом (СЕГОДНЯ(), импорт из Excel) считалось бы
+        // правкой и уходило на сервер с первым же сохранением.
         if (canWriteRef.current) {
           const parts = currentParts();
           if (parts) baselineRef.current = baselineOf(parts);
+          const openedRevision = revisionRef.current;
+          try {
+            const sub = api.getFormula?.().calculationResultApplied?.(() => {
+              setTimeout(() => {
+                if (disposed || conflictRef.current) return;
+                if (dirtyRef.current || inFlightRef.current !== null) return;
+                if (revisionRef.current !== openedRevision) return;
+                const next = currentParts();
+                if (next) baselineRef.current = baselineOf(next);
+              }, 0);
+            });
+            if (sub) disposables.push(sub);
+          } catch {
+            /* optional */
+          }
         }
 
         listen(api.Event?.CommandExecuted, (event) => {
@@ -1209,6 +1247,23 @@ export function SmetaSpreadsheetEditor({
             >
               {statusLabel}
             </span>
+          ) : null}
+          {mode === "draft" ? (
+            <BudgetExcelExportButton
+              projectId={projectId}
+              departmentId={department.id}
+              className="h-9"
+              beforeExport={canWrite ? saveEditsBeforeExport : undefined}
+            />
+          ) : null}
+          {mode === "draft" ? (
+            <BudgetDriveExport
+              projectId={projectId}
+              departmentId={department.id}
+              button={driveButton}
+              className="h-9"
+              beforeExport={canWrite ? saveEditsBeforeExport : undefined}
+            />
           ) : null}
           {canWrite ? (
             <>

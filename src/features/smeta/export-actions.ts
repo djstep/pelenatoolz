@@ -1,16 +1,30 @@
 "use server";
 
+import {
+  assertInProject,
+  isNotInProjectError,
+} from "@/features/memberships/assert-in-project";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
+import { buildDepartmentBudgetFile, buildSummaryBudgetFile } from "@/features/smeta/export-file";
+import {
+  departmentExportFileName,
+  departmentExportLabel,
+  parseDepartmentExportVersion,
+  summaryExportFileName,
+} from "@/features/smeta/lib/export-department-xlsx";
 import {
   buildPlanFactWorkbook,
   workbookToBase64,
 } from "@/features/smeta/lib/export-plan-fact-xlsx";
-import { buildSummaryWorkbook } from "@/features/smeta/lib/export-summary-xlsx";
 import { planFactPeriodLabel } from "@/features/smeta/lib/plan-fact";
-import { canOpenSmeta, canReadAllSmeta } from "@/features/smeta/lib/smeta-access";
+import {
+  canOpenSmeta,
+  canReadAllSmeta,
+  canReadDepartmentSmeta,
+} from "@/features/smeta/lib/smeta-access";
 import { getPlanFact, resolvePlanFactFilters } from "@/features/smeta/plan-fact-queries";
-import { getSummaryBook } from "@/features/smeta/summary-queries";
 import { AuditEntityType } from "@/shared/audit/entity-types";
+import { auditMemberName } from "@/shared/audit/member-name";
 import { recordAudit } from "@/shared/audit/with-audit";
 import { formatFileDate } from "@/shared/i18n/format-date";
 
@@ -83,9 +97,16 @@ export async function exportSummaryBookAction(
   const drafts = Boolean(
     payload && typeof payload === "object" && (payload as { drafts?: unknown }).drafts === true,
   );
-  const book = await getSummaryBook(projectId, ctx, { drafts });
-  const base64 = await workbookToBase64(buildSummaryWorkbook(book.workbook));
-  if (base64.length * 0.75 > MAX_EXPORT_BYTES) {
+  // Тот же файл, что уходит на диск проекта.
+  const file = await buildSummaryBudgetFile({
+    projectId,
+    access: ctx,
+    drafts,
+    projectName: ctx.project.name,
+    timezone: ctx.project.timezone,
+    exportedBy: auditMemberName(ctx.user.name),
+  });
+  if (file.content.length > MAX_EXPORT_BYTES) {
     return { error: "Выгрузка слишком большая" };
   }
 
@@ -99,5 +120,66 @@ export async function exportSummaryBookAction(
     }`,
     changes: { export: "summary_book", drafts },
   });
-  return { base64, fileName: `summary-book-${stamp(ctx.project.timezone)}.xlsx` };
+  return {
+    base64: file.content.toString("base64"),
+    fileName: summaryExportFileName(drafts, file.exportedAt, ctx.project.timezone),
+  };
+}
+
+/**
+ * Смета цеха в Excel: основной лист (утверждённая версия или текущий лист со значениями вместо
+ * формул) + «О выгрузке». Права — как у просмотра сметы цеха (глава этого цеха, продюсер,
+ * «Сметы — просмотр всех»). Из браузера — только id цеха и номер версии. Журнал — без сумм.
+ */
+export async function exportDepartmentBudgetAction(
+  projectId: string,
+  departmentId: string,
+  payload: unknown,
+): Promise<SmetaExportResult> {
+  const ctx = await requireProjectContext(projectId);
+  if (typeof departmentId !== "string" || !departmentId) return { error: "Цех не найден" };
+  // Нет права на смету этого цеха — отказ до поиска цеха (как у страницы).
+  if (!canReadDepartmentSmeta(ctx, departmentId)) return { error: NO_RIGHTS };
+  try {
+    await assertInProject("Department", departmentId, projectId);
+  } catch (error) {
+    if (isNotInProjectError(error)) return { error: "Цех не найден" };
+    throw error;
+  }
+  const version = parseDepartmentExportVersion(payload);
+  if (version === false) return { error: "Некорректные данные" };
+
+  // Тот же файл, что уходит на диск проекта.
+  const file = await buildDepartmentBudgetFile({
+    projectId,
+    departmentId,
+    version,
+    projectName: ctx.project.name,
+    timezone: ctx.project.timezone,
+    exportedBy: auditMemberName(ctx.user.name),
+  });
+  if ("error" in file) return { error: file.error };
+  const { department, loaded } = file;
+  if (file.content.length > MAX_EXPORT_BYTES) {
+    return { error: "Выгрузка слишком большая" };
+  }
+
+  const label = departmentExportLabel(loaded.source);
+  await recordAudit(ctx, {
+    projectId,
+    entityType: AuditEntityType.smetaExport,
+    entityId: departmentId,
+    action: "CREATE",
+    summary: `Выгрузка сметы цеха «${department.name}» в Excel: ${label}`,
+    changes: {
+      export: "department",
+      departmentId,
+      version: loaded.source.kind === "version" ? loaded.source.number : null,
+      status: loaded.status,
+    },
+  });
+  return {
+    base64: file.content.toString("base64"),
+    fileName: departmentExportFileName(department.name, loaded.source, file.exportedAt, ctx.project.timezone),
+  };
 }

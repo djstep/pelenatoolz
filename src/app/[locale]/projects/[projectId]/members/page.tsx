@@ -16,8 +16,9 @@ import {
 } from "@/features/memberships/queries";
 import { Card } from "@/shared/ui/card";
 
-// Vercel: выгрузка на диск (предел 50 с), OAuth дисков и пересчёт доступов к папкам после ответа (`after()`) — до 60 с.
-export const maxDuration = 60;
+// Vercel (Fluid compute, потолок 300 с): выгрузка на диск (до 50 с) и пересчёт доступов к папкам после ответа
+// (`after()`, до 40 с) идут в одной функции — до 120 с. OAuth дисков — здесь же.
+export const maxDuration = 120;
 
 type Props = {
   params: Promise<{ locale: string; projectId: string }>;

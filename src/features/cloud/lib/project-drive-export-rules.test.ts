@@ -230,7 +230,12 @@ describe("что пришло из браузера (назначение)", () 
  */
 const actions = readFileSync(new URL("../../call-sheets/drive-actions.ts", import.meta.url), "utf8");
 const service = readFileSync(new URL("./drive-export-service.ts", import.meta.url), "utf8");
-const projectPart = service.slice(service.indexOf("export async function putCallSheetOnProjectDrive("));
+// Общий путь вызывного и сметы на диск проекта; обёртки (журнал вызывного и сметы) — после него.
+const projectPart = service.slice(
+  service.indexOf("async function putDocumentOnProjectDrive("),
+  service.indexOf("export async function putCallSheetOnProjectDrive("),
+);
+const wrappers = service.slice(service.indexOf("export async function putCallSheetOnProjectDrive("));
 
 describe("сервер: проверки до выгрузки на диск проекта", () => {
   test("вход и проект → право просмотра → день и цех этого проекта → право по назначению → выгрузка", () => {
@@ -307,8 +312,39 @@ describe("сервер: проверки до выгрузки на диск п�
     assert.match(projectPart, /closed = true;\s*return \{ failure: e \};/);
   });
 
-  test("журнал — без ссылок и почт", () => {
-    const changes = projectPart.slice(projectPart.indexOf("changes: {"), projectPart.indexOf("{ db: tx }"));
-    assert.doesNotMatch(changes, /webUrl|externalId|email/i);
+  test("журнал — без ссылок, почт и сумм (вызывной, смета цеха, сводная)", () => {
+    const parts = wrappers.split("changes: {").slice(1);
+    assert.equal(parts.length, 3);
+    for (const part of parts) {
+      assert.doesNotMatch(part.slice(0, part.indexOf("}),")), /webUrl|externalId|email|total|amount|sum\b/i);
+    }
+    // Смета — тип «Выгрузка смет» (видят продюсер и «просмотр всех»), а не «Выгрузка на диск».
+    const budget = wrappers.slice(
+      wrappers.indexOf("export async function putBudgetOnProjectDrive("),
+      wrappers.indexOf("export async function putBudgetSummaryOnProjectDrive("),
+    );
+    assert.match(budget, /entityType: AuditEntityType\.smetaExport/);
+    assert.match(budget, /restrictCopy: true/);
+    assert.match(budget, /kind: "budget-department"/);
+  });
+
+  test("сводная — «Сметы / Сводная», один файл на проект (docId summary), запрет копирования, «Выгрузка смет»", () => {
+    const summary = wrappers.slice(
+      wrappers.indexOf("export async function putBudgetSummaryOnProjectDrive("),
+      wrappers.indexOf("export async function getProjectBudgetSummaryExport("),
+    );
+    assert.match(summary, /target: \{ kind: "budget-summary" \}/);
+    assert.match(summary, /docType: "BUDGET"/);
+    assert.match(summary, /docId: budgetDriveDocId\(target\)/);
+    assert.match(summary, /restrictCopy: true/);
+    assert.match(summary, /entityType: AuditEntityType\.smetaExport/);
+    // Общий путь, а не свой: блокировка, повторная проверка диска, один файл с заменой — там.
+    assert.match(summary, /return putDocumentOnProjectDrive\(/);
+  });
+
+  test("смета — только в папки смет, вызывной — никогда в них (до любых запросов)", () => {
+    const guard = projectPart.indexOf("assertBudgetFileFolderKey(leafKey)");
+    assert.ok(guard > 0 && guard < projectPart.indexOf("getProjectDriveExportAvailability("));
+    assert.ok(projectPart.includes("else if (isBudgetFileFolderKey(leafKey)) throw"));
   });
 });

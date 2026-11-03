@@ -217,6 +217,14 @@ export async function getDriveFile(accessToken: string, fileId: string): Promise
   return toDriveFile(await readJson<DriveFileJson>(res));
 }
 
+/**
+ * Запрет скачивания, печати и копирования для читателей и комментаторов
+ * (`copyRequiresWriterPermission`) — у файлов смет (решение 10, BUDGET_DRIVE_NOTES.md).
+ */
+function restrictCopyMetadata(metadata: Record<string, unknown>, restrictCopy: boolean | undefined) {
+  if (restrictCopy) metadata.copyRequiresWriterPermission = true;
+}
+
 /** Новый файл в папке. `convertToGoogleSheet` — Google сам превращает xlsx в Google Таблицу. */
 export async function uploadDriveFile(
   accessToken: string,
@@ -226,11 +234,13 @@ export async function uploadDriveFile(
     content: Buffer;
     sourceMimeType: string;
     convertToGoogleSheet?: boolean;
+    restrictCopy?: boolean;
   },
 ): Promise<DriveUploadResult> {
   const { driveUpload } = googleEndpoints();
   const metadata: Record<string, unknown> = { name: input.name, parents: [input.parentId] };
   if (input.convertToGoogleSheet) metadata.mimeType = GOOGLE_SHEET_MIME;
+  restrictCopyMetadata(metadata, input.restrictCopy);
   const { body, contentType } = multipartBody(metadata, input.content, input.sourceMimeType);
   const res = await googleFetch(
     accessToken,
@@ -243,16 +253,18 @@ export async function uploadDriveFile(
 
 /**
  * Новое содержимое того же файла (`files.update` с загрузкой): id и ссылка не меняются.
- * `name` — переименование той же операцией.
+ * `name` — переименование той же операцией. `restrictCopy` — запрет копирования ставится заново
+ * (Google его и так сохраняет; заново — на случай, если хранитель снял его руками).
  */
 export async function replaceDriveFileContent(
   accessToken: string,
   fileId: string,
-  input: { content: Buffer; sourceMimeType: string; name?: string },
+  input: { content: Buffer; sourceMimeType: string; name?: string; restrictCopy?: boolean },
 ): Promise<DriveUploadResult> {
   const { driveUpload } = googleEndpoints();
   const metadata: Record<string, unknown> = {};
   if (input.name) metadata.name = input.name;
+  restrictCopyMetadata(metadata, input.restrictCopy);
   const { body, contentType } = multipartBody(metadata, input.content, input.sourceMimeType);
   const res = await googleFetch(
     accessToken,
@@ -360,11 +372,19 @@ export type PutGoogleSheetResult = {
 
 /**
  * Один файл на вызывной в папке: нет файла (или его удалили / убрали в корзину) — новый;
- * есть — заменить по `GOOGLE_SHEET_REPLACE_MODE`. `mode` — только для тестов.
+ * есть — заменить по `GOOGLE_SHEET_REPLACE_MODE`. `mode` — только для тестов. `restrictCopy` —
+ * запрет скачивания и копирования (сметы): при «update» ставится той же заменой, при «recreate» и
+ * новом файле — у нового файла.
  */
 export async function putGoogleSheetFromXlsx(
   accessToken: string,
-  input: { existingFileId?: string | null; name: string; parentId: string; content: Buffer },
+  input: {
+    existingFileId?: string | null;
+    name: string;
+    parentId: string;
+    content: Buffer;
+    restrictCopy?: boolean;
+  },
   mode: GoogleSheetReplaceMode = GOOGLE_SHEET_REPLACE_MODE,
 ): Promise<PutGoogleSheetResult> {
   const upload = () =>
@@ -374,6 +394,7 @@ export async function putGoogleSheetFromXlsx(
       content: input.content,
       sourceMimeType: XLSX_MIME,
       convertToGoogleSheet: true,
+      restrictCopy: input.restrictCopy,
     });
 
   if (!input.existingFileId) {
@@ -392,6 +413,7 @@ export async function putGoogleSheetFromXlsx(
       content: input.content,
       sourceMimeType: XLSX_MIME,
       name: input.name,
+      restrictCopy: input.restrictCopy,
     });
     return { id: replaced.id, webUrl: replaced.webUrl ?? existing.webUrl, outcome: "replaced" };
   }

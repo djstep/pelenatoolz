@@ -3,10 +3,16 @@ import "server-only";
 import { ProjectDriveStatus } from "@prisma/client";
 import { after } from "next/server";
 import {
+  BUDGET_FOLDER_KEYS,
+  BUDGET_SUMMARY_FOLDER_NAME,
+  budgetDepartmentFolderKey,
+  BUDGETS_FOLDER_NAME,
   COMMON_FOLDER_NAME,
   departmentFolderKey,
   DEPARTMENTS_FOLDER_NAME,
   PROJECT_FOLDER_KEYS,
+  projectFolderLeafKey,
+  type ProjectFolderTarget,
 } from "@/features/cloud/lib/drive-access-rules";
 import { syncProjectDriveAccess } from "@/features/cloud/lib/drive-access-sync";
 import { CALL_SHEETS_FOLDER_NAME, googleProjectFolderName } from "@/features/cloud/lib/drive-export-rules";
@@ -16,12 +22,13 @@ import { withProjectDriveAccessToken } from "@/features/cloud/lib/project-drive-
 import { prisma } from "@/shared/db/prisma";
 
 /**
- * Папки на диске проекта (Google): `PELENA · <Проект> / Вызывные / Общая` и
- * `PELENA · <Проект> / Вызывные / Цеха / <Цех>`. Создаются токеном хранителя при первой
- * выгрузке в папку (шаг 6 вызывает `ensureProjectDriveFolder`), id — в `DriveFolder`.
+ * Папки на диске проекта (Google): `PELENA · <Проект> / Вызывные / Общая`,
+ * `PELENA · <Проект> / Вызывные / Цеха / <Цех>`, `PELENA · <Проект> / Сметы / Сводная` и
+ * `PELENA · <Проект> / Сметы / Цеха / <Цех>`. Создаются токеном хранителя при первой
+ * выгрузке в папку (выгрузка вызывает `ensureProjectFolderChain`), id — в `DriveFolder`.
  */
 
-export type ProjectFolderTarget = { kind: "common" } | { kind: "department"; departmentId: string };
+export type { ProjectFolderTarget };
 
 export type EnsuredProjectFolder = {
   folderId: string;
@@ -111,14 +118,14 @@ export async function ensureProjectFolderChain(
 ): Promise<EnsuredProjectFolder & { departmentName: string | null }> {
   const { projectId, driveId, target } = input;
   let department: { id: string; name: string } | null = null;
-  if (target.kind === "department") {
+  if (target.kind === "department" || target.kind === "budget-department") {
     department = await db.department.findFirst({
       where: { id: target.departmentId, projectId },
       select: { id: true, name: true },
     });
     if (!department) throw new ProjectFolderDepartmentGoneError();
   }
-  const leafKey = department ? departmentFolderKey(department.id) : PROJECT_FOLDER_KEYS.common;
+  const leafKey = projectFolderLeafKey(target);
 
   const rows = await db.driveFolder.findMany({
     where: { projectId, projectDriveId: driveId },
@@ -148,23 +155,22 @@ export async function ensureProjectFolderChain(
     googleProjectFolderName(input.projectName),
     null,
   );
-  const callSheets = await ensureGoogleFolder(
-    accessToken,
-    store,
-    PROJECT_FOLDER_KEYS.callSheets,
-    CALL_SHEETS_FOLDER_NAME,
-    root.id,
-  );
+  // Вызывные — `Вызывные / …`, сметы — `Сметы / …`; у каждой ветки свои папки «Цеха».
+  const budget = target.kind === "budget-summary" || target.kind === "budget-department";
+  const branch = budget
+    ? await ensureGoogleFolder(accessToken, store, BUDGET_FOLDER_KEYS.budgets, BUDGETS_FOLDER_NAME, root.id)
+    : await ensureGoogleFolder(accessToken, store, PROJECT_FOLDER_KEYS.callSheets, CALL_SHEETS_FOLDER_NAME, root.id);
   let leaf;
   if (!department) {
-    leaf = await ensureGoogleFolder(accessToken, store, leafKey, COMMON_FOLDER_NAME, callSheets.id);
+    const name = budget ? BUDGET_SUMMARY_FOLDER_NAME : COMMON_FOLDER_NAME;
+    leaf = await ensureGoogleFolder(accessToken, store, leafKey, name, branch.id);
   } else {
     const departments = await ensureGoogleFolder(
       accessToken,
       store,
-      PROJECT_FOLDER_KEYS.departments,
+      budget ? BUDGET_FOLDER_KEYS.departments : PROJECT_FOLDER_KEYS.departments,
       DEPARTMENTS_FOLDER_NAME,
-      callSheets.id,
+      branch.id,
     );
     leaf = await ensureGoogleFolder(accessToken, store, leafKey, department.name, departments.id);
     // Цех переименовали, а переименование папки не прошло (Google был недоступен) — догоняем.
@@ -198,7 +204,7 @@ export function scheduleProjectFolderAccessAfterExport(
   target: ProjectFolderTarget,
   actorUserId: string,
 ) {
-  const key = target.kind === "department" ? departmentFolderKey(target.departmentId) : PROJECT_FOLDER_KEYS.common;
+  const key = projectFolderLeafKey(target);
   after(async () => {
     try {
       const folder = await prisma.driveFolder.findUnique({
@@ -214,31 +220,49 @@ export function scheduleProjectFolderAccessAfterExport(
 }
 
 /**
- * Цех переименовали — переименовать его папку на диске проекта (после ответа, `after()`).
- * Папки нет, диск не подключён или папку удалили руками — ничего (при выгрузке создастся с новым именем).
+ * Цех переименовали — переименовать его папки на диске проекта: `Вызывные / Цеха / <Цех>` и
+ * `Сметы / Цеха / <Цех>`, какие есть. Папки нет, диск не подключён или папку удалили руками —
+ * ничего (при выгрузке создастся с новым именем). Сколько папок переименовано — в ответе.
  */
+export async function renameDepartmentFolders(
+  projectId: string,
+  departmentId: string,
+  actorUserId: string,
+): Promise<number> {
+  const drive = await prisma.projectDrive.findUnique({
+    where: { projectId },
+    select: { id: true, status: true, needsReconnectAt: true },
+  });
+  if (!drive || drive.status !== ProjectDriveStatus.ACTIVE || drive.needsReconnectAt) return 0;
+  const [folders, department] = await Promise.all([
+    prisma.driveFolder.findMany({
+      where: {
+        projectDriveId: drive.id,
+        key: { in: [departmentFolderKey(departmentId), budgetDepartmentFolderKey(departmentId)] },
+      },
+      select: { externalId: true },
+    }),
+    prisma.department.findFirst({ where: { id: departmentId, projectId }, select: { name: true } }),
+  ]);
+  if (folders.length === 0 || !department) return 0;
+  return withProjectDriveAccessToken(projectId, actorUserId, async (accessToken) => {
+    let renamed = 0;
+    for (const folder of folders) {
+      const file = await getDriveFile(accessToken, folder.externalId);
+      if (file && !file.trashed && file.name !== department.name) {
+        await renameDriveFile(accessToken, folder.externalId, department.name);
+        renamed++;
+      }
+    }
+    return renamed;
+  });
+}
+
+/** То же после ответа (`after()`): ответ пользователю не ждёт Google. Не бросает. */
 export function scheduleDepartmentFolderRename(projectId: string, departmentId: string, actorUserId: string) {
   after(async () => {
     try {
-      const drive = await prisma.projectDrive.findUnique({
-        where: { projectId },
-        select: { id: true, status: true, needsReconnectAt: true },
-      });
-      if (!drive || drive.status !== ProjectDriveStatus.ACTIVE || drive.needsReconnectAt) return;
-      const [folder, department] = await Promise.all([
-        prisma.driveFolder.findUnique({
-          where: { projectDriveId_key: { projectDriveId: drive.id, key: departmentFolderKey(departmentId) } },
-          select: { externalId: true },
-        }),
-        prisma.department.findFirst({ where: { id: departmentId, projectId }, select: { name: true } }),
-      ]);
-      if (!folder || !department) return;
-      await withProjectDriveAccessToken(projectId, actorUserId, async (accessToken) => {
-        const file = await getDriveFile(accessToken, folder.externalId);
-        if (file && !file.trashed && file.name !== department.name) {
-          await renameDriveFile(accessToken, folder.externalId, department.name);
-        }
-      });
+      await renameDepartmentFolders(projectId, departmentId, actorUserId);
     } catch (e) {
       console.error("[drive folder rename]", projectId, e instanceof Error ? e.message : e);
     }

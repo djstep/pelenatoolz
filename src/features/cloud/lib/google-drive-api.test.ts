@@ -389,3 +389,46 @@ describe("ошибки Google", () => {
     assert.equal(e.message, "Google Диск недоступен — попробуйте позже");
   });
 });
+
+describe("запрет скачивания и копирования (сметы, решение 10)", () => {
+  const input = { name: "Смета · Звук · версия 3 (утверждена)", parentId: "p1", content: XLSX, restrictCopy: true };
+
+  test("новый файл — copyRequiresWriterPermission в метаданных", async () => {
+    mockFetch(() => json(200, { id: "s1", mimeType: GOOGLE_SHEET_MIME, webViewLink: "https://sheet/s1" }));
+    await putGoogleSheetFromXlsx(TOKEN, input, "update");
+    assert.deepEqual(parseMultipart(calls[0]).metadata, {
+      name: input.name,
+      parents: ["p1"],
+      mimeType: GOOGLE_SHEET_MIME,
+      copyRequiresWriterPermission: true,
+    });
+  });
+
+  test("update: замена содержимого ставит запрет заново тем же запросом", async () => {
+    mockFetch((_c, i) =>
+      i === 0
+        ? json(200, { id: "s1", name: "old", mimeType: GOOGLE_SHEET_MIME, webViewLink: "https://sheet/s1", trashed: false })
+        : json(200, { id: "s1", mimeType: GOOGLE_SHEET_MIME, webViewLink: "https://sheet/s1" }),
+    );
+    await putGoogleSheetFromXlsx(TOKEN, { ...input, existingFileId: "s1" }, "update");
+    assert.equal(calls[1].method, "PATCH");
+    assert.deepEqual(parseMultipart(calls[1]).metadata, { name: input.name, copyRequiresWriterPermission: true });
+  });
+
+  test("recreate: у нового файла запрет ставится заново", async () => {
+    mockFetch((_c, i) => {
+      if (i === 0) return json(200, { id: "s1", mimeType: GOOGLE_SHEET_MIME, webViewLink: "https://sheet/s1" });
+      if (i === 1) return json(200, { id: "s2", mimeType: GOOGLE_SHEET_MIME, webViewLink: "https://sheet/s2" });
+      return json(200, { id: "s1", trashed: true });
+    });
+    await putGoogleSheetFromXlsx(TOKEN, { ...input, existingFileId: "s1" }, "recreate");
+    assert.equal(calls[1].method, "POST");
+    assert.equal(parseMultipart(calls[1]).metadata.copyRequiresWriterPermission, true);
+  });
+
+  test("без restrictCopy (вызывной) — поля нет вовсе", async () => {
+    mockFetch(() => json(200, { id: "s1", mimeType: GOOGLE_SHEET_MIME, webViewLink: "https://sheet/s1" }));
+    await putGoogleSheetFromXlsx(TOKEN, { name: "Вызывной", parentId: "p1", content: XLSX }, "update");
+    assert.equal("copyRequiresWriterPermission" in parseMultipart(calls[0]).metadata, false);
+  });
+});

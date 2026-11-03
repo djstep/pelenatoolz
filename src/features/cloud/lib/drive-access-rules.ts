@@ -5,11 +5,18 @@ import { DRIVE_FOLDER_KEYS } from "@/features/cloud/lib/drive-export-rules";
  * разница «выдано / нужно». Без базы и сети; годится и для браузера (раздел «Диск проекта»).
  * Решения 9, 10, 12, 13 и риск 9 — `docs/tasks/WAVE_3_DRIVE_NOTES.md`, п. 3.
  *
- *   PELENA · <Проект>   (root)        — никому
- *   └── Вызывные        (callsheets)  — никому
- *       ├── Общая       (common)      — активные участники с «КПП и вызывные: просмотр»
- *       └── Цеха        (departments) — никому
- *           └── <Цех>   (dept:<id>)   — главы этого цеха + активные продюсеры
+ *   PELENA · <Проект>   (root)               — никому
+ *   ├── Вызывные        (callsheets)         — никому
+ *   │   ├── Общая       (common)             — активные участники с «КПП и вызывные: просмотр»
+ *   │   └── Цеха        (departments)        — никому
+ *   │       └── <Цех>   (dept:<id>)          — главы этого цеха + активные продюсеры
+ *   └── Сметы           (budgets)            — никому
+ *       ├── Сводная     (budget-summary)     — активные продюсеры
+ *       └── Цеха        (budget-departments) — никому
+ *           └── <Цех>   (budget-dept:<id>)   — главы этого цеха + активные продюсеры
+ *
+ * Сметы — решения 6в, 7 и «просмотр всех папок не получает» — `docs/tasks/BUDGET_DRIVE_NOTES.md`:
+ * «Финансы: просмотр» и «Сметы — просмотр всех» в доступах к папкам смет не участвуют.
  */
 
 /** Ключи папок диска проекта (`DriveFolder.key`). */
@@ -19,8 +26,17 @@ export const PROJECT_FOLDER_KEYS = {
   departments: "departments",
 } as const;
 
+/** Ключи папок смет на диске проекта (`DriveFolder.key`); папки цехов смет — `budget-dept:<id>`. */
+export const BUDGET_FOLDER_KEYS = {
+  budgets: "budgets",
+  summary: "budget-summary",
+  departments: "budget-departments",
+} as const;
+
 export const COMMON_FOLDER_NAME = "Общая";
 export const DEPARTMENTS_FOLDER_NAME = "Цеха";
+export const BUDGETS_FOLDER_NAME = "Сметы";
+export const BUDGET_SUMMARY_FOLDER_NAME = "Сводная";
 
 /** Роль Google для всех выдач системы: смотреть и комментировать, не править. */
 export const DRIVE_GRANT_ROLE = "commenter" as const;
@@ -39,18 +55,50 @@ export function departmentIdFromFolderKey(key: string): string | null {
     : null;
 }
 
+const BUDGET_DEPT_PREFIX = "budget-dept:";
+
+export function budgetDepartmentFolderKey(departmentId: string) {
+  return `${BUDGET_DEPT_PREFIX}${departmentId}`;
+}
+
+export function departmentIdFromBudgetFolderKey(key: string): string | null {
+  return key.startsWith(BUDGET_DEPT_PREFIX) && key.length > BUDGET_DEPT_PREFIX.length
+    ? key.slice(BUDGET_DEPT_PREFIX.length)
+    : null;
+}
+
+/**
+ * Папка, куда может лечь файл сметы: «Сметы / Сводная» или «Сметы / Цеха / <Цех>». Смета не кладётся
+ * ни в папки вызывных (их видят главы и участники без смет), ни в промежуточные папки.
+ */
+export function isBudgetFileFolderKey(key: string): boolean {
+  return key === BUDGET_FOLDER_KEYS.summary || departmentIdFromBudgetFolderKey(key) !== null;
+}
+
+/** Последняя проверка перед загрузкой файла сметы: бросает, если папка не из конечных папок смет. */
+export function assertBudgetFileFolderKey(key: string): void {
+  if (!isBudgetFileFolderKey(key)) {
+    throw new Error(`Смета не кладётся в папку «${key}»: только «Сметы / Сводная» и папки цехов смет`);
+  }
+}
+
 /**
  * Риск 9: в «Моём диске» доступ к папке наследуют все вложенные, снять его у вложенной нельзя.
- * Поэтому доступ выдаётся только конечным папкам — «Общая» и папки цехов. Никогда
- * `root` / `callsheets` / `departments` (и любым будущим ключам, пока их не добавят сюда).
+ * Поэтому доступ выдаётся только конечным папкам — «Общая», папки цехов вызывных, «Сводная» и
+ * папки цехов смет. Никогда `root` / `callsheets` / `departments` / `budgets` / `budget-departments`
+ * (и любым будущим ключам, пока их не добавят сюда).
  */
 export function isShareableFolderKey(key: string): boolean {
-  return key === PROJECT_FOLDER_KEYS.common || departmentIdFromFolderKey(key) !== null;
+  return (
+    key === PROJECT_FOLDER_KEYS.common ||
+    departmentIdFromFolderKey(key) !== null ||
+    isBudgetFileFolderKey(key)
+  );
 }
 
 export class UnshareableFolderError extends Error {
   constructor(key: string) {
-    super(`Доступ к папке «${key}» не выдаётся: только «Общая» и папки цехов`);
+    super(`Доступ к папке «${key}» не выдаётся: только конечные папки вызывных и смет`);
     this.name = "UnshareableFolderError";
   }
 }
@@ -58,6 +106,95 @@ export class UnshareableFolderError extends Error {
 /** Последняя проверка перед запросом к Google: бросает, если папка не конечная. */
 export function assertShareableFolderKey(key: string): void {
   if (!isShareableFolderKey(key)) throw new UnshareableFolderError(key);
+}
+
+/** Конечная папка диска проекта: вызывные («Общая», цех) или сметы («Сводная», цех). */
+export type ProjectFolderTarget =
+  | { kind: "common" }
+  | { kind: "department"; departmentId: string }
+  | { kind: "budget-summary" }
+  | { kind: "budget-department"; departmentId: string };
+
+/** Ключ конечной папки (`DriveFolder.key`) — одно место на все назначения. */
+export function projectFolderLeafKey(target: ProjectFolderTarget): string {
+  switch (target.kind) {
+    case "common":
+      return PROJECT_FOLDER_KEYS.common;
+    case "department":
+      return departmentFolderKey(target.departmentId);
+    case "budget-summary":
+      return BUDGET_FOLDER_KEYS.summary;
+    case "budget-department":
+      return budgetDepartmentFolderKey(target.departmentId);
+  }
+}
+
+// ---------- чужие доступы к папкам смет (вопрос 11, BUDGET_DRIVE_NOTES.md) ----------
+
+/**
+ * Папки, где система ищет доступы, выданные не ею: вся ветка «Сметы» и корень проекта — доступ к
+ * корню или к «Сметам» Google наследует во все сметы. Папки вызывных не проверяются.
+ */
+export function isBudgetTreeFolderKey(key: string): boolean {
+  return (
+    key === BUDGET_FOLDER_KEYS.budgets ||
+    key === BUDGET_FOLDER_KEYS.departments ||
+    isBudgetFileFolderKey(key)
+  );
+}
+
+/** Доступ к папке, выданный не системой: человек, группа, домен или «все, у кого есть ссылка». */
+export type ForeignPermission = { id: string; type: string; role: string; email: string | null };
+
+/**
+ * Чужие доступы папки: всё, кроме владельца и выдач самой системы (`permissionId` строк
+ * `DriveFolderGrant`). Доступ, который хранитель выдал руками нужному человеку, — тоже чужой:
+ * система его не снимет, когда человек уйдёт.
+ */
+export function foreignFolderPermissions(
+  google: readonly ForeignPermission[],
+  ourPermissionIds: Iterable<string>,
+): ForeignPermission[] {
+  const ours = new Set(ourPermissionIds);
+  return google.filter((p) => p.role !== "owner" && !ours.has(p.id));
+}
+
+/** Как папку называть в предупреждении: «Сметы / Цеха / Звук», «PELENA · Проект». */
+export function budgetTreeFolderLabel(key: string, names: { project: string; department: string | null }): string {
+  if (key === PROJECT_FOLDER_KEYS.root) return names.project;
+  if (key === BUDGET_FOLDER_KEYS.budgets) return BUDGETS_FOLDER_NAME;
+  if (key === BUDGET_FOLDER_KEYS.departments) return `${BUDGETS_FOLDER_NAME} / ${DEPARTMENTS_FOLDER_NAME}`;
+  if (key === BUDGET_FOLDER_KEYS.summary) return `${BUDGETS_FOLDER_NAME} / ${BUDGET_SUMMARY_FOLDER_NAME}`;
+  return `${BUDGETS_FOLDER_NAME} / ${DEPARTMENTS_FOLDER_NAME} / ${names.department ?? "удалённый цех"}`;
+}
+
+export function foreignAccessWarningText(label: string, count: number): string {
+  return `К папке «${label}» есть доступы, выданные не системой: ${count}`;
+}
+
+/** Кому выдан чужой доступ — для списка продюсерам (почта, «все, у кого есть ссылка», домен). */
+export function foreignPermissionWho(p: ForeignPermission): string {
+  if (p.type === "anyone") return "все, у кого есть ссылка";
+  if (p.type === "domain") return `домен${p.email ? ` ${p.email}` : ""}`;
+  return p.email ?? "без почты";
+}
+
+/** Разбор `DriveFolder.foreignAccess` из базы: мусор — пусто. */
+export function parseForeignAccess(raw: unknown): ForeignPermission[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((p) => {
+    if (!p || typeof p !== "object") return [];
+    const { id, type, role, email } = p as Record<string, unknown>;
+    if (typeof id !== "string") return [];
+    return [
+      {
+        id,
+        type: typeof type === "string" ? type : "",
+        role: typeof role === "string" ? role : "",
+        email: typeof email === "string" ? email : null,
+      },
+    ];
+  });
 }
 
 /** Почта, на которую выдаётся доступ: «Почта для Google», иначе почта входа (решение 13). */
@@ -95,7 +232,9 @@ export type DesiredGrant = { folderId: string; userId: string; email: string };
  * Кому какая папка. Только активные участники (приглашённые и удалённые — ничего). Аккаунт самого
  * диска пропускается — он владелец папок. Одна почта на папку — один доступ (у Google доступ
  * человека к файлу один): второй человек с той же почтой не получает своей выдачи.
- * Папки `root` / `callsheets` / `departments` в ответ не попадают никогда.
+ * Папки `root` / `callsheets` / `departments` / `budgets` / `budget-departments` в ответ не
+ * попадают никогда. Папки смет: «Сводная» — продюсеры, цех — главы цеха и продюсеры (финансовые
+ * права и «Сметы — просмотр всех» не участвуют — решения 6в и 7, `BUDGET_DRIVE_NOTES.md`).
  */
 export function desiredFolderGrants(input: {
   folders: readonly AccessFolder[];
@@ -117,8 +256,11 @@ export function desiredFolderGrants(input: {
     let who: typeof active;
     if (folder.key === PROJECT_FOLDER_KEYS.common) {
       who = active.filter((m) => m.canReadCallSheets);
+    } else if (folder.key === BUDGET_FOLDER_KEYS.summary) {
+      who = active.filter((m) => m.isProducer);
     } else {
-      const departmentId = departmentIdFromFolderKey(folder.key);
+      const departmentId =
+        departmentIdFromFolderKey(folder.key) ?? departmentIdFromBudgetFolderKey(folder.key);
       // Цех удалили (`departmentId` обнулился) — папка остаётся, доступов нет.
       if (!departmentId || folder.departmentId !== departmentId) continue;
       const heads = new Set(

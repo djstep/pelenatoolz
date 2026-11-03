@@ -2556,18 +2556,24 @@ model ProjectDrive {
 
 /// Папка, созданная системой: на диске проекта (`projectDriveId`) или на личном диске человека
 /// (`cloudConnectionId`) — ровно одно из двух (CHECK в миграции). `key`: `root`, `callsheets`,
-/// `common`, `departments`, `dept:<id>`. `externalId` — id папки Google или путь Яндекса (`app:/…`).
+/// `common`, `departments`, `dept:<id>`, сметы — `budgets`, `budget-summary`, `budget-departments`,
+/// `budget-dept:<id>`. `externalId` — id папки Google или путь Яндекса (`app:/…`).
 model DriveFolder {
-  id                String   @id @default(cuid())
-  projectId         String
-  projectDriveId    String?
-  cloudConnectionId String?
-  key               String
-  departmentId      String?
-  externalId        String
-  webUrl            String?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id                     String    @id @default(cuid())
+  projectId              String
+  projectDriveId         String?
+  cloudConnectionId      String?
+  key                    String
+  departmentId           String?
+  externalId             String
+  webUrl                 String?
+  /// Доступы, выданные не системой (только корень и ветка «Сметы»): [{ id, type, role, email }].
+  /// Почты — персональные данные: только продюсерам в «Диске проекта», в журнал не пишутся.
+  foreignAccess          Json?
+  /// Когда система последний раз сверяла доступы папки с Google; пусто — не сверяла.
+  foreignAccessCheckedAt DateTime?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
 
   project         Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
   projectDrive    ProjectDrive?      @relation(fields: [projectDriveId], references: [id], onDelete: Cascade)

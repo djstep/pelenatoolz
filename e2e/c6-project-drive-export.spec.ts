@@ -63,6 +63,33 @@ async function grantedEmails(folderExternalId: string) {
     .sort();
 }
 
+/**
+ * Предел ожидания пересчёта доступов. Пересчёт идёт после ответа (`after()`), под нагрузкой
+ * dev-сервера — десятки секунд; сам пересчёт ограничен 40 с (`SYNC_BUDGET_MS`), здесь — с запасом.
+ */
+const SYNC_WAIT_MS = 60_000;
+const SYNC_POLL = { timeout: SYNC_WAIT_MS, intervals: [250, 500, 1_000, 2_000] };
+
+/** Статусы выдач папки в базе, по порядку. */
+async function grantStatuses(folderId: string) {
+  const rows = await db.driveFolderGrant.findMany({ where: { folderId }, select: { status: true } });
+  return rows.map((r) => r.status).sort();
+}
+
+/**
+ * Дождаться конца пересчёта доступов папки: у каждого из `people` есть строка выдачи и ни одна
+ * не ждёт («выдать» / «снять»). Опрос состояния, а не пауза: итог проверяет вызывающий.
+ */
+async function settledGrants(folderId: string, people: number) {
+  await expect
+    .poll(async () => {
+      const statuses = await grantStatuses(folderId);
+      return statuses.length >= people && statuses.every((s) => s === "OK" || s === "FAILED");
+    }, SYNC_POLL)
+    .toBe(true);
+  return grantStatuses(folderId);
+}
+
 const membership = async (role: E2ERoleKey) =>
   db.projectMembership.findFirstOrThrow({
     where: { projectId: ctx.projectId, user: { email: email(role) } },
@@ -232,9 +259,10 @@ test("первая выгрузка в «Общую»: папки PELENA · Пр
   expect(await filesIn(common!.externalId)).toHaveLength(1);
 
   // Доступы новой папке выдаются после ответа: все с просмотром вызывных.
-  await expect
-    .poll(() => grantedEmails(common!.externalId), { timeout: 20_000 })
-    .toEqual([email("nocallsheet"), email("nofin"), email("producer")].sort());
+  expect(await settledGrants(common!.id, 3)).toEqual(["OK", "OK", "OK"]);
+  expect(await grantedEmails(common!.externalId)).toEqual(
+    [email("nocallsheet"), email("nofin"), email("producer")].sort(),
+  );
 
   const audit = await lastAudit("drive_export", "выгружен на диск проекта — «Общая»");
   expect(audit?.summary).toMatch(/^Вызывной дня 1 /);
@@ -284,9 +312,14 @@ test("две первые выгрузки одновременно → одна
   const files = await filesIn(common.externalId);
   expect(files).toHaveLength(1);
   expect((await exportIn(common.id, 2))?.externalId).toBe(files[0].id);
+  // Пересчёт после обеих выгрузок должен закончиться здесь: иначе он идёт и в следующем тесте
+  // (выдаёт доступы к этой папке и «съедает» отказы Google, настроенные следующим тестом).
+  expect(await settledGrants(common.id, 3)).toEqual(["OK", "OK", "OK"]);
 });
 
 test("папка осталась без доступов → следующая выгрузка в неё выдаёт их сама", async ({ page }) => {
+  // Два ожидания пересчёта по SYNC_WAIT_MS и две выгрузки — больше обычного предела теста.
+  test.setTimeout(SYNC_WAIT_MS * 2 + 60_000);
   // С чистого листа; Google отказывает в выдаче всем трём — новая «Общая» без доступов.
   const drive = await db.projectDrive.findUniqueOrThrow({ where: { projectId: ctx.projectId }, select: { id: true } });
   await db.driveFolder.deleteMany({ where: { projectDriveId: drive.id } });
@@ -301,17 +334,17 @@ test("папка осталась без доступов → следующая
   const dialog = await openDriveDialog(page, 2);
   expect(await uploadCommon(dialog)).toContain("Вызывной выгружен на диск проекта — «Общая»");
   const common = (await driveFolder("common"))!;
-  const failedRows = () => db.driveFolderGrant.count({ where: { folderId: common.id, status: "FAILED" } });
-  await expect.poll(failedRows, { timeout: 20_000 }).toBe(3);
+  expect(await settledGrants(common.id, 3)).toEqual(["FAILED", "FAILED", "FAILED"]);
   expect(await grantedEmails(common.externalId)).toEqual([]);
 
   // Повторная выгрузка (папка уже есть) — после ответа доступы догоняются без «Повторить».
+  // Строки уже «конечные» (FAILED) — ждём именно перехода в OK, опросом до предела.
   const again = await openDriveDialog(page, 2);
   expect(await uploadCommon(again)).toContain("обновлён — ссылка прежняя");
-  await expect
-    .poll(() => grantedEmails(common.externalId), { timeout: 20_000 })
-    .toEqual([email("nocallsheet"), email("nofin"), email("producer")].sort());
-  expect(await failedRows()).toBe(0);
+  await expect.poll(() => grantStatuses(common.id), SYNC_POLL).toEqual(["OK", "OK", "OK"]);
+  expect(await grantedEmails(common.externalId)).toEqual(
+    [email("nocallsheet"), email("nofin"), email("producer")].sort(),
+  );
 });
 
 test("глава «Звука» выгружает в «Звук»; в чужой цех и в «Общую» без правки — отказ на сервере", async ({ browser }) => {
@@ -334,9 +367,8 @@ test("глава «Звука» выгружает в «Звук»; в чужо�
   expect(await chainOf(row!.externalId)).toMatch(
     new RegExp(`^PELENA · E2E приёмка / Вызывные / Цеха / ${SOUND} / Вызывной · день 1 · `),
   );
-  await expect
-    .poll(() => grantedEmails(folder.externalId), { timeout: 20_000 })
-    .toEqual([email("nocallsheet"), email("producer")].sort());
+  expect(await settledGrants(folder.id, 2)).toEqual(["OK", "OK"]);
+  expect(await grantedEmails(folder.externalId)).toEqual([email("nocallsheet"), email("producer")].sort());
 
   // Окно открыто продюсером (видит все цеха и «Общую»), запросы уходят с сессией главы «Звука».
   const filesBefore = (await stub<StubState>("/state")).google.files.length;
