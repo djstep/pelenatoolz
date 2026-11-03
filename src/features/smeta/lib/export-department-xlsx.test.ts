@@ -7,6 +7,7 @@ import {
   departmentExportInfo,
   departmentExportLabel,
   parseDepartmentExportVersion,
+  summaryExportFileName,
 } from "@/features/smeta/lib/export-department-xlsx";
 import {
   addExportInfoSheet,
@@ -168,6 +169,14 @@ describe("строки и имена", () => {
       departmentExportFileName("Звук", { kind: "current", status: "SUBMITTED" }, at, "Europe/Moscow"),
       "Смета · Звук · черновик (на утверждении) · 03.11.2026.xlsx",
     );
+  });
+
+  test("имя файла сводной — как на диске, дата по поясу проекта", () => {
+    assert.equal(
+      summaryExportFileName(false, at, "Europe/Moscow"),
+      "Сводная смета · утверждённые версии · 03.11.2026.xlsx",
+    );
+    assert.equal(summaryExportFileName(true, at, "Europe/Moscow"), "Сводная смета · с черновиками · 03.11.2026.xlsx");
   });
 
   test("имя файла: недопустимые знаки убраны, имя не пустое", () => {

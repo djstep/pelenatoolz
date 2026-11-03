@@ -213,6 +213,14 @@ export function budgetDriveExportDoneText(
     : `Смета выгружена на диск проекта — ${placeLabel}`;
 }
 
+/** Строка в окне сводной: файл на диске — снимок, «Свод» — факт на дату выгрузки. */
+export function summaryDriveSnapshotText(exportedAt: Date, timezone: string | null): string {
+  return (
+    `Снимок на ${formatDriveDate(exportedAt, timezone)}: в «Своде» — факт (начислено / оплачено) на дату ` +
+    "выгрузки. Сам файл на диске не обновляется — выгрузите заново."
+  );
+}
+
 /** Строка в окне выгрузки: диск — для просмотра и комментариев, решение — в системе. */
 export const BUDGET_DRIVE_APPROVAL_NOTE =
   "Утверждение — только в системе: комментарии в Google Таблице в историю сметы не попадают.";

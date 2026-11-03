@@ -1,6 +1,6 @@
 import "server-only";
 
-import { canExportBudgetToDrive } from "@/features/cloud/lib/budget-drive-export-rules";
+import { canExportBudgetToDrive, type BudgetDriveTarget } from "@/features/cloud/lib/budget-drive-export-rules";
 import { getProjectDriveExportAvailability } from "@/features/cloud/lib/drive-export-service";
 import { projectDriveUnavailableText } from "@/features/cloud/lib/project-drive-export-rules";
 import { canSeeProjectDrive } from "@/features/cloud/lib/project-drive-rules";
@@ -22,8 +22,22 @@ export async function getBudgetDriveButton(
   ctx: Awaited<ReturnType<typeof requireProjectContext>>,
   departmentId: string,
 ): Promise<BudgetDriveButton | null> {
+  return driveButton(ctx, { kind: "department", departmentId });
+}
+
+/** «На диск…» на странице сводной: только продюсерам (решение 8); остальным — ни кнопки, ни подписи. */
+export async function getBudgetSummaryDriveButton(
+  ctx: Awaited<ReturnType<typeof requireProjectContext>>,
+): Promise<BudgetDriveButton | null> {
+  return driveButton(ctx, { kind: "summary" });
+}
+
+async function driveButton(
+  ctx: Awaited<ReturnType<typeof requireProjectContext>>,
+  target: BudgetDriveTarget,
+): Promise<BudgetDriveButton | null> {
   const actor = { isProducer: isProducerRole(ctx.role), headDepartmentIds: ctx.headDepartmentIds };
-  if (!canExportBudgetToDrive(actor, { kind: "department", departmentId })) return null;
+  if (!canExportBudgetToDrive(actor, target)) return null;
   const availability = await getProjectDriveExportAvailability(ctx.project.id);
   return {
     notice: availability

@@ -18,6 +18,7 @@ import {
   parseBudgetDriveRequest,
   resolveBudgetDriveSource,
   summaryDriveFileName,
+  summaryDriveSnapshotText,
   type BudgetDriveActor,
   type BudgetDriveTarget,
 } from "@/features/cloud/lib/budget-drive-export-rules";
@@ -251,6 +252,21 @@ describe("что пришло из браузера", () => {
     for (const raw of bad) {
       assert.deepEqual(parseBudgetDriveRequest(raw), { error: DRIVE_EXPORT_BAD_INPUT }, JSON.stringify(raw));
     }
+  });
+});
+
+describe("окно сводной (шаг 5)", () => {
+  test("снимок — дата по поясу проекта, факт на дату выгрузки", () => {
+    // 23:30 UTC 2 ноября — в Москве уже 3 ноября.
+    const text = summaryDriveSnapshotText(new Date("2026-11-02T23:30:00.000Z"), "Europe/Moscow");
+    assert.match(text, /^Снимок на 03\.11\.2026: /);
+    assert.match(text, /факт \(начислено \/ оплачено\) на дату выгрузки/);
+  });
+
+  test("кто увидит — только продюсеры; глава и «просмотр всех» сводную не выгружают", () => {
+    assert.equal(budgetDriveAudienceText({ kind: "summary" }, null), "Только продюсеры");
+    assert.equal(canExportBudgetToDrive({ isProducer: false, headDepartmentIds: ["d1"] }, { kind: "summary" }), false);
+    assert.equal(canExportBudgetToDrive({ isProducer: true, headDepartmentIds: [] }, { kind: "summary" }), true);
   });
 });
 

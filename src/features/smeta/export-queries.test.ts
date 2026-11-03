@@ -218,4 +218,44 @@ describe("права на Excel сметы цеха", () => {
     const state = src.slice(src.indexOf("export async function getBudgetDriveStateAction"), src.indexOf("export type BudgetDriveExportResult"));
     assert.ok(state.indexOf("canExportBudgetToDrive(") < state.indexOf("Promise.all("));
   });
+
+  test("сводная на диск: вход → разбор ввода (только «сводная») → только продюсер → книга → диск", () => {
+    const src = readFileSync(new URL("./drive-actions.ts", import.meta.url), "utf8");
+    const body = src.slice(src.indexOf("export async function exportBudgetSummaryToDriveAction"));
+    const order = [
+      "requireProjectContext(projectId)",
+      "parseBudgetDriveRequest(input)",
+      'if (!("drafts" in parsed)) return { error: DRIVE_EXPORT_BAD_INPUT }',
+      "canExportBudgetToDrive(budgetActor(ctx), SUMMARY)",
+      "buildSummaryBudgetFile(",
+      "putBudgetSummaryOnProjectDrive(",
+    ].map((s) => body.indexOf(s));
+    for (const [i, at] of order.entries()) assert.ok(at > 0, `нет шага ${i}`);
+    for (let i = 1; i < order.length; i++) assert.ok(order[i - 1]! < order[i]!, `порядок ${i}`);
+    // Из ввода — только режим.
+    assert.doesNotMatch(body, /parsed\.(projectId|email|folder|target\.departmentId)/);
+    // Окно тоже — только продюсеру, до чтения.
+    const state = src.slice(
+      src.indexOf("export async function getBudgetSummaryDriveStateAction"),
+      src.indexOf("export type BudgetSummaryDriveExportResult"),
+    );
+    assert.ok(state.indexOf("canExportBudgetToDrive(budgetActor(ctx), SUMMARY)") > 0);
+    assert.ok(state.indexOf("canExportBudgetToDrive(") < state.indexOf("Promise.all("));
+    // Смету цеха действие сводной не выгружает, а действие сметы цеха — сводную.
+    const dept = src.slice(src.indexOf("export async function exportBudgetToDriveAction"), src.indexOf("// ---------- сводная"));
+    assert.ok(dept.includes('if ("drafts" in parsed) return { error: NO_RIGHTS }'));
+  });
+
+  test("«Экспорт Excel» сводной и диск — один файл (общий сборщик)", () => {
+    const actions = readFileSync(new URL("./export-actions.ts", import.meta.url), "utf8");
+    const body = actions.slice(
+      actions.indexOf("export async function exportSummaryBookAction"),
+      actions.indexOf("export async function exportDepartmentBudgetAction"),
+    );
+    assert.ok(body.indexOf("canReadAllSmeta(ctx)") < body.indexOf("buildSummaryBudgetFile("));
+    assert.match(body, /summaryExportFileName\(/);
+    const file = readFileSync(new URL("./export-file.ts", import.meta.url), "utf8");
+    const summary = file.slice(file.indexOf("export async function buildSummaryBudgetFile"));
+    assert.ok(summary.indexOf("getSummaryBook(") < summary.indexOf("addExportInfoSheet("));
+  });
 });

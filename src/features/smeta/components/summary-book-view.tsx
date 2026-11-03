@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { useTransition } from "react";
+import { BudgetSummaryDriveExport } from "@/features/smeta/components/budget-summary-drive-export";
 import { SmetaWorkspace } from "@/features/smeta/components/smeta-workspace";
+import type { BudgetDriveButton } from "@/features/smeta/drive-queries";
 import { exportSummaryBookAction } from "@/features/smeta/export-actions";
 import { downloadBase64Xlsx } from "@/features/smeta/lib/download-xlsx";
 import type { BudgetClient } from "@/features/smeta/queries";
@@ -19,12 +21,15 @@ export function SummaryBookView({
   drafts,
   baseHref,
   listHref,
+  driveButton,
 }: {
   projectId: string;
   book: BudgetClient;
   drafts: boolean;
   baseHref: string;
   listHref: string;
+  /** «На диск…» — только продюсерам (null — ни кнопки, ни подписи). */
+  driveButton: BudgetDriveButton | null;
 }) {
   const toast = useToast();
   const [pending, start] = useTransition();
@@ -49,25 +54,27 @@ export function SummaryBookView({
         >
           Показать черновики
         </Link>
-        <Button
-          type="button"
-          variant="secondary"
-          className="ml-auto"
-          disabled={pending}
-          onClick={() => {
-            start(async () => {
-              const res = await exportSummaryBookAction(projectId, { drafts });
-              if (res.error !== undefined) {
-                toast.error(res.error);
-                return;
-              }
-              downloadBase64Xlsx(res.base64, res.fileName);
-              toast.success("Excel скачан");
-            });
-          }}
-        >
-          {pending ? "…" : "Экспорт Excel"}
-        </Button>
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          <BudgetSummaryDriveExport projectId={projectId} drafts={drafts} button={driveButton} />
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={pending}
+            onClick={() => {
+              start(async () => {
+                const res = await exportSummaryBookAction(projectId, { drafts });
+                if (res.error !== undefined) {
+                  toast.error(res.error);
+                  return;
+                }
+                downloadBase64Xlsx(res.base64, res.fileName);
+                toast.success("Excel скачан");
+              });
+            }}
+          >
+            {pending ? "…" : "Экспорт Excel"}
+          </Button>
+        </div>
       </div>
       <p className="text-sm text-[var(--muted-fg)]">
         {drafts

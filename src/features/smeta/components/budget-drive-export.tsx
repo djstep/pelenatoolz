@@ -29,7 +29,7 @@ function formatWhen(iso: string) {
 }
 
 /** «Уже на диске: ссылка · кто · когда · версия N (статус)». */
-function ExistingExport({ view }: { view: DriveExportView }) {
+export function ExistingExport({ view }: { view: DriveExportView }) {
   return (
     <p className="text-[var(--muted-fg)]" data-testid="budget-drive-existing">
       Уже на диске:{" "}

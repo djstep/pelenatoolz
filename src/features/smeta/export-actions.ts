@@ -1,23 +1,21 @@
 "use server";
 
-import { summaryDriveModeLabel } from "@/features/cloud/lib/budget-drive-export-rules";
 import {
   assertInProject,
   isNotInProjectError,
 } from "@/features/memberships/assert-in-project";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
-import { buildDepartmentBudgetFile } from "@/features/smeta/export-file";
+import { buildDepartmentBudgetFile, buildSummaryBudgetFile } from "@/features/smeta/export-file";
 import {
   departmentExportFileName,
   departmentExportLabel,
   parseDepartmentExportVersion,
+  summaryExportFileName,
 } from "@/features/smeta/lib/export-department-xlsx";
-import { addExportInfoSheet, formatExportDateTime } from "@/features/smeta/lib/export-info-sheet";
 import {
   buildPlanFactWorkbook,
   workbookToBase64,
 } from "@/features/smeta/lib/export-plan-fact-xlsx";
-import { buildSummaryWorkbook } from "@/features/smeta/lib/export-summary-xlsx";
 import { planFactPeriodLabel } from "@/features/smeta/lib/plan-fact";
 import {
   canOpenSmeta,
@@ -25,7 +23,6 @@ import {
   canReadDepartmentSmeta,
 } from "@/features/smeta/lib/smeta-access";
 import { getPlanFact, resolvePlanFactFilters } from "@/features/smeta/plan-fact-queries";
-import { getSummaryBook } from "@/features/smeta/summary-queries";
 import { AuditEntityType } from "@/shared/audit/entity-types";
 import { auditMemberName } from "@/shared/audit/member-name";
 import { recordAudit } from "@/shared/audit/with-audit";
@@ -100,19 +97,16 @@ export async function exportSummaryBookAction(
   const drafts = Boolean(
     payload && typeof payload === "object" && (payload as { drafts?: unknown }).drafts === true,
   );
-  const book = await getSummaryBook(projectId, ctx, { drafts });
-  const workbook = buildSummaryWorkbook(book.workbook);
-  addExportInfoSheet(workbook, {
-    document: "Сводная смета",
-    project: ctx.project.name,
-    status: summaryDriveModeLabel(drafts),
-    version: null,
-    approved: null,
+  // Тот же файл, что уходит на диск проекта.
+  const file = await buildSummaryBudgetFile({
+    projectId,
+    access: ctx,
+    drafts,
+    projectName: ctx.project.name,
+    timezone: ctx.project.timezone,
     exportedBy: auditMemberName(ctx.user.name),
-    exportedAt: formatExportDateTime(new Date(), ctx.project.timezone),
   });
-  const base64 = await workbookToBase64(workbook);
-  if (base64.length * 0.75 > MAX_EXPORT_BYTES) {
+  if (file.content.length > MAX_EXPORT_BYTES) {
     return { error: "Выгрузка слишком большая" };
   }
 
@@ -126,7 +120,10 @@ export async function exportSummaryBookAction(
     }`,
     changes: { export: "summary_book", drafts },
   });
-  return { base64, fileName: `summary-book-${stamp(ctx.project.timezone)}.xlsx` };
+  return {
+    base64: file.content.toString("base64"),
+    fileName: summaryExportFileName(drafts, file.exportedAt, ctx.project.timezone),
+  };
 }
 
 /**

@@ -1,10 +1,15 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { SummaryBookView } from "@/features/smeta/components/summary-book-view";
+import { getBudgetSummaryDriveButton } from "@/features/smeta/drive-queries";
 import { canReadAllSmeta } from "@/features/smeta/lib/smeta-access";
 import type { BudgetClient } from "@/features/smeta/queries";
 import { getSummaryBook } from "@/features/smeta/summary-queries";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
+
+// Vercel (Fluid compute, потолок 300 с): сборка сводной, выгрузка на диск (до 50 с) и пересчёт доступов
+// к папке после ответа (`after()`, до 40 с) идут в одной функции — до 120 с.
+export const maxDuration = 120;
 
 type Props = {
   params: Promise<{ locale: string; projectId: string }>;
@@ -20,7 +25,10 @@ export default async function SummaryBookPage({ params, searchParams }: Props) {
   if (!canReadAllSmeta(ctx)) notFound();
 
   const drafts = sp.drafts === "1";
-  const book = await getSummaryBook(projectId, ctx, { drafts });
+  const [book, driveButton] = await Promise.all([
+    getSummaryBook(projectId, ctx, { drafts }),
+    getBudgetSummaryDriveButton(ctx),
+  ]);
   // Книга с id «summary-…» только для показа: сервер сохраняет только книгу черновика цеха.
   const sheetBook: BudgetClient = {
     id: `${book.workbook.id}-${drafts ? "drafts" : "versions"}`,
@@ -46,6 +54,7 @@ export default async function SummaryBookPage({ params, searchParams }: Props) {
         drafts={drafts}
         baseHref={`${listHref}/summary`}
         listHref={listHref}
+        driveButton={driveButton}
       />
     </div>
   );

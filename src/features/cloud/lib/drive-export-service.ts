@@ -13,6 +13,7 @@ import {
 } from "@/features/cloud/lib/cloud-service";
 import {
   assertBudgetFileFolderKey,
+  BUDGET_FOLDER_KEYS,
   budgetDepartmentFolderKey,
   isBudgetFileFolderKey,
   isShareableFolderKey,
@@ -37,7 +38,12 @@ import {
   scheduleProjectFolderAccessAfterExport,
   type ProjectFolderTarget,
 } from "@/features/cloud/lib/project-drive-folders";
-import { budgetDrivePlaceLabel } from "@/features/cloud/lib/budget-drive-export-rules";
+import {
+  BUDGET_SUMMARY_DOC_ID,
+  budgetDriveDocId,
+  budgetDrivePlaceLabel,
+  summaryDriveModeLabel,
+} from "@/features/cloud/lib/budget-drive-export-rules";
 import {
   projectDrivePlaceLabel,
   projectDriveUnavailable,
@@ -434,7 +440,7 @@ type EnsuredFolder = Awaited<ReturnType<typeof ensureProjectFolderChain>>;
 /** Документ для диска проекта: куда, что и как записать в журнал (без ссылок и почт). */
 type ProjectDriveDocument = {
   docType: "CALL_SHEET" | "BUDGET";
-  /** `DriveExport.docId`: у вызывного — id дня, у сметы цеха — id цеха. */
+  /** `DriveExport.docId`: у вызывного — id дня, у сметы цеха — id цеха, у сводной — `summary`. */
   docId: string;
   target: ProjectFolderTarget;
   fileName: string;
@@ -723,6 +729,61 @@ export async function putBudgetOnProjectDrive(input: {
       },
     }),
   });
+}
+
+/**
+ * Сводная смета на диск проекта — в «Сметы / Сводная» (видят только продюсеры): один файл на проект,
+ * запрет скачивания и копирования, журнал — «Выгрузка смет», без сумм, ссылок и почт.
+ */
+export async function putBudgetSummaryOnProjectDrive(input: {
+  userId: string;
+  projectId: string;
+  projectName: string;
+  fileName: string;
+  content: Buffer;
+  drafts: boolean;
+}): Promise<ProjectDriveExportResult> {
+  const target = { kind: "summary" } as const;
+  const mode = summaryDriveModeLabel(input.drafts);
+  return putDocumentOnProjectDrive({
+    ...input,
+    docType: "BUDGET",
+    docId: budgetDriveDocId(target),
+    target: { kind: "budget-summary" },
+    version: null,
+    statusLabel: mode,
+    restrictCopy: true,
+    placeLabel: (departmentName) => budgetDrivePlaceLabel(target, departmentName),
+    audit: ({ outcome }) => ({
+      entityType: AuditEntityType.smetaExport,
+      summary: `Сводная смета выгружена на диск проекта: ${mode}`,
+      changes: {
+        export: "drive",
+        destination: "budget-summary",
+        drafts: input.drafts,
+        status: mode,
+        outcome,
+      },
+    }),
+  });
+}
+
+/** Выгрузка сводной на действующий диск проекта («уже на диске»). Только чтение. */
+export async function getProjectBudgetSummaryExport(projectId: string): Promise<DriveExportView | null> {
+  const row = await prisma.driveExport.findFirst({
+    where: {
+      projectId,
+      docType: "BUDGET",
+      docId: BUDGET_SUMMARY_DOC_ID,
+      folder: {
+        projectId,
+        key: BUDGET_FOLDER_KEYS.summary,
+        projectDrive: { projectId, status: ProjectDriveStatus.ACTIVE },
+      },
+    },
+    select: exportViewSelect,
+  });
+  return row ? toView(row) : null;
 }
 
 /** Выгрузка сметы цеха на действующий диск проекта («уже на диске»). Только чтение. */
