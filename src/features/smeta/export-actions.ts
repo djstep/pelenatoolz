@@ -6,11 +6,9 @@ import {
   isNotInProjectError,
 } from "@/features/memberships/assert-in-project";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
-import { loadDepartmentBudgetExport } from "@/features/smeta/export-queries";
+import { buildDepartmentBudgetFile } from "@/features/smeta/export-file";
 import {
-  buildDepartmentBudgetWorkbook,
   departmentExportFileName,
-  departmentExportInfo,
   departmentExportLabel,
   parseDepartmentExportVersion,
 } from "@/features/smeta/lib/export-department-xlsx";
@@ -31,7 +29,6 @@ import { getSummaryBook } from "@/features/smeta/summary-queries";
 import { AuditEntityType } from "@/shared/audit/entity-types";
 import { auditMemberName } from "@/shared/audit/member-name";
 import { recordAudit } from "@/shared/audit/with-audit";
-import { prisma } from "@/shared/db/prisma";
 import { formatFileDate } from "@/shared/i18n/format-date";
 
 const NO_RIGHTS = "Недостаточно прав";
@@ -155,29 +152,18 @@ export async function exportDepartmentBudgetAction(
   const version = parseDepartmentExportVersion(payload);
   if (version === false) return { error: "Некорректные данные" };
 
-  const department = await prisma.department.findFirst({
-    where: { id: departmentId, projectId },
-    select: { name: true, codePrefix: true },
+  // Тот же файл, что уходит на диск проекта.
+  const file = await buildDepartmentBudgetFile({
+    projectId,
+    departmentId,
+    version,
+    projectName: ctx.project.name,
+    timezone: ctx.project.timezone,
+    exportedBy: auditMemberName(ctx.user.name),
   });
-  if (!department) return { error: "Цех не найден" };
-  const loaded = await loadDepartmentBudgetExport(prisma, projectId, departmentId, version);
-  if ("error" in loaded) return { error: loaded.error };
-
-  const now = new Date();
-  const workbook = buildDepartmentBudgetWorkbook(
-    loaded.sheet,
-    departmentExportInfo({
-      projectName: ctx.project.name,
-      departmentName: department.name,
-      source: loaded.source,
-      approved: loaded.approved,
-      exportedBy: auditMemberName(ctx.user.name),
-      exportedAt: now,
-      timezone: ctx.project.timezone,
-    }),
-  );
-  const base64 = await workbookToBase64(workbook);
-  if (base64.length * 0.75 > MAX_EXPORT_BYTES) {
+  if ("error" in file) return { error: file.error };
+  const { department, loaded } = file;
+  if (file.content.length > MAX_EXPORT_BYTES) {
     return { error: "Выгрузка слишком большая" };
   }
 
@@ -196,7 +182,7 @@ export async function exportDepartmentBudgetAction(
     },
   });
   return {
-    base64,
-    fileName: departmentExportFileName(department.codePrefix, loaded.source, now, ctx.project.timezone),
+    base64: file.content.toString("base64"),
+    fileName: departmentExportFileName(department.name, loaded.source, file.exportedAt, ctx.project.timezone),
   };
 }

@@ -8,6 +8,7 @@ import {
   listDepartmentCodes,
 } from "@/features/smeta/queries";
 import { getBudgetApprovalInfo } from "@/features/smeta/approval-queries";
+import { getBudgetDriveButton } from "@/features/smeta/drive-queries";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import {
   canApproveSmeta,
@@ -16,6 +17,10 @@ import {
 } from "@/features/smeta/lib/smeta-access";
 import { prisma } from "@/shared/db/prisma";
 import { Card } from "@/shared/ui/card";
+
+// Vercel (Fluid compute, потолок 300 с): выгрузка сметы на диск (до 50 с) и пересчёт доступов к папке
+// после ответа (`after()`, до 40 с) идут в одной функции — до 120 с.
+export const maxDuration = 120;
 
 type Props = {
   params: Promise<{ locale: string; projectId: string; departmentId: string }>;
@@ -60,10 +65,11 @@ export default async function DepartmentSmetaPage({ params }: Props) {
     );
   }
 
-  const [checks, usedCodes, approvalInfo] = await Promise.all([
+  const [checks, usedCodes, approvalInfo, driveButton] = await Promise.all([
     checkDepartmentBudget(projectId, budget),
     canWrite ? listDepartmentCodes(projectId, department.id) : Promise.resolve([]),
     getBudgetApprovalInfo(projectId, department.id),
+    getBudgetDriveButton(ctx, department.id),
   ]);
   const departmentHref = `${listHref}/${department.id}`;
 
@@ -77,6 +83,7 @@ export default async function DepartmentSmetaPage({ params }: Props) {
         initialChecks={checks}
         usedCodes={usedCodes}
         listHref={listHref}
+        driveButton={driveButton}
         approval={
           approvalInfo
             ? {

@@ -1,4 +1,5 @@
 import {
+  budgetDriveFileName,
   budgetDriveStatusLabel,
   type BudgetDriveSource,
 } from "@/features/cloud/lib/budget-drive-export-rules";
@@ -9,7 +10,6 @@ import {
   type ExportInfo,
 } from "@/features/smeta/lib/export-info-sheet";
 import { assembleWorkbookFromSheets } from "@/features/smeta/lib/workbook-model";
-import { formatFileDate } from "@/shared/i18n/format-date";
 
 /**
  * Excel сметы цеха — тот же файл уходит на диск проекта (`BUDGET_DRIVE_NOTES.md`, решения 2–4, 13):
@@ -71,16 +71,25 @@ export function departmentExportLabel(source: BudgetDriveSource): string {
     : `текущий лист (${budgetDriveStatusLabel(source)})`;
 }
 
-/** Имя файла при скачивании: `smeta-ХУД-v3-2026-11-03.xlsx` / `smeta-ХУД-draft-2026-11-03.xlsx`. */
+/** Знаки, недопустимые в имени файла (Windows, macOS), и управляющие — убираются. */
+const BAD_FILE_CHARS = /[<>:"/\\|?*\u0000-\u001f]/g;
+
+/**
+ * Имя файла при скачивании — как на диске: «Смета · Звук · версия 3 (утверждена).xlsx» /
+ * «Смета · Звук · черновик (на утверждении) · 03.11.2026.xlsx». Недопустимые знаки убраны.
+ */
 export function departmentExportFileName(
-  codePrefix: string,
+  departmentName: string,
   source: BudgetDriveSource,
   exportedAt: Date,
   timezone: string | null,
 ): string {
-  const which = source.kind === "version" ? `v${source.number}` : "draft";
-  const prefix = codePrefix.replace(/[^\p{L}\p{N}]/gu, "") || "dept";
-  return `smeta-${prefix}-${which}-${formatFileDate(exportedAt, timezone)}.xlsx`;
+  const base = budgetDriveFileName(departmentName, source, exportedAt, timezone)
+    .replace(BAD_FILE_CHARS, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/[. ]+$/, "");
+  return `${base || "Смета"}.xlsx`;
 }
 
 /** Из браузера — только номер утверждённой версии (пусто — по умолчанию); мусор — false. */

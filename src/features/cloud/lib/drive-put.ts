@@ -105,8 +105,9 @@ export async function putCallSheetToGoogle(
 }
 
 /**
- * Google, готовая папка (диск проекта: «Общая» / папка цеха — `ensureProjectFolderChain`): один файл
- * на вызывной. Есть файл — то же id, новое содержимое и имя; папку пересоздали — файл новый.
+ * Google, готовая папка (диск проекта: «Общая» / папка цеха, сметы — `ensureProjectFolderChain`):
+ * один файл на документ. Есть файл — то же id, новое содержимое и имя; папку пересоздали — файл новый.
+ * `restrictCopy` — запрет скачивания и копирования (сметы).
  */
 export async function putCallSheetInGoogleFolder(
   accessToken: string,
@@ -116,6 +117,7 @@ export async function putCallSheetInGoogleFolder(
     existingFileId: string | null;
     fileName: string;
     content: Buffer;
+    restrictCopy?: boolean;
   },
 ): Promise<DrivePutResult> {
   const put = await putGoogleSheetFromXlsx(accessToken, {
@@ -123,6 +125,7 @@ export async function putCallSheetInGoogleFolder(
     name: input.fileName,
     parentId: input.folderId,
     content: input.content,
+    restrictCopy: input.restrictCopy,
   });
   const outcome: DrivePutOutcome =
     input.existingFileId && (input.folderRecreated || put.outcome !== "replaced") ? "recreated" : put.outcome;

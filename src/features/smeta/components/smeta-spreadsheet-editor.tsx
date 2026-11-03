@@ -27,6 +27,8 @@ import {
 } from "@/features/smeta/components/smeta-sheet-nav";
 import { SmetaChecksPanel } from "@/features/smeta/components/smeta-checks-panel";
 import { BudgetExcelExportButton } from "@/features/smeta/components/budget-excel-export-button";
+import { BudgetDriveExport } from "@/features/smeta/components/budget-drive-export";
+import type { BudgetDriveButton } from "@/features/smeta/drive-queries";
 import {
   SmetaApprovalBanner,
   SmetaApprovalControls,
@@ -286,6 +288,7 @@ export function SmetaSpreadsheetEditor({
   approval,
   mode = "draft",
   title,
+  driveButton = null,
 }: {
   projectId: string;
   department: { id: string; name: string; codePrefix: string };
@@ -299,6 +302,8 @@ export function SmetaSpreadsheetEditor({
   /** «version» — просмотр утверждённой версии: только чтение, без сохранения и проверок. */
   mode?: "draft" | "version" | "summary";
   title?: string;
+  /** «На диск…» сметы цеха: null — права выгружать нет. */
+  driveButton?: BudgetDriveButton | null;
 }) {
   const canWrite = mode === "draft" ? canWriteProp : false;
   const [approvalInfo, setApprovalInfo] = useState(approval?.info);
@@ -1215,6 +1220,19 @@ export function SmetaSpreadsheetEditor({
             <BudgetExcelExportButton
               projectId={projectId}
               departmentId={department.id}
+              className="h-9"
+              beforeExport={
+                canWrite
+                  ? async () => (await flushSave()) !== null && !dirtyRef.current
+                  : undefined
+              }
+            />
+          ) : null}
+          {mode === "draft" ? (
+            <BudgetDriveExport
+              projectId={projectId}
+              departmentId={department.id}
+              button={driveButton}
               className="h-9"
               beforeExport={
                 canWrite

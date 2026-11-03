@@ -199,3 +199,17 @@ describe("buildAuditLogWhere", () => {
     assert.deepEqual(buildAuditLogWhere("p1", {}, null), { projectId: "p1" });
   });
 });
+
+describe("выгрузка смет на диск (BUDGET_DRIVE_NOTES, шаг 4)", () => {
+  test("роль только с вызывными «Выгрузку смет» не видит, «Выгрузку на диск» (вызывного) — видит", () => {
+    const visible = visibleAuditEntityTypes(viewer(readOnly("schedule")));
+    assert.ok(visible);
+    assert.ok(!visible.includes(AuditEntityType.smetaExport));
+    assert.ok(visible.includes(AuditEntityType.driveExport));
+  });
+
+  test("«Сметы — просмотр всех» — видит «Выгрузку смет»", () => {
+    const visible = visibleAuditEntityTypes(viewer(readOnly("smeta_all")));
+    assert.ok(visible?.includes(AuditEntityType.smetaExport));
+  });
+});

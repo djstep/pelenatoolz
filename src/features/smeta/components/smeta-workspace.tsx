@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import type { SmetaCheck } from "@/features/smeta/lib/main-sheet";
 import type { BudgetClient } from "@/features/smeta/queries";
 import type { SmetaApprovalProps } from "@/features/smeta/components/smeta-spreadsheet-editor";
+import type { BudgetDriveButton } from "@/features/smeta/drive-queries";
 
 const SmetaSpreadsheetEditor = dynamic(
   () =>
@@ -31,6 +32,7 @@ export function SmetaWorkspace({
   approval,
   mode,
   title,
+  driveButton,
 }: {
   projectId: string;
   department: { id: string; name: string; codePrefix: string };
@@ -42,6 +44,8 @@ export function SmetaWorkspace({
   approval?: SmetaApprovalProps;
   mode?: "draft" | "version" | "summary";
   title?: string;
+  /** «На диск…» (страница сметы цеха): null — права выгружать нет. */
+  driveButton?: BudgetDriveButton | null;
 }) {
   return (
     // Узкий экран: страница прокручивается, и без минимальной высоты листу не остаётся места.
@@ -58,6 +62,7 @@ export function SmetaWorkspace({
         approval={approval}
         mode={mode}
         title={title}
+        driveButton={driveButton}
       />
     </div>
   );

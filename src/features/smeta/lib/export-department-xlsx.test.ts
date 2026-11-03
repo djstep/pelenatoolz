@@ -161,12 +161,27 @@ describe("строки и имена", () => {
     assert.equal(departmentExportLabel({ kind: "version", number: 3 }), "версия 3 (утверждена)");
     assert.equal(departmentExportLabel({ kind: "current", status: "SUBMITTED" }), "текущий лист (на утверждении)");
     assert.equal(
-      departmentExportFileName("ХУД", { kind: "version", number: 3 }, at, "Europe/Moscow"),
-      "smeta-ХУД-v3-2026-11-03.xlsx",
+      departmentExportFileName("Звук", { kind: "version", number: 3 }, at, "Europe/Moscow"),
+      "Смета · Звук · версия 3 (утверждена).xlsx",
     );
     assert.equal(
-      departmentExportFileName("", { kind: "current", status: "DRAFT" }, at, null),
-      "smeta-dept-draft-2026-11-03.xlsx",
+      departmentExportFileName("Звук", { kind: "current", status: "SUBMITTED" }, at, "Europe/Moscow"),
+      "Смета · Звук · черновик (на утверждении) · 03.11.2026.xlsx",
+    );
+  });
+
+  test("имя файла: недопустимые знаки убраны, имя не пустое", () => {
+    assert.equal(
+      departmentExportFileName('Звук/Свет: "А" <Б> | В? *', { kind: "version", number: 1 }, at, null),
+      "Смета · Звук Свет А Б В · версия 1 (утверждена).xlsx",
+    );
+    assert.equal(
+      departmentExportFileName("Цех\u0007\t2", { kind: "current", status: "DRAFT" }, at, null),
+      "Смета · Цех 2 · черновик · 03.11.2026.xlsx",
+    );
+    assert.equal(
+      departmentExportFileName("", { kind: "version", number: 2 }, at, null),
+      "Смета · Цех · версия 2 (утверждена).xlsx",
     );
   });
 

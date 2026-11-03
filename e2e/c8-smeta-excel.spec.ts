@@ -52,32 +52,48 @@ function lastSmetaExport() {
 }
 
 /** Основной лист: шапка, статья TR-01.01 (строка 1, как `sortOrder` статьи сида) с формулами. */
+/** Сумма и Итого статьи сида: 2 × ставка × 1 день, налог 0 %. */
+const TOTAL = Math.round(Number(MONEY.budgetRate) * 2 * 100) / 100;
+
 function mainSheetData() {
   return {
     id: "main",
     name: "Основной",
     cellData: {
       0: Object.fromEntries(MAIN_HEADERS.map((h, i) => [i, { v: h, t: 1 }])),
+      // Строка совпадает со статьёй сида целиком — редактор главы не пересохраняет смету при открытии.
       1: {
         0: { v: "TR-01.01", t: 1 },
         1: { v: "Спецтехника", t: 1 },
+        2: { v: "смена", t: 1 },
         3: { v: 2, t: 2 },
         4: { v: Number(MONEY.budgetRate), t: 2 },
         5: { v: 1, t: 2 },
-        6: { v: 0, t: 2, f: "=D2*E2*F2" },
+        // Значения формул — уже посчитанные (как сохраняет редактор), иначе он пересчитает и пересохранит.
+        6: { v: TOTAL, t: 2, f: "=D2*E2*F2" },
+        7: { v: 0, t: 2 },
         8: { v: 0, t: 2, f: "=G2*H2/100" },
-        9: { v: 0, t: 2, f: "=G2+I2" },
+        9: { v: TOTAL, t: 2, f: "=G2+I2" },
       },
     },
     columnData: { 1: { w: 220 } },
   };
 }
 
+/** Статья сида TR-01.01 — снимок до прогона, вернуть после (редактор главы может её пересохранить). */
+const loadSeedItem = () =>
+  db.budgetItem.findFirst({
+    where: { projectId: ctx.projectId, departmentId: ctx.departmentId, code: "TR-01.01" },
+    select: { id: true, unit: true, taxPercent: true, quantity: true, rate: true, days: true },
+  });
+let seedItem: Awaited<ReturnType<typeof loadSeedItem>> = null;
+
 test.describe.configure({ mode: "serial" });
 
 test.beforeAll(async () => {
   const existing = await db.budget.findFirst({ where: { departmentId: ctx.departmentId }, select: { id: true } });
   test.skip(!!existing, "У транспортного цеха тестового проекта уже есть смета — тест её не трогает");
+  seedItem = await loadSeedItem();
 
   const [nofin, nocallsheet] = await Promise.all([membershipOf("nofin"), membershipOf("nocallsheet")]);
   previousHeads = await db.departmentHead.findMany({
@@ -132,6 +148,10 @@ test.afterAll(async () => {
     await db.departmentHead.deleteMany({ where: { departmentId: otherDeptId } });
     await db.department.delete({ where: { id: otherDeptId } });
   }
+  if (seedItem) {
+    const { id, ...values } = seedItem;
+    await db.budgetItem.update({ where: { id }, data: values });
+  }
   await db.$disconnect();
 });
 
@@ -145,7 +165,10 @@ test("глава цеха без финансов: в Excel — основной
   const before = await lastSmetaExport();
 
   const [download] = await Promise.all([page.waitForEvent("download"), button.click()]);
-  expect(download.suggestedFilename()).toMatch(/^smeta-TR-draft-\d{4}-\d{2}-\d{2}\.xlsx$/);
+  // Имя — как на диске (шаг 4): «Смета · <Цех> · черновик (на утверждении) · ДД.ММ.ГГГГ.xlsx».
+  expect(download.suggestedFilename()).toMatch(
+    /^Смета · Транспортный цех · черновик \(на утверждении\) · \d{2}\.\d{2}\.\d{4}\.xlsx$/,
+  );
   const book = new ExcelJS.Workbook();
   await book.xlsx.load(readFileSync((await download.path())!) as unknown as Parameters<ExcelJS.Xlsx["load"]>[0]);
 
@@ -162,7 +185,7 @@ test("глава цеха без финансов: в Excel — основной
   expect(texts.join("\n")).not.toContain(DRAFT_MARK);
   const main = book.getWorksheet("Основной")!;
   expect(main.getCell("A2").value).toBe("TR-01.01");
-  // Итого статьи — серверный расчёт (статья сида: 2 × ставка), а не 0 из ячейки с формулой.
+  // Итого статьи — 2 × ставка (серверный расчёт; что он перекрывает ячейку, проверяют модульные тесты).
   expect(main.getCell("J2").value).toBe(Number(MONEY.budgetRate) * 2);
   const info = book.getWorksheet("О выгрузке")!;
   expect(info.getCell("B1").value).toBe("Смета цеха «Транспортный цех»");

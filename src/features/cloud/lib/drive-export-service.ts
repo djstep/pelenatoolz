@@ -11,7 +11,13 @@ import {
   getValidAccessToken,
   markCloudConnectionNeedsReconnect,
 } from "@/features/cloud/lib/cloud-service";
-import { isShareableFolderKey } from "@/features/cloud/lib/drive-access-rules";
+import {
+  assertBudgetFileFolderKey,
+  budgetDepartmentFolderKey,
+  isBudgetFileFolderKey,
+  isShareableFolderKey,
+  projectFolderLeafKey,
+} from "@/features/cloud/lib/drive-access-rules";
 import {
   DRIVE_FOLDER_KEYS,
   type DrivePutOutcome,
@@ -31,6 +37,7 @@ import {
   scheduleProjectFolderAccessAfterExport,
   type ProjectFolderTarget,
 } from "@/features/cloud/lib/project-drive-folders";
+import { budgetDrivePlaceLabel } from "@/features/cloud/lib/budget-drive-export-rules";
 import {
   projectDrivePlaceLabel,
   projectDriveUnavailable,
@@ -44,7 +51,7 @@ import {
 import { connectionReconnectReason, reconnectReasonText } from "@/features/cloud/lib/scopes";
 import { cloudProviderLabels } from "@/features/cloud/lib/types";
 import { isProducerRole } from "@/features/roles/role-rules";
-import { AuditEntityType } from "@/shared/audit/entity-types";
+import { AuditEntityType, type AuditEntityTypeValue } from "@/shared/audit/entity-types";
 import { auditMutation } from "@/shared/audit/with-audit";
 import { prisma } from "@/shared/db/prisma";
 
@@ -424,29 +431,43 @@ export type ProjectDriveExportResult =
 
 type EnsuredFolder = Awaited<ReturnType<typeof ensureProjectFolderChain>>;
 
-/**
- * Вызывной на диск проекта — в «Общую» или папку цеха (только Google, токен хранителя). Права
- * человека и принадлежность дня / цеха проекту проверяет вызывающий (`drive-actions.ts`).
- * Одна выгрузка за раз на диск проекта: строка `ProjectDrive` под блокировкой (`SELECT … FOR UPDATE`)
- * от создания папок (`ensureProjectFolderChain`) до записи `DriveExport`. Две первые выгрузки сразу:
- * вторая ждёт, видит папку и запись первой — одна «Общая», один файл. Под блокировкой ещё раз:
- * диск тот же и активен, без «нужно переподключить», хранитель — активный продюсер.
- * Время и сообщения — как у личного диска. Доступы новой папке выдаются после ответа.
- */
-export async function putCallSheetOnProjectDrive(input: {
-  userId: string;
-  projectId: string;
-  dayId: string;
-  dayNumber: number;
-  /** Вызывной — только в «Общую» или папку цеха вызывных. */
-  target: Extract<ProjectFolderTarget, { kind: "common" | "department" }>;
-  projectName: string;
+/** Документ для диска проекта: куда, что и как записать в журнал (без ссылок и почт). */
+type ProjectDriveDocument = {
+  docType: "CALL_SHEET" | "BUDGET";
+  /** `DriveExport.docId`: у вызывного — id дня, у сметы цеха — id цеха. */
+  docId: string;
+  target: ProjectFolderTarget;
   fileName: string;
   content: Buffer;
   version: number | null;
   statusLabel: string;
-}): Promise<ProjectDriveExportResult> {
-  const { userId, projectId, dayId, target } = input;
+  /** Запрет скачивания, печати и копирования для комментаторов (сметы). */
+  restrictCopy: boolean;
+  placeLabel: (departmentName: string | null) => string;
+  audit: (done: { placeLabel: string; departmentName: string | null; outcome: DrivePutOutcome }) => {
+    entityType: AuditEntityTypeValue;
+    summary: string;
+    changes: Record<string, unknown>;
+  };
+};
+
+/**
+ * Документ на диск проекта (только Google, токен хранителя): вызывной — в «Общую» или папку цеха
+ * вызывных, смета — в папки «Сметы / …». Права человека и принадлежность документа / цеха проекту
+ * проверяет вызывающий. Смета — только в папки смет, вызывной — никогда в них.
+ * Одна выгрузка за раз на диск проекта: строка `ProjectDrive` под блокировкой (`SELECT … FOR UPDATE`)
+ * от создания папок (`ensureProjectFolderChain`) до записи `DriveExport`. Две первые выгрузки сразу:
+ * вторая ждёт, видит папку и запись первой — одна папка, один файл. Под блокировкой ещё раз:
+ * диск тот же и активен, без «нужно переподключить», хранитель — активный продюсер.
+ * Время и сообщения — как у личного диска. Доступы папки пересчитываются после ответа.
+ */
+async function putDocumentOnProjectDrive(
+  input: { userId: string; projectId: string; projectName: string } & ProjectDriveDocument,
+): Promise<ProjectDriveExportResult> {
+  const { userId, projectId, target, docType, docId } = input;
+  const leafKey = projectFolderLeafKey(target);
+  if (docType === "BUDGET") assertBudgetFileFolderKey(leafKey);
+  else if (isBudgetFileFolderKey(leafKey)) throw new Error("Вызывной не кладётся в папки смет");
 
   const unavailable = await getProjectDriveExportAvailability(projectId);
   if (unavailable) return { unavailable };
@@ -534,7 +555,7 @@ export async function putCallSheetOnProjectDrive(input: {
           }
           existing = await tx.driveExport.findUnique({
             where: {
-              folderId_docType_docId: { folderId: folder.folderId, docType: "CALL_SHEET", docId: dayId },
+              folderId_docType_docId: { folderId: folder.folderId, docType, docId },
             },
             select: { externalId: true },
           });
@@ -545,6 +566,7 @@ export async function putCallSheetOnProjectDrive(input: {
               existingFileId: existing?.externalId ?? null,
               fileName: input.fileName,
               content: input.content,
+              restrictCopy: input.restrictCopy,
             }),
             deadlineAt,
           );
@@ -563,7 +585,7 @@ export async function putCallSheetOnProjectDrive(input: {
           throw e;
         }
 
-        const placeLabel = projectDrivePlaceLabel(target.kind, folder.departmentName);
+        const placeLabel = input.placeLabel(folder.departmentName);
         const data = {
           provider: "GOOGLE_DRIVE" as const,
           format: FORMAT.GOOGLE_DRIVE,
@@ -574,37 +596,25 @@ export async function putCallSheetOnProjectDrive(input: {
           uploadedById: userId,
           uploadedAt: new Date(),
         };
-        const versionText = input.version ? `версия ${input.version}, ` : "";
+        const audit = input.audit({ placeLabel, departmentName: folder.departmentName, outcome: put.outcome });
         const saved = await auditMutation(
           { user: { id: userId } },
           () =>
             tx.driveExport.upsert({
-              where: {
-                folderId_docType_docId: { folderId: folder.folderId, docType: "CALL_SHEET", docId: dayId },
-              },
-              create: { projectId, docType: "CALL_SHEET", docId: dayId, folderId: folder.folderId, ...data },
+              where: { folderId_docType_docId: { folderId: folder.folderId, docType, docId } },
+              create: { projectId, docType, docId, folderId: folder.folderId, ...data },
               update: data,
               select: exportViewSelect,
             }),
           undefined,
           {
             projectId,
-            entityType: AuditEntityType.driveExport,
+            entityType: audit.entityType,
             action: existing ? "UPDATE" : "CREATE",
             entityId: (_input, row) => row.id,
-            summary: `Вызывной дня ${input.dayNumber} (${versionText}${input.statusLabel}) выгружен на диск проекта — ${placeLabel}`,
+            summary: audit.summary,
             // Без ссылок и почт.
-            changes: {
-              provider: "GOOGLE_DRIVE",
-              destination: target.kind,
-              ...(target.kind === "department"
-                ? { departmentId: target.departmentId, departmentName: folder.departmentName }
-                : {}),
-              dayId,
-              version: input.version,
-              status: input.statusLabel,
-              outcome: put.outcome,
-            },
+            changes: audit.changes,
           },
           { db: tx },
         );
@@ -636,4 +646,114 @@ export async function putCallSheetOnProjectDrive(input: {
     return { error: e.message };
   }
   return { ok: true, view: toView(result.saved), outcome: result.outcome, placeLabel: result.placeLabel };
+}
+
+/** Вызывной на диск проекта — в «Общую» или папку цеха вызывных. */
+export async function putCallSheetOnProjectDrive(input: {
+  userId: string;
+  projectId: string;
+  dayId: string;
+  dayNumber: number;
+  /** Вызывной — только в «Общую» или папку цеха вызывных. */
+  target: Extract<ProjectFolderTarget, { kind: "common" | "department" }>;
+  projectName: string;
+  fileName: string;
+  content: Buffer;
+  version: number | null;
+  statusLabel: string;
+}): Promise<ProjectDriveExportResult> {
+  const { target, dayId } = input;
+  const versionText = input.version ? `версия ${input.version}, ` : "";
+  return putDocumentOnProjectDrive({
+    ...input,
+    docType: "CALL_SHEET",
+    docId: dayId,
+    restrictCopy: false,
+    placeLabel: (departmentName) => projectDrivePlaceLabel(target.kind, departmentName),
+    audit: ({ placeLabel, departmentName, outcome }) => ({
+      entityType: AuditEntityType.driveExport,
+      summary: `Вызывной дня ${input.dayNumber} (${versionText}${input.statusLabel}) выгружен на диск проекта — ${placeLabel}`,
+      changes: {
+        provider: "GOOGLE_DRIVE",
+        destination: target.kind,
+        ...(target.kind === "department" ? { departmentId: target.departmentId, departmentName } : {}),
+        dayId,
+        version: input.version,
+        status: input.statusLabel,
+        outcome,
+      },
+    }),
+  });
+}
+
+/**
+ * Смета цеха на диск проекта — в «Сметы / Цеха / <Цех>»: запрет скачивания и копирования, журнал —
+ * «Выгрузка смет» (его видят продюсер и «просмотр всех»), без сумм, ссылок и почт.
+ */
+export async function putBudgetOnProjectDrive(input: {
+  userId: string;
+  projectId: string;
+  departmentId: string;
+  projectName: string;
+  fileName: string;
+  content: Buffer;
+  version: number | null;
+  statusLabel: string;
+  /** «версия 3 (утверждена)» / «текущий лист (на утверждении)». */
+  label: string;
+}): Promise<ProjectDriveExportResult> {
+  const { departmentId } = input;
+  return putDocumentOnProjectDrive({
+    ...input,
+    docType: "BUDGET",
+    docId: departmentId,
+    target: { kind: "budget-department", departmentId },
+    restrictCopy: true,
+    placeLabel: (departmentName) => budgetDrivePlaceLabel({ kind: "department", departmentId }, departmentName),
+    audit: ({ departmentName, outcome }) => ({
+      entityType: AuditEntityType.smetaExport,
+      summary: `Смета цеха «${departmentName ?? "—"}» выгружена на диск проекта: ${input.label}`,
+      changes: {
+        export: "drive",
+        destination: "budget-department",
+        departmentId,
+        version: input.version,
+        status: input.statusLabel,
+        outcome,
+      },
+    }),
+  });
+}
+
+/** Выгрузка сметы цеха на действующий диск проекта («уже на диске»). Только чтение. */
+export async function getProjectBudgetExport(
+  projectId: string,
+  departmentId: string,
+): Promise<DriveExportView | null> {
+  const row = await prisma.driveExport.findFirst({
+    where: {
+      projectId,
+      docType: "BUDGET",
+      docId: departmentId,
+      folder: {
+        projectId,
+        key: budgetDepartmentFolderKey(departmentId),
+        projectDrive: { projectId, status: ProjectDriveStatus.ACTIVE },
+      },
+    },
+    select: exportViewSelect,
+  });
+  return row ? toView(row) : null;
+}
+
+/** Были ли уже выгрузки смет на действующий диск проекта (подсказка про служебный аккаунт — до первой). */
+export async function hasProjectBudgetExports(projectId: string): Promise<boolean> {
+  const count = await prisma.driveExport.count({
+    where: {
+      projectId,
+      docType: "BUDGET",
+      folder: { projectDrive: { projectId, status: ProjectDriveStatus.ACTIVE } },
+    },
+  });
+  return count > 0;
 }

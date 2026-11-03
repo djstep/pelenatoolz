@@ -188,11 +188,34 @@ describe("права на Excel сметы цеха", () => {
     };
     assert.ok(at("requireProjectContext(projectId)") < at("canReadDepartmentSmeta(ctx, departmentId)"));
     assert.ok(at("canReadDepartmentSmeta(ctx, departmentId)") < at('assertInProject("Department"'));
-    assert.ok(at('assertInProject("Department"') < at("loadDepartmentBudgetExport("));
-    assert.ok(at("loadDepartmentBudgetExport(") < at("buildDepartmentBudgetWorkbook("));
+    assert.ok(at('assertInProject("Department"') < at("buildDepartmentBudgetFile("));
+    // Тот же файл, что уходит на диск: сначала смета и версия этого цеха, потом книга.
+    const file = readFileSync(new URL("./export-file.ts", import.meta.url), "utf8");
+    assert.ok(file.indexOf("loadDepartmentBudgetExport(") < file.indexOf("buildDepartmentBudgetWorkbook("));
     // Журнал — тип «Выгрузка смет», без сумм.
     const audit = body.slice(at("recordAudit("));
     assert.match(audit, /AuditEntityType\.smetaExport/);
     assert.doesNotMatch(audit.slice(0, audit.indexOf("});")), /total|amount|sum\b/i);
+  });
+
+  test("на диск: вход → разбор ввода → цех проекта → право (продюсер / глава этого цеха) → файл → диск", () => {
+    const src = readFileSync(new URL("./drive-actions.ts", import.meta.url), "utf8");
+    const body = src.slice(src.indexOf("export async function exportBudgetToDriveAction"));
+    const order = [
+      "requireProjectContext(projectId)",
+      "parseBudgetDriveRequest(input)",
+      'if ("drafts" in parsed) return { error: NO_RIGHTS }',
+      "departmentOfProject(projectId, parsed.target.departmentId)",
+      "canExportBudgetToDrive(budgetActor(ctx)",
+      "buildDepartmentBudgetFile(",
+      "putBudgetOnProjectDrive(",
+    ].map((s) => body.indexOf(s));
+    for (const [i, at] of order.entries()) assert.ok(at > 0, `нет шага ${i}`);
+    for (let i = 1; i < order.length; i++) assert.ok(order[i - 1]! < order[i]!, `порядок ${i}`);
+    // projectId и всё остальное — не из ввода: в выгрузку идут только цех и номер версии.
+    assert.doesNotMatch(body, /parsed\.(projectId|email|folder)/);
+    // Окно тоже не показывает ничего без права выгружать.
+    const state = src.slice(src.indexOf("export async function getBudgetDriveStateAction"), src.indexOf("export type BudgetDriveExportResult"));
+    assert.ok(state.indexOf("canExportBudgetToDrive(") < state.indexOf("Promise.all("));
   });
 });

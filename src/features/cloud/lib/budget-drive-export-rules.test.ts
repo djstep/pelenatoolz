@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import {
+  BUDGET_DRIVE_APPROVAL_NOTE,
+  budgetDriveKeeperHint,
   BUDGET_SUMMARY_DOC_ID,
   budgetDriveAccess,
   budgetDriveAudienceText,
@@ -249,6 +251,15 @@ describe("что пришло из браузера", () => {
     for (const raw of bad) {
       assert.deepEqual(parseBudgetDriveRequest(raw), { error: DRIVE_EXPORT_BAD_INPUT }, JSON.stringify(raw));
     }
+  });
+});
+
+describe("тексты окна (шаг 4)", () => {
+  test("утверждение — только в системе; подсказка хранителю — со служебным аккаунтом", () => {
+    assert.match(BUDGET_DRIVE_APPROVAL_NOTE, /^Утверждение — только в системе/);
+    assert.match(budgetDriveKeeperHint("keeper@company.test"), /аккаунте «keeper@company.test»/);
+    assert.match(budgetDriveKeeperHint(null), /аккаунте хранителя диска проекта/);
+    assert.match(budgetDriveKeeperHint(null), /служебный аккаунт компании/);
   });
 });
 
