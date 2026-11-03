@@ -438,7 +438,8 @@ export async function putCallSheetOnProjectDrive(input: {
   projectId: string;
   dayId: string;
   dayNumber: number;
-  target: ProjectFolderTarget;
+  /** Вызывной — только в «Общую» или папку цеха вызывных. */
+  target: Extract<ProjectFolderTarget, { kind: "common" | "department" }>;
   projectName: string;
   fileName: string;
   content: Buffer;

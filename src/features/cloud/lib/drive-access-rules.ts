@@ -108,6 +108,95 @@ export function assertShareableFolderKey(key: string): void {
   if (!isShareableFolderKey(key)) throw new UnshareableFolderError(key);
 }
 
+/** Конечная папка диска проекта: вызывные («Общая», цех) или сметы («Сводная», цех). */
+export type ProjectFolderTarget =
+  | { kind: "common" }
+  | { kind: "department"; departmentId: string }
+  | { kind: "budget-summary" }
+  | { kind: "budget-department"; departmentId: string };
+
+/** Ключ конечной папки (`DriveFolder.key`) — одно место на все назначения. */
+export function projectFolderLeafKey(target: ProjectFolderTarget): string {
+  switch (target.kind) {
+    case "common":
+      return PROJECT_FOLDER_KEYS.common;
+    case "department":
+      return departmentFolderKey(target.departmentId);
+    case "budget-summary":
+      return BUDGET_FOLDER_KEYS.summary;
+    case "budget-department":
+      return budgetDepartmentFolderKey(target.departmentId);
+  }
+}
+
+// ---------- чужие доступы к папкам смет (вопрос 11, BUDGET_DRIVE_NOTES.md) ----------
+
+/**
+ * Папки, где система ищет доступы, выданные не ею: вся ветка «Сметы» и корень проекта — доступ к
+ * корню или к «Сметам» Google наследует во все сметы. Папки вызывных не проверяются.
+ */
+export function isBudgetTreeFolderKey(key: string): boolean {
+  return (
+    key === BUDGET_FOLDER_KEYS.budgets ||
+    key === BUDGET_FOLDER_KEYS.departments ||
+    isBudgetFileFolderKey(key)
+  );
+}
+
+/** Доступ к папке, выданный не системой: человек, группа, домен или «все, у кого есть ссылка». */
+export type ForeignPermission = { id: string; type: string; role: string; email: string | null };
+
+/**
+ * Чужие доступы папки: всё, кроме владельца и выдач самой системы (`permissionId` строк
+ * `DriveFolderGrant`). Доступ, который хранитель выдал руками нужному человеку, — тоже чужой:
+ * система его не снимет, когда человек уйдёт.
+ */
+export function foreignFolderPermissions(
+  google: readonly ForeignPermission[],
+  ourPermissionIds: Iterable<string>,
+): ForeignPermission[] {
+  const ours = new Set(ourPermissionIds);
+  return google.filter((p) => p.role !== "owner" && !ours.has(p.id));
+}
+
+/** Как папку называть в предупреждении: «Сметы / Цеха / Звук», «PELENA · Проект». */
+export function budgetTreeFolderLabel(key: string, names: { project: string; department: string | null }): string {
+  if (key === PROJECT_FOLDER_KEYS.root) return names.project;
+  if (key === BUDGET_FOLDER_KEYS.budgets) return BUDGETS_FOLDER_NAME;
+  if (key === BUDGET_FOLDER_KEYS.departments) return `${BUDGETS_FOLDER_NAME} / ${DEPARTMENTS_FOLDER_NAME}`;
+  if (key === BUDGET_FOLDER_KEYS.summary) return `${BUDGETS_FOLDER_NAME} / ${BUDGET_SUMMARY_FOLDER_NAME}`;
+  return `${BUDGETS_FOLDER_NAME} / ${DEPARTMENTS_FOLDER_NAME} / ${names.department ?? "удалённый цех"}`;
+}
+
+export function foreignAccessWarningText(label: string, count: number): string {
+  return `К папке «${label}» есть доступы, выданные не системой: ${count}`;
+}
+
+/** Кому выдан чужой доступ — для списка продюсерам (почта, «все, у кого есть ссылка», домен). */
+export function foreignPermissionWho(p: ForeignPermission): string {
+  if (p.type === "anyone") return "все, у кого есть ссылка";
+  if (p.type === "domain") return `домен${p.email ? ` ${p.email}` : ""}`;
+  return p.email ?? "без почты";
+}
+
+/** Разбор `DriveFolder.foreignAccess` из базы: мусор — пусто. */
+export function parseForeignAccess(raw: unknown): ForeignPermission[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((p) => {
+    if (!p || typeof p !== "object") return [];
+    const { id, type, role, email } = p as Record<string, unknown>;
+    if (typeof id !== "string") return [];
+    return [
+      {
+        id,
+        type: typeof type === "string" ? type : "",
+        role: typeof role === "string" ? role : "",
+        email: typeof email === "string" ? email : null,
+      },
+    ];
+  });
+}
+
 /** Почта, на которую выдаётся доступ: «Почта для Google», иначе почта входа (решение 13). */
 export function grantEmailFor(user: { email: string; googleEmail: string | null }): string {
   return (user.googleEmail?.trim() || user.email).trim().toLowerCase();

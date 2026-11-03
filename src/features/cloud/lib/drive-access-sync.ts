@@ -4,19 +4,26 @@ import { MembershipStatus, ProjectDriveStatus, type DriveFolderGrant } from "@pr
 import { after } from "next/server";
 import {
   assertShareableFolderKey,
+  budgetTreeFolderLabel,
   COMMON_FOLDER_NAME,
   departmentIdFromFolderKey,
   desiredFolderGrants,
   diffFolderGrants,
   DRIVE_GRANT_NOTIFY,
   DRIVE_GRANT_ROLE,
+  foreignFolderPermissions,
+  foreignPermissionWho,
+  isBudgetFileFolderKey,
+  isBudgetTreeFolderKey,
   isKnownGoogleEmail,
   isShareableFolderKey,
+  parseForeignAccess,
   PROJECT_FOLDER_KEYS,
   type AccessFolder,
   type FolderPermission,
   type GrantOp,
 } from "@/features/cloud/lib/drive-access-rules";
+import { googleProjectFolderName } from "@/features/cloud/lib/drive-export-rules";
 import { isCloudApiError, isCloudReconnectRequiredError } from "@/features/cloud/lib/errors";
 import {
   createDrivePermission,
@@ -438,10 +445,12 @@ export async function syncProjectDriveAccess(
           const ops = diffFolderGrants({ desired, stored, google }).filter(
             (op) => !stats.failedKeys.has(opKey(op)),
           );
-          if (ops.length === 0) return;
+          if (ops.length === 0) break;
           await premark(ops);
           for (const op of ops) await applyOp(accessToken, op, byId, deadline, stats);
         }
+        // После выдач: свои доступы уже записаны — всё остальное у папок смет чужое.
+        await checkBudgetForeignAccess(accessToken, projectId, drive.id, options, deadline);
       });
     } catch (e) {
       if (isCloudReconnectRequiredError(e)) {
@@ -480,6 +489,107 @@ export async function syncProjectDriveAccess(
     await auditDriveSync(projectId, drive.id, options, result, [...stats.errors]);
   }
   return result;
+}
+
+// ---------- чужие доступы к папкам смет (вопрос 11) ----------
+
+/**
+ * Сверить доступы корня и ветки «Сметы» с выдачами системы: всё, что выдано не ею (руками
+ * хранителя, «по ссылке», домену), — в `DriveFolder.foreignAccess` и предупреждение в «Диске
+ * проекта». Ничего не снимает. Пересчёт только по папкам вызывных — не сверяет. Журнал — когда
+ * число чужих доступов изменилось, без почт.
+ */
+async function checkBudgetForeignAccess(
+  accessToken: string,
+  projectId: string,
+  driveId: string,
+  options: { actorUserId: string; trigger: DriveSyncTrigger; folderIds?: readonly string[] },
+  deadline: number,
+) {
+  const rows = await prisma.driveFolder.findMany({
+    where: { projectId, projectDriveId: driveId },
+    select: {
+      id: true,
+      key: true,
+      externalId: true,
+      foreignAccess: true,
+      department: { select: { name: true } },
+    },
+  });
+  const tree = rows.filter((f) => isBudgetTreeFolderKey(f.key));
+  if (tree.length === 0) return;
+  if (options.folderIds && !tree.some((f) => options.folderIds!.includes(f.id))) return;
+  const root = rows.find((f) => f.key === PROJECT_FOLDER_KEYS.root);
+  const folders = root ? [root, ...tree] : tree;
+  const project = await prisma.project.findUniqueOrThrow({ where: { id: projectId }, select: { name: true } });
+
+  let before = 0;
+  let after = 0;
+  const report: { folder: string; count: number }[] = [];
+  for (const folder of folders) {
+    let list;
+    try {
+      list = await withRetry(() => listDrivePermissions(accessToken, folder.externalId), deadline);
+    } catch (e) {
+      if (isCloudReconnectRequiredError(e)) throw e;
+      if (e instanceof SyncOutOfTimeError) break;
+      // Папку удалили (404) или Google не ответил — прежняя отметка остаётся до следующей сверки.
+      continue;
+    }
+    const ours = await prisma.driveFolderGrant.findMany({
+      where: { folderId: folder.id, permissionId: { not: null } },
+      select: { permissionId: true },
+    });
+    const foreign = foreignFolderPermissions(
+      list,
+      ours.map((g) => g.permissionId!),
+    );
+    before += parseForeignAccess(folder.foreignAccess).length;
+    after += foreign.length;
+    if (foreign.length > 0) {
+      const label = budgetTreeFolderLabel(folder.key, {
+        project: googleProjectFolderName(project.name),
+        department: folder.department?.name ?? null,
+      });
+      report.push({ folder: label, count: foreign.length });
+    }
+    await prisma.driveFolder.update({
+      where: { id: folder.id },
+      data: { foreignAccess: foreign, foreignAccessCheckedAt: new Date() },
+    });
+  }
+  if (before === after) return;
+
+  const summary =
+    after > 0
+      ? `К папкам смет на диске проекта есть доступы, выданные не системой: ${after} (${report
+          .map((r) => `«${r.folder}» — ${r.count}`)
+          .join(", ")}). Система их не снимает`
+      : "Доступов к папкам смет, выданных не системой, больше нет";
+  try {
+    await auditMutation(
+      { user: { id: options.actorUserId } },
+      async () => null,
+      null,
+      {
+        projectId,
+        entityType: AuditEntityType.projectDrive,
+        entityId: driveId,
+        action: "UPDATE",
+        summary,
+        changes: {
+          foreignAccess: true,
+          trigger: options.trigger,
+          triggerText: TRIGGER_TEXT[options.trigger],
+          before,
+          after,
+          folders: report,
+        },
+      },
+    );
+  } catch (e) {
+    console.error("[drive access sync] foreign audit", e instanceof Error ? e.message : e);
+  }
 }
 
 /** Журнал: итог пересчёта и ошибки — только счётчики и наши тексты, без почт. */
@@ -595,18 +705,33 @@ export type UnsyncedDriveGrant = {
   action: "add" | "remove";
   reason: string;
   notGoogleEmail: boolean;
+  /** Папка смет — в списке выделяется: там деньги. */
+  budget: boolean;
+};
+
+/** Чужие доступы к папке смет (или корню) — предупреждение продюсерам. */
+export type ForeignAccessWarning = {
+  folderId: string;
+  folder: string;
+  count: number;
+  /** Кому выдано: почты, «все, у кого есть ссылка», домен — только продюсерам. */
+  who: string[];
 };
 
 export type DriveAccessOverview = {
   folders: number;
   granted: number;
   unsynced: UnsyncedDriveGrant[];
+  foreign: ForeignAccessWarning[];
 };
 
 function folderLabel(folder: { key: string; department: { name: string } | null }) {
   if (folder.key === PROJECT_FOLDER_KEYS.common) return COMMON_FOLDER_NAME;
   if (departmentIdFromFolderKey(folder.key)) {
     return folder.department ? `Цех «${folder.department.name}»` : "Удалённый цех";
+  }
+  if (isBudgetFileFolderKey(folder.key)) {
+    return budgetTreeFolderLabel(folder.key, { project: "", department: folder.department?.name ?? null });
   }
   return folder.key;
 }
@@ -622,15 +747,30 @@ function pendingReason(row: Pick<DriveFolderGrant, "status" | "lastError">) {
 export async function getDriveAccessOverview(projectId: string): Promise<DriveAccessOverview | null> {
   const drive = await prisma.projectDrive.findUnique({
     where: { projectId },
-    select: { id: true, status: true },
+    select: { id: true, status: true, project: { select: { name: true } } },
   });
   if (!drive || drive.status !== ProjectDriveStatus.ACTIVE) return null;
-  const folders = (
-    await prisma.driveFolder.findMany({
-      where: { projectId, projectDriveId: drive.id },
-      select: { id: true, key: true },
-    })
-  ).filter((f) => isShareableFolderKey(f.key));
+  const allFolders = await prisma.driveFolder.findMany({
+    where: { projectId, projectDriveId: drive.id },
+    select: { id: true, key: true, foreignAccess: true, department: { select: { name: true } } },
+  });
+  const folders = allFolders.filter((f) => isShareableFolderKey(f.key));
+  const foreign = allFolders.flatMap((f) => {
+    if (f.key !== PROJECT_FOLDER_KEYS.root && !isBudgetTreeFolderKey(f.key)) return [];
+    const list = parseForeignAccess(f.foreignAccess);
+    if (list.length === 0) return [];
+    return [
+      {
+        folderId: f.id,
+        folder: budgetTreeFolderLabel(f.key, {
+          project: googleProjectFolderName(drive.project.name),
+          department: f.department?.name ?? null,
+        }),
+        count: list.length,
+        who: list.map(foreignPermissionWho),
+      },
+    ];
+  });
   const folderIds = folders.map((f) => f.id);
   const [granted, rows] = await Promise.all([
     prisma.driveFolderGrant.count({ where: { folderId: { in: folderIds }, status: "OK" } }),
@@ -657,7 +797,9 @@ export async function getDriveAccessOverview(projectId: string): Promise<DriveAc
   return {
     folders: folders.length,
     granted,
+    foreign,
     unsynced: rows.map((r) => ({
+      budget: isBudgetFileFolderKey(r.folder.key),
       id: r.id,
       name: auditMemberName(r.user.name),
       email: r.email,

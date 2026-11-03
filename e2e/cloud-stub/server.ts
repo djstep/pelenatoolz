@@ -12,6 +12,7 @@ import type { AddressInfo } from "node:net";
  *   GET  /__stub/google/files/<id>/content, GET /__stub/yandex/content?path= — содержимое файла;
  *   POST /__stub/google/files/<id>/delete — файл «удалили руками» (дальше Google отвечает 404);
  *   POST /__stub/google/files/<id>/permissions {email, role} — доступ, выданный хранителем «руками»;
+ *        {type: "anyone", role} — «все, у кого есть ссылка», тоже руками;
  *   POST /__stub/reset      — всё с нуля;
  *   POST /__stub/config     — аккаунт следующего входа, отказ в окне согласия, `failNext`.
  * Только `node:http`, без пакетов. Слушает 127.0.0.1.
@@ -125,6 +126,8 @@ type DriveFile = {
   mimeType: string;
   parents: string[];
   trashed: boolean;
+  /** Запрет скачивания, печати и копирования для читателей и комментаторов. */
+  copyRequiresWriterPermission: boolean;
   ownerSub: string;
   ownerEmail: string;
   size: number;
@@ -138,7 +141,8 @@ type DrivePermission = {
   fileId: string;
   type: string;
   role: string;
-  emailAddress: string;
+  /** У «все, у кого есть ссылка» почты нет. */
+  emailAddress: string | null;
   sendNotificationEmail: boolean;
   /** Выдан «руками» через `/__stub/...`, а не приложением. */
   manual?: boolean;
@@ -461,6 +465,7 @@ export async function startCloudStub(opts: { port?: number; appOrigin?: string }
     mimeType: f.mimeType,
     parents: f.parents,
     trashed: f.trashed,
+    copyRequiresWriterPermission: f.copyRequiresWriterPermission,
     webViewLink: webViewLink(f),
   });
 
@@ -636,6 +641,7 @@ export async function startCloudStub(opts: { port?: number; appOrigin?: string }
         mimeType: typeof meta.mimeType === "string" ? meta.mimeType : "application/octet-stream",
         parents,
         trashed: false,
+        copyRequiresWriterPermission: meta.copyRequiresWriterPermission === true,
         ownerSub: grant.google!.sub,
         ownerEmail: grant.google!.email,
         size: 0,
@@ -728,6 +734,9 @@ export async function startCloudStub(opts: { port?: number; appOrigin?: string }
       const patch = jsonOf(ctx) ?? {};
       if (typeof patch.name === "string") f.name = patch.name;
       if (typeof patch.trashed === "boolean") f.trashed = patch.trashed;
+      if (typeof patch.copyRequiresWriterPermission === "boolean") {
+        f.copyRequiresWriterPermission = patch.copyRequiresWriterPermission;
+      }
       send(ctx, 200, driveFileJson(f));
       return;
     }
@@ -767,6 +776,10 @@ export async function startCloudStub(opts: { port?: number; appOrigin?: string }
         const f = ownFile(ctx, grant, decodeURIComponent(uploadOne[1]!));
         if (!f) return;
         if (typeof meta.name === "string") f.name = meta.name;
+        // Как у Google: метаданные, которых нет в запросе (запрет копирования), сохраняются.
+        if (typeof meta.copyRequiresWriterPermission === "boolean") {
+          f.copyRequiresWriterPermission = meta.copyRequiresWriterPermission;
+        }
         // Как у Google: id не меняется; Google Таблица остаётся таблицей (xlsx импортируется в неё).
         if (f.mimeType === GOOGLE_SHEET && !SHEET_SOURCES.has(mediaType)) {
           googleError(ctx, 400, "badContent", "Unsupported content for a spreadsheet.");
@@ -796,6 +809,7 @@ export async function startCloudStub(opts: { port?: number; appOrigin?: string }
         mimeType: target,
         parents,
         trashed: false,
+        copyRequiresWriterPermission: meta.copyRequiresWriterPermission === true,
         ownerSub: grant.google!.sub,
         ownerEmail: grant.google!.email,
         size: media.content.length,
@@ -1164,6 +1178,7 @@ export async function startCloudStub(opts: { port?: number; appOrigin?: string }
         mimeType: f.mimeType,
         parents: f.parents,
         trashed: f.trashed,
+        copyRequiresWriterPermission: f.copyRequiresWriterPermission,
         size: f.size,
         contentVersion: f.contentVersion,
         sourceMimeType: f.sourceMimeType,
@@ -1225,6 +1240,20 @@ export async function startCloudStub(opts: { port?: number; appOrigin?: string }
     if (method === "POST" && gManual) {
       const fileId = decodeURIComponent(gManual[1]);
       const body = jsonOf(ctx) ?? {};
+      if (body.type === "anyone") {
+        if (!state.driveFiles.has(fileId)) return send(ctx, 400, { error: "file expected" });
+        state.drivePermissions = state.drivePermissions.filter((p) => !(p.fileId === fileId && p.id === "anyoneWithLink"));
+        state.drivePermissions.push({
+          id: "anyoneWithLink",
+          fileId,
+          type: "anyone",
+          role: typeof body.role === "string" ? body.role : "reader",
+          emailAddress: null,
+          sendNotificationEmail: false,
+          manual: true,
+        });
+        return send(ctx, 200, { id: "anyoneWithLink" });
+      }
       const email = typeof body.email === "string" ? body.email.trim() : "";
       if (!state.driveFiles.has(fileId) || !email) return send(ctx, 400, { error: "file and email expected" });
       const id = permissionIdFor(email);

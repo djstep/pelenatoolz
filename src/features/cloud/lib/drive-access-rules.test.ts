@@ -4,6 +4,13 @@ import { describe, test } from "node:test";
 import {
   assertBudgetFileFolderKey,
   assertShareableFolderKey,
+  budgetTreeFolderLabel,
+  foreignAccessWarningText,
+  foreignFolderPermissions,
+  foreignPermissionWho,
+  isBudgetTreeFolderKey,
+  parseForeignAccess,
+  projectFolderLeafKey,
   BUDGET_FOLDER_KEYS,
   budgetDepartmentFolderKey,
   departmentFolderKey,
@@ -381,5 +388,78 @@ describe("почта не Google и подсказка в профиле", () =>
       profileDriveEmailNotice({ email: "me@mail.ru", googleEmail: "ME@gmail.com", connectedGoogleEmail: "me@gmail.com" }),
       { grantEmail: "me@gmail.com", mismatch: null },
     );
+  });
+});
+
+describe("конечная папка по назначению", () => {
+  test("вызывные и сметы — разные ключи, одно место расчёта", () => {
+    assert.equal(projectFolderLeafKey({ kind: "common" }), "common");
+    assert.equal(projectFolderLeafKey({ kind: "department", departmentId: "d1" }), departmentFolderKey("d1"));
+    assert.equal(projectFolderLeafKey({ kind: "budget-summary" }), BUDGET_FOLDER_KEYS.summary);
+    assert.equal(
+      projectFolderLeafKey({ kind: "budget-department", departmentId: "d1" }),
+      budgetDepartmentFolderKey("d1"),
+    );
+    for (const kind of ["common", "department", "budget-summary", "budget-department"] as const) {
+      const key = projectFolderLeafKey(kind === "common" || kind === "budget-summary" ? { kind } : { kind, departmentId: "d1" });
+      assert.equal(isShareableFolderKey(key), true, kind);
+      assert.equal(isBudgetFileFolderKey(key), kind.startsWith("budget"), kind);
+    }
+  });
+});
+
+describe("чужие доступы к папкам смет (вопрос 11)", () => {
+  test("сверяется вся ветка «Сметы»; папки вызывных — нет", () => {
+    for (const key of ["budgets", "budget-departments", "budget-summary", budgetDepartmentFolderKey("d1")]) {
+      assert.equal(isBudgetTreeFolderKey(key), true, key);
+    }
+    for (const key of ["root", "callsheets", "common", "departments", departmentFolderKey("d1"), "budget-dept:"]) {
+      assert.equal(isBudgetTreeFolderKey(key), false, key);
+    }
+  });
+
+  test("чужие — всё, кроме владельца и выдач системы; ручной доступ нужному человеку тоже чужой", () => {
+    const google = [
+      { id: "owner", type: "user", role: "owner", email: "keeper@company.test" },
+      { id: "p-ours", type: "user", role: "commenter", email: "head@gmail.com" },
+      { id: "p-manual", type: "user", role: "writer", email: "friend@gmail.com" },
+      { id: "anyoneWithLink", type: "anyone", role: "reader", email: null },
+    ];
+    assert.deepEqual(
+      foreignFolderPermissions(google, ["p-ours"]).map((p) => p.id),
+      ["p-manual", "anyoneWithLink"],
+    );
+    assert.deepEqual(foreignFolderPermissions(google, ["p-ours", "p-manual", "anyoneWithLink"]), []);
+  });
+
+  test("подписи папок и предупреждение", () => {
+    const names = { project: "PELENA · Фильм", department: "Звук" };
+    assert.equal(budgetTreeFolderLabel("root", names), "PELENA · Фильм");
+    assert.equal(budgetTreeFolderLabel("budgets", names), "Сметы");
+    assert.equal(budgetTreeFolderLabel("budget-departments", names), "Сметы / Цеха");
+    assert.equal(budgetTreeFolderLabel("budget-summary", names), "Сметы / Сводная");
+    assert.equal(budgetTreeFolderLabel(budgetDepartmentFolderKey("d1"), names), "Сметы / Цеха / Звук");
+    assert.equal(
+      budgetTreeFolderLabel(budgetDepartmentFolderKey("d1"), { ...names, department: null }),
+      "Сметы / Цеха / удалённый цех",
+    );
+    assert.equal(
+      foreignAccessWarningText("Сметы / Сводная", 2),
+      "К папке «Сметы / Сводная» есть доступы, выданные не системой: 2",
+    );
+  });
+
+  test("кому выдано — почта, «по ссылке», домен", () => {
+    assert.equal(foreignPermissionWho({ id: "1", type: "user", role: "reader", email: "a@b.c" }), "a@b.c");
+    assert.equal(foreignPermissionWho({ id: "2", type: "anyone", role: "reader", email: null }), "все, у кого есть ссылка");
+    assert.equal(foreignPermissionWho({ id: "3", type: "domain", role: "reader", email: null }), "домен");
+  });
+
+  test("разбор из базы: мусор — пусто", () => {
+    assert.deepEqual(parseForeignAccess(null), []);
+    assert.deepEqual(parseForeignAccess({}), []);
+    assert.deepEqual(parseForeignAccess([{ id: 1 }, "x", { id: "a", type: "user", role: "reader" }]), [
+      { id: "a", type: "user", role: "reader", email: null },
+    ]);
   });
 });
