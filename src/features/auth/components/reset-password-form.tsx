@@ -7,9 +7,9 @@ import {
   resetPasswordAction,
   type ActionState,
 } from "@/features/auth/actions";
+import { NewPasswordField } from "@/features/auth/components/new-password-field";
 import { Button } from "@/shared/ui/button";
-import { Input } from "@/shared/ui/input";
-import { Label } from "@/shared/ui/label";
+import { submitKeepingFields } from "@/shared/ui/forms/submit-keeping-fields";
 
 const initial: ActionState = {};
 
@@ -38,21 +38,10 @@ export function ResetPasswordForm({
   }
 
   return (
-    <form action={action} className="space-y-4">
+    <form onSubmit={submitKeepingFields(action)} className="space-y-4">
       <input type="hidden" name="token" value={token} />
       <p className="text-sm text-[var(--muted-fg)]">{t("resetPasswordHint")}</p>
-      <div>
-        <Label htmlFor="password">{t("newPassword")}</Label>
-        <Input
-          id="password"
-          name="password"
-          type="password"
-          autoComplete="new-password"
-          minLength={8}
-          required
-        />
-        <p className="mt-1 text-xs text-[var(--muted-fg)]">{t("passwordHint")}</p>
-      </div>
+      <NewPasswordField label={t("newPassword")} />
       {state.error ? (
         <p className="text-sm text-[var(--danger)]" role="alert">
           {state.error}

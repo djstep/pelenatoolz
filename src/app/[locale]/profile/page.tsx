@@ -5,6 +5,7 @@ import { CloudOAuthNoticeLine } from "@/features/cloud/components/cloud-oauth-no
 import { listUserCloudConnections } from "@/features/cloud/lib/cloud-service";
 import { profileDriveEmailNotice } from "@/features/cloud/lib/drive-access-rules";
 import { cloudOAuthNotice } from "@/features/cloud/lib/oauth-notice";
+import { ChangePasswordForm } from "@/features/profile/components/change-password-form";
 import { ProfileForm } from "@/features/profile/components/profile-form";
 import { prisma } from "@/shared/db/prisma";
 import { Card } from "@/shared/ui/card";
@@ -30,6 +31,8 @@ export default async function ProfilePage({ params, searchParams }: Props) {
     listUserCloudConnections(sessionUser.id!),
   ]);
   const notice = cloudOAuthNotice(query, connections);
+  const passwordChanged =
+    typeof query.passwordChanged === "string" ? query.passwordChanged : null;
   // Риск 4: на какую почту выдаются папки дисков проектов и не опечатка ли это.
   const driveEmail = user
     ? profileDriveEmailNotice({
@@ -74,6 +77,23 @@ export default async function ProfilePage({ params, searchParams }: Props) {
             </div>
           ) : null}
         </Card>
+        {user ? (
+          <section className="mt-6" id="password">
+            <Card>
+              <h2 className="mb-4 font-display text-[17px] font-bold">Пароль</h2>
+              {passwordChanged ? (
+                <p
+                  className="mb-4 text-sm text-[var(--tone-success-strong)]"
+                  role="status"
+                  data-testid="password-changed"
+                >
+                  Пароль изменён. На других устройствах нужно войти заново.
+                </p>
+              ) : null}
+              <ChangePasswordForm key={passwordChanged ?? "form"} email={user.email} />
+            </Card>
+          </section>
+        ) : null}
         <section className="mt-6" id="cloud">
           <Card>
             <h2 className="mb-1 font-display text-[17px] font-bold">Личные диски</h2>

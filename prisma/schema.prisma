@@ -236,6 +236,11 @@ model User {
   email        String   @unique
   name         String
   passwordHash String
+  /// Растёт при смене и сбросе пароля: выданные раньше сессии перестают действовать.
+  sessionVersion Int @default(0)
+  /// Когда и какую редакцию политики принял при регистрации. У зарегистрированных раньше пусто: их не спрашивали.
+  personalDataConsentAt DateTime?
+  personalDataConsentVersion String?
   phone        String?
   /// Почта для Google (доступы к Диску); может отличаться от почты входа.
   googleEmail  String?
@@ -2641,4 +2646,14 @@ model DriveExport {
   @@unique([folderId, docType, docId])
   @@index([projectId, docType, docId])
   @@index([uploadedById])
+}
+
+/// Счётчик попыток: на Vercel нет общей памяти, поэтому он в базе. Почта и IP в ключе только в виде хеша.
+model RateLimitCounter {
+  key          String    @id
+  count        Int       @default(0)
+  windowStart  DateTime  @default(now())
+  blockedUntil DateTime?
+
+  @@index([windowStart])
 }

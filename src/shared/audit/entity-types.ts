@@ -8,6 +8,8 @@ export const AuditEntityType = {
   /** Переходы статуса вызывного: на согласование, утверждение, возврат, «Внести изменения». */
   callSheetStatus: "call_sheet_status",
   userProfile: "user_profile",
+  /** Смена и сброс пароля: пишется без проекта, самого пароля в записи нет. */
+  userPassword: "user_password",
   character: "character",
   actor: "actor",
   castingPerson: "casting_person",

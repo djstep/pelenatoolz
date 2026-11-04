@@ -2,6 +2,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { chromium, type FullConfig } from "@playwright/test";
 import { config as loadEnv } from "dotenv";
+import { loginLimitEmailPrefix } from "../src/features/auth/lib/login-limit";
 import { startCloudStub, type CloudStub } from "./cloud-stub/server";
 import { E2E_ROLES, passwordEnvName, type E2ERoleKey } from "./fixtures/data";
 import { e2eDb, loadE2EContext } from "./helpers/db";
@@ -41,6 +42,10 @@ export default async function globalSetup(config: FullConfig) {
   try {
     const ctx = await loadE2EContext(db);
     writeFileSync(path.join(AUTH_DIR, "context.json"), JSON.stringify(ctx, null, 2));
+    // Прошлый прогон мог оставить неудачные входы: тест неверного пароля в c1 идёт под e2e-producer.
+    for (const { email } of Object.values(E2E_ROLES)) {
+      await db.rateLimitCounter.deleteMany({ where: { key: { startsWith: loginLimitEmailPrefix(email) } } });
+    }
   } finally {
     await db.$disconnect();
   }

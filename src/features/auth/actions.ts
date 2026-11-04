@@ -3,7 +3,7 @@
 import bcrypt from "bcryptjs";
 import { AuthError } from "next-auth";
 import { redirect } from "next/navigation";
-import { signIn, signOut } from "@/auth";
+import { LoginBlockedError, signIn, signOut } from "@/auth";
 import { loginSchema, registerSchema, forgotPasswordSchema, resetPasswordSchema } from "@/features/auth/schemas";
 import {
   buildPasswordResetUrl,
@@ -11,6 +11,11 @@ import {
   hashPasswordResetToken,
   sendPasswordResetEmail,
 } from "@/features/auth/lib/password-reset";
+import { LOGIN_BLOCKED_MESSAGE } from "@/features/auth/lib/login-limit";
+import { PERSONAL_DATA_POLICY_VERSION } from "@/features/auth/lib/personal-data-consent";
+import { passwordProblem } from "@/features/auth/lib/password-rules";
+import { AuditEntityType } from "@/shared/audit/entity-types";
+import { auditMutation } from "@/shared/audit/with-audit";
 import { prisma } from "@/shared/db/prisma";
 import { safeRedirectPath } from "@/shared/lib/safe-redirect";
 
@@ -31,12 +36,17 @@ export async function registerAction(
     lastName: formData.get("lastName"),
     email: formData.get("email"),
     password: formData.get("password"),
+    personalDataConsent: formData.get("personalDataConsent"),
   });
 
   if (!parsed.success) {
+    const fieldErrors = parsed.error.flatten().fieldErrors;
     return {
-      error: "Проверьте правильность заполнения формы",
-      fieldErrors: parsed.error.flatten().fieldErrors,
+      error:
+        fieldErrors.password?.[0] ??
+        fieldErrors.personalDataConsent?.[0] ??
+        "Проверьте правильность заполнения формы",
+      fieldErrors,
     };
   }
 
@@ -48,12 +58,30 @@ export async function registerAction(
 
   const name = `${parsed.data.firstName} ${parsed.data.lastName}`.trim();
   const passwordHash = await bcrypt.hash(parsed.data.password, 12);
-  await prisma.user.create({
-    data: {
-      name,
-      email,
-      passwordHash,
-    },
+  await prisma.$transaction(async (tx) => {
+    const user = await tx.user.create({
+      data: {
+        name,
+        email,
+        passwordHash,
+        personalDataConsentAt: new Date(),
+        personalDataConsentVersion: PERSONAL_DATA_POLICY_VERSION,
+      },
+    });
+    await auditMutation(
+      { user: { id: user.id } },
+      async () => user,
+      null,
+      {
+        projectId: null,
+        entityType: AuditEntityType.userProfile,
+        entityId: user.id,
+        action: "CREATE",
+        summary: "Регистрация, дано согласие на обработку персональных данных",
+        changes: { personalDataConsentVersion: PERSONAL_DATA_POLICY_VERSION },
+      },
+      { db: tx },
+    );
   });
 
   try {
@@ -98,6 +126,9 @@ export async function loginAction(
       redirect: false,
     });
   } catch (error) {
+    if (error instanceof LoginBlockedError) {
+      return { error: LOGIN_BLOCKED_MESSAGE, email };
+    }
     if (error instanceof AuthError) {
       return { error: "Неверный email или пароль", email };
     }
@@ -111,6 +142,13 @@ export async function logoutAction() {
   await signOut({ redirectTo: "/ru/login" });
 }
 
+/**
+ * Сброс пароля по письму выключен до своего домена (волна 6б). Страница показывает «Обратитесь к
+ * администратору проекта», а действие ниже — публичная точка доступа, поэтому и оно отвечает одинаково
+ * на любую почту: не обращается к базе и не отправляет письмо.
+ */
+const PASSWORD_RESET_BY_EMAIL_ENABLED: boolean = false;
+
 const forgotPasswordSuccess =
   "Если аккаунт с таким email существует, мы отправили ссылку для сброса пароля.";
 
@@ -118,6 +156,10 @@ export async function requestPasswordResetAction(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  if (!PASSWORD_RESET_BY_EMAIL_ENABLED) {
+    return { error: "Обратитесь к администратору проекта" };
+  }
+
   const parsed = forgotPasswordSchema.safeParse({
     email: formData.get("email"),
   });
@@ -179,9 +221,10 @@ export async function resetPasswordAction(
   });
 
   if (!parsed.success) {
+    const fieldErrors = parsed.error.flatten().fieldErrors;
     return {
-      error: "Проверьте пароль (минимум 8 символов) и попробуйте снова",
-      fieldErrors: parsed.error.flatten().fieldErrors,
+      error: fieldErrors.password?.[0] ?? "Ссылка недействительна или устарела. Запросите сброс снова.",
+      fieldErrors,
     };
   }
 
@@ -195,12 +238,15 @@ export async function resetPasswordAction(
     return { error: "Ссылка недействительна или устарела. Запросите сброс снова." };
   }
 
+  const problem = passwordProblem(parsed.data.password, record.user.email);
+  if (problem) return { error: problem };
+
   const passwordHash = await bcrypt.hash(parsed.data.password, 12);
 
   await prisma.$transaction([
     prisma.user.update({
       where: { id: record.userId },
-      data: { passwordHash },
+      data: { passwordHash, sessionVersion: { increment: 1 } },
     }),
     prisma.passwordResetToken.update({
       where: { id: record.id },
