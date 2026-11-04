@@ -2642,3 +2642,13 @@ model DriveExport {
   @@index([projectId, docType, docId])
   @@index([uploadedById])
 }
+
+/// Счётчик попыток: на Vercel нет общей памяти, поэтому он в базе. Почта и IP в ключе только в виде хеша.
+model RateLimitCounter {
+  key          String    @id
+  count        Int       @default(0)
+  windowStart  DateTime  @default(now())
+  blockedUntil DateTime?
+
+  @@index([windowStart])
+}

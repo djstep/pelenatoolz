@@ -3,7 +3,7 @@
 import bcrypt from "bcryptjs";
 import { AuthError } from "next-auth";
 import { redirect } from "next/navigation";
-import { signIn, signOut } from "@/auth";
+import { LoginBlockedError, signIn, signOut } from "@/auth";
 import { loginSchema, registerSchema, forgotPasswordSchema, resetPasswordSchema } from "@/features/auth/schemas";
 import {
   buildPasswordResetUrl,
@@ -11,6 +11,7 @@ import {
   hashPasswordResetToken,
   sendPasswordResetEmail,
 } from "@/features/auth/lib/password-reset";
+import { LOGIN_BLOCKED_MESSAGE } from "@/features/auth/lib/login-limit";
 import { passwordProblem } from "@/features/auth/lib/password-rules";
 import { prisma } from "@/shared/db/prisma";
 import { safeRedirectPath } from "@/shared/lib/safe-redirect";
@@ -100,6 +101,9 @@ export async function loginAction(
       redirect: false,
     });
   } catch (error) {
+    if (error instanceof LoginBlockedError) {
+      return { error: LOGIN_BLOCKED_MESSAGE, email };
+    }
     if (error instanceof AuthError) {
       return { error: "Неверный email или пароль", email };
     }
