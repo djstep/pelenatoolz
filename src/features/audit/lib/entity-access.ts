@@ -61,6 +61,7 @@ const AUDIT_ENTITY_VISIBILITY: Record<AuditEntityTypeValue, AuditVisibility> = {
   [AuditEntityType.driveExport]: anyOf("callsheet:read", "schedule:read"),
   // Профиль пишется без проекта и в журнал проекта не попадает. Условие — самое строгое.
   [AuditEntityType.userProfile]: anyOf("members:manage"),
+  [AuditEntityType.userPassword]: anyOf("members:manage"),
   // Личное подключение диска — тоже без проекта.
   [AuditEntityType.cloudConnection]: anyOf("members:manage"),
   // Диск проекта подключают и отключают продюсеры; хранитель меняется вместе с участниками.

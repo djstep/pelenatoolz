@@ -287,6 +287,115 @@ test.describe("ограничение попыток входа", () => {
   });
 });
 
+test.describe("смена пароля в профиле", () => {
+  const NEW_PASSWORD = "монтаж-среда-17-дубль";
+
+  async function loggedIn(browser: Browser, email: string, ip: string, password = PASSWORD) {
+    const opened = await openLogin(browser, ip);
+    await submitLogin(opened.page, email, password);
+    await expectLoggedIn(opened.page);
+    await opened.page.goto("/ru/profile");
+    return opened;
+  }
+
+  async function fillChange(page: LoginPage, current: string, next: string, repeat = next) {
+    await page.locator("#current-password").fill(current);
+    await page.locator("#new-password").fill(next);
+    await page.locator("#new-password-repeat").fill(repeat);
+    await page.getByTestId("change-password-form").locator('button[type="submit"]').click();
+  }
+
+  const formAlert = (page: LoginPage) => page.locator('[data-testid="change-password-form"] [role="alert"]');
+
+  async function hasSession(page: LoginPage) {
+    return Boolean((await (await page.request.get("/api/auth/session")).json())?.user);
+  }
+
+  test("успех: это устройство остаётся, второе выходит, старый пароль не подходит", async ({ browser }) => {
+    const email = await createTmpUser("change");
+    const here = await loggedIn(browser, email, IP_A);
+    const other = await loggedIn(browser, email, IP_B);
+
+    await fillChange(here.page, PASSWORD, NEW_PASSWORD);
+    await expect(here.page.getByTestId("password-changed")).toBeVisible();
+    await expect(here.page).toHaveURL(/\/profile/);
+    await expect(here.page.locator("#current-password")).toHaveValue("");
+
+    expect(await hasSession(here.page)).toBe(true);
+    await here.page.reload();
+    await expect(here.page).toHaveURL(/\/profile/);
+
+    expect(await hasSession(other.page)).toBe(false);
+    await other.page.goto("/ru/projects");
+    await expect(other.page).toHaveURL(/\/login/);
+
+    const fresh = await openLogin(browser, "203.0.113.30");
+    await loginFails(fresh.page, email, PASSWORD, WRONG_LOGIN_MESSAGE);
+    await submitLogin(fresh.page, email, NEW_PASSWORD);
+    await expectLoggedIn(fresh.page);
+
+    const user = await db.user.findUniqueOrThrow({ where: { email } });
+    expect(user.sessionVersion).toBe(1);
+    const audit = await db.auditLog.findMany({ where: { userId: user.id, entityType: "user_password" } });
+    expect(audit).toHaveLength(1);
+    expect(audit[0].projectId).toBeNull();
+    expect(JSON.stringify(audit[0])).not.toContain(NEW_PASSWORD);
+
+    await Promise.all([here.context.close(), other.context.close(), fresh.context.close()]);
+  });
+
+  test("отказы: неверный текущий, повтор, слабый новый, совпадает с текущим", async ({ browser }) => {
+    const email = await createTmpUser("change-refused");
+    const { context, page } = await loggedIn(browser, email, IP_A);
+    const hashBefore = (await db.user.findUniqueOrThrow({ where: { email } })).passwordHash;
+
+    await fillChange(page, WRONG_PASSWORD, NEW_PASSWORD);
+    await expect(formAlert(page)).toHaveText("Неверный текущий пароль");
+    await expect(page.locator("#new-password")).toHaveValue(NEW_PASSWORD);
+
+    await fillChange(page, PASSWORD, NEW_PASSWORD, "другой-пароль-дубль-5");
+    await expect(formAlert(page)).toHaveText("Новый пароль и повтор не совпадают");
+
+    await fillChange(page, PASSWORD, "QwertyUiop");
+    await expect(formAlert(page)).toContainText("распространён");
+
+    await fillChange(page, PASSWORD, email.split("@")[0]);
+    await expect(formAlert(page)).toContainText("почтой");
+
+    await fillChange(page, PASSWORD, PASSWORD);
+    await expect(formAlert(page)).toHaveText("Новый пароль совпадает с текущим");
+
+    const after = await db.user.findUniqueOrThrow({ where: { email } });
+    expect(after.passwordHash).toBe(hashBefore);
+    expect(after.sessionVersion).toBe(0);
+    await context.close();
+  });
+
+  test("подбор текущего пароля ограничен: на 6-й раз отказ даже с верным", async ({ browser }) => {
+    const email = await createTmpUser("change-limit");
+    const { context, page } = await loggedIn(browser, email, IP_A);
+    for (let i = 1; i <= LOGIN_RATE_LIMIT.limit; i += 1) {
+      const answer = page.waitForResponse((res) => res.request().method() === "POST" && res.url().includes("/profile"));
+      await fillChange(page, `${WRONG_PASSWORD}-${i}`, NEW_PASSWORD);
+      await answer;
+      await expect(formAlert(page)).toHaveText("Неверный текущий пароль");
+    }
+    await fillChange(page, PASSWORD, NEW_PASSWORD);
+    await expect(formAlert(page)).toHaveText("Слишком много попыток. Попробуйте позже.");
+    expect((await db.user.findUniqueOrThrow({ where: { email } })).sessionVersion).toBe(0);
+    await context.close();
+  });
+
+  test("сессия гаснет сразу, как только номер в базе вырос", async ({ browser }) => {
+    const email = await createTmpUser("change-version");
+    const { context, page } = await loggedIn(browser, email, IP_A);
+    expect(await hasSession(page)).toBe(true);
+    await db.user.update({ where: { email }, data: { sessionVersion: { increment: 1 } } });
+    expect(await hasSession(page)).toBe(false);
+    await context.close();
+  });
+});
+
 test.describe("требования к паролю", () => {
   async function openRegister(browser: Browser, email: string) {
     const context = await browser.newContext();

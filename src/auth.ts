@@ -1,3 +1,4 @@
+import { cache } from "react";
 import NextAuth, { CredentialsSignin } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
@@ -8,6 +9,7 @@ import {
   loginLimitEmailKey,
   loginLimitKey,
 } from "@/features/auth/lib/login-limit";
+import { isSessionVersionCurrent } from "@/features/auth/lib/session-version";
 import { loginSchema } from "@/features/auth/schemas";
 import { prisma } from "@/shared/db/prisma";
 import { checkRateLimit, resetRateLimit } from "@/shared/lib/rate-limit";
@@ -22,6 +24,18 @@ export class LoginBlockedError extends CredentialsSignin {
  * столько же времени, и по задержке ответа нельзя узнать, есть ли такой пользователь.
  */
 const NO_USER_PASSWORD_HASH = "$2b$12$N8wDbPCI/2DxKbBsP9oghORMEkCxNxqKcnAYWTiF9zNr7OI3koRtO";
+
+/**
+ * Текущий номер сессий пользователя. Страница проверяет вход по нескольку раз за один показ,
+ * cache оставляет на весь показ один запрос к базе. Вне показа страницы cache ничего не хранит.
+ */
+const currentSessionVersion = cache(async (userId: string) => {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { sessionVersion: true },
+  });
+  return user?.sessionVersion ?? null;
+});
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
@@ -65,6 +79,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           id: user.id,
           email: user.email,
           name: user.name,
+          sessionVersion: user.sessionVersion,
         };
       },
     }),
@@ -80,6 +95,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async jwt({ token, user }) {
       if (user?.id) {
         token.sub = user.id;
+        token.sessionVersion = user.sessionVersion ?? 0;
+        return token;
+      }
+      if (token.sub) {
+        const current = await currentSessionVersion(token.sub);
+        if (!isSessionVersionCurrent(token.sessionVersion, current)) {
+          return null;
+        }
       }
       return token;
     },

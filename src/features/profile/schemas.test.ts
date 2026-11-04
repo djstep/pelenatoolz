@@ -1,7 +1,42 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { profileAuditChanges, profileSchema } from "@/features/profile/schemas";
+import { changePasswordSchema, profileAuditChanges, profileSchema } from "@/features/profile/schemas";
 import { isValidPhone } from "@/shared/lib/phone";
+
+describe("смена пароля: форма", () => {
+  const firstIssue = (input: Record<string, string>) =>
+    changePasswordSchema.safeParse(input).error?.issues[0]?.message;
+
+  test("всё заполнено верно", () => {
+    const parsed = changePasswordSchema.safeParse({
+      currentPassword: "старый",
+      newPassword: "новый-длинный",
+      newPasswordRepeat: "новый-длинный",
+    });
+    assert.equal(parsed.success, true);
+  });
+
+  test("без текущего пароля — нельзя", () => {
+    assert.equal(
+      firstIssue({ currentPassword: "", newPassword: "новый", newPasswordRepeat: "новый" }),
+      "Введите текущий пароль",
+    );
+  });
+
+  test("повтор не совпал — нельзя", () => {
+    assert.equal(
+      firstIssue({ currentPassword: "старый", newPassword: "новый", newPasswordRepeat: "другой" }),
+      "Новый пароль и повтор не совпадают",
+    );
+  });
+
+  test("новый равен текущему — нельзя", () => {
+    assert.equal(
+      firstIssue({ currentPassword: "тот-же", newPassword: "тот-же", newPasswordRepeat: "тот-же" }),
+      "Новый пароль совпадает с текущим",
+    );
+  });
+});
 
 describe("телефон", () => {
   test("обычные записи номера проходят", () => {

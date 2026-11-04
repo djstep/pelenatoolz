@@ -221,7 +221,7 @@ export async function resetPasswordAction(
   await prisma.$transaction([
     prisma.user.update({
       where: { id: record.userId },
-      data: { passwordHash },
+      data: { passwordHash, sessionVersion: { increment: 1 } },
     }),
     prisma.passwordResetToken.update({
       where: { id: record.id },

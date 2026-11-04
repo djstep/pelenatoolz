@@ -15,6 +15,22 @@ export const profileSchema = z.object({
 
 export type ProfileInput = z.infer<typeof profileSchema>;
 
+/** Смена пароля: правила нового пароля проверяет `passwordProblem`, там нужна почта. */
+export const changePasswordSchema = z
+  .object({
+    currentPassword: z.string().min(1, "Введите текущий пароль").max(128, "Неверный текущий пароль"),
+    newPassword: z.string(),
+    newPasswordRepeat: z.string(),
+  })
+  .refine((data) => data.newPassword === data.newPasswordRepeat, {
+    message: "Новый пароль и повтор не совпадают",
+    path: ["newPasswordRepeat"],
+  })
+  .refine((data) => data.newPassword !== data.currentPassword, {
+    message: "Новый пароль совпадает с текущим",
+    path: ["newPassword"],
+  });
+
 /**
  * Что пишем в журнал об изменении профиля: имя — как есть, телефон и почта — только факт
  * изменения (персональные данные в журнал не попадают).

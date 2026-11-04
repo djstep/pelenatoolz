@@ -236,6 +236,8 @@ model User {
   email        String   @unique
   name         String
   passwordHash String
+  /// Растёт при смене и сбросе пароля: выданные раньше сессии перестают действовать.
+  sessionVersion Int @default(0)
   phone        String?
   /// Почта для Google (доступы к Диску); может отличаться от почты входа.
   googleEmail  String?
