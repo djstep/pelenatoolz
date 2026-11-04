@@ -4,8 +4,8 @@ import { seedDatabaseProblem } from "@/shared/db/seed-database-guard";
 
 const url = (host: string) => `postgresql://user:secret@${host}/neondb?sslmode=require`;
 
-const DEV = "ep-flat-lake-zadfsin3.c-2.eu-west-2.aws.neon.tech";
-const DEV_POOLER = "ep-flat-lake-zadfsin3-pooler.c-2.eu-west-2.aws.neon.tech";
+const DEV = "ep-floral-bread-zabr5sop.c-2.eu-west-2.aws.neon.tech";
+const DEV_POOLER = "ep-floral-bread-zabr5sop-pooler.c-2.eu-west-2.aws.neon.tech";
 const E2E_BRANCH = "ep-wispy-unit-za418ey3.c-2.eu-west-2.aws.neon.tech";
 
 describe("сид: только перечисленные тестовые базы", () => {
@@ -39,13 +39,13 @@ describe("сид: только перечисленные тестовые ба�
   test("имя базы из списка важно только как имя сервера", () => {
     const cases = [
       // в пароле, пути и параметрах
-      "postgresql://user:ep-flat-lake-zadfsin3@db.pelena.example.ru/neondb",
+      "postgresql://user:ep-floral-bread-zabr5sop@db.pelena.example.ru/neondb",
       `postgresql://user:secret@db.pelena.example.ru/${DEV}`,
       `postgresql://user:secret@db.pelena.example.ru/neondb?host=${DEV}`,
       // в чужом домене
       url(`${DEV}.evil.example`),
-      url("ep-flat-lake-zadfsin3.example.ru"),
-      url("ep-flat-lake-zadfsin3-other.c-2.eu-west-2.aws.neon.tech"),
+      url("ep-floral-bread-zabr5sop.example.ru"),
+      url("ep-floral-bread-zabr5sop-other.c-2.eu-west-2.aws.neon.tech"),
     ];
     for (const value of cases) {
       assert.notEqual(seedDatabaseProblem({ DATABASE_URL: value }), null, value);

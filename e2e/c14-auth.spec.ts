@@ -554,7 +554,7 @@ test.describe("политика обработки персональных да
 test.describe("скрипт владельца: сброс пароля", () => {
   const ROOT = process.cwd();
   const FAKE_PROD = "postgresql://user:secret@ep-steep-sound-fake.invalid/neondb";
-  const FAKE_DEV = "postgresql://user:secret@ep-flat-lake-fake.invalid/neondb";
+  const FAKE_DEV = "postgresql://user:secret@ep-floral-bread-fake.invalid/neondb";
 
   function runScript(args: string[], options: { cwd?: string; env?: Record<string, string> } = {}) {
     return spawnSync(
@@ -621,7 +621,7 @@ test.describe("скрипт владельца: сброс пароля", () => 
     const email = await createTmpUser("script-env");
     const result = runScript([email], { env: { DATABASE_URL: FAKE_PROD, DIRECT_URL: FAKE_PROD } });
     expect(result.status).toBe(0);
-    expect(result.stdout).toContain("База: ep-flat-lake");
+    expect(result.stdout).toContain("База: ep-floral-bread");
   });
 
   test("прод в .env без --prod: отказ, даже если в оболочке другая база", () => {
@@ -698,7 +698,7 @@ test.describe("скрипт владельца: сброс пароля", () => 
       withEnvFile(fakeProdEnv, (cwd) => {
         const result = runScript([email, "--env-file", path.join(ROOT, ".env")], { cwd });
         expect(result.status).toBe(0);
-        expect(result.stdout).toContain("База: ep-flat-lake");
+        expect(result.stdout).toContain("База: ep-floral-bread");
       });
       const after = await db.user.findUniqueOrThrow({ where: { email } });
       expect(after.passwordHash).not.toBe(before.passwordHash);

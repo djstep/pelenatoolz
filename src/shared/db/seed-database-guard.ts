@@ -5,7 +5,7 @@
  */
 export const SEED_DATABASE_ENDPOINTS = [
   // dev, он же база `npm run e2e`
-  "ep-flat-lake-zadfsin3",
+  "ep-floral-bread-zabr5sop",
   // отдельная e2e-ветка (`.env.old-e2e`)
   "ep-wispy-unit-za418ey3",
 ] as const;
