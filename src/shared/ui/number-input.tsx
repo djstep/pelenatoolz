@@ -178,7 +178,7 @@ export function NumberInput({
   return (
     <div
       className={cn(
-        "glass-input glass-number-input flex w-full items-stretch overflow-hidden rounded-xl",
+        "glass-input glass-number-input flex w-full items-stretch overflow-hidden rounded-lg",
         disabled && "pointer-events-none opacity-60",
         className,
       )}
@@ -231,7 +231,7 @@ export function NumberInput({
           onBlur?.(e);
         }}
         onKeyDown={handleKeyDown}
-        className="glass-number-field min-w-0 flex-1 bg-transparent px-2 py-2.5 text-center text-sm text-[var(--foreground)] outline-none placeholder:text-[var(--muted)]"
+        className="glass-number-field min-w-0 flex-1 bg-transparent px-2 py-[7px] text-center text-sm leading-5 text-[var(--foreground)] outline-none placeholder:text-[var(--muted)]"
       />
 
       <button

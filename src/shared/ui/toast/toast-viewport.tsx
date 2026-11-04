@@ -1,30 +1,30 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { type CSSProperties, useEffect, useState } from "react";
 import { cn } from "@/shared/lib/cn";
 import type { ToastRecord, ToastType } from "@/shared/ui/toast/types";
 
 const TYPE_STYLES: Record<
   ToastType,
-  { border: string; icon: string; label: string }
+  { tone: string; icon: string; label: string }
 > = {
   success: {
-    border: "border-l-emerald-400/80",
+    tone: "var(--tone-success-strong)",
     icon: "text-[var(--tone-success-strong)]",
     label: "Успешно",
   },
   error: {
-    border: "border-l-[var(--danger)]",
+    tone: "var(--danger)",
     icon: "text-[var(--danger)]",
     label: "Ошибка",
   },
   info: {
-    border: "border-l-[var(--accent)]",
+    tone: "var(--accent)",
     icon: "text-[var(--accent)]",
     label: "Информация",
   },
   warning: {
-    border: "border-l-amber-400",
+    tone: "var(--tone-warning-strong)",
     icon: "text-[var(--tone-warning-strong)]",
     label: "Внимание",
   },
@@ -120,10 +120,11 @@ function ToastCard({
       role={item.type === "error" ? "alert" : "status"}
       aria-live={item.type === "error" ? "assertive" : "polite"}
       className={cn(
-        "toast-item glass-card border border-[var(--border)] border-l-4 p-3 shadow-2xl",
-        style.border,
+        "toast-item glass-card p-3 shadow-lg",
         leaving && "toast-item--leaving",
       )}
+      // Цвет полосы прогресса по типу: .toast-progress-bar в globals.css.
+      style={{ "--toast-tone": style.tone } as CSSProperties}
     >
       <div className="flex items-start gap-3">
         <ToastIcon type={item.type} />

@@ -34,7 +34,7 @@ export function CloudOAuthNoticeLine({
       className={cn(
         "mb-4 rounded-xl border px-3 py-2 text-sm",
         notice.tone === "error"
-          ? "border-[rgba(251,113,133,0.35)] bg-[rgba(251,113,133,0.08)] text-[var(--danger)]"
+          ? "border-[var(--tone-danger-line)] bg-[var(--tone-danger-bg)] text-[var(--danger)]"
           : "border-[var(--border)] text-[var(--foreground)]",
       )}
     >

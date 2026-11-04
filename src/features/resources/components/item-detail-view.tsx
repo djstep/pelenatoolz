@@ -38,7 +38,7 @@ export function ItemDetailView({
         >
           ← {item.category.name}
         </Link>
-        <h1 className="font-display mt-2 text-2xl font-semibold">{item.name}</h1>
+        <h1 className="font-display mt-2 text-2xl font-bold tabular-nums">{item.name}</h1>
         {item.notes ? (
           <p className="mt-2 text-sm text-[var(--muted-fg)] whitespace-pre-wrap">
             {item.notes}

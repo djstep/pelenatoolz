@@ -81,7 +81,7 @@ export function ScreenplayActionSidebar({
               value={timingMode}
               onChange={onTimingModeChange}
               disabled={!canWrite || timingSaving}
-              className="screenplay-timing-mode-control flex-col gap-1.5"
+              className="screenplay-timing-mode-control w-full flex-col gap-1.5"
               options={(
                 Object.keys(timingModeOptionLabels) as TimingMode[]
               ).map((mode) => ({

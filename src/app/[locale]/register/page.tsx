@@ -17,10 +17,6 @@ export default async function RegisterPage({ params, searchParams }: Props) {
 
   return (
     <main className="relative mx-auto flex min-h-screen w-full max-w-md flex-col justify-center px-4 py-12">
-      <div
-        aria-hidden
-        className="pointer-events-none absolute -top-24 left-1/2 h-64 w-64 -translate-x-1/2 rounded-full bg-[var(--accent-2)]/25 blur-[80px]"
-      />
       <div className="mb-8 text-center">
         <Link href={`/${locale}`} className="inline-flex justify-center">
           <AppBrand size="lg" />
@@ -28,7 +24,7 @@ export default async function RegisterPage({ params, searchParams }: Props) {
         <p className="mt-2 text-sm text-[var(--muted-fg)]">{tApp("tagline")}</p>
       </div>
       <Card className="glass-strong">
-        <h1 className="mb-6 font-display text-2xl font-semibold">
+        <h1 className="mb-6 font-display text-[27px] font-bold leading-tight">
           {t("registerTitle")}
         </h1>
         <RegisterForm callbackUrl={callbackUrl} locale={locale} />

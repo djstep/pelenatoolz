@@ -23,7 +23,7 @@ export default async function NewProjectPage({ params }: Props) {
         >
           ← {tCommon("back")}
         </Link>
-        <h1 className="mt-4 mb-6 font-display text-3xl font-semibold">
+        <h1 className="mt-4 mb-6 font-display text-[27px] font-bold leading-tight">
           {t("create")}
         </h1>
         <Card>

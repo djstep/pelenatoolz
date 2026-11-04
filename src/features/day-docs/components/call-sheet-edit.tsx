@@ -517,7 +517,7 @@ export function CallSheetEditor({
                         }
                         placeholder="00:00"
                         className={cn(
-                          manual && "border-amber-400/50 bg-amber-500/10",
+                          manual && "border-[var(--dirty)] bg-[var(--tone-warning-bg)]",
                         )}
                         title={manual && computed ? `Расчётное: ${computed}` : undefined}
                       />
@@ -667,7 +667,7 @@ export function CallSheetEditor({
                         }
                         placeholder="00:00"
                         className={cn(
-                          manual && "border-amber-400/50 bg-amber-500/10",
+                          manual && "border-[var(--dirty)] bg-[var(--tone-warning-bg)]",
                         )}
                         title={manual && computed ? `Расчётное: ${computed}` : undefined}
                       />
@@ -806,7 +806,7 @@ export function CallSheetEditor({
                           )
                         }
                         className={cn(
-                          manual && "border-amber-400/50 bg-amber-500/10",
+                          manual && "border-[var(--dirty)] bg-[var(--tone-warning-bg)]",
                         )}
                         title={manual && computed ? `Расчётное: ${computed}` : undefined}
                       />

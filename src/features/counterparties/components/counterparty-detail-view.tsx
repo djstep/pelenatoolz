@@ -98,7 +98,7 @@ export function CounterpartyDetailView({
           ← Справочник
         </Link>
         <div>
-          <h1 className="font-display text-xl font-semibold">
+          <h1 className="font-display text-[27px] font-bold leading-tight">
             {counterparty.name}
           </h1>
           <p className="text-sm text-[var(--muted-fg)]">
@@ -108,7 +108,7 @@ export function CounterpartyDetailView({
         </div>
       </header>
 
-      <dl className="grid gap-3 rounded-2xl border border-[var(--border)] bg-[var(--panel-solid)] p-4 text-sm sm:grid-cols-2">
+      <dl className="grid gap-3 rounded-xl border border-[var(--border)] bg-[var(--panel-solid)] p-4 text-sm sm:grid-cols-2">
         <div>
           <dt className="text-xs text-[var(--muted-fg)]">Контакты</dt>
           <dd>{counterparty.contacts || "—"}</dd>
@@ -123,7 +123,7 @@ export function CounterpartyDetailView({
         <>
           <section className="space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className="font-display text-lg font-semibold">Договоры</h2>
+              <h2 className="font-display text-base font-bold">Договоры</h2>
               <div className="flex gap-2">
                 <Link
                   href={`/${locale}/projects/${projectId}/counterparties/contracts?counterpartyId=${counterparty.id}`}
@@ -147,7 +147,7 @@ export function CounterpartyDetailView({
                 ) : null}
               </div>
             </div>
-            <ul className="divide-y divide-[var(--border)]/60 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--panel-solid)]">
+            <ul className="divide-y divide-[var(--border)]/60 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--panel-solid)]">
               {contracts.map((c) => (
                 <li key={c.id}>
                   <Link
@@ -177,7 +177,7 @@ export function CounterpartyDetailView({
 
           <section className="space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className="font-display text-lg font-semibold">Акты</h2>
+              <h2 className="font-display text-base font-bold">Акты</h2>
               <Link
                 href={`/${locale}/projects/${projectId}/counterparties/acts?counterpartyId=${counterparty.id}`}
                 className="text-sm text-[var(--accent)] hover:underline"

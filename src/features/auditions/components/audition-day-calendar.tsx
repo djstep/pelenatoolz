@@ -50,7 +50,7 @@ function DaySlotCell({
       ref={setNodeRef}
       className={cn(
         "min-h-[7.5rem] border-b border-[var(--border)]/60 p-2",
-        isOver && "bg-[var(--accent)]/15",
+        isOver && "bg-[var(--accent-soft)]",
       )}
     >
       <div className="flex flex-wrap gap-2">

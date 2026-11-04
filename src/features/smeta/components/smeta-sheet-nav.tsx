@@ -69,7 +69,7 @@ export function SmetaSheetNavigator({
 
   if (collapsed) {
     return (
-      <div className="flex w-10 shrink-0 flex-col items-center gap-2 border-r border-[var(--border)] bg-[var(--panel-solid)] py-2">
+      <div className="flex w-10 shrink-0 flex-col items-center gap-2 border-r border-[var(--border)] bg-[var(--background)] py-2">
         {isFullscreen && onExitFullscreen ? (
           <button
             type="button"
@@ -101,7 +101,7 @@ export function SmetaSheetNavigator({
   }
 
   return (
-    <aside className="flex w-64 shrink-0 flex-col border-r border-[var(--border)] bg-[var(--panel-solid)] text-[var(--foreground)]">
+    <aside className="flex w-64 shrink-0 flex-col border-r border-[var(--border)] bg-[var(--background)] text-[var(--foreground)]">
       {isFullscreen && onExitFullscreen ? (
         <div className="border-b border-[var(--border)] px-3 py-2">
           <Button
@@ -126,7 +126,7 @@ export function SmetaSheetNavigator({
 
       <div className="flex items-center justify-between gap-2 border-b border-[var(--border)] px-3 py-2">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-[var(--foreground)]">
+          <p className="text-xs font-semibold text-[var(--muted-fg)]">
             Листы
           </p>
           <p className="text-[11px] text-[var(--foreground)]/70">
@@ -170,10 +170,10 @@ export function SmetaSheetNavigator({
                     type="button"
                     onClick={() => onSelectSheet(sheet.id)}
                     className={cn(
-                      "min-w-0 flex-1 rounded-lg px-2 py-1.5 text-left text-sm transition-colors",
+                      "min-w-0 flex-1 rounded-lg border px-2 py-1.5 text-left text-sm transition-colors",
                       active
-                        ? "glass-nav-active"
-                        : "text-[var(--foreground)] hover:bg-[var(--nav-hover-bg)]",
+                        ? "border-[var(--border)] bg-[var(--surface)] font-semibold shadow-[var(--glass-shadow)]"
+                        : "border-transparent text-[var(--foreground)] hover:bg-[var(--nav-hover-bg)]",
                     )}
                     title={sheet.name}
                   >
@@ -185,7 +185,7 @@ export function SmetaSheetNavigator({
                       ) : null}
                       {sheet.name}
                       {sheet.id === mainSheetId ? (
-                        <span className="ml-1.5 text-xs text-[var(--muted-fg)]">основной</span>
+                        <span className="ml-1.5 text-xs font-normal text-[var(--muted-fg)]">основной</span>
                       ) : null}
                     </span>
                   </button>
@@ -196,8 +196,8 @@ export function SmetaSheetNavigator({
                     className={cn(
                       "shrink-0 rounded-lg px-1.5 text-sm transition-colors",
                       sheet.pinned
-                        ? "text-[var(--tone-warning-strong)] hover:bg-amber-500/10"
-                        : "text-[var(--foreground)]/55 hover:bg-[var(--nav-hover-bg)] hover:text-[var(--foreground)]",
+                        ? "text-[var(--tone-warning-strong)] hover:bg-[var(--tone-warning-bg)]"
+                        : "text-[var(--muted-fg)] hover:bg-[var(--nav-hover-bg)] hover:text-[var(--foreground)]",
                       !canWrite && "opacity-40",
                     )}
                     title={
@@ -222,7 +222,7 @@ export function SmetaSheetNavigator({
       </div>
 
       <div className="space-y-2 border-t border-[var(--border)] px-3 py-3">
-        <p className="text-xs font-semibold uppercase tracking-wide text-[var(--foreground)]">
+        <p className="text-xs font-semibold text-[var(--muted-fg)]">
           Закрепление
         </p>
         <p className="text-[11px] leading-snug text-[var(--foreground)]/70">

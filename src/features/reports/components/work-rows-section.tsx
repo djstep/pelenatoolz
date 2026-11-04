@@ -239,7 +239,7 @@ function WorkRowEditor({
               className={cn(
                 "inline-flex h-8 w-8 items-center justify-center rounded-lg border border-transparent",
                 "hover:border-[var(--border)] hover:bg-[rgb(var(--tint-rgb)/0.05)]",
-                hasExtras && "border-[var(--accent)]/40 bg-[var(--accent)]/10",
+                hasExtras && "border-[var(--accent)]/40 bg-[var(--accent-soft)]",
               )}
               title={
                 hasExtras
@@ -341,7 +341,7 @@ export function WorkRowsSection({
   const colCount = showMileageColumn ? 9 : 8;
 
   return (
-    <section className="rounded-2xl border border-[var(--border)] bg-[var(--panel-solid)] p-5">
+    <section className="rounded-xl border border-[var(--border)] bg-[var(--panel-solid)] p-5">
       <h3 className="mb-1 font-semibold">
         Фактическое время работы актёров и ресурсов
       </h3>

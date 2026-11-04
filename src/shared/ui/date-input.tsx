@@ -148,7 +148,7 @@ export function DateInput({
         aria-expanded={open}
         aria-controls={panelId}
         className={cn(
-          "glass-input glass-select-trigger w-full rounded-xl text-sm",
+          "glass-input glass-select-trigger w-full rounded-lg text-sm",
           disabled && "cursor-not-allowed opacity-60",
         )}
         onClick={() => {

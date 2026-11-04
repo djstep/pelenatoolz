@@ -211,7 +211,7 @@ function BudgetDriveModal({
           <>
             {state.unavailable ? (
               <p
-                className="rounded-lg border border-amber-500/30 bg-[var(--tone-warning-bg)] px-3 py-2 text-[var(--tone-warning-soft)]"
+                className="rounded-lg border border-[var(--tone-warning-line)] bg-[var(--tone-warning-bg)] px-3 py-2 text-[var(--tone-warning-soft)]"
                 data-testid="budget-drive-project-unavailable"
               >
                 {state.unavailable}{" "}
@@ -259,7 +259,7 @@ function BudgetDriveModal({
                 ) : null}
                 {state.keeperHint ? (
                   <p
-                    className="rounded-lg border border-amber-500/30 bg-[var(--tone-warning-bg)] px-3 py-2 text-[var(--tone-warning-soft)]"
+                    className="rounded-lg border border-[var(--tone-warning-line)] bg-[var(--tone-warning-bg)] px-3 py-2 text-[var(--tone-warning-soft)]"
                     data-testid="budget-drive-keeper-hint"
                   >
                     {state.keeperHint}

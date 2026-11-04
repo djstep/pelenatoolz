@@ -83,7 +83,7 @@ export function CallSheetStatusPanel({
   return (
     <section
       aria-label="Статус вызывного"
-      className="space-y-2 rounded-2xl border border-[var(--border)] bg-[var(--panel-solid)] px-4 py-3"
+      className="space-y-2 rounded-xl border border-[var(--border)] bg-[var(--panel-solid)] px-4 py-3"
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2 text-sm">
@@ -121,7 +121,7 @@ export function CallSheetStatusPanel({
       {data.status === "APPROVED" && data.dataChanged ? (
         <p
           role="status"
-          className="rounded-lg border border-amber-500/30 bg-[var(--tone-warning-bg)] px-3 py-2 text-sm text-[var(--tone-warning-soft)]"
+          className="rounded-lg border border-[var(--tone-warning-line)] bg-[var(--tone-warning-bg)] px-3 py-2 text-sm text-[var(--tone-warning-soft)]"
         >
           Данные дня изменились после утверждения версии {data.version}
         </p>

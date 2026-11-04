@@ -1,19 +1,31 @@
 "use client";
 
+import { Menu } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { cn } from "@/shared/lib/cn";
 
 /**
- * Боковая панель проекта. От `lg` — колонка слева, как раньше. Уже — свёрнута: строка
- * с названием проекта и кнопкой «Меню», первым экраном идёт содержимое страницы; по кнопке
- * панель открывается поверх страницы и закрывается переходом, «Закрыть» или Esc.
+ * Боковое меню проекта — тёмное в обеих темах (`--sidebar-*`). От `lg` — колонка слева на всю
+ * высоту: логотип, блок проекта, разделы, внизу пользователь и тема (шапки в проекте нет).
+ * Уже `lg` — свёрнуто: сверху полоса с логотипом, темой и «Меню аккаунта», под ней — название
+ * проекта и кнопка «Меню»; первым экраном идёт содержимое страницы. По «Меню» панель
+ * открывается поверх страницы и закрывается переходом, «Закрыть» или Esc.
  */
 export function ProjectSidebar({
   projectName,
+  brand,
+  mobileAccount,
+  footer,
   children,
 }: {
   projectName: string;
+  /** Логотип со ссылкой на список проектов. */
+  brand: React.ReactNode;
+  /** Тема и «Меню аккаунта» в полосе телефона. */
+  mobileAccount: React.ReactNode;
+  /** Низ колонки на компьютере: пользователь и тема. */
+  footer: React.ReactNode;
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -34,46 +46,50 @@ export function ProjectSidebar({
   }, [open]);
 
   return (
-    <aside className="w-full shrink-0 border-b border-[var(--border)] lg:w-60 lg:border-b-0 lg:border-r">
-      <div className="project-sidebar flex items-center justify-between gap-3 px-4 py-2 lg:hidden">
-        <span className="min-w-0 truncate font-display text-base font-semibold">{projectName}</span>
-        <button
-          type="button"
-          aria-expanded={open}
-          aria-controls="project-menu"
-          onClick={() => setOpen((v) => !v)}
-          className="inline-flex h-9 shrink-0 items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm font-medium transition hover:bg-[var(--surface-2)]"
-        >
-          <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4" aria-hidden>
-            <path
-              fillRule="evenodd"
-              d="M2 4.75A.75.75 0 012.75 4h14.5a.75.75 0 010 1.5H2.75A.75.75 0 012 4.75zM2 10a.75.75 0 01.75-.75h14.5a.75.75 0 010 1.5H2.75A.75.75 0 012 10zm0 5.25a.75.75 0 01.75-.75h14.5a.75.75 0 010 1.5H2.75a.75.75 0 01-.75-.75z"
-              clipRule="evenodd"
-            />
-          </svg>
-          Меню
-        </button>
-      </div>
+    <aside className="project-sidebar brand-on-dark flex w-full shrink-0 flex-col text-[var(--sidebar-fg)] lg:h-full lg:w-[248px] lg:flex-col lg:border-r lg:border-[var(--sidebar-line)]">
       <div
         id="project-menu"
         className={cn(
-          "lg:static lg:block lg:h-full lg:bg-transparent",
-          open ? "fixed inset-x-0 bottom-0 top-14 z-40 overflow-y-auto bg-[var(--background)]" : "hidden",
+          "lg:static lg:flex lg:min-h-0 lg:flex-1 lg:flex-col",
+          open ? "project-sidebar fixed inset-0 z-40 flex flex-col overflow-y-auto" : "hidden",
         )}
       >
-        <div className="project-sidebar space-y-4 px-3 py-5 lg:h-full lg:max-h-none lg:overflow-y-auto lg:backdrop-blur-md">
+        <div className="hidden px-4 pb-2 pt-5 lg:block">{brand}</div>
+        <div className="flex-1 space-y-3 px-3 py-4 lg:min-h-0 lg:overflow-y-auto lg:pt-2">
           {open ? (
             <div className="flex justify-end lg:hidden">
               <button
                 type="button"
                 onClick={() => setOpen(false)}
-                className="rounded-lg px-3 py-1.5 text-sm text-[var(--muted-fg)] transition hover:bg-[var(--nav-hover-bg)] hover:text-[var(--foreground)]"
+                className="rounded-lg px-3 py-1.5 text-sm text-[var(--sidebar-fg-2)] transition-colors hover:bg-[var(--sidebar-hover)] hover:text-[var(--sidebar-fg)]"
               >
                 Закрыть
               </button>
             </div>
           ) : null}
           {children}
+        </div>
+        <div className="hidden border-t border-[var(--sidebar-line)] px-3 py-2.5 lg:block">{footer}</div>
+      </div>
+      {/* Телефон: полосы сверху. В разметке — после меню (на экране — первыми, order-first):
+          первый текст страницы на компьютере — видимый блок проекта, а не скрытая полоса. */}
+      <div className="order-first lg:hidden">
+        <div className="flex h-13 items-center justify-between gap-3 border-b border-[var(--sidebar-line)] px-4 lg:hidden">
+          {brand}
+          {mobileAccount}
+        </div>
+        <div className="flex items-center justify-between gap-3 px-4 py-2 lg:hidden">
+          <span className="min-w-0 truncate text-base font-bold">{projectName}</span>
+          <button
+            type="button"
+            aria-expanded={open}
+            aria-controls="project-menu"
+            onClick={() => setOpen((v) => !v)}
+            className="inline-flex h-9 shrink-0 items-center gap-2 rounded-lg border border-[var(--sidebar-line)] px-3 text-sm font-semibold text-[var(--sidebar-fg)] transition-colors hover:bg-[var(--sidebar-hover)]"
+          >
+            <Menu className="h-4 w-4" strokeWidth={1.75} aria-hidden />
+            Меню
+          </button>
         </div>
       </div>
     </aside>

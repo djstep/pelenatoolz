@@ -435,7 +435,7 @@ export function ContractsWorkspace({
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-2xl border border-[var(--border)]">
+      <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
         <table className="w-full min-w-[900px] border-collapse text-sm">
           <thead>
             <tr className="border-b border-[var(--border)] bg-[var(--panel-solid)] text-left">

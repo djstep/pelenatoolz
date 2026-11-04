@@ -50,7 +50,7 @@ export function DayDocsIndex({
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="font-display text-2xl font-semibold">{title}</h2>
+          <h2 className="font-display text-[27px] font-bold leading-tight">{title}</h2>
           <p className="mt-1 text-sm text-[var(--muted-fg)]">
             {kind === "call-sheets"
               ? "Только рабочие смены. Выходные, отсыпные и подготовительные дни — в КПП без вызывного."
@@ -70,8 +70,8 @@ export function DayDocsIndex({
             className={cn(
               "rounded-lg border px-3 py-1.5 transition-colors",
               awaitingApproval.active
-                ? "border-[#eab308]/60 bg-[#eab308]/15 font-medium"
-                : "border-[var(--border)] hover:border-[#eab308]/60",
+                ? "border-[var(--tone-warning-line)] bg-[var(--tone-warning-bg)] font-medium"
+                : "border-[var(--border)] hover:border-[var(--tone-warning-line)]",
             )}
           >
             Ждут утверждения: {awaitingApproval.count}
@@ -91,7 +91,7 @@ export function DayDocsIndex({
             : "Съёмочных дней пока нет. Создайте их в КПП."}
         </p>
       ) : (
-        <div className="overflow-x-auto rounded-2xl border border-[var(--border)] bg-[var(--panel-solid)]">
+        <div className="overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--panel-solid)]">
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-[var(--border)] text-[var(--muted-fg)]">

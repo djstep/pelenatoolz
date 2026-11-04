@@ -465,7 +465,7 @@ export function FinanceWorkspace({
           Операций пока нет. Добавьте приход или расход.
         </p>
       ) : (
-        <div className="overflow-x-auto rounded-2xl border border-[var(--border)] bg-[var(--panel-solid)]">
+        <div className="overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--panel-solid)]">
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-[var(--border)] text-[var(--muted-fg)]">
@@ -489,8 +489,8 @@ export function FinanceWorkspace({
                       className={cn(
                         "rounded-md border px-2 py-0.5 text-xs",
                         op.type === "INCOME"
-                          ? "border-emerald-500/30 text-[var(--tone-success)]"
-                          : "border-red-500/30 text-[var(--tone-danger)]",
+                          ? "border-[var(--tone-success-line)] text-[var(--tone-success)]"
+                          : "border-[var(--tone-danger-line)] text-[var(--tone-danger)]",
                       )}
                     >
                       {financeOpTypeLabels[op.type]}

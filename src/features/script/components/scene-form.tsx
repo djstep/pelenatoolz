@@ -43,7 +43,7 @@ export function SceneForm({
       action={action}
       className="glass-panel space-y-4 p-5"
     >
-      <h3 className="font-display text-lg font-semibold">Добавить сцену</h3>
+      <h3 className="font-display text-base font-bold">Добавить сцену</h3>
 
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
@@ -168,7 +168,7 @@ export function SceneForm({
         <p className="text-sm text-[var(--danger)]">{state.error}</p>
       ) : null}
       {state.success ? (
-        <p className="text-sm text-green-700">{state.success}</p>
+        <p className="text-sm text-[var(--tone-success)]">{state.success}</p>
       ) : null}
       <Button type="submit" disabled={pending}>
         {pending ? "…" : "Добавить сцену"}

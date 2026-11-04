@@ -48,6 +48,7 @@ import {
 } from "@/shared/i18n/domain-labels";
 import { useTableLayout, type ColumnDef } from "@/shared/hooks/use-table-layout";
 import { Badge } from "@/shared/ui/badge";
+import { SceneNumber } from "@/shared/ui/scene-number";
 import { Button } from "@/shared/ui/button";
 import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
 import { Input } from "@/shared/ui/input";
@@ -488,6 +489,8 @@ export function LibrettoWorkspace({
                         ) : (
                           getStatusDateLabel(scene)
                         )
+                      ) : col.id === "number" ? (
+                        <SceneNumber>{cellValue(scene, col.id, projectType)}</SceneNumber>
                       ) : (
                         cellValue(scene, col.id, projectType)
                       )}

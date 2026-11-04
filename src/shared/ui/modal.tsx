@@ -118,7 +118,7 @@ export function Modal({
     <div className="fixed inset-0 z-[100] flex items-end justify-center p-0 sm:items-center sm:p-4">
       <button
         type="button"
-        className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+        className="absolute inset-0 bg-black/50"
         aria-label="Закрыть"
         onClick={requestClose}
       />
@@ -134,7 +134,7 @@ export function Modal({
         onClickCapture={guardUnsaved ? onClickCapture : undefined}
       >
         <div className="flex items-center justify-between border-b border-[var(--border)] px-5 py-4">
-          <h2 id={titleId} className="font-display text-lg font-semibold">{title}</h2>
+          <h2 id={titleId} className="font-display text-[17px] font-bold">{title}</h2>
           <Button type="button" variant="ghost" onClick={requestClose} aria-label="Закрыть">
             ×
           </Button>

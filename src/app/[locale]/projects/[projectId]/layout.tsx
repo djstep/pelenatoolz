@@ -1,4 +1,3 @@
-import { AppHeader } from "@/features/auth/components/app-header";
 import { awaitingApprovalCount } from "@/features/call-sheets/lib/awaiting-approval";
 import { countCallSheetsAwaitingApproval } from "@/features/call-sheets/queries";
 import { ProjectDriveAlertBanner } from "@/features/cloud/components/project-drive-alert";
@@ -36,22 +35,20 @@ export default async function ProjectLayout({ children, params }: Props) {
   );
 
   return (
-    <>
-      <AppHeader locale={locale} />
-      <ProjectShell
-        locale={locale}
-        project={ctx.project}
-        role={ctx.role}
-        navGroups={navGroups}
-      >
-        {driveAlert ? (
-          <ProjectDriveAlertBanner
-            alert={driveAlert}
-            settingsHref={`/${locale}/projects/${projectId}/settings`}
-          />
-        ) : null}
-        {children}
-      </ProjectShell>
-    </>
+    // Шапки в проекте нет: пользователь, тема и выход — в боковом меню (ProjectShell).
+    <ProjectShell
+      locale={locale}
+      project={ctx.project}
+      role={ctx.role}
+      navGroups={navGroups}
+    >
+      {driveAlert ? (
+        <ProjectDriveAlertBanner
+          alert={driveAlert}
+          settingsHref={`/${locale}/projects/${projectId}/settings`}
+        />
+      ) : null}
+      {children}
+    </ProjectShell>
   );
 }

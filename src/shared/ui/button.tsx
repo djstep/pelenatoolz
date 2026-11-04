@@ -7,9 +7,10 @@ const variants: Record<Variant, string> = {
   primary: "glass-btn-primary",
   secondary: "glass-btn-secondary",
   ghost:
-    "text-[var(--foreground)] hover:bg-[rgb(var(--tint-rgb)/0.08)] border border-transparent hover:border-[var(--border)]",
+    "text-[var(--foreground)] border border-transparent hover:bg-[rgb(var(--tint-rgb)/0.06)]",
+  // Опасная: текст --danger и рамка в тон, без заливки.
   danger:
-    "bg-[rgba(251,113,133,0.1)] text-[var(--danger)] border border-[rgba(251,113,133,0.35)] hover:bg-[rgba(251,113,133,0.18)] backdrop-blur-md",
+    "text-[var(--danger)] border border-[color-mix(in_srgb,var(--danger)_45%,transparent)] hover:bg-[color-mix(in_srgb,var(--danger)_8%,transparent)]",
 };
 
 export function Button({
@@ -20,7 +21,8 @@ export function Button({
   return (
     <button
       className={cn(
-        "inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-all duration-200 disabled:opacity-50 disabled:pointer-events-none",
+        // Высота 36 px: строка 20 + отступы 7 + рамка 1 (в тулбарах уменьшают через className).
+        "inline-flex items-center justify-center gap-2 rounded-lg px-4 py-[7px] text-sm leading-5 font-semibold transition-colors duration-150 disabled:opacity-50 disabled:pointer-events-none",
         variants[variant],
         className,
       )}

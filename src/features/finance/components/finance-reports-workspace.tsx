@@ -103,7 +103,7 @@ export function CashFlowReportView({
 
       <form
         method="get"
-        className="grid gap-3 rounded-2xl border border-[var(--border)] bg-[var(--panel-solid)] p-4 sm:grid-cols-2 lg:grid-cols-4"
+        className="grid gap-3 rounded-xl border border-[var(--border)] bg-[var(--panel-solid)] p-4 sm:grid-cols-2 lg:grid-cols-4"
       >
         <input type="hidden" name="view" value="cash-flow" />
         <div>
@@ -213,7 +213,7 @@ export function CashFlowReportView({
           Нет платежей за выбранный период.
         </p>
       ) : (
-        <div className="overflow-x-auto rounded-2xl border border-[var(--border)] bg-[var(--panel-solid)]">
+        <div className="overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--panel-solid)]">
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-[var(--border)] text-[var(--muted-fg)]">

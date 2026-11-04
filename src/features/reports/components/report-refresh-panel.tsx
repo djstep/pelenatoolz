@@ -32,7 +32,7 @@ export function ReportCreatePanel({
   const [pending, start] = useTransition();
 
   return (
-    <section className="rounded-2xl border border-[var(--border)] bg-[var(--panel-solid)] p-5">
+    <section className="rounded-xl border border-[var(--border)] bg-[var(--panel-solid)] p-5">
       <h3 className="font-semibold">Отчёт ещё не создан</h3>
       {canEdit ? (
         <>
@@ -250,7 +250,7 @@ export function ReportStalePanel({
   ].filter(Boolean);
 
   return (
-    <section className="rounded-2xl border border-[var(--tone-warning)] bg-[var(--tone-warning-bg)] p-5 print:hidden">
+    <section className="rounded-xl border border-[var(--tone-warning)] bg-[var(--tone-warning-bg)] p-5 print:hidden">
       <h3 className="font-semibold text-[var(--tone-warning)]">Отчёт устарел, обновить?</h3>
       <p className="mt-1 text-sm text-[var(--muted-fg)]">
         В КПП, вызывном или карточках есть изменения, которых нет в отчёте. Пока отчёт не
@@ -311,7 +311,7 @@ export function ReportRatesNotice({
         Ставки в карточках отличаются ({count}) {open ? "▴" : "▾"}
       </button>
       {open ? (
-        <div className="mt-2 rounded-2xl border border-[var(--border)] bg-[var(--panel-solid)] p-4">
+        <div className="mt-2 rounded-xl border border-[var(--border)] bg-[var(--panel-solid)] p-4">
           <RateChanges
             staleness={staleness}
             canEdit={canEdit}

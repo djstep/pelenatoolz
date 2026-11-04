@@ -1,23 +1,11 @@
 import type { Metadata } from "next";
-import { IBM_Plex_Sans, Sora } from "next/font/google";
+import { MedeoSans } from "medeo-font/sans";
 import { APP_BRAND } from "@/shared/brand";
 import { ThemeProvider } from "@/shared/theme/theme-provider";
 import { ToastProvider } from "@/shared/ui/toast";
 import { ConfirmProvider } from "@/shared/ui/confirm/confirm-provider";
 import { UnsavedChangesProvider } from "@/shared/ui/unsaved/unsaved-changes-provider";
 import "./globals.css";
-
-const body = IBM_Plex_Sans({
-  variable: "--font-body",
-  subsets: ["latin", "cyrillic"],
-  weight: ["400", "500", "600", "700"],
-});
-
-const display = Sora({
-  variable: "--font-display",
-  subsets: ["latin"],
-  weight: ["500", "600", "700"],
-});
 
 export const metadata: Metadata = {
   title: APP_BRAND,
@@ -32,7 +20,7 @@ export default function RootLayout({
   return (
     <html
       lang="ru"
-      className={`${body.variable} ${display.variable} h-full`}
+      className={`${MedeoSans.variable} h-full`}
       data-theme="dark"
       suppressHydrationWarning
     >

@@ -20,7 +20,7 @@ export default async function CharactersPage({ params }: Props) {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="font-display text-2xl font-semibold">Персонажи</h2>
+        <h2 className="font-display text-[27px] font-bold leading-tight">Персонажи</h2>
         <p className="mt-1 text-sm text-[var(--muted-fg)]">
           Роли по сценарию и утверждённый каст. Подбор кандидатов — в разделе Кастинг.
         </p>

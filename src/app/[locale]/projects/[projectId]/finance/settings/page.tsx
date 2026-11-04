@@ -27,7 +27,7 @@ export default async function FinanceSettingsPage({ params }: Props) {
   return (
     <div className="space-y-10">
       <div>
-        <h2 className="font-display text-2xl font-semibold">
+        <h2 className="font-display text-[27px] font-bold leading-tight">
           Финансы · Настройки
         </h2>
         <p className="mt-1 text-sm text-[var(--muted-fg)]">

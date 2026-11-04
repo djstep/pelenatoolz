@@ -34,7 +34,7 @@ export default async function ScreenplaySyncPage({ params }: Props) {
         >
           ← К версии
         </Link>
-        <h2 className="font-display text-2xl font-semibold">Обновить либретто из версии</h2>
+        <h2 className="font-display text-[27px] font-bold leading-tight">Обновить либретто из версии</h2>
         <p className="mt-1 text-sm text-[var(--muted-fg)]">
           Сцены версии сопоставляются со сценами либретто. Текст версии не меняется; меняются
           сцены, персонажи, локации и связи в либретто — только после «Обновить либретто».

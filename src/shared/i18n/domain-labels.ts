@@ -51,11 +51,11 @@ export const sceneStatusLabels: Record<SceneStatus, string> = {
 };
 
 export const sceneStatusColors: Record<SceneStatus, string> = {
-  SHOT: "bg-green-600/20 text-[var(--tone-success)] border-green-500/30",
-  RESHOOT_REQUIRED: "bg-yellow-600/20 text-[var(--tone-warning-soft)] border-yellow-500/30",
-  PLANNING: "bg-zinc-500/20 text-[var(--tone-neutral)] border-zinc-400/30",
-  OFF_PLAN: "bg-[var(--badge-muted-bg)] text-[var(--muted-fg)] border-zinc-600/30",
-  NOT_SHOT: "bg-red-600/20 text-[var(--tone-danger)] border-red-500/30",
+  SHOT: "bg-[var(--tone-success-bg)] text-[var(--tone-success)] border-[var(--tone-success-line)]",
+  RESHOOT_REQUIRED: "bg-[var(--tone-warning-bg)] text-[var(--tone-warning-soft)] border-[var(--tone-warning-line)]",
+  PLANNING: "bg-[var(--glass-badge-bg)] text-[var(--tone-neutral)] border-[var(--border)]",
+  OFF_PLAN: "bg-[var(--badge-muted-bg)] text-[var(--muted-fg)] border-[var(--border)]",
+  NOT_SHOT: "bg-[var(--tone-danger-bg)] text-[var(--tone-danger)] border-[var(--tone-danger-line)]",
 };
 
 export const sceneStatusRowColors: Record<SceneStatus, string> = {

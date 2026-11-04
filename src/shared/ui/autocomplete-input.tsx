@@ -147,7 +147,7 @@ export function AutocompleteInput({
         aria-controls={listboxId}
         aria-autocomplete="list"
         className={cn(
-          "glass-input w-full rounded-xl px-3 py-2.5 text-sm text-[var(--foreground)] placeholder:text-[var(--muted)]",
+          "glass-input w-full rounded-lg px-3 py-[7px] text-sm leading-5 text-[var(--foreground)] placeholder:text-[var(--muted)]",
           disabled && "cursor-not-allowed opacity-60",
         )}
         onChange={(event) => handleInputChange(event.target.value)}
@@ -186,7 +186,7 @@ export function AutocompleteInput({
               aria-selected={index === activeIndex}
               className={cn(
                 "glass-dropdown-item w-full text-left",
-                index === activeIndex && "bg-[var(--accent)]/10",
+                index === activeIndex && "bg-[var(--accent-soft)]",
               )}
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => commitOption(option)}

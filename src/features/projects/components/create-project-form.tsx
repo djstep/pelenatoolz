@@ -77,7 +77,7 @@ export function CreateProjectForm() {
               className={cn(
                 "rounded-lg border px-4 py-2 text-sm transition",
                 projectType === type
-                  ? "border-[var(--accent)] bg-[var(--accent)]/20 font-medium text-[var(--foreground)]"
+                  ? "border-[var(--accent)] bg-[var(--accent-soft)] font-medium text-[var(--foreground)]"
                   : "border-[var(--border)] bg-[rgb(var(--tint-rgb)/0.05)] hover:bg-[rgb(var(--tint-rgb)/0.1)]",
               )}
             >

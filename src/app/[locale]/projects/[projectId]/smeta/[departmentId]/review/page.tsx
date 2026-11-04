@@ -47,7 +47,7 @@ export default async function BudgetReviewPage({ params }: Props) {
         ← Смета цеха
       </Link>
       <div className="flex flex-wrap items-center gap-3">
-        <h2 className="font-display text-2xl font-semibold">Сравнение — {department.name}</h2>
+        <h2 className="font-display text-[27px] font-bold leading-tight">Сравнение — {department.name}</h2>
         <SmetaStatusBadge
           status={info.status}
           changedAfterSubmit={changedAfterSubmit}

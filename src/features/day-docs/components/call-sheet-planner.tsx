@@ -193,7 +193,7 @@ function SecondUnitRowEditor({
         </label>
         <div className="flex flex-col gap-1 pb-2 text-xs">
           <span className="text-[var(--muted-fg)]">Длительность</span>
-          <span className="font-mono">
+          <span className="tabular-nums">
             {isValidHhMm(row.startTime) && isValidHhMm(row.endTime)
               ? slotDurationLabel(row.startTime, row.endTime)
               : "—"}
@@ -1115,7 +1115,7 @@ export function CallSheetPlanner({
                   key={`${slot.startTime}-${index}`}
                   className="rounded-lg border border-[var(--border)]/60 px-3 py-2 text-sm"
                 >
-                  <span className="font-mono font-medium">
+                  <span className="tabular-nums font-medium">
                     {slot.startTime}–{slot.endTime}
                   </span>
                   <span className="ml-2 text-[var(--muted-fg)]">
@@ -1133,7 +1133,7 @@ export function CallSheetPlanner({
                   key={row.id}
                   className="rounded-lg border border-[var(--border)]/60 px-3 py-2 text-sm"
                 >
-                  <span className="font-mono font-medium">
+                  <span className="tabular-nums font-medium">
                     {row.startTime || "—"}
                     {row.endTime ? `–${row.endTime}` : ""}
                   </span>

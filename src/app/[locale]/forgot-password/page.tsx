@@ -26,7 +26,7 @@ export default async function ForgotPasswordPage({ params }: Props) {
         <p className="mt-2 text-sm text-[var(--muted-fg)]">{tApp("tagline")}</p>
       </div>
       <Card className="glass-strong">
-        <h1 className="mb-6 font-display text-2xl font-semibold">
+        <h1 className="mb-6 font-display text-[27px] font-bold leading-tight">
           {t("forgotPasswordTitle")}
         </h1>
         <ForgotPasswordForm locale={locale} />

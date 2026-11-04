@@ -270,7 +270,7 @@ export function ScriptReview({
   return (
     <form ref={formRef} onSubmit={(e) => e.preventDefault()} className="space-y-6">
       <section className="glass-card space-y-3 p-6">
-        <h3 className="font-display text-lg font-semibold">Сводка</h3>
+        <h3 className="font-display text-base font-bold">Сводка</h3>
         <p className="text-sm text-[var(--muted-fg)]">
           {data.sync
             ? `Обновление либретто из версии «${data.sync.label}». Текст версии не меняется.`
@@ -326,7 +326,7 @@ export function ScriptReview({
         return (
           <section key={group} className="glass-card space-y-4 p-6">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h3 className="font-display text-lg font-semibold">{GROUP_TITLES[group]}</h3>
+              <h3 className="font-display text-base font-bold">{GROUP_TITLES[group]}</h3>
               <span className="text-xs text-[var(--muted-fg)]">
                 {questions.length > 0 ? `Вопросов: ${questions.length}` : "Вопросов нет"}
               </span>

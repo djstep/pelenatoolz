@@ -35,7 +35,7 @@ export default async function InvitePage({ params }: Props) {
     return (
       <main className="mx-auto flex min-h-screen max-w-md items-center px-4">
         <Card className="w-full">
-          <h1 className="font-display text-2xl font-semibold">{t("title")}</h1>
+          <h1 className="font-display text-[27px] font-bold leading-tight">{t("title")}</h1>
           <p className="mt-3 text-sm text-[var(--danger)]">
             Приглашение недействительно или срок его действия истёк.
           </p>
@@ -54,7 +54,7 @@ export default async function InvitePage({ params }: Props) {
   return (
     <main className="mx-auto flex min-h-screen max-w-md items-center px-4">
       <Card className="w-full space-y-4">
-        <h1 className="font-display text-2xl font-semibold">{t("title")}</h1>
+        <h1 className="font-display text-[27px] font-bold leading-tight">{t("title")}</h1>
         <dl className="space-y-2 text-sm">
           <div className="flex justify-between gap-4">
             <dt className="text-[var(--muted-fg)]">{t("project")}</dt>

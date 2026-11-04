@@ -49,7 +49,7 @@ export default async function DepartmentSmetaPage({ params }: Props) {
           ← Все сметы
         </Link>
         <Card>
-          <h2 className="font-display text-xl font-semibold">Смета — {department.name}</h2>
+          <h2 className="font-display text-[27px] font-bold leading-tight">Смета — {department.name}</h2>
           <p className="mt-2 text-sm text-[var(--muted-fg)]">Смета ещё не создана.</p>
           {canWrite ? (
             <div className="mt-4">

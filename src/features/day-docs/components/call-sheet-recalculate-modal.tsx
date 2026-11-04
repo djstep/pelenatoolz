@@ -52,10 +52,10 @@ function ProposalTable({
         {Object.entries(fields).map(([field, change]) => (
           <tr key={field} className="border-t border-[var(--border)]/40">
             <td className="py-1 pr-2">{labels[field] ?? field}</td>
-            <td className="py-1 pr-2 font-mono text-[var(--muted-fg)]">
+            <td className="py-1 pr-2 tabular-nums text-[var(--muted-fg)]">
               {change?.current || "—"}
             </td>
-            <td className="py-1 font-mono text-[var(--tone-success)]">
+            <td className="py-1 tabular-nums text-[var(--tone-success)]">
               {change?.proposed || "—"}
             </td>
           </tr>
@@ -179,7 +179,7 @@ export function CallSheetRecalculateModal({
           className={cn(
             "rounded-lg px-3 py-1.5 text-sm",
             tab === "actors"
-              ? "bg-[var(--accent)]/20 text-[var(--foreground)]"
+              ? "bg-[var(--accent-soft)] text-[var(--foreground)]"
               : "text-[var(--muted-fg)] hover:text-[var(--foreground)]",
           )}
           onClick={() => setTab("actors")}
@@ -191,7 +191,7 @@ export function CallSheetRecalculateModal({
           className={cn(
             "rounded-lg px-3 py-1.5 text-sm",
             tab === "resources"
-              ? "bg-[var(--accent)]/20 text-[var(--foreground)]"
+              ? "bg-[var(--accent-soft)] text-[var(--foreground)]"
               : "text-[var(--muted-fg)] hover:text-[var(--foreground)]",
           )}
           onClick={() => setTab("resources")}

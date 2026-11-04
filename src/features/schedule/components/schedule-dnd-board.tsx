@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, useEffect, type CSSProperties } from "react";
+import { useMemo, useRef, useState, useEffect } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -18,6 +18,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { MoreVertical } from "lucide-react";
 import {
   assignSceneToDayByDnDAction,
   getSceneDayRemoveImpactAction,
@@ -46,17 +47,17 @@ import {
 } from "@/shared/i18n/domain-labels";
 import { Badge } from "@/shared/ui/badge";
 import { Input } from "@/shared/ui/input";
+import { SceneNumber } from "@/shared/ui/scene-number";
 import { Select } from "@/shared/ui/select";
 import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
 import { useToast } from "@/shared/ui/toast";
 import {
+  computeDaySceneHints,
   computePlanningHint,
+  planningHintWords,
   resolveRowIdByActor,
 } from "@/features/actor-availability/lib/planning-hint";
-import {
-  planningHintClass,
-  type PlanningHint,
-} from "@/features/actor-availability/lib/status";
+import type { PlanningHint } from "@/features/actor-availability/lib/status";
 import type { ScheduleAvailabilityBundle } from "@/features/actor-availability/lib/serialize-bundle";
 import { isWorkingShootDay } from "@/features/schedule/lib/shoot-day-type";
 import { formatDateShort } from "@/shared/i18n/format-date";
@@ -116,7 +117,6 @@ function DraggableSceneCard({
       {...(canWrite ? attributes : {})}
       className={cn(
         sceneCardClass(isDragging),
-        "border-l-[3px] border-l-teal-400/70",
         canWrite && "cursor-grab touch-none active:cursor-grabbing",
       )}
       onClick={() => {
@@ -144,10 +144,13 @@ function SortableDayScene({
   row,
   canWrite,
   onOpen,
+  hint,
 }: {
   row: DayScene;
   canWrite: boolean;
   onOpen: (scene: SceneCard) => void;
+  /** Занятость актёров сцены в этот день (только карточки в днях). */
+  hint?: PlanningHint;
 }) {
   const skipClickRef = useRef(false);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
@@ -172,7 +175,6 @@ function SortableDayScene({
       {...(canWrite ? attributes : {})}
       className={cn(
         sceneCardClass(isDragging),
-        "border-l-[3px] border-l-sky-400/70",
         isDragging && "opacity-50",
         row.scene.cutAt && !isDragging && "opacity-60",
         canWrite && "cursor-grab touch-none active:cursor-grabbing",
@@ -193,51 +195,75 @@ function SortableDayScene({
       role="button"
       tabIndex={0}
     >
-      <SceneCardBody scene={row.scene} />
+      <SceneCardBody scene={row.scene} hint={hint} />
     </div>
   );
 }
 
 /**
- * Цвета типов дней — переменные темы (globals.css, --kpp-*).
- * muted — приглушённый текст внутри колонки: на насыщенном фоне светлой темы
- * обычный серый нечитаем, поэтому берётся тёмный оттенок того же цвета.
+ * Цвета типов дней — переменные темы (globals.css, --kpp-*): шапка залита цветом типа,
+ * сцены — в «утопленном» лотке, метка типа — сплошная плашка.
  */
 function dayTypeTone(dayType: keyof typeof shootDayTypeLabels) {
   switch (dayType) {
     case "OFF":
       return {
-        column: "border-[var(--kpp-off-border)] bg-[var(--kpp-off-bg)]",
-        header: "border-[var(--kpp-off-head-border)] bg-[var(--kpp-off-head-bg)]",
-        accent: "text-[var(--kpp-off-fg)]",
-        muted: "var(--kpp-off-muted)",
+        column: "border-[var(--kpp-off-border)]",
+        head: "bg-[var(--kpp-off-head)]",
+        well: "border-[var(--kpp-off-border)] bg-[var(--kpp-off-well)]",
+        tag: "bg-[var(--kpp-off-tag-bg)] text-[var(--kpp-off-tag-fg)]",
       };
     case "REST":
       return {
-        column: "border-[var(--kpp-rest-border)] bg-[var(--kpp-rest-bg)]",
-        header: "border-[var(--kpp-rest-head-border)] bg-[var(--kpp-rest-head-bg)]",
-        accent: "text-[var(--kpp-rest-fg)]",
-        muted: "var(--kpp-rest-muted)",
+        column: "border-[var(--kpp-rest-border)]",
+        head: "bg-[var(--kpp-rest-head)]",
+        well: "border-[var(--kpp-rest-border)] bg-[var(--kpp-rest-well)]",
+        tag: "bg-[var(--kpp-rest-tag-bg)] text-[var(--kpp-rest-tag-fg)]",
       };
     case "PREP":
       return {
-        column: "border-[var(--kpp-prep-border)] bg-[var(--kpp-prep-bg)]",
-        header: "border-[var(--kpp-prep-head-border)] bg-[var(--kpp-prep-head-bg)]",
-        accent: "text-[var(--kpp-prep-fg)]",
-        muted: "var(--kpp-prep-muted)",
+        column: "border-[var(--kpp-prep-border)]",
+        head: "bg-[var(--kpp-prep-head)]",
+        well: "border-[var(--kpp-prep-border)] bg-[var(--kpp-prep-well)]",
+        tag: "bg-[var(--kpp-prep-tag-bg)] text-[var(--kpp-prep-tag-fg)]",
       };
     default:
       return {
-        column: "border-[var(--kpp-work-border)] bg-[var(--kpp-work-bg)]",
-        header: "border-[var(--kpp-work-head-border)] bg-[var(--kpp-work-head-bg)]",
-        accent: "text-[var(--kpp-work-fg)]",
-        muted: "var(--kpp-work-muted)",
+        column: "border-[var(--kpp-work-border)]",
+        head: "bg-[var(--kpp-work-head)]",
+        well: "border-[var(--kpp-work-border)] bg-[var(--kpp-work-well)]",
+        tag: "bg-[var(--kpp-work-tag-bg)] text-[var(--kpp-work-tag-fg)]",
       };
   }
 }
 
-function SceneCardBody({ scene }: { scene: SceneCard }) {
+/** Номер сцены, как в `formatSceneBrief`: серия-номер+постфикс. */
+function sceneNumberLabel(scene: SceneCard) {
+  const ep = scene.episodeNumber && scene.episodeNumber > 0 ? `${scene.episodeNumber}-` : "";
+  return `${ep}${scene.number}${scene.postfix ?? ""}`;
+}
+
+/** Точка цветом --kpp-avail-*, слово — цветом тона (контраст текста ≥ 4.5:1 на карточке). */
+const AVAILABILITY_MARK: Partial<Record<PlanningHint, { dot: string; word: string }>> = {
+  all_free: { dot: "bg-[var(--kpp-avail-ok)]", word: "text-[var(--tone-success)]" },
+  partial: { dot: "bg-[var(--kpp-avail-part)]", word: "text-[var(--tone-warning)]" },
+  none_free: { dot: "bg-[var(--kpp-avail-busy)]", word: "text-[var(--tone-danger)]" },
+};
+
+/**
+ * Карточка: «хлопушка» с номером + режим; объект; персонажи; внизу — страницы, хрон, день
+ * по сценарию и (в днях) занятость актёров.
+ */
+function SceneCardBody({ scene, hint }: { scene: SceneCard; hint?: PlanningHint }) {
   const chars = scene.characters.map((c) => c.character.name).join(", ");
+  const mode = [
+    scene.intExt ? intExtLabels[scene.intExt] : null,
+    scene.dayNight ? dayNightLabels[scene.dayNight] : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  const location = scene.locations?.[0]?.location.name;
+  const mark = hint ? AVAILABILITY_MARK[hint] : undefined;
   return (
     <>
       {scene.cutAt ? (
@@ -245,24 +271,40 @@ function SceneCardBody({ scene }: { scene: SceneCard }) {
           <Badge>вырезана</Badge>
         </div>
       ) : null}
-      <div className={cn("font-semibold leading-snug", scene.cutAt && "line-through")}>
-        {formatSceneBrief(scene)}
+      <div className={cn("flex items-center gap-1.5", scene.cutAt && "line-through")}>
+        <SceneNumber>{sceneNumberLabel(scene)}</SceneNumber>
+        {mode ? <span className="truncate text-[var(--muted-fg)]">{mode}</span> : null}
       </div>
-      {chars ? (
-        <div className="mt-1 line-clamp-2 text-[var(--muted-fg)]">{chars}</div>
+      {location ? (
+        <div className={cn("mt-1 text-[13px] font-[650] leading-snug", scene.cutAt && "line-through")}>
+          {location}
+        </div>
       ) : null}
-      <div className="mt-1 text-[var(--muted-fg)]">
-        {formatPagesMinutes(scene.pageCount, scene.planSeconds)}
-        {scene.scriptDay != null ? ` · день #${scene.scriptDay}` : ""}
+      {chars ? (
+        <div className="mt-0.5 line-clamp-2 text-[var(--muted-fg)]">{chars}</div>
+      ) : null}
+      <div className="mt-1.5 flex flex-wrap items-center justify-between gap-x-2 border-t border-[var(--border)] pt-1.5 tabular-nums text-[var(--muted-fg)]">
+        <span>
+          {formatPagesMinutes(scene.pageCount, scene.planSeconds)}
+          {scene.scriptDay != null ? ` · день #${scene.scriptDay}` : ""}
+        </span>
+        {hint && mark ? (
+          <span className={cn("inline-flex items-center gap-1 font-semibold", mark.word)}>
+            <span aria-hidden className={cn("h-2 w-2 shrink-0 rounded-full", mark.dot)} />
+            {planningHintWords[hint]}
+          </span>
+        ) : null}
       </div>
     </>
   );
 }
 
+/** Карточка сцены приподнята над лотком: рамка, тень, при наведении — выше на 1 px. */
 function sceneCardClass(isDragging?: boolean) {
   return cn(
-    "rounded-xl border border-[rgb(var(--tint-rgb)/0.1)] bg-[var(--kpp-card-bg)] p-2 text-xs",
-    "shadow-[inset_0_1px_0_rgb(var(--tint-rgb)/0.06)]",
+    "rounded-lg border border-[var(--kpp-card-border)] bg-[var(--kpp-card-bg)] p-2 text-xs text-[var(--foreground)]",
+    "[box-shadow:var(--kpp-card-shadow)] transition-[box-shadow,transform] duration-150",
+    "hover:-translate-y-px hover:[box-shadow:var(--kpp-card-shadow-hover)]",
     isDragging && "opacity-40",
   );
 }
@@ -277,7 +319,7 @@ function DaySceneGroupHeader({
   return (
     <div
       className={cn(
-        "rounded-md px-2 py-1 text-[10px] font-semibold leading-snug",
+        "rounded-md px-2 py-1 text-[11px] font-bold leading-snug",
         mode === "location"
           ? "bg-[var(--kpp-day-group-loc-bg)] text-[var(--kpp-day-group-loc-fg)]"
           : "bg-[var(--kpp-day-group-actor-bg)] text-[var(--kpp-day-group-actor-fg)]",
@@ -288,12 +330,21 @@ function DaySceneGroupHeader({
   );
 }
 
+/** Подсказка планирования (занятость актёров) — кольцо колонки цветом --kpp-avail-*. */
+const planningHintRing: Record<PlanningHint, string> = {
+  all_free: "ring-2 ring-[var(--kpp-avail-ok)]",
+  partial: "ring-2 ring-[var(--kpp-avail-part)]",
+  none_free: "ring-2 ring-[var(--kpp-avail-busy)]",
+  neutral: "",
+};
+
 function DayColumn({
   day,
   canWrite,
   onMenu,
   onOpenScene,
   planningHint,
+  sceneHints,
   dayGroupBy,
   characterToActor,
   actorNames,
@@ -303,6 +354,8 @@ function DayColumn({
   onMenu: (dayId: string, anchor: MenuAnchor) => void;
   onOpenScene: (scene: SceneCard) => void;
   planningHint?: PlanningHint;
+  /** Занятость по сценам дня: id записи сцены в дне → подсказка. */
+  sceneHints?: Map<string, PlanningHint>;
   dayGroupBy: DayGroupBy;
   characterToActor: Record<string, string>;
   actorNames: Record<string, string>;
@@ -328,34 +381,29 @@ function DayColumn({
       ),
     [day.scenes, dayGroupBy, characterToActor, actorNames],
   );
+  // Заметка подготовки и комментарий — одной строкой в шапке, целиком — в подсказке.
+  const note = [day.dayType === "PREP" ? day.prepNote : null, day.comment]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
     <div
       ref={columnRef}
-      style={{ "--muted-fg": tone.muted } as CSSProperties}
       className={cn(
-        "flex h-full w-56 shrink-0 flex-col overflow-hidden rounded-xl border shadow-[inset_0_1px_0_rgb(var(--tint-rgb)/0.06)]",
+        "flex h-full w-[204px] shrink-0 flex-col overflow-hidden rounded-xl border",
         tone.column,
-        day.isNightShift && "ring-1 ring-indigo-400/40",
         isOver && acceptsScenes && "ring-2 ring-[var(--accent)]",
-        planningHint && planningHint !== "neutral" && planningHintClass[planningHint],
+        planningHint && planningHint !== "neutral" && planningHintRing[planningHint],
       )}
     >
-      <div className={cn("border-b p-2", tone.header)}>
+      {/* Шапка дня фиксированной высоты: все колонки ровно. */}
+      <div className={cn("flex h-[136px] shrink-0 flex-col gap-[3px] overflow-hidden px-3 pb-2 pt-2.5 text-[var(--kpp-head-fg)]", tone.head)}>
         <div className="flex items-start justify-between gap-1">
-          <div>
-            <div className="text-xs font-semibold">
-              {dateStr}
-              {day.isNightShift ? " · ночь" : ""}
-            </div>
-            <div className={cn("text-[10px]", tone.accent)}>
-              День {day.dayNumber} · {shootDayTypeLabels[day.dayType]}
-            </div>
-          </div>
+          <div className="text-[15px] font-bold leading-tight">День {day.dayNumber}</div>
           {canWrite ? (
             <button
               type="button"
-              className="rounded px-1.5 py-0.5 text-[var(--muted-fg)] hover:bg-[rgb(var(--tint-rgb)/0.1)] hover:text-[rgb(var(--tint-rgb))]"
+              className="-mr-1 -mt-0.5 rounded-md p-0.5 text-[var(--kpp-head-fg-2)] hover:bg-[rgb(var(--tint-rgb)/0.1)] hover:text-[var(--kpp-head-fg)]"
               onClick={() => {
                 const r = columnRef.current?.getBoundingClientRect();
                 if (!r) return;
@@ -368,30 +416,41 @@ function DayColumn({
               }}
               aria-label="Меню дня"
             >
-              ⋮
+              <MoreVertical className="h-4 w-4" aria-hidden />
             </button>
           ) : null}
         </div>
-        <div className="mt-1 text-[10px] text-[var(--muted-fg)]">
+        <div className="text-xs leading-tight text-[var(--kpp-head-fg-2)]">{dateStr}</div>
+        <div className="flex flex-wrap gap-1">
+          <span className={cn("rounded-[5px] px-1.5 py-px text-[11px] font-semibold", tone.tag)}>
+            {shootDayTypeLabels[day.dayType]}
+          </span>
+          {day.isNightShift ? (
+            <span className="rounded-[5px] bg-[var(--primary)] px-1.5 py-px text-[11px] font-semibold text-[var(--primary-fg)]">
+              ночь
+            </span>
+          ) : null}
+          {day.isLocked ? (
+            <span className="rounded-[5px] border border-[var(--kpp-head-fg)] px-1.5 text-[11px] font-semibold">
+              Зафиксирован
+            </span>
+          ) : null}
+        </div>
+        <div className="text-[11px] tabular-nums text-[var(--kpp-head-fg-2)]">
           {formatDaySummary(summary)}
         </div>
-        {day.isLocked ? <Badge className="mt-1">Зафиксирован</Badge> : null}
-        {day.dayType === "PREP" && day.prepNote ? (
-          <p className="mt-1 line-clamp-2 text-[10px] text-[var(--kpp-prep-note)]">
-            {day.prepNote}
-          </p>
-        ) : null}
-        {day.comment ? (
-          <p className="mt-1 line-clamp-2 text-[10px] text-[var(--muted-fg)]">
-            {day.comment}
+        {note ? (
+          <p className="truncate text-[11px] text-[var(--kpp-head-fg-2)]" title={note}>
+            {note}
           </p>
         ) : null}
       </div>
+      {/* Лоток со сценами: утопленный, прокрутка внутри колонки. */}
       <div
         ref={setNodeRef}
         className={cn(
-          "flex min-h-[8rem] flex-1 flex-col gap-2 bg-[var(--kpp-drop-bg)] p-2",
-          !acceptsScenes && "opacity-90",
+          "flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto border-t p-2 [box-shadow:var(--kpp-well-shadow)]",
+          tone.well,
         )}
       >
         <SortableContext
@@ -411,12 +470,18 @@ function DayColumn({
                 row={block.row}
                 canWrite={canDragScenes}
                 onOpen={onOpenScene}
+                hint={sceneHints?.get(block.row.id)}
               />
             ),
           )}
         </SortableContext>
         {day.scenes.length === 0 ? (
-          <p className="py-4 text-center text-[10px] text-[var(--muted-fg)]">
+          <p
+            className={cn(
+              "py-6 text-center text-[11px] text-[var(--kpp-head-fg-2)]",
+              acceptsScenes && "rounded-lg border border-dashed border-[var(--kpp-drop-border)]",
+            )}
+          >
             {acceptsScenes
               ? "Перетащите сцену сюда"
               : "Сцены только в рабочие дни"}
@@ -542,6 +607,20 @@ export function ScheduleDnDBoard({
     };
   }, [availability]);
 
+  // Занятость на карточках в днях — одним расчётом на всю доску, из того же набора данных.
+  const sceneHints = useMemo(
+    () =>
+      availContext
+        ? computeDaySceneHints(
+            shootDays,
+            availContext.characterToActor,
+            availContext.manualDays,
+            availContext.rowIdByActor,
+          )
+        : undefined,
+    [shootDays, availContext],
+  );
+
   function hintForDay(day: ShootDay): PlanningHint | undefined {
     if (!activeScene || !availContext) return undefined;
     const charIds = activeScene.characters.map((c) => c.character.id);
@@ -644,17 +723,17 @@ export function ScheduleDnDBoard({
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
-      <div className="flex h-full min-h-[28rem] overflow-hidden rounded-2xl border border-[var(--border-strong)] shadow-[var(--glass-shadow)]">
-        <aside className="flex w-80 shrink-0 flex-col overflow-hidden border-r-2 border-[var(--kpp-panel-border)] bg-[image:var(--kpp-panel-bg)]">
-          <div className="border-b border-[var(--kpp-panel-head-border)] bg-[var(--kpp-panel-head-bg)] p-3">
+      <div className="flex h-full min-h-[28rem] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--kpp-board-bg)] shadow-[var(--glass-shadow)]">
+        <aside className="flex w-80 shrink-0 flex-col overflow-hidden border-r border-[var(--kpp-panel-border)] bg-[var(--kpp-panel-head-bg)]">
+          <div className="border-b border-[var(--kpp-panel-border)] bg-[var(--kpp-panel-head-bg)] p-3">
             <div className="flex items-start justify-between gap-2">
-              <h3 className="text-sm font-semibold leading-snug text-[var(--kpp-panel-title)]">
+              <h3 className="text-[15px] font-bold leading-snug text-[var(--kpp-panel-title)]">
                 Неспланированные сцены
               </h3>
               <button
                 type="button"
                 className={cn(
-                  "shrink-0 rounded-md px-2 py-1 text-[11px] text-[var(--kpp-panel-fg)] hover:bg-[var(--kpp-panel-btn-hover)]",
+                  "shrink-0 rounded-md px-2 py-1 text-xs font-semibold text-[var(--kpp-panel-fg)] hover:bg-[var(--kpp-panel-btn-hover)]",
                   (filtersOpen || hasActiveFilters) &&
                     "bg-[var(--kpp-panel-btn-active)] text-[var(--kpp-panel-title)]",
                 )}
@@ -664,7 +743,7 @@ export function ScheduleDnDBoard({
                 {hasActiveFilters ? " ·" : ""}
               </button>
             </div>
-            <p className="mt-1 text-[11px] text-[var(--kpp-panel-muted)]">
+            <p className="mt-1 text-xs tabular-nums text-[var(--kpp-panel-muted)]">
               {filtered.length}
               {hasActiveFilters ? ` из ${unscheduled.length}` : ""} сц.
             </p>
@@ -747,16 +826,16 @@ export function ScheduleDnDBoard({
             ) : null}
           </div>
 
-          <div className="flex-1 space-y-4 overflow-y-auto p-3">
+          <div className="flex-1 space-y-4 overflow-y-auto bg-[var(--kpp-pool-well)] p-3 [box-shadow:var(--kpp-well-shadow)]">
             {displayBlocks.map(([loc, items]) => (
               <div key={loc || "__flat"}>
                 {unscheduledGroupBy === "location" && loc ? (
-                  <div className="mb-2 rounded-md bg-[var(--kpp-group-loc-bg)] px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--kpp-group-loc-fg)]">
+                  <div className="mb-2 rounded-md bg-[var(--kpp-group-loc-bg)] px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-[var(--kpp-group-loc-fg)]">
                     {loc} ({items.length})
                   </div>
                 ) : null}
                 {unscheduledGroupBy === "actor" && loc ? (
-                  <div className="mb-2 rounded-md bg-[var(--kpp-group-actor-bg)] px-2 py-1 text-[11px] font-semibold tracking-wide text-[var(--kpp-group-actor-fg)]">
+                  <div className="mb-2 rounded-md bg-[var(--kpp-group-actor-bg)] px-2 py-1 text-[11px] font-bold tracking-wide text-[var(--kpp-group-actor-fg)]">
                     {loc} ({items.length})
                   </div>
                 ) : null}
@@ -784,7 +863,7 @@ export function ScheduleDnDBoard({
         </aside>
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-          <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-b border-[rgb(var(--tint-rgb)/0.1)] bg-[var(--kpp-bar-bg)] px-3 py-2 text-[10px] text-[var(--muted-fg)]">
+          <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-b border-[var(--border)] bg-[var(--kpp-bar-bg)] px-3 py-2 text-[11px] text-[var(--muted-fg)]">
             <label className="inline-flex items-center gap-2">
               <span className="shrink-0 text-[var(--foreground)]/80">
                 Сцены в дне:
@@ -792,47 +871,47 @@ export function ScheduleDnDBoard({
               <select
                 value={dayGroupBy}
                 onChange={(e) => setDayGroupBy(e.target.value as DayGroupBy)}
-                className="glass-input h-7 w-[9.5rem] shrink-0 rounded-lg px-2 text-[10px] leading-none text-[var(--foreground)]"
+                className="glass-input h-7 w-[9.5rem] shrink-0 rounded-lg px-2 text-[11px] leading-none text-[var(--foreground)]"
               >
                 <option value="none">Список</option>
                 <option value="location">По объекту</option>
                 <option value="actor">По актёру</option>
               </select>
             </label>
-            <span className="hidden h-3 w-px bg-[rgb(var(--tint-rgb)/0.15)] sm:inline" aria-hidden />
+            <span className="hidden h-3 w-px bg-[var(--border-strong)] sm:inline" aria-hidden />
             <span className="text-[var(--foreground)]/80">Типы дней:</span>
             <span className="inline-flex items-center gap-1">
-              <span className="h-2.5 w-5 rounded border border-[var(--kpp-work-border)] bg-[var(--kpp-work-bg)]" />
+              <span className="h-3 w-5 rounded-[3px] border border-[var(--border-strong)] bg-[var(--kpp-work-head)]" />
               {shootDayTypeLabels.WORKING}
             </span>
             <span className="inline-flex items-center gap-1">
-              <span className="h-2.5 w-5 rounded border border-[var(--kpp-off-border)] bg-[var(--kpp-off-bg)]" />
+              <span className="h-3 w-5 rounded-[3px] border border-[var(--border-strong)] bg-[var(--kpp-off-head)]" />
               {shootDayTypeLabels.OFF}
             </span>
             <span className="inline-flex items-center gap-1">
-              <span className="h-2.5 w-5 rounded border border-[var(--kpp-rest-border)] bg-[var(--kpp-rest-bg)]" />
+              <span className="h-3 w-5 rounded-[3px] border border-[var(--border-strong)] bg-[var(--kpp-rest-head)]" />
               {shootDayTypeLabels.REST}
             </span>
             <span className="inline-flex items-center gap-1">
-              <span className="h-2.5 w-5 rounded border border-[var(--kpp-prep-border)] bg-[var(--kpp-prep-bg)]" />
+              <span className="h-3 w-5 rounded-[3px] border border-[var(--border-strong)] bg-[var(--kpp-prep-head)]" />
               {shootDayTypeLabels.PREP}
             </span>
           </div>
           {activeScene && availContext ? (
-            <div className="flex shrink-0 flex-wrap gap-3 border-b border-[rgb(var(--tint-rgb)/0.1)] bg-[var(--kpp-bar-bg)] px-3 py-2 text-[10px] text-[var(--muted-fg)]">
+            <div className="flex shrink-0 flex-wrap gap-3 border-b border-[var(--border)] bg-[var(--kpp-bar-bg)] px-3 py-2 text-[11px] text-[var(--muted-fg)]">
               <span>Занятость актёров сцены:</span>
               <span className="inline-flex items-center gap-1">
-                <span className="h-2 w-6 rounded ring-2 ring-emerald-400/70" /> все свободны
+                <span className="h-2 w-2 rounded-full bg-[var(--kpp-avail-ok)]" /> все свободны
               </span>
               <span className="inline-flex items-center gap-1">
-                <span className="h-2 w-6 rounded ring-2 ring-amber-400/70" /> частично
+                <span className="h-2 w-2 rounded-full bg-[var(--kpp-avail-part)]" /> частично
               </span>
               <span className="inline-flex items-center gap-1">
-                <span className="h-2 w-6 rounded ring-2 ring-rose-400/70" /> заняты
+                <span className="h-2 w-2 rounded-full bg-[var(--kpp-avail-busy)]" /> заняты
               </span>
             </div>
           ) : null}
-          <div className="flex min-h-0 min-w-0 flex-1 gap-3 overflow-x-auto bg-[image:var(--kpp-board-bg)] p-3">
+          <div className="flex min-h-0 min-w-0 flex-1 gap-3 overflow-x-auto bg-[var(--kpp-board-bg)] p-3">
           {shootDays.map((day) => (
             <DayColumn
               key={day.id}
@@ -841,6 +920,7 @@ export function ScheduleDnDBoard({
               onMenu={(dayId, anchor) => setMenuState({ dayId, anchor })}
               onOpenScene={setDetailScene}
               planningHint={hintForDay(day)}
+              sceneHints={sceneHints}
               dayGroupBy={dayGroupBy}
               characterToActor={characterToActor}
               actorNames={actorNames}
@@ -857,7 +937,7 @@ export function ScheduleDnDBoard({
 
       <DragOverlay>
         {activeScene ? (
-          <div className="glass-panel w-52 p-2 text-xs shadow-xl">
+          <div className="w-[188px] rounded-lg border border-[var(--kpp-card-border)] bg-[var(--kpp-card-bg)] p-2 text-xs font-semibold text-[var(--foreground)] [box-shadow:var(--kpp-card-shadow-hover)]">
             {formatSceneBrief(activeScene)}
           </div>
         ) : null}

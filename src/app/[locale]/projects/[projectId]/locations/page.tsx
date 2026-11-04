@@ -26,7 +26,7 @@ export default async function LocationsPage({ params }: Props) {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="font-display text-2xl font-semibold">Локации</h2>
+        <h2 className="font-display text-[27px] font-bold leading-tight">Локации</h2>
         <p className="mt-1 text-sm text-[var(--muted-fg)]">
           Справочник площадок съёмки: название, подлокация, адрес, статистика по сценам.
         </p>

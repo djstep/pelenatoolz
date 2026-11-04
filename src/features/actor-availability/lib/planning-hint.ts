@@ -73,6 +73,70 @@ export function computePlanningHint(
   return "partial";
 }
 
+/** Слово занятости на карточке сцены в дне КПП («Без дня» — без слова). */
+export const planningHintWords: Partial<Record<PlanningHint, string>> = {
+  all_free: "свободны",
+  partial: "частично",
+  none_free: "заняты",
+};
+
+type BoardDay = {
+  id: string;
+  date: Date;
+  scenes: { id: string; scene: { characters: { character: { id: string } }[] } }[];
+};
+
+/**
+ * Занятость актёров сцен, уже стоящих в днях КПП, — одним расчётом на всю доску.
+ * Та же `computePlanningHint`, что и кольцо при перетаскивании, но своя запись сцены — не занятость:
+ * актёр и так стоит в КПП на этот день. Поэтому из КПП считаются только другие съёмочные дни на ту
+ * же дату (второй юнит), а из календаря убран «занят (наш проект)» — его пишет комментарий к дате КПП.
+ * Результат: id записи сцены в дне → подсказка.
+ */
+export function computeDaySceneHints(
+  days: BoardDay[],
+  characterToActor: Record<string, string>,
+  manualDays: ManualDaysSerialized,
+  rowIdByActor: Map<string, string>,
+): Map<string, PlanningHint> {
+  const outsideProject: ManualDaysSerialized = {};
+  for (const [rowId, rowDays] of Object.entries(manualDays)) {
+    outsideProject[rowId] = Object.fromEntries(
+      Object.entries(rowDays).filter(([, day]) => day.status !== "BUSY_OUR_PROJECT"),
+    );
+  }
+
+  const hints = new Map<string, PlanningHint>();
+  for (const day of days) {
+    const dateKey = toDateKey(new Date(day.date));
+    const otherDays = new Set<string>();
+    for (const other of days) {
+      if (other.id === day.id || toDateKey(new Date(other.date)) !== dateKey) continue;
+      for (const row of other.scenes) {
+        for (const { character } of row.scene.characters) {
+          const actorId = characterToActor[character.id];
+          if (actorId) otherDays.add(actorId);
+        }
+      }
+    }
+    const kppBusy: KppBusyMap = new Map([[dateKey, otherDays]]);
+    for (const row of day.scenes) {
+      hints.set(
+        row.id,
+        computePlanningHint(
+          row.scene.characters.map((c) => c.character.id),
+          new Date(day.date),
+          characterToActor,
+          outsideProject,
+          rowIdByActor,
+          kppBusy,
+        ),
+      );
+    }
+  }
+  return hints;
+}
+
 export function resolveRowIdByActor(
   rows: { id: string; actorId: string | null }[],
 ): Map<string, string> {

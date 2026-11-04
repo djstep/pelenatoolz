@@ -40,7 +40,7 @@ export function ActorEmploymentView({
               Актёры
             </Link>
           </p>
-          <h2 className="mt-1 font-display text-2xl font-semibold">
+          <h2 className="mt-1 font-display text-[27px] font-bold leading-tight">
             Занятость актёров · День {day.dayNumber}
           </h2>
           <p className="mt-1 text-sm text-[var(--muted-fg)]">
@@ -50,7 +50,7 @@ export function ActorEmploymentView({
         <PrintButton />
       </div>
 
-      <section className="rounded-2xl border border-[var(--border)] bg-[var(--panel-solid)] p-5">
+      <section className="rounded-xl border border-[var(--border)] bg-[var(--panel-solid)] p-5">
         <div className="mb-4 flex flex-wrap gap-4 text-sm">
           <span>
             Ролей в дне: <strong>{cast.length}</strong>

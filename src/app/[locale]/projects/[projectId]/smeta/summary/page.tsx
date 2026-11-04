@@ -47,7 +47,7 @@ export default async function SummaryBookPage({ params, searchParams }: Props) {
       <Link href={listHref} className="text-sm text-[var(--muted-fg)] hover:underline">
         ← Сметы
       </Link>
-      <h2 className="font-display text-2xl font-semibold">Сводная книга</h2>
+      <h2 className="font-display text-[27px] font-bold leading-tight">Сводная книга</h2>
       <SummaryBookView
         projectId={projectId}
         book={sheetBook}

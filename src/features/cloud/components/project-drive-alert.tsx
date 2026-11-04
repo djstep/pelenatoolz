@@ -16,7 +16,7 @@ export function ProjectDriveAlertBanner({
     <div
       role="alert"
       data-testid="project-drive-alert"
-      className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[rgba(251,113,133,0.35)] bg-[rgba(251,113,133,0.08)] px-3 py-2 text-sm"
+      className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--tone-danger-line)] bg-[var(--tone-danger-bg)] px-3 py-2 text-sm"
     >
       <span>{projectDriveAlertText[alert]}</span>
       <Link href={settingsHref} className="font-medium underline underline-offset-2">

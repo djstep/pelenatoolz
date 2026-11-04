@@ -6,9 +6,11 @@ const LOGO_HEIGHT = 219;
 
 const sizes = {
   md: { className: "h-14" },
-  lg: { className: "h-20" },
+  lg: { className: "h-14 sm:h-20" },
   /** Шапка приложения: на телефоне ниже, чтобы шапка помещалась в экран. */
-  header: { className: "h-9 sm:h-14" },
+  header: { className: "h-7 sm:h-9" },
+  /** Боковое меню проекта (вместе с классом-контекстом `brand-on-dark`). */
+  sidebar: { className: "h-8" },
 } as const;
 
 export function AppBrand({

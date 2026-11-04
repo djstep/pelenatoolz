@@ -38,7 +38,7 @@ export default async function AuditionDetailPage({ params }: Props) {
         >
           ← Все пробы
         </Link>
-        <h1 className="font-display mt-2 text-2xl font-semibold">
+        <h1 className="font-display mt-2 text-2xl font-bold tabular-nums">
           Проба · {formatDateShort(audition.date)}
           {audition.time ? ` · ${audition.time}` : ""}
         </h1>

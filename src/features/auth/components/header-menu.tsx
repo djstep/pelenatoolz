@@ -7,17 +7,22 @@ import { useEffect, useRef, useState } from "react";
  * Выпадающее меню аккаунта в шапке.
  * Без `trigger` — телефон: кнопка-«гамбургер», «Проекты», профиль и «Выйти» (на ширине от `sm` скрыто).
  * С `trigger` — меню пользователя на компьютере: кнопка с инициалами и именем → «Профиль», «Выйти».
+ * `placement="top"` — список над кнопкой (низ бокового меню проекта); `triggerClassName` — вид кнопки.
  */
 export function HeaderMenu({
   children,
   trigger,
   label = "Меню аккаунта",
   className = "relative sm:hidden",
+  placement = "bottom",
+  triggerClassName,
 }: {
   children: React.ReactNode;
   trigger?: React.ReactNode;
   label?: string;
   className?: string;
+  placement?: "bottom" | "top";
+  triggerClassName?: string;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -53,9 +58,10 @@ export function HeaderMenu({
         aria-haspopup="menu"
         onClick={() => setOpen((v) => !v)}
         className={
-          trigger
-            ? "inline-flex max-w-[16rem] items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] py-1 pl-1 pr-3 text-[var(--foreground)] transition hover:bg-[var(--surface-2)]"
-            : "inline-flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)] transition hover:bg-[var(--surface-2)]"
+          triggerClassName ??
+          (trigger
+            ? "inline-flex max-w-[16rem] items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] py-1 pl-1 pr-3 text-[var(--foreground)] transition hover:bg-[var(--surface-2)]"
+            : "inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)] transition hover:bg-[var(--surface-2)]")
         }
       >
         {trigger ?? (
@@ -71,7 +77,11 @@ export function HeaderMenu({
       {open ? (
         <div
           role="menu"
-          className="glass-panel absolute right-0 top-full z-50 mt-2 flex min-w-[12rem] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-xl py-1 text-sm shadow-lg"
+          className={
+            placement === "top"
+              ? "glass-dropdown absolute bottom-full left-0 z-50 mb-2 flex min-w-[12rem] max-w-[calc(100vw-2rem)] flex-col overflow-hidden text-sm"
+              : "glass-dropdown absolute right-0 top-full z-50 mt-2 flex min-w-[12rem] max-w-[calc(100vw-2rem)] flex-col overflow-hidden text-sm"
+          }
           onClick={(e) => {
             // Переход по ссылке меню закрывает его сразу (до смены адреса).
             if ((e.target as HTMLElement).closest("a")) setOpen(false);

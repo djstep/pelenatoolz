@@ -48,7 +48,7 @@ export default async function PlanFactPage({ params, searchParams }: Props) {
       >
         ← Сметы
       </Link>
-      <h2 className="font-display text-2xl font-semibold">План/факт</h2>
+      <h2 className="font-display text-[27px] font-bold leading-tight">План/факт</h2>
       <PlanFactView
         projectId={projectId}
         report={report}

@@ -51,7 +51,7 @@ export default async function ProductionReportDayPage({ params }: Props) {
               ← Все отчёты
             </Link>
           </p>
-          <h2 className="mt-1 font-display text-2xl font-semibold">
+          <h2 className="mt-1 font-display text-[27px] font-bold leading-tight">
             Производственный отчёт · День {day.dayNumber}
           </h2>
         </div>

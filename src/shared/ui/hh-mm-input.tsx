@@ -315,7 +315,7 @@ export function HhMmInput({
         }
       }}
       className={cn(
-        "glass-input w-full rounded-xl px-3 py-2 font-mono text-sm tracking-wider text-[var(--foreground)] placeholder:text-[var(--muted)]",
+        "glass-input w-full rounded-lg px-3 py-[7px] text-sm leading-5 tabular-nums text-[var(--foreground)] placeholder:text-[var(--muted)]",
         invalid && "border-[var(--danger)] ring-1 ring-[var(--danger)]/50",
         className,
       )}

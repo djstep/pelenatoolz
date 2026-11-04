@@ -120,7 +120,7 @@ export function ContractDetailView({
         >
           ← К списку
         </Link>
-        <h1 className="font-display text-xl font-semibold">
+        <h1 className="font-display text-[27px] font-bold leading-tight">
           Договор {contract.number}
         </h1>
         <Badge
@@ -166,7 +166,7 @@ export function ContractDetailView({
       </header>
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="space-y-4 rounded-2xl border border-[var(--border)] bg-[var(--panel-solid)] p-5">
+        <div className="space-y-4 rounded-xl border border-[var(--border)] bg-[var(--panel-solid)] p-5">
           <dl className="grid gap-3 sm:grid-cols-2 text-sm">
             <div>
               <dt className="text-xs text-[var(--muted-fg)]">Дата</dt>
@@ -223,7 +223,7 @@ export function ContractDetailView({
         </div>
 
         <aside className="space-y-4">
-          <section className="rounded-2xl border border-[var(--border)] bg-[var(--panel-solid)] p-4">
+          <section className="rounded-xl border border-[var(--border)] bg-[var(--panel-solid)] p-4">
             <h3 className="font-semibold">Файлы</h3>
             <ul className="mt-3 space-y-2 text-sm">
               {contract.files.map((f) => (
@@ -332,7 +332,7 @@ export function ContractDetailView({
       </div>
 
       {finance.read ? (
-        <section className="rounded-2xl border border-[var(--border)] bg-[var(--panel-solid)] p-4">
+        <section className="rounded-xl border border-[var(--border)] bg-[var(--panel-solid)] p-4">
           <div className="flex items-center justify-between gap-2">
             <h3 className="font-semibold">Платежи и начисления</h3>
           </div>
@@ -369,7 +369,7 @@ export function ContractDetailView({
         </section>
       ) : null}
 
-      <section className="rounded-2xl border border-[var(--border)] bg-[var(--panel-solid)] p-4">
+      <section className="rounded-xl border border-[var(--border)] bg-[var(--panel-solid)] p-4">
         <div className="flex items-center justify-between gap-2">
           <h3 className="font-semibold">Акты</h3>
           {canWrite ? (

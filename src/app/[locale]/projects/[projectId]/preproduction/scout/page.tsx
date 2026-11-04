@@ -29,7 +29,7 @@ export default async function ScoutPage({ params }: Props) {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="font-display text-2xl font-semibold">Скаут</h2>
+        <h2 className="font-display text-[27px] font-bold leading-tight">Скаут</h2>
         <p className="mt-1 text-sm text-[var(--muted-fg)]">
           Реальные площадки-кандидаты для игровых локаций.
         </p>

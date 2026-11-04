@@ -76,7 +76,7 @@ export function BudgetVersionView({
             <tbody>
               {lines.map((l) => (
                 <tr key={l.itemId} className="border-t border-[var(--border)]/60">
-                  <td className="px-3 py-2 font-mono text-xs whitespace-nowrap">{l.code}</td>
+                  <td className="px-3 py-2 tabular-nums text-xs whitespace-nowrap">{l.code}</td>
                   <td className="px-3 py-2">{l.name || "—"}</td>
                   <td className="px-3 py-2">{l.unit ?? "—"}</td>
                   <td className="px-3 py-2 text-right">{num(l.quantity)}</td>

@@ -4,9 +4,9 @@ import { Badge, statusBadgeStyle } from "@/shared/ui/badge";
 
 /** Цвет плашки статуса: черновик — серый, на согласовании — жёлтый, утверждён — зелёный. */
 export const CALL_SHEET_STATUS_COLORS: Record<CallSheetStatusValue, string> = {
-  DRAFT: "#a1a1aa",
-  IN_REVIEW: "#eab308",
-  APPROVED: "#22c55e",
+  DRAFT: "var(--status-neutral)",
+  IN_REVIEW: "var(--status-warning)",
+  APPROVED: "var(--status-success)",
 };
 
 /** Статус вызывного цветной плашкой — на странице вызывного и в списке вызывных. */

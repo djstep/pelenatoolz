@@ -37,17 +37,17 @@ function sideCellClass(kind: BlockDiffKind, side: DiffSide): string {
     case "unchanged":
       return "border-transparent opacity-70";
     case "modified":
-      return "bg-amber-500/15 border-amber-500/30";
+      return "border-[var(--tone-warning-line)] bg-[var(--tone-warning-bg)]";
     case "removed":
       // Блок был в старой (a) и удалён в новой (b)
       return side === "a"
-        ? "bg-red-500/15 border-red-500/30"
-        : "bg-red-500/15 border-red-500/30 line-through opacity-80";
+        ? "border-[var(--tone-danger-line)] bg-[var(--tone-danger-bg)]"
+        : "border-[var(--tone-danger-line)] bg-[var(--tone-danger-bg)] line-through opacity-80";
     case "added":
       // Блок появился в новой (b), в старой (a) его не было
       return side === "b"
-        ? "bg-emerald-500/15 border-emerald-500/30"
-        : "bg-emerald-500/15 border-emerald-500/30 line-through opacity-80";
+        ? "border-[var(--tone-success-line)] bg-[var(--tone-success-bg)]"
+        : "border-[var(--tone-success-line)] bg-[var(--tone-success-bg)] line-through opacity-80";
     default:
       return "border-transparent";
   }
@@ -160,7 +160,7 @@ export function ScreenplayVersionDiff({
           >
             ← Все версии
           </Link>
-          <h2 className="font-display text-xl font-semibold">Сравнение версий</h2>
+          <h2 className="font-display text-[27px] font-bold leading-tight">Сравнение версий</h2>
           <p className="text-sm text-[var(--muted-fg)]">
             {versionLabel(newerMeta)}{" "}
             <span className="text-[var(--muted-fg)]">(новее)</span>

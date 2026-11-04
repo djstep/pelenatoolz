@@ -31,7 +31,7 @@ export default async function BudgetVersionsPage({ params }: Props) {
       <Link href={departmentHref} className="text-sm text-[var(--muted-fg)] hover:underline">
         ← Смета цеха
       </Link>
-      <h2 className="font-display text-2xl font-semibold">Версии сметы — {department.name}</h2>
+      <h2 className="font-display text-[27px] font-bold leading-tight">Версии сметы — {department.name}</h2>
       <Card>
         {versions.length === 0 ? (
           <p className="text-sm text-[var(--muted-fg)]">

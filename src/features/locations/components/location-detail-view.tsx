@@ -114,7 +114,7 @@ export function LocationDetailView({
               ← Все локации
             </a>
           </p>
-          <h2 className="font-display text-2xl font-semibold">
+          <h2 className="font-display text-[27px] font-bold leading-tight">
             {formatLocationTitle(location.name, location.sublocation)}
           </h2>
           <p className="mt-1 text-sm text-[var(--muted-fg)]">

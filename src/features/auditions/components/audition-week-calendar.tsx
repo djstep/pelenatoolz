@@ -47,7 +47,7 @@ function SlotCell({
       ref={setNodeRef}
       className={cn(
         "min-h-[4.5rem] border-b border-r border-[var(--border)]/60 p-1 align-top",
-        isOver && "bg-[var(--accent)]/15",
+        isOver && "bg-[var(--accent-soft)]",
       )}
     >
       {here.map((s) => (
@@ -143,7 +143,7 @@ export function AuditionWeekCalendar({
                 key={key}
                 type="button"
                 onClick={() => onOpenDay(key)}
-                className="sticky top-0 z-10 border-b border-r border-[var(--border)] bg-[var(--panel-solid)] p-2 text-center transition hover:bg-[var(--accent)]/10"
+                className="sticky top-0 z-10 border-b border-r border-[var(--border)] bg-[var(--panel-solid)] p-2 text-center transition hover:bg-[var(--accent-soft)]"
                 title="Открыть день"
               >
                 <div className="text-xs text-[var(--muted-fg)]">

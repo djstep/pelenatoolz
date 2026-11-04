@@ -32,7 +32,7 @@ export default async function CallSheetTemplatePage({ params }: Props) {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="font-display text-2xl font-semibold">Шаблон вызывного</h2>
+        <h2 className="font-display text-[27px] font-bold leading-tight">Шаблон вызывного</h2>
         <p className="mt-1 text-sm text-[var(--muted-fg)]">
           Руководители, вызов цехов, база и транспорт — общие для всех вызывных проекта.
           Порядок строк меняется перетаскиванием за ⠿.

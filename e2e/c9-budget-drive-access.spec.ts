@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { expect, test } from "@playwright/test";
 import { E2E_ROLES, type E2ERoleKey } from "./fixtures/data";
 import { e2eDb } from "./helpers/db";
-import { e2eContext } from "./helpers/session";
+import { e2eContext, projectPath, stateShot, storageStatePath } from "./helpers/session";
 
 /**
  * Папки смет на диске проекта (`BUDGET_DRIVE_NOTES.md`, шаг 3) — настоящий пересчёт доступов и
@@ -201,7 +201,7 @@ test("цех переименовали — переименованы папк�
   helper("rename", ctx.projectId, ctx.departmentId, users.producer);
 });
 
-test("чужие доступы к папкам смет: предупреждение продюсерам, журнал без почт, ничего не снято", async () => {
+test("чужие доступы к папкам смет: предупреждение продюсерам, журнал без почт, ничего не снято", async ({ browser }) => {
   await stub(`/google/files/${await folderId("budget-summary")}/permissions`, { email: MANUAL_EMAIL, role: "writer" });
   await stub(`/google/files/${await folderId("budgets")}/permissions`, { type: "anyone", role: "reader" });
   const before = await db.auditLog.findFirst({
@@ -220,6 +220,14 @@ test("чужие доступы к папкам смет: предупрежде
       ["Сметы / Сводная", 1, [MANUAL_EMAIL]],
     ].sort(),
   );
+  if (process.env.E2E_STATE_SHOTS) {
+    const context = await browser.newContext({ storageState: storageStatePath("producer") });
+    const page = await context.newPage();
+    await page.goto(projectPath(ctx, "/settings"));
+    await page.getByTestId("project-drive-foreign").waitFor();
+    await stateShot(page, "drive-foreign-access", "project-drive-foreign");
+    await context.close();
+  }
   // Система ничего не сняла.
   expect(await emailsOf("budget-summary", { manual: true })).toEqual([MANUAL_EMAIL]);
   expect(await emailsOf("budgets", { manual: true })).toEqual(["anyone"]);

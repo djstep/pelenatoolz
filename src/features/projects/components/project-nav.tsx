@@ -1,8 +1,24 @@
 "use client";
 
+import {
+  BookOpen,
+  CalendarDays,
+  ChevronDown,
+  ChevronRight,
+  ClipboardList,
+  FileText,
+  Film,
+  Folder,
+  LayoutGrid,
+  Settings,
+  Users,
+  Wallet,
+  type LucideIcon,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { findActiveNavHref } from "@/features/projects/lib/active-nav";
 import { cn } from "@/shared/lib/cn";
 
 export type NavItem = {
@@ -27,38 +43,89 @@ export type NavGroup = {
 
 const STORAGE_KEY = "filmprod-nav-sections";
 
-function ChevronIcon({ open }: { open: boolean }) {
+/** Иконки разделов (уровень 1) — по id группы. */
+const GROUP_ICONS: Record<string, LucideIcon> = {
+  preproduction: Users,
+  planning: CalendarDays,
+  reports: ClipboardList,
+  finance: Wallet,
+  post: Film,
+  settings: Settings,
+};
+
+/** Пункты группы без названия оформлены как разделы — у каждого своя иконка (по адресу). */
+const TOP_ITEM_ICONS: Record<string, LucideIcon> = {
+  "": LayoutGrid,
+  "/screenplay": FileText,
+  "/screenplay/dictionary": BookOpen,
+  "/files": Folder,
+};
+
+function NavCount({ count }: { count: number }) {
   return (
-    <svg
-      viewBox="0 0 20 20"
-      fill="currentColor"
-      aria-hidden
-      className={cn(
-        "h-4 w-4 shrink-0 text-[var(--muted-fg)] transition-transform duration-200",
-        open && "rotate-180",
-      )}
+    <span
+      className="min-w-[1.25rem] rounded-full bg-[var(--sidebar-warn-bg)] px-1.5 py-0.5 text-center text-[11px] font-semibold leading-none text-[var(--sidebar-warn-fg)] tabular-nums"
+      title="На согласовании"
+      aria-label={`на согласовании: ${count}`}
     >
-      <path
-        fillRule="evenodd"
-        d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.25a.75.75 0 01-1.06 0L5.21 8.29a.75.75 0 01.02-1.08z"
-        clipRule="evenodd"
-      />
-    </svg>
+      {count}
+    </span>
   );
 }
 
-function NavLink({
+function SoonPill() {
+  return (
+    <span className="rounded-[5px] border border-[var(--sidebar-line)] px-1.5 py-0.5 text-[11px] uppercase tracking-wide text-[var(--sidebar-muted)]">
+      скоро
+    </span>
+  );
+}
+
+/** Раздел без подразделов (Обзор, Сценарий, Словарь, Файлы): иконка + название, 36 px. */
+function TopLink({
   locale,
   projectId,
   item,
   active,
-  nested,
 }: {
   locale: string;
   projectId: string;
   item: NavItem;
   active: boolean;
-  nested?: boolean;
+}) {
+  const href = `/${locale}/projects/${projectId}${item.href}`;
+  const Icon = TOP_ITEM_ICONS[item.href] ?? LayoutGrid;
+
+  return (
+    <Link
+      href={href}
+      className={cn(
+        "flex h-9 items-center gap-2.5 rounded-lg px-2.5 text-sm font-[650] transition-colors",
+        active
+          ? "bg-[var(--sidebar-active-bg)] text-[var(--sidebar-active-fg)]"
+          : "text-[var(--sidebar-fg)] hover:bg-[var(--sidebar-hover)]",
+        item.soon && !active && "opacity-60",
+      )}
+    >
+      <Icon className="h-[17px] w-[17px] shrink-0" strokeWidth={1.75} aria-hidden />
+      <span className="min-w-0 flex-1 truncate">{item.label}</span>
+      {item.count ? <NavCount count={item.count} /> : null}
+      {item.soon ? <SoonPill /> : null}
+    </Link>
+  );
+}
+
+/** Подраздел (уровень 2): отступ, направляющая слева, 30 px; активный — плашка и метка. */
+function SubLink({
+  locale,
+  projectId,
+  item,
+  active,
+}: {
+  locale: string;
+  projectId: string;
+  item: NavItem;
+  active: boolean;
 }) {
   const href = `/${locale}/projects/${projectId}${item.href}`;
 
@@ -66,39 +133,16 @@ function NavLink({
     <Link
       href={href}
       className={cn(
-        "flex items-center justify-between rounded-lg py-2 text-sm transition-all duration-200",
-        nested ? "pl-3 pr-2" : "px-3",
+        "relative flex h-[30px] items-center justify-between gap-2 rounded-md px-2.5 text-[13.5px] transition-colors",
         active
-          ? "glass-nav-active font-medium text-[var(--foreground)]"
-          : "text-[var(--muted-fg)] project-nav-link hover:text-[var(--foreground)]",
+          ? "bg-[var(--sidebar-active-bg)] font-semibold text-[var(--sidebar-active-fg)] before:absolute before:-left-[11px] before:top-1/2 before:h-4 before:w-[2px] before:-translate-y-1/2 before:rounded-full before:bg-[var(--sidebar-fg)]"
+          : "font-[450] text-[var(--sidebar-fg-2)] hover:bg-[var(--sidebar-hover)] hover:text-[var(--sidebar-fg)]",
         item.soon && !active && "opacity-60",
       )}
     >
-      <span className="flex items-center gap-2">
-        {nested ? (
-          <span
-            className={cn(
-              "h-1.5 w-1.5 shrink-0 rounded-full",
-              active ? "bg-[var(--accent)]" : "bg-[var(--muted-fg)]/50",
-            )}
-          />
-        ) : null}
-        {item.label}
-      </span>
-      {item.count ? (
-        <span
-          className="min-w-[1.25rem] rounded-full bg-[#eab308] px-1.5 py-0.5 text-center text-[10px] font-semibold leading-none text-black tabular-nums"
-          title="На согласовании"
-          aria-label={`на согласовании: ${item.count}`}
-        >
-          {item.count}
-        </span>
-      ) : null}
-      {item.soon ? (
-        <span className="rounded-md border border-[var(--border)] bg-[var(--surface-2)] px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-[var(--muted-fg)]">
-          скоро
-        </span>
-      ) : null}
+      <span className="min-w-0 truncate">{item.label}</span>
+      {item.count ? <NavCount count={item.count} /> : null}
+      {item.soon ? <SoonPill /> : null}
     </Link>
   );
 }
@@ -116,30 +160,31 @@ function CollapsibleSection({
   groupActive: boolean;
   children: React.ReactNode;
 }) {
+  const Icon = GROUP_ICONS[group.id] ?? Folder;
+  const Chevron = open ? ChevronDown : ChevronRight;
+
   return (
-    <div
-      className={cn(
-        "project-nav-section overflow-hidden rounded-xl transition-colors duration-200",
-        open && "project-nav-section--open",
-        groupActive && !open && "project-nav-section--active",
-      )}
-    >
+    <div className="border-t border-[var(--sidebar-line)] py-1.5">
       <button
         type="button"
         onClick={onToggle}
         aria-expanded={open}
-        className={cn(
-          "flex w-full items-center gap-2 px-3 py-2.5 text-left transition-colors project-nav-link",
-          groupActive ? "text-[var(--accent)]" : "text-[var(--foreground)]",
-        )}
+        className="flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-left text-sm font-[650] text-[var(--sidebar-fg)] transition-colors hover:bg-[var(--sidebar-hover)]"
       >
-        <ChevronIcon open={open} />
-        <span className="flex-1 text-sm font-medium">{group.title}</span>
+        <Icon className="h-[17px] w-[17px] shrink-0" strokeWidth={1.75} aria-hidden />
+        <span className={cn("min-w-0 flex-1 truncate", groupActive && !open && "text-white")}>
+          {group.title}
+        </span>
+        {/* Здесь активная страница: у свёрнутого раздела — точка; для чтения с экрана — «здесь», как раньше. */}
         {groupActive ? (
-          <span className="rounded-full border border-[color-mix(in srgb,var(--accent)_30%,transparent)] bg-[color-mix(in srgb,var(--accent)_12%,transparent)] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[var(--accent)]">
-            здесь
-          </span>
+          <>
+            {!open ? (
+              <span aria-hidden className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--sidebar-fg)]" />
+            ) : null}
+            <span className="sr-only">здесь</span>
+          </>
         ) : null}
+        <Chevron className="h-4 w-4 shrink-0 text-[var(--sidebar-muted)]" aria-hidden />
       </button>
 
       <div
@@ -149,7 +194,7 @@ function CollapsibleSection({
         )}
       >
         <div className="min-h-0 overflow-hidden">
-          <div className="border-t border-[var(--border)] px-1.5 pb-1.5 pt-1">
+          <div className="ml-[18px] mt-0.5 border-l-[1.5px] border-[var(--sidebar-guide)] pb-1 pl-2.5">
             {children}
           </div>
         </div>
@@ -173,24 +218,10 @@ export function ProjectNav({
 
   const allItems = useMemo(() => groups.flatMap((group) => group.items), [groups]);
 
-  const activeHref = useMemo(() => {
-    const base = `/${locale}/projects/${projectId}`;
-    const matches = allItems
-      .filter((item) => {
-        const full = `${base}${item.href}`;
-        if (item.href === "") return pathname === full;
-        if (item.exact) {
-          return pathname === full;
-        }
-        if (pathname === full || pathname.startsWith(`${full}/`)) return true;
-        return (item.matchPrefixes ?? []).some((prefix) => {
-          const p = `${base}${prefix}`;
-          return pathname === p || pathname.startsWith(`${p}/`);
-        });
-      })
-      .sort((a, b) => b.href.length - a.href.length);
-    return matches[0]?.href ?? null;
-  }, [allItems, locale, projectId, pathname]);
+  const activeHref = useMemo(
+    () => findActiveNavHref(allItems, `/${locale}/projects/${projectId}`, pathname),
+    [allItems, locale, projectId, pathname],
+  );
 
   const isActive = useCallback(
     (href: string) => activeHref === href,
@@ -245,14 +276,11 @@ export function ProjectNav({
   }
 
   return (
-    <nav className="space-y-2">
+    <nav>
       {topGroups.map((group) => (
-        <div
-          key={group.id}
-          className="project-nav-section space-y-0.5 rounded-xl p-1.5"
-        >
+        <div key={group.id} className="space-y-0.5 pb-1.5">
           {group.items.map((item) => (
-            <NavLink
+            <TopLink
               key={item.href || "__overview"}
               locale={locale}
               projectId={projectId}
@@ -276,20 +304,19 @@ export function ProjectNav({
             groupActive={groupActive}
           >
             {group.items.length > 0 ? (
-              <div className="space-y-0.5">
+              <div className="space-y-0.5 pt-0.5">
                 {group.items.map((item) => (
-                  <NavLink
+                  <SubLink
                     key={item.href}
                     locale={locale}
                     projectId={projectId}
                     item={item}
                     active={isActive(item.href)}
-                    nested
                   />
                 ))}
               </div>
             ) : group.emptyHint ? (
-              <p className="px-3 py-2 text-xs leading-relaxed text-[var(--muted-fg)]">
+              <p className="px-2.5 py-1.5 text-xs leading-relaxed text-[var(--sidebar-muted)]">
                 {group.emptyHint}
               </p>
             ) : null}

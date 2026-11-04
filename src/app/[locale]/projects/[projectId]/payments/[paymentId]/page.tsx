@@ -79,7 +79,7 @@ export default async function PaymentDetailPage({ params }: Props) {
           ← К платежам
         </Link>
         <div>
-          <h1 className="font-display text-xl font-semibold">
+          <h1 className="font-display text-[27px] font-bold leading-tight">
             Платёж {formatDateShort(payment.date)}
           </h1>
           <p className="text-sm text-[var(--muted-fg)]">
@@ -89,7 +89,7 @@ export default async function PaymentDetailPage({ params }: Props) {
         </div>
       </header>
 
-      <dl className="grid gap-3 rounded-2xl border border-[var(--border)] bg-[var(--panel-solid)] p-4 text-sm sm:grid-cols-2">
+      <dl className="grid gap-3 rounded-xl border border-[var(--border)] bg-[var(--panel-solid)] p-4 text-sm sm:grid-cols-2">
         <div>
           <dt className="text-xs text-[var(--muted-fg)]">Сумма / с налогом</dt>
           <dd>
@@ -117,7 +117,7 @@ export default async function PaymentDetailPage({ params }: Props) {
 
       {showCertificates ? (
         <section className="space-y-3">
-          <h2 className="font-display text-lg font-semibold">Акты</h2>
+          <h2 className="font-display text-base font-bold">Акты</h2>
           <CertificatesWorkspace
             projectId={projectId}
             certificates={certificateRows}

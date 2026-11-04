@@ -26,7 +26,7 @@ export default async function SettingsResourcesPage({ params }: Props) {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="font-display text-2xl font-semibold">Ресурсы</h2>
+        <h2 className="font-display text-[27px] font-bold leading-tight">Ресурсы</h2>
         <p className="mt-1 text-sm text-[var(--muted-fg)]">
           Категории и элементы ресурсов для планирования съёмок.
         </p>

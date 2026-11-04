@@ -56,7 +56,7 @@ export function QuestionCard({
       className={cn(
         "space-y-2 rounded-xl border p-3",
         unanswered
-          ? "border-[var(--danger)]/50 bg-[rgba(251,113,133,0.06)]"
+          ? "border-[var(--tone-danger-line)] bg-[var(--tone-danger-bg)]"
           : answered != null
             ? "border-[var(--accent)]/30"
             : "border-[var(--border)]",
@@ -207,7 +207,7 @@ export function SceneDiff({ blocks }: { blocks: NormalizedBlock[] }) {
                 key={block.paragraphIndex}
                 className={cn(
                   "border-b border-[var(--border)]/50 align-top",
-                  changed && "bg-[var(--accent)]/8",
+                  changed && "bg-[var(--accent-soft)]",
                 )}
               >
                 <td className="px-2 py-1 text-[var(--muted-fg)]">

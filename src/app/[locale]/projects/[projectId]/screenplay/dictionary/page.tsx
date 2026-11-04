@@ -63,7 +63,7 @@ export default async function ScriptDictionaryPage({ params }: Props) {
   return (
     <div className="space-y-4">
       <div>
-        <h2 className="font-display text-2xl font-semibold">Словарь сценария</h2>
+        <h2 className="font-display text-[27px] font-bold leading-tight">Словарь сценария</h2>
         <p className="mt-1 text-sm text-[var(--muted-fg)]">
           Ответы на постоянные вопросы импорта: при следующих импортах и обновлении либретто
           они применяются молча. Удалите правило — вопрос задастся снова.

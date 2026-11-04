@@ -25,8 +25,8 @@ export function ScenePlanningHistory({
   attempts: ScenePlanningAttempt[];
 }) {
   return (
-    <aside className="rounded-2xl border border-[var(--border)] bg-[var(--panel-solid)] p-4">
-      <h3 className="font-display text-sm font-semibold tracking-wide">
+    <aside className="rounded-xl border border-[var(--border)] bg-[var(--panel-solid)] p-4">
+      <h3 className="font-display text-[15px] font-bold">
         История планирования
       </h3>
       <p className="mt-1 text-xs text-[var(--muted-fg)]">

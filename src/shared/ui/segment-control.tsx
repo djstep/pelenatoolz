@@ -18,7 +18,13 @@ export function SegmentControl<T extends string>({
   className?: string;
 }) {
   return (
-    <div className={cn("flex flex-wrap gap-2", className)}>
+    // Сегменты: подложка --background, выбранный — --surface с рамкой.
+    <div
+      className={cn(
+        "inline-flex max-w-full flex-wrap gap-1 rounded-lg border border-[var(--border)] bg-[var(--background)] p-1",
+        className,
+      )}
+    >
       <input type="hidden" name={name} value={value} />
       {options.map((option) => {
         const selected = option.value === value;
@@ -29,10 +35,10 @@ export function SegmentControl<T extends string>({
             disabled={disabled}
             aria-pressed={selected}
             className={cn(
-              "rounded-xl border px-4 py-2 text-sm transition-all duration-150",
+              "rounded-md border px-3 py-[5px] text-sm leading-5 transition-colors duration-150",
               selected
-                ? "border-[var(--accent)] bg-[var(--accent)]/20 font-medium text-[var(--foreground)] shadow-[0_0_20px_rgba(110,168,255,0.12)]"
-                : "border-[var(--border)] bg-[rgb(var(--tint-rgb)/0.05)] text-[var(--muted-fg)] hover:border-[var(--border-strong)] hover:bg-[rgb(var(--tint-rgb)/0.1)] hover:text-[var(--foreground)]",
+                ? "border-[var(--border)] bg-[var(--surface)] font-semibold text-[var(--foreground)] shadow-[var(--glass-shadow)]"
+                : "border-transparent text-[var(--muted-fg)] hover:text-[var(--foreground)]",
               disabled && "cursor-not-allowed opacity-60",
             )}
             onClick={() => onChange(option.value)}

@@ -136,7 +136,7 @@ export function BudgetItemSelect({
               data-selected={(choice?.id ?? "") === value ? "true" : undefined}
               className={cn(
                 "glass-dropdown-item w-full text-left",
-                index === active && "bg-[var(--accent)]/10",
+                index === active && "bg-[var(--accent-soft)]",
               )}
               onMouseEnter={() => setActive(index)}
               onClick={() => commit(choice)}
@@ -144,7 +144,7 @@ export function BudgetItemSelect({
               {choice ? (
                 <>
                   <span className="block truncate">
-                    <span className="font-mono text-xs">{choice.code}</span> · {choice.name}
+                    <span className="tabular-nums text-xs">{choice.code}</span> · {choice.name}
                   </span>
                   <span className="block truncate text-xs text-[var(--muted-fg)]">
                     {choice.departmentName}

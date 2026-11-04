@@ -40,7 +40,7 @@ export default async function SchedulePage({ params }: Props) {
       <div className="shrink-0 space-y-3">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 className="font-display text-2xl font-semibold">КПП и вызывные</h2>
+            <h2 className="font-display text-[27px] font-bold leading-tight">КПП и вызывные</h2>
             <p className="mt-1 text-sm text-[var(--muted-fg)]">
               Фильтры слева · перетаскивание сцены за блок · клик — подробности · ⋮
               — меню дня (комментарий, тип, вызывной)

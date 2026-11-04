@@ -29,7 +29,7 @@ export default async function ResourceUsagePage({ params }: Props) {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="font-display text-2xl font-semibold">
+        <h2 className="font-display text-[27px] font-bold leading-tight">
           Ведомость по использованию ресурсов
         </h2>
         <p className="mt-1 text-sm text-[var(--muted-fg)]">

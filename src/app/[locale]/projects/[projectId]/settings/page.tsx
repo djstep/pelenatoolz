@@ -61,7 +61,7 @@ export default async function ProjectSettingsPage({ params, searchParams }: Prop
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="font-display text-2xl font-semibold">Настройки проекта</h2>
+        <h2 className="font-display text-[27px] font-bold leading-tight">Настройки проекта</h2>
         <p className="mt-1 text-sm text-[var(--muted-fg)]">
           Редактирование параметров, архивирование и удаление.
         </p>
@@ -69,7 +69,7 @@ export default async function ProjectSettingsPage({ params, searchParams }: Prop
 
       {canWrite ? (
         <Card>
-          <h3 className="mb-4 font-display text-lg font-semibold">
+          <h3 className="mb-4 font-display text-base font-bold">
             Основные параметры
           </h3>
           <ProjectSettingsForm project={projectSettingsValues(ctx.project)} />
@@ -78,7 +78,7 @@ export default async function ProjectSettingsPage({ params, searchParams }: Prop
 
       {showDrive ? (
         <Card>
-          <h3 className="mb-1 font-display text-lg font-semibold">Диск проекта</h3>
+          <h3 className="mb-1 font-display text-base font-bold">Диск проекта</h3>
           <p className="mb-4 text-sm text-[var(--muted-fg)]">
             Google Диск, куда система выгружает документы для просмотра и согласования.
           </p>
@@ -110,7 +110,7 @@ export default async function ProjectSettingsPage({ params, searchParams }: Prop
 
       {canManage ? (
         <Card>
-          <h3 className="mb-4 font-display text-lg font-semibold">
+          <h3 className="mb-4 font-display text-base font-bold">
             Управление проектом
           </h3>
           <ProjectDangerZone

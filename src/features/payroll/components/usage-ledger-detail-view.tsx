@@ -36,7 +36,7 @@ export function UsageLedgerDetailView({
         >
           ← {backLabel}
         </Link>
-        <h1 className="font-display mt-2 text-2xl font-semibold">{title}</h1>
+        <h1 className="font-display mt-2 text-2xl font-bold tabular-nums">{title}</h1>
         {subtitle ? (
           <p className="mt-1 text-sm text-[var(--muted-fg)]">{subtitle}</p>
         ) : null}
@@ -52,7 +52,7 @@ export function UsageLedgerDetailView({
         ) : null}
       </div>
 
-      <section className="rounded-2xl border border-[var(--border)] bg-[var(--panel-solid)] p-5">
+      <section className="rounded-xl border border-[var(--border)] bg-[var(--panel-solid)] p-5">
         <h2 className="mb-3 font-semibold">Ведомость по использованию</h2>
         <OvertimeHistoryTable
           locale={locale}

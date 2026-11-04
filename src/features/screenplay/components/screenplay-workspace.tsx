@@ -307,7 +307,7 @@ export function ScreenplayWorkspace({
                 type="button"
                 disabled={pending}
                 onClick={makeCurrent}
-                className="rounded-full border border-[var(--border)] px-2.5 py-0.5 text-xs text-[var(--muted-fg)] hover:border-emerald-500/50 hover:text-[var(--tone-success-strong)] disabled:opacity-50"
+                className="rounded-full border border-[var(--border)] px-2.5 py-0.5 text-xs text-[var(--muted-fg)] hover:border-[var(--tone-success-line)] hover:text-[var(--tone-success-strong)] disabled:opacity-50"
               >
                 Сделать текущей
               </button>

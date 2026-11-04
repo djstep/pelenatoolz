@@ -120,7 +120,7 @@ export function ProjectDangerZone({
         </div>
       </div>
 
-      <div className="rounded-lg border border-red-500/30 bg-red-500/5 p-4">
+      <div className="rounded-lg border border-[var(--tone-danger-line)] bg-[var(--tone-danger-bg)] p-4">
         <h4 className="font-semibold text-[var(--tone-danger)]">Удаление проекта</h4>
         {canDelete ? (
           <>

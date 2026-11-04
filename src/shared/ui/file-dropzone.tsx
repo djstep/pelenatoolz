@@ -132,18 +132,18 @@ export function FileDropzone({
         }}
         onDrop={onDrop}
         className={cn(
-          "group relative flex min-h-[9.5rem] cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border border-dashed px-6 py-8 text-center transition-all duration-200",
-          "bg-[rgb(var(--tint-rgb)/0.03)] backdrop-blur-md",
+          "group relative flex min-h-[9.5rem] cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border border-dashed px-6 py-8 text-center transition-all duration-200",
+          "bg-[var(--surface-2)]",
           dragging
-            ? "border-[var(--accent)] bg-[var(--accent)]/10 shadow-[0_0_32px_rgba(110,168,255,0.18)]"
+            ? "border-[var(--accent)] bg-[var(--accent-soft)]"
             : "border-[var(--border-strong)] hover:border-[var(--accent)]/60 hover:bg-[rgb(var(--tint-rgb)/0.05)]",
           disabled && "pointer-events-none opacity-60",
-          file && !dragging && "border-solid border-[var(--accent)]/45 bg-[var(--accent)]/8",
+          file && !dragging && "border-solid border-[var(--accent)]/45 bg-[var(--accent-soft)]",
         )}
       >
         <div
           className={cn(
-            "flex h-12 w-12 items-center justify-center rounded-xl border border-[var(--border)] bg-[rgb(var(--tint-rgb)/0.05)] text-[var(--muted-fg)] transition",
+            "flex h-12 w-12 items-center justify-center rounded-lg border border-[var(--border)] bg-[rgb(var(--tint-rgb)/0.05)] text-[var(--muted-fg)] transition",
             (dragging || file) && "border-[var(--accent)]/40 text-[var(--accent)]",
           )}
         >

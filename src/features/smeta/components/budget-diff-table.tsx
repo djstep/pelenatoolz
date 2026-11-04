@@ -113,7 +113,7 @@ export function BudgetDiffTable({
                     key={row.itemId}
                     className={cn("border-t border-[var(--border)]/60 align-top", KIND_ROW[row.kind])}
                   >
-                    <td className="px-3 py-2 font-mono text-xs whitespace-nowrap">{row.code}</td>
+                    <td className="px-3 py-2 tabular-nums text-xs whitespace-nowrap">{row.code}</td>
                     <td className="px-3 py-2">
                       {row.fields.includes("name") && row.before && row.after ? (
                         <>
@@ -168,7 +168,7 @@ export function BudgetDiffTable({
         <span className="text-[var(--muted-fg)]">Итог по цеху:</span>
         <span className="text-[var(--muted-fg)]">{formatRub(diff.totalBefore)}</span>
         <span>→</span>
-        <span className="font-display text-lg font-semibold">{formatRub(diff.totalAfter)}</span>
+        <span className="font-display text-base font-bold">{formatRub(diff.totalAfter)}</span>
         <span
           className={cn(
             "font-medium",

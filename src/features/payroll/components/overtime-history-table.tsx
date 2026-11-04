@@ -74,7 +74,7 @@ export function OvertimeHistoryTable({
                 key={row.workRowId}
                 className={cn(
                   "border-b border-[var(--border)]/50",
-                  row.hasExtras && "bg-red-500/15",
+                  row.hasExtras && "bg-[var(--tone-danger-bg)]",
                 )}
               >
                 <td className="px-2 py-2">

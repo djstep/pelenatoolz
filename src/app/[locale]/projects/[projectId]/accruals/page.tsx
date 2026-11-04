@@ -80,7 +80,7 @@ export default async function AccrualsPage({ params, searchParams }: Props) {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="font-display text-2xl font-semibold">Начисления</h2>
+          <h2 className="font-display text-[27px] font-bold leading-tight">Начисления</h2>
           <p className="mt-1 text-sm text-[var(--muted-fg)]">
             Фактически понесённые расходы (метод начисления) · валюта:{" "}
             {ctx.project.currency}

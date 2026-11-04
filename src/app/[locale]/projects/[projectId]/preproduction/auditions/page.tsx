@@ -43,7 +43,7 @@ export default async function AuditionsPage({ params }: Props) {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="font-display text-2xl font-semibold">Кастинг-пробы</h2>
+        <h2 className="font-display text-[27px] font-bold leading-tight">Кастинг-пробы</h2>
         <p className="mt-1 text-sm text-[var(--muted-fg)]">
           Планирование вызовов и видеозаписи проб.
         </p>

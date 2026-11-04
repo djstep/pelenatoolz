@@ -199,7 +199,7 @@ function SortableDepartmentRow({
             : "Глава не назначен"}
         </div>
       </div>
-      <span className="rounded-md border border-[var(--border)] px-2 py-0.5 font-mono text-xs text-[var(--muted-fg)]">
+      <span className="rounded-md border border-[var(--border)] px-2 py-0.5 tabular-nums text-xs text-[var(--muted-fg)]">
         {department.codePrefix}
       </span>
       <div className="flex gap-2">

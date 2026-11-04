@@ -291,16 +291,16 @@ export function AvailabilityCalendar({
 
       <div className="flex flex-wrap gap-3 text-[10px] text-[var(--muted-fg)]">
         <span className="inline-flex items-center gap-1">
-          <span className="h-3 w-3 rounded border bg-emerald-500/30" /> Свободен
+          <span className="h-3 w-3 rounded border border-[var(--tone-success-line)] bg-[var(--tone-success-bg)]" /> Свободен
         </span>
         <span className="inline-flex items-center gap-1">
-          <span className="h-3 w-3 rounded border bg-amber-500/35" /> Другой проект
+          <span className="h-3 w-3 rounded border border-[var(--tone-warning-line)] bg-[var(--tone-warning-bg)]" /> Другой проект
         </span>
         <span className="inline-flex items-center gap-1">
-          <span className="h-3 w-3 rounded border bg-violet-500/35" /> Наш проект (КПП или бронь)
+          <span className="h-3 w-3 rounded border border-[var(--tone-violet-line)] bg-[var(--tone-violet-bg)]" /> Наш проект (КПП или бронь)
         </span>
         <span className="inline-flex items-center gap-1">
-          <span className="h-3 w-3 rounded border bg-rose-500/35" /> Недоступен
+          <span className="h-3 w-3 rounded border border-[var(--tone-danger-line)] bg-[var(--tone-danger-bg)]" /> Недоступен
         </span>
         <span>Клик по ячейке — выбор статуса и комментария</span>
       </div>
@@ -361,7 +361,7 @@ export function AvailabilityCalendar({
               {filteredRows.map((row) => (
                 <tr
                   key={row.id}
-                  className={`border-b border-[var(--border)]/60 ${row.id === highlightRowId ? "bg-[var(--accent)]/10" : ""}`}
+                  className={`border-b border-[var(--border)]/60 ${row.id === highlightRowId ? "bg-[var(--accent-soft)]" : ""}`}
                 >
                   <td className="sticky left-0 z-10 bg-[var(--panel-solid)] px-3 py-2">
                     <div className="flex items-center gap-2">
@@ -464,12 +464,12 @@ export function AvailabilityCalendar({
             </p>
 
             {editor.kppLocked ? (
-              <p className="rounded-lg border border-violet-400/40 bg-violet-500/15 px-3 py-2 text-sm text-[var(--tone-violet)]">
+              <p className="rounded-lg border border-[var(--tone-violet-line)] bg-[var(--tone-violet-bg)] px-3 py-2 text-sm text-[var(--tone-violet)]">
                 Этот день занят по КПП — статус задаётся автоматически. Можно добавить
                 комментарий.
               </p>
             ) : editor.status === "BUSY_OUR_PROJECT" ? (
-              <p className="rounded-lg border border-violet-400/40 bg-violet-500/15 px-3 py-2 text-sm text-[var(--tone-violet)]">
+              <p className="rounded-lg border border-[var(--tone-violet-line)] bg-[var(--tone-violet-bg)] px-3 py-2 text-sm text-[var(--tone-violet)]">
                 Ручная бронь на наш проект (без сцены в КПП). Подсказки при перетаскивании
                 в КПП учитывают этот статус.
               </p>

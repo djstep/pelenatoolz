@@ -89,7 +89,7 @@ export function CallSheetView({
               КПП
             </Link>
           </p>
-          <h2 className="mt-1 font-display text-2xl font-semibold">
+          <h2 className="mt-1 font-display text-[27px] font-bold leading-tight">
             Вызывной · День {day.dayNumber}
             {day.shiftNumber ? ` · Смена ${day.shiftNumber}` : ""}
           </h2>

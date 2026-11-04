@@ -50,7 +50,7 @@ export default async function ShiftEntryPage({ params, searchParams }: Props) {
             ← Начисления
           </Link>
         </p>
-        <h2 className="mt-2 font-display text-2xl font-semibold">
+        <h2 className="mt-2 font-display text-[27px] font-bold leading-tight">
           Ввод посменных расходов
         </h2>
         <p className="mt-1 text-sm text-[var(--muted-fg)]">

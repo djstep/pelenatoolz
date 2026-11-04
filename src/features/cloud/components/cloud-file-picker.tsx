@@ -145,7 +145,7 @@ export function CloudReconnectNotice({
       {stale.map((c) => (
         <div
           key={c.id}
-          className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[rgba(251,113,133,0.35)] bg-[rgba(251,113,133,0.08)] px-3 py-2 text-sm"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--tone-danger-line)] bg-[var(--tone-danger-bg)] px-3 py-2 text-sm"
         >
           <span>{reconnectReasonText(c.provider, c.reconnectReason!)}</span>
           <CloudConnectButton

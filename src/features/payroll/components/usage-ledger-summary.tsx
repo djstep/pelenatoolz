@@ -149,7 +149,7 @@ export function UsageLedgerSummary({
           отчётах.
         </p>
       ) : (
-        <div className="overflow-x-auto rounded-2xl border border-[var(--border)] bg-[var(--panel-solid)]">
+        <div className="overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--panel-solid)]">
           <table className="w-full min-w-[900px] text-left text-sm">
             <thead>
               <tr className="border-b border-[var(--border)] text-[var(--muted-fg)]">

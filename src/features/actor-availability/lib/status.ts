@@ -38,15 +38,15 @@ export function cellColorClass(
   opts?: { kppAuto?: boolean },
 ): string {
   if (opts?.kppAuto || status === "BUSY_OUR_PROJECT") {
-    return "bg-violet-500/35 border-violet-400/50 text-[var(--tone-violet)]";
+    return "bg-[var(--tone-violet-bg)] border-[var(--tone-violet-line)] text-[var(--tone-violet)]";
   }
   switch (status) {
     case "FREE":
-      return "bg-emerald-500/30 border-emerald-400/45 text-[var(--tone-success-soft)]";
+      return "bg-[var(--tone-success-bg)] border-[var(--tone-success-line)] text-[var(--tone-success-soft)]";
     case "BUSY_OTHER":
-      return "bg-amber-500/35 border-amber-400/50 text-[var(--tone-warning-soft)]";
+      return "bg-[var(--tone-warning-bg)] border-[var(--tone-warning-line)] text-[var(--tone-warning-soft)]";
     case "UNAVAILABLE":
-      return "bg-rose-500/35 border-rose-400/50 text-[var(--tone-danger-soft)]";
+      return "bg-[var(--tone-danger-bg)] border-[var(--tone-danger-line)] text-[var(--tone-danger-soft)]";
     default:
       return "bg-[rgb(var(--tint-rgb)/0.05)] border-[rgb(var(--tint-rgb)/0.1)] text-[var(--muted-fg)]";
   }

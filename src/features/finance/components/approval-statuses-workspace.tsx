@@ -165,7 +165,7 @@ export function ApprovalStatusesWorkspace({
     <section className="space-y-3">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h3 className="font-display text-lg font-semibold">
+          <h3 className="font-display text-base font-bold">
             Статусы согласования
           </h3>
           <p className="mt-1 text-sm text-[var(--muted-fg)]">
@@ -180,7 +180,7 @@ export function ApprovalStatusesWorkspace({
         ) : null}
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--panel-solid)]">
+      <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--panel-solid)]">
         {statuses.length === 0 ? (
           <p className="px-4 py-6 text-sm text-[var(--muted-fg)]">
             Статусов пока нет.

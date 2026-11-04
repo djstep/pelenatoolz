@@ -197,7 +197,7 @@ export function FinanceVariablesWorkspace({
 
   return (
     <div className="space-y-6">
-      <section className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--panel-solid)]">
+      <section className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--panel-solid)]">
         <div className="border-b border-[var(--border)] px-4 py-3">
           <h3 className="font-semibold">Переменные проекта</h3>
           <p className="mt-1 text-xs text-[var(--muted-fg)]">
@@ -216,7 +216,7 @@ export function FinanceVariablesWorkspace({
         ))}
       </section>
 
-      <section className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--panel-solid)]">
+      <section className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--panel-solid)]">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] px-4 py-3">
           <div>
             <h3 className="font-semibold">Свои переменные</h3>

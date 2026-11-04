@@ -29,7 +29,7 @@ export default async function CastingPage({ params, searchParams }: Props) {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="font-display text-2xl font-semibold">Кастинг</h2>
+        <h2 className="font-display text-[27px] font-bold leading-tight">Кастинг</h2>
         <p className="mt-1 text-sm text-[var(--muted-fg)]">
           Воронка кандидатов на роли: реальные люди и заявки на персонажей.
         </p>

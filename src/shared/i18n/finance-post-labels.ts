@@ -41,8 +41,8 @@ export const postTaskStatusLabels: Record<PostTaskStatus, string> = {
 };
 
 export const postTaskStatusColors: Record<PostTaskStatus, string> = {
-  TODO: "bg-zinc-500/20 text-[var(--tone-neutral)] border-zinc-400/30",
-  IN_PROGRESS: "bg-sky-600/20 text-[var(--tone-info-soft)] border-sky-500/30",
-  DONE: "bg-emerald-600/20 text-[var(--tone-success-soft)] border-emerald-500/30",
-  BLOCKED: "bg-red-600/20 text-[var(--tone-danger)] border-red-500/30",
+  TODO: "bg-[var(--glass-badge-bg)] text-[var(--tone-neutral)] border-[var(--border)]",
+  IN_PROGRESS: "bg-[var(--tone-info-bg)] text-[var(--tone-info-soft)] border-[var(--tone-info-line)]",
+  DONE: "bg-[var(--tone-success-bg)] text-[var(--tone-success-soft)] border-[var(--tone-success-line)]",
+  BLOCKED: "bg-[var(--tone-danger-bg)] text-[var(--tone-danger)] border-[var(--tone-danger-line)]",
 };

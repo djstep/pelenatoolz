@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { expect, test, type Browser, type Page } from "@playwright/test";
 import { E2E_ROLE_NAMES, E2E_ROLES, type E2ERoleKey } from "./fixtures/data";
 import { e2eDb } from "./helpers/db";
-import { e2eContext, projectPath, storageStatePath } from "./helpers/session";
+import { e2eContext, projectPath, stateShot, storageStatePath } from "./helpers/session";
 
 /**
  * Папки и доступы на диске проекта (шаг 5 волны дисков) — против заглушки дисков, как `c3`/`c4`.
@@ -324,6 +324,7 @@ test("ошибка Google при выдаче: роль сменилась, ст
   await expect(failed).toContainText("Google не может выдать доступ на эту почту");
   await expect(failed).toContainText(email("nocallsheet"));
   await expect(failed).toContainText("почта не Google");
+  await stateShot(page, "drive-not-synced", "project-drive-unsynced");
 
   const audit = await db.auditLog.findFirst({
     where: { projectId: ctx.projectId, entityType: "project_drive", summary: { startsWith: "Ошибка синхронизации" } },

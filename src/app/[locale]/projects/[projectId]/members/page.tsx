@@ -52,14 +52,15 @@ export default async function ProjectMembersPage({ params }: Props) {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="font-display text-2xl font-semibold">{t("title")}</h2>
+        <h2 className="font-display text-[27px] font-bold leading-tight">{t("title")}</h2>
         <p className="mt-1 text-sm text-[var(--muted-fg)]">
           Роли, приглашения и доступ к модулям проекта.
         </p>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
-        <Card>
+        {/* min-w-0: широкая таблица прокручивается внутри карточки, а не растягивает страницу. */}
+        <Card className="min-w-0">
           <MembersTable
             projectId={projectId}
             members={members.map((m) => ({
@@ -84,7 +85,7 @@ export default async function ProjectMembersPage({ params }: Props) {
         {manage ? (
           <div className="space-y-6">
             <Card>
-              <h3 className="mb-4 font-display text-lg font-semibold">
+              <h3 className="mb-4 font-display text-base font-bold">
                 {t("invite")}
               </h3>
               <InviteForm

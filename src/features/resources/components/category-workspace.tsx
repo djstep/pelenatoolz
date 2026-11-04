@@ -118,7 +118,7 @@ export function CategoryWorkspace({
         >
           ← Все категории
         </Link>
-        <h1 className="font-display mt-2 text-2xl font-semibold">{category.name}</h1>
+        <h1 className="font-display mt-2 text-2xl font-bold tabular-nums">{category.name}</h1>
         <p className="mt-1 text-sm text-[var(--muted-fg)]">
           {category.fillInScenes ? "Посценный" : ""}
           {category.perShift ? " · Посменный" : ""}

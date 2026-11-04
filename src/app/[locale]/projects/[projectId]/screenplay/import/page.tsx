@@ -27,7 +27,7 @@ export default async function ScreenplayImportPage({ params }: Props) {
         >
           ← Все версии
         </Link>
-        <h2 className="font-display text-2xl font-semibold">Импорт сценария</h2>
+        <h2 className="font-display text-[27px] font-bold leading-tight">Импорт сценария</h2>
         <p className="mt-1 text-sm text-[var(--muted-fg)]">
           Файл Word .docx приводится к одному виду: сцены, шапки, персонажи, реплики, переходы.
           Экран показывает только то, в чём программа не уверена. Импорт создаст новую версию

@@ -85,7 +85,7 @@ export function AuditWorkspace({
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="font-display text-2xl font-semibold">Журнал изменений</h2>
+        <h2 className="font-display text-[27px] font-bold leading-tight">Журнал изменений</h2>
         <p className="mt-1 text-sm text-[var(--muted-fg)]">
           Кто, что и когда менял в проекте. Всего записей: {total}.
         </p>

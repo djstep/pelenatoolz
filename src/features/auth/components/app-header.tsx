@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { cache } from "react";
 import { getTranslations } from "next-intl/server";
 import { auth } from "@/auth";
 import { logoutAction } from "@/features/auth/actions";
@@ -9,17 +10,19 @@ import { AppBrand } from "@/shared/ui/app-brand";
 import { ThemeToggle } from "@/shared/theme/theme-toggle";
 
 /** Инициалы для кружка в меню пользователя: «Анна Петрова» → «АП», почта → первая буква. */
-function initials(name: string) {
+export function initials(name: string) {
   const words = name.split(/[\s@._-]+/).filter(Boolean);
   const letters = (words.length > 1 && !name.includes("@") ? words.slice(0, 2) : words.slice(0, 1))
     .map((w) => w[0]);
   return letters.join("").toLocaleUpperCase("ru") || "?";
 }
 
-export async function AppHeader({ locale }: { locale: string }) {
+/**
+ * Имя пользователя для шапки и меню проекта; без входа — на страницу входа.
+ * Один запрос на страницу (cache): шапку и меню проекта рисуют разные компоненты.
+ */
+export const currentDisplayName = cache(async (locale: string) => {
   const session = await auth();
-  const t = await getTranslations("nav");
-
   if (!session?.user) {
     redirect(`/${locale}/login`);
   }
@@ -28,7 +31,12 @@ export async function AppHeader({ locale }: { locale: string }) {
   const profile = session.user.id
     ? await prisma.user.findUnique({ where: { id: session.user.id }, select: { name: true } })
     : null;
-  const displayName = profile?.name || session.user.name || session.user.email || "Профиль";
+  return profile?.name || session.user.name || session.user.email || "Профиль";
+});
+
+export async function AppHeader({ locale }: { locale: string }) {
+  const displayName = await currentDisplayName(locale);
+  const t = await getTranslations("nav");
 
   return (
     <header className="glass-header sticky top-0 z-50">

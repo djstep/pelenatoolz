@@ -31,7 +31,7 @@ export default async function ProjectRolesPage({ params }: Props) {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="font-display text-2xl font-semibold">Роли и права доступа</h2>
+        <h2 className="font-display text-[27px] font-bold leading-tight">Роли и права доступа</h2>
         <p className="mt-1 text-sm text-[var(--muted-fg)]">
           Матрица по разделам и отдельно — финансовые условия по типам ресурсов
           (актёры, локации, каждая категория).

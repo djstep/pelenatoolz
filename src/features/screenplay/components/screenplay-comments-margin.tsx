@@ -78,7 +78,7 @@ export function ScreenplayCommentsMargin({
             "screenplay-comment-card mb-3 rounded-xl border p-3 text-xs",
             thread.status === "RESOLVED"
               ? "border-[var(--border)] bg-[var(--surface-2)]/50 opacity-70"
-              : "border-yellow-500/30 bg-yellow-500/10",
+              : "border-[var(--tone-warning-line)] bg-[var(--tone-warning-bg)]",
           )}
         >
           <div className="mb-1 flex items-start justify-between gap-2">

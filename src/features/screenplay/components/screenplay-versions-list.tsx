@@ -192,7 +192,7 @@ export function ScreenplayVersionsList({
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="font-display text-2xl font-semibold">Сценарий</h2>
+          <h2 className="font-display text-[27px] font-bold leading-tight">Сценарий</h2>
           <p className="mt-1 text-sm text-[var(--muted-fg)]">
             Версии текста и импорт. Новая версия — при сохранении или импорте.
           </p>
@@ -263,8 +263,8 @@ export function ScreenplayVersionsList({
                   key={version.id}
                   className={cn(
                     "cursor-pointer border-b border-[var(--border)]/60 hover:bg-[var(--surface-2)]/50",
-                    version.isCurrent && "bg-[var(--accent)]/5",
-                    selected.includes(version.id) && "bg-[var(--accent)]/8",
+                    version.isCurrent && "bg-[var(--accent-soft)]",
+                    selected.includes(version.id) && "bg-[var(--accent-soft)]",
                     version.isLocked && "screenplay-versions-row--locked",
                   )}
                   onClick={() => router.push(`${base}/${version.id}`)}
@@ -286,21 +286,21 @@ export function ScreenplayVersionsList({
                       />
                       {version.isLocked ? (
                         <span
-                          className="shrink-0 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-medium text-[var(--tone-warning)]"
+                          className="shrink-0 rounded-full bg-[var(--tone-warning-bg)] px-2 py-0.5 text-[10px] font-medium text-[var(--tone-warning)]"
                           title="Версия заблокирована"
                         >
                           🔒
                         </span>
                       ) : null}
                       {version.isCurrent ? (
-                        <span className="shrink-0 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium text-[var(--tone-success-strong)]">
+                        <span className="shrink-0 rounded-full bg-[var(--tone-success-bg)] px-2 py-0.5 text-[10px] font-medium text-[var(--tone-success-strong)]">
                           Текущая
                         </span>
                       ) : canWrite ? (
                         <button
                           type="button"
                           disabled={pending}
-                          className="shrink-0 rounded-full border border-[var(--border)] px-2 py-0.5 text-[10px] font-medium text-[var(--muted-fg)] hover:border-emerald-500/50 hover:text-[var(--tone-success-strong)] disabled:opacity-50"
+                          className="shrink-0 rounded-full border border-[var(--border)] px-2 py-0.5 text-[10px] font-medium text-[var(--muted-fg)] hover:border-[var(--tone-success-line)] hover:text-[var(--tone-success-strong)] disabled:opacity-50"
                           onClick={(event) => {
                             event.stopPropagation();
                             makeCurrent(version);

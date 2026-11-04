@@ -209,7 +209,7 @@ export function UnsavedChangesProvider({ children }: { children: ReactNode }) {
             <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
               <button
                 type="button"
-                className="absolute inset-0 bg-black/60"
+                className="absolute inset-0 bg-black/50"
                 aria-label="Остаться"
                 onClick={() => answer("stay")}
               />
@@ -219,7 +219,7 @@ export function UnsavedChangesProvider({ children }: { children: ReactNode }) {
                 aria-labelledby="unsaved-title"
                 className="relative w-full max-w-sm glass-card p-5 shadow-2xl"
               >
-                <h2 id="unsaved-title" className="font-display text-lg font-semibold">
+                <h2 id="unsaved-title" className="font-display text-[17px] font-bold">
                   Есть несохранённые изменения
                 </h2>
                 <p className="mt-1 text-sm text-[var(--muted-fg)]">

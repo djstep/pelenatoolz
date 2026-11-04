@@ -45,7 +45,7 @@ export function ForgotPasswordForm({ locale }: { locale: string }) {
         </p>
       ) : null}
       {state.devResetUrl ? (
-        <p className="rounded-lg border border-amber-500/30 bg-[var(--tone-warning-bg)] p-3 text-xs text-[var(--tone-warning-soft)]">
+        <p className="rounded-lg border border-[var(--tone-warning-line)] bg-[var(--tone-warning-bg)] p-3 text-xs text-[var(--tone-warning-soft)]">
           Режим разработки (письмо не отправлено):{" "}
           <a href={state.devResetUrl} className="underline">
             открыть ссылку сброса

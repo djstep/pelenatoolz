@@ -24,7 +24,8 @@ export default defineConfig({
     // Паролей в тестах нет (вход — в globalSetup, без трассы); трасса — только при падении.
     trace: "retain-on-failure",
     video: "off",
-    screenshot: "only-on-failure",
+    // E2E_SHOTS=1 — снимок в конце каждого теста (проверка оформления состояний, недоступных без данных теста).
+    screenshot: process.env.E2E_SHOTS ? "on" : "only-on-failure",
     navigationTimeout: 90_000,
     actionTimeout: 30_000,
   },

@@ -56,7 +56,7 @@ export function ProjectSettingsForm({ project }: { project: ProjectSettingsValue
   return (
     <form ref={formRef} action={action} className="space-y-6">
       {isArchived ? (
-        <div className="rounded-md border border-yellow-500/30 bg-yellow-500/10 p-3 text-sm">
+        <div className="rounded-md border border-[var(--tone-warning-line)] bg-[var(--tone-warning-bg)] p-3 text-sm">
           Проект в архиве. Для редактирования сначала восстановите его.
         </div>
       ) : null}
@@ -124,7 +124,7 @@ export function ProjectSettingsForm({ project }: { project: ProjectSettingsValue
               className={cn(
                 "rounded-lg border px-4 py-2 text-sm transition",
                 projectType === type
-                  ? "border-[var(--accent)] bg-[var(--accent)]/20 font-medium text-[var(--foreground)]"
+                  ? "border-[var(--accent)] bg-[var(--accent-soft)] font-medium text-[var(--foreground)]"
                   : "border-[var(--border)] bg-[rgb(var(--tint-rgb)/0.05)] hover:bg-[rgb(var(--tint-rgb)/0.1)]",
                 isArchived && "opacity-50 cursor-not-allowed",
               )}

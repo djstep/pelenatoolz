@@ -51,7 +51,7 @@ export function AuditionsHub({
           className={cn(
             "flex-1 rounded-lg px-3 py-2 text-sm transition",
             tab === "plan"
-              ? "bg-[var(--accent)]/20 font-medium text-[var(--foreground)]"
+              ? "bg-[var(--accent-soft)] font-medium text-[var(--foreground)]"
               : "text-[var(--muted-fg)] hover:text-[var(--foreground)]",
           )}
           onClick={() => setTab("plan")}
@@ -63,7 +63,7 @@ export function AuditionsHub({
           className={cn(
             "flex-1 rounded-lg px-3 py-2 text-sm transition",
             tab === "tapes"
-              ? "bg-[var(--accent)]/20 font-medium text-[var(--foreground)]"
+              ? "bg-[var(--accent-soft)] font-medium text-[var(--foreground)]"
               : "text-[var(--muted-fg)] hover:text-[var(--foreground)]",
           )}
           onClick={() => setTab("tapes")}

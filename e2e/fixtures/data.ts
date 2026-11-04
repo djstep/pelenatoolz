@@ -101,4 +101,13 @@ export const NAMES = {
   vehicle: "Volvo XC90 E2E",
   transport: "Автокран E2E",
   castingPerson: { lastName: "Кандидатов", firstName: "Олег" },
+  /** Цех тестов смет: на нём смету создают сами тесты (c8, c10, c12), в сиде её нет. */
+  transportDepartment: "Транспортный цех",
+  /** Цех со сметой из сида — для снимков редактора сметы. */
+  smetaDepartment: "Операторский цех",
+  company: "ООО «Студия E2E»",
+  counterparty: "ИП Подрядчик E2E",
+  contract: "E2E-1",
+  audition: "Проба E2E",
+  scout: "Дача E2E",
 } as const;

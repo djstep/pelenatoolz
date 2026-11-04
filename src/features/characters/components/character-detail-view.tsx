@@ -21,6 +21,7 @@ import {
   seedExtras,
   seedOvertime,
 } from "@/features/actors/components/actor-payroll-block";
+import { SceneNumber } from "@/shared/ui/scene-number";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
@@ -124,7 +125,7 @@ export function CharacterDetailView({
         >
           ← Все персонажи
         </Link>
-        <h1 className="font-display mt-2 text-2xl font-semibold">{character.name}</h1>
+        <h1 className="font-display mt-2 text-2xl font-bold tabular-nums">{character.name}</h1>
         <p className="mt-1 text-sm text-[var(--muted-fg)]">
           {character.scenes.length} сцен · план{" "}
           {character.planSeconds > 0
@@ -352,10 +353,10 @@ export function CharacterDetailView({
         <ul className="space-y-2 text-sm">
           {character.scenes.map((sc) => (
             <li key={sc.sceneId} className="border-b border-[var(--border)]/50 pb-2">
-              <span className="font-medium">
+              <SceneNumber>
                 {sc.scene.episodeNumber}.{sc.scene.number}
                 {sc.scene.postfix}
-              </span>
+              </SceneNumber>
               {sc.scene.summary ? ` — ${sc.scene.summary}` : ""}
               {sc.scene.locations[0]?.location ? (
                 <span className="text-[var(--muted-fg)]">

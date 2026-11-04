@@ -353,7 +353,7 @@ export function CallSheetDriveExportModal({
 
               {drive?.notice ? (
                 <p
-                  className="rounded-lg border border-amber-500/30 bg-[var(--tone-warning-bg)] px-3 py-2 text-[var(--tone-warning-soft)]"
+                  className="rounded-lg border border-[var(--tone-warning-line)] bg-[var(--tone-warning-bg)] px-3 py-2 text-[var(--tone-warning-soft)]"
                   data-testid="drive-export-project-unavailable"
                 >
                   {drive.notice}
@@ -404,7 +404,7 @@ export function CallSheetDriveExportModal({
                   Повторная выгрузка заменяет тот же файл.
                 </p>
                 {provider === "YANDEX_DISK" ? (
-                  <p className="rounded-lg border border-amber-500/30 bg-[var(--tone-warning-bg)] px-3 py-2 text-[var(--tone-warning-soft)]">
+                  <p className="rounded-lg border border-[var(--tone-warning-line)] bg-[var(--tone-warning-bg)] px-3 py-2 text-[var(--tone-warning-soft)]">
                     {YANDEX_PERSONAL_NOTE}
                   </p>
                 ) : null}

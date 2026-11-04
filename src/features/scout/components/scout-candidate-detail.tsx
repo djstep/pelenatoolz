@@ -91,7 +91,7 @@ export function ScoutCandidateDetail({
         </Link>
         <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h1 className="font-display text-2xl font-semibold">{candidate.title}</h1>
+            <h1 className="font-display text-[27px] font-bold leading-tight">{candidate.title}</h1>
             <p className="mt-1 text-sm text-[var(--muted-fg)]">
               {candidate.address ?? "Адрес не указан"}
             </p>

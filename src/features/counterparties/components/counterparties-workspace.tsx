@@ -327,7 +327,7 @@ export function CounterpartiesWorkspace({
             Компаний пока нет. Добавьте юрлица, с которых идут платежи.
           </p>
         ) : (
-          <div className="overflow-x-auto rounded-2xl border border-[var(--border)] bg-[var(--panel-solid)]">
+          <div className="overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--panel-solid)]">
             <table className="w-full text-left text-sm">
               <thead>
                 <tr className="border-b border-[var(--border)] text-[var(--muted-fg)]">
@@ -390,7 +390,7 @@ export function CounterpartiesWorkspace({
           Контрагентов пока нет. Добавьте получателей платежей.
         </p>
       ) : (
-        <div className="overflow-x-auto rounded-2xl border border-[var(--border)] bg-[var(--panel-solid)]">
+        <div className="overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--panel-solid)]">
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-[var(--border)] text-[var(--muted-fg)]">

@@ -36,7 +36,7 @@ export function ProductionReportsIndex({
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="font-display text-2xl font-semibold">
+          <h2 className="font-display text-[27px] font-bold leading-tight">
             Производственные отчёты
           </h2>
           <p className="mt-1 text-sm text-[var(--muted-fg)]">
@@ -53,7 +53,7 @@ export function ProductionReportsIndex({
           Съёмочных дней пока нет. Создайте их в КПП.
         </p>
       ) : (
-        <div className="overflow-x-auto rounded-2xl border border-[var(--border)] bg-[var(--panel-solid)]">
+        <div className="overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--panel-solid)]">
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-[var(--border)] text-[var(--muted-fg)]">

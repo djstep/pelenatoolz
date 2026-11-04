@@ -47,7 +47,7 @@ export default async function SmetaPage({ params }: Props) {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="font-display text-2xl font-semibold">Сметы</h2>
+        <h2 className="font-display text-[27px] font-bold leading-tight">Сметы</h2>
         <div className="flex flex-wrap gap-2 text-sm">
           <Link
             href={`${base}/plan-fact`}
@@ -67,7 +67,7 @@ export default async function SmetaPage({ params }: Props) {
       </div>
       {pending.length > 0 ? (
         <Card>
-          <h3 className="font-display text-lg font-semibold">На утверждении</h3>
+          <h3 className="font-display text-base font-bold">На утверждении</h3>
           <ul className="mt-3 divide-y divide-[var(--border)]/60">
             {pending.map((department) => {
               const summary = summaries.get(department.id)!;
@@ -101,7 +101,7 @@ export default async function SmetaPage({ params }: Props) {
         </Card>
       ) : null}
       <Card>
-        <h3 className="font-display text-lg font-semibold">Сметы цехов</h3>
+        <h3 className="font-display text-base font-bold">Сметы цехов</h3>
         {departments.length === 0 ? (
           <p className="mt-2 text-sm text-[var(--muted-fg)]">
             Цехов пока нет. Их создаёт продюсер в разделе «Настройки → Цеха».
@@ -124,7 +124,7 @@ export default async function SmetaPage({ params }: Props) {
                     ) : (
                       <span className="font-medium">{department.name}</span>
                     )}
-                    <span className="font-mono text-xs text-[var(--muted-fg)]">
+                    <span className="tabular-nums text-xs text-[var(--muted-fg)]">
                       {department.codePrefix}
                     </span>
                   </span>

@@ -8,7 +8,7 @@ export function Badge({
   return (
     <span
       className={cn(
-        "glass-badge inline-flex items-center rounded-lg px-2 py-0.5 text-xs font-medium tracking-wide",
+        "glass-badge inline-flex items-center rounded-[5px] px-2 py-0.5 text-xs font-semibold",
         className,
       )}
       {...props}

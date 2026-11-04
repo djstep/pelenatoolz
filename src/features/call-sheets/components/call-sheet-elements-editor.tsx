@@ -269,7 +269,7 @@ function AutoRowView({
   return (
     <div className="flex flex-wrap items-start gap-2 rounded-lg border border-[var(--border)]/60 bg-[var(--surface-1)] px-3 py-2.5 text-sm">
       <span
-        className="mt-2 rounded bg-[var(--accent)]/15 px-1.5 text-[0.65rem] font-semibold uppercase tracking-wide text-[var(--accent)]"
+        className="mt-2 rounded bg-[var(--accent-soft)] px-1.5 text-[0.65rem] font-semibold uppercase tracking-wide text-[var(--accent)]"
         title={
           perShift
             ? "Посменный ресурс, добавленный в день. Время подачи — из дня; поправить можно здесь."

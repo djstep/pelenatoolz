@@ -476,7 +476,7 @@ export function PaymentsWorkspace({
 
       <form
         method="get"
-        className="grid gap-3 rounded-2xl border border-[var(--border)] bg-[var(--panel-solid)] p-4 sm:grid-cols-2 lg:grid-cols-3"
+        className="grid gap-3 rounded-xl border border-[var(--border)] bg-[var(--panel-solid)] p-4 sm:grid-cols-2 lg:grid-cols-3"
       >
         <div className="sm:col-span-2 lg:col-span-3">
           <Label htmlFor="q">Поиск</Label>
@@ -576,7 +576,7 @@ export function PaymentsWorkspace({
           начислений.
         </p>
       ) : (
-        <div className="overflow-x-auto rounded-2xl border border-[var(--border)] bg-[var(--panel-solid)]">
+        <div className="overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--panel-solid)]">
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-[var(--border)] text-[var(--muted-fg)]">

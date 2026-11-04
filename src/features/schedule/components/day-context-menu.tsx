@@ -1,5 +1,23 @@
 "use client";
 
+import {
+  ArrowLeft,
+  ArrowRight,
+  Ban,
+  CalendarDays,
+  ChartColumn,
+  Check,
+  ClipboardList,
+  Lock,
+  LockOpen,
+  Moon,
+  Pencil,
+  StickyNote,
+  Sun,
+  Users,
+  X,
+  type LucideIcon,
+} from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -47,14 +65,14 @@ function MenuItem({
   disabled,
   active,
   danger,
-  icon,
+  icon: Icon,
 }: {
   children: ReactNode;
   onClick?: () => void;
   disabled?: boolean;
   active?: boolean;
   danger?: boolean;
-  icon?: string;
+  icon?: LucideIcon;
 }) {
   return (
     <button
@@ -66,16 +84,14 @@ function MenuItem({
         disabled
           ? "cursor-not-allowed text-[var(--muted-fg)] opacity-50"
           : danger
-            ? "text-[var(--tone-danger)] hover:bg-red-500/15"
+            ? "text-[var(--danger)] hover:bg-[color-mix(in_srgb,var(--danger)_10%,transparent)]"
             : active
-              ? "bg-[var(--accent)]/25 text-[rgb(var(--tint-rgb))]"
-              : "text-[var(--foreground)] hover:bg-[rgb(var(--tint-rgb)/0.1)]",
+              ? "bg-[var(--accent-soft)] font-semibold text-[var(--foreground)]"
+              : "text-[var(--foreground)] hover:bg-[rgb(var(--tint-rgb)/0.06)]",
       )}
     >
-      {icon ? (
-        <span className="w-4 shrink-0 text-center text-xs opacity-80" aria-hidden>
-          {icon}
-        </span>
+      {Icon ? (
+        <Icon className="h-4 w-4 shrink-0 opacity-80" strokeWidth={1.75} aria-hidden />
       ) : (
         <span className="w-4 shrink-0" />
       )}
@@ -185,7 +201,7 @@ export function DayContextMenu({
       <div
         ref={panelRef}
         style={{ top: pos.top, left: pos.left, width: MENU_WIDTH }}
-        className="absolute z-10 max-h-[min(70vh,32rem)] overflow-hidden rounded-2xl border border-[var(--border-strong)] bg-[var(--kpp-menu-bg)] shadow-2xl"
+        className="absolute z-10 max-h-[min(70vh,32rem)] overflow-hidden rounded-xl border border-[var(--border-strong)] bg-[var(--kpp-menu-bg)] shadow-xl"
         role="menu"
       >
         <div className="border-b border-[var(--border)] px-3 py-2.5">
@@ -203,7 +219,7 @@ export function DayContextMenu({
             {DAY_TYPES.map(([type, label]) => (
               <MenuItem
                 key={type}
-                icon={day.dayType === type ? "✓" : ""}
+                icon={day.dayType === type ? Check : undefined}
                 active={day.dayType === type}
                 disabled={busy}
                 onClick={() =>
@@ -219,7 +235,7 @@ export function DayContextMenu({
             <Divider />
 
             <MenuItem
-              icon="🔒"
+              icon={day.isLocked ? LockOpen : Lock}
               disabled={busy}
               onClick={() =>
                 run(() =>
@@ -232,7 +248,7 @@ export function DayContextMenu({
               {day.isLocked ? "Снять фиксацию" : "Зафиксировать день"}
             </MenuItem>
             <MenuItem
-              icon={day.isNightShift ? "☀" : "☾"}
+              icon={day.isNightShift ? Sun : Moon}
               disabled={busy}
               onClick={() =>
                 run(() =>
@@ -246,11 +262,11 @@ export function DayContextMenu({
                 ? "Сделать дневной сменой"
                 : "Сделать ночной сменой"}
             </MenuItem>
-            <MenuItem icon="📅" disabled={busy} onClick={() => setMode("move")}>
+            <MenuItem icon={CalendarDays} disabled={busy} onClick={() => setMode("move")}>
               Перенести на другую дату
             </MenuItem>
             <MenuItem
-              icon="⬅"
+              icon={ArrowLeft}
               disabled={busy}
               onClick={() =>
                 run(() => insertShootDayBeforeAction(projectId, day.id))
@@ -259,7 +275,7 @@ export function DayContextMenu({
               Вставить день (слева)
             </MenuItem>
             <MenuItem
-              icon="➡"
+              icon={ArrowRight}
               disabled={busy}
               onClick={() =>
                 run(() => insertShootDayAfterAction(projectId, day.id))
@@ -268,7 +284,7 @@ export function DayContextMenu({
               Вставить день (справа)
             </MenuItem>
             <MenuItem
-              icon="⊘"
+              icon={Ban}
               disabled={busy}
               onClick={() =>
                 void confirmAction({
@@ -282,7 +298,7 @@ export function DayContextMenu({
               Очистить день
             </MenuItem>
             <MenuItem
-              icon="✕"
+              icon={X}
               danger
               disabled={busy}
               onClick={() =>
@@ -302,7 +318,7 @@ export function DayContextMenu({
             <Divider />
 
             <MenuItem
-              icon="📋"
+              icon={ClipboardList}
               disabled={!isWorkingShootDay(day.dayType)}
               onClick={() => {
                 if (!isWorkingShootDay(day.dayType)) return;
@@ -316,7 +332,7 @@ export function DayContextMenu({
               {!isWorkingShootDay(day.dayType) ? " (только рабочий день)" : ""}
             </MenuItem>
             <MenuItem
-              icon="📊"
+              icon={ChartColumn}
               onClick={() => {
                 onClose();
                 router.push(
@@ -327,7 +343,7 @@ export function DayContextMenu({
               Производственный отчёт
             </MenuItem>
             <MenuItem
-              icon="👥"
+              icon={Users}
               onClick={() => {
                 onClose();
                 router.push(
@@ -337,12 +353,12 @@ export function DayContextMenu({
             >
               Занятость актёров
             </MenuItem>
-            <MenuItem icon="✎" disabled={busy} onClick={() => setMode("comment")}>
+            <MenuItem icon={Pencil} disabled={busy} onClick={() => setMode("comment")}>
               Комментарий
               {day.comment ? "…" : ""}
             </MenuItem>
             {day.dayType === "PREP" ? (
-              <MenuItem icon="📝" disabled={busy} onClick={() => setMode("prep")}>
+              <MenuItem icon={StickyNote} disabled={busy} onClick={() => setMode("prep")}>
                 Заметка подготовки
                 {day.prepNote ? "…" : ""}
               </MenuItem>

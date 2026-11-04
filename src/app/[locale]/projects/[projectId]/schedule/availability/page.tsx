@@ -65,7 +65,7 @@ export default async function AvailabilityPage({ params, searchParams }: Props) 
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="font-display text-2xl font-semibold">Занятость актёров</h2>
+        <h2 className="font-display text-[27px] font-bold leading-tight">Занятость актёров</h2>
         <p className="mt-1 text-sm text-[var(--muted-fg)]">
           Клик по ячейке — смена статуса · ПКМ — комментарий · фиолетовый — съёмка по КПП
         </p>

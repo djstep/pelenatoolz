@@ -47,7 +47,7 @@ export default async function FinanceReportsPage({
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="font-display text-2xl font-semibold">Отчёты</h2>
+        <h2 className="font-display text-[27px] font-bold leading-tight">Отчёты</h2>
         <p className="mt-1 text-sm text-[var(--muted-fg)]">
           Сводные управленческие отчёты по начислениям и платежам · валюта:{" "}
           {ctx.project.currency}

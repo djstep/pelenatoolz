@@ -113,7 +113,7 @@ export function PlanFactView({
     <div className="space-y-6">
       <form
         method="get"
-        className="grid gap-3 rounded-2xl border border-[var(--border)] bg-[var(--panel-solid)] p-4 sm:grid-cols-3"
+        className="grid gap-3 rounded-xl border border-[var(--border)] bg-[var(--panel-solid)] p-4 sm:grid-cols-3"
       >
         <div>
           <Label htmlFor="department">Цех</Label>
@@ -176,7 +176,7 @@ export function PlanFactView({
       {report.departments.map((d) => (
         <Card key={d.id}>
           <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <h3 className="font-display text-lg font-semibold">{d.name}</h3>
+            <h3 className="font-display text-base font-bold">{d.name}</h3>
             <span className="text-xs text-[var(--muted-fg)]">
               {d.versionNumber
                 ? `план — версия ${d.versionNumber}`
@@ -198,7 +198,7 @@ export function PlanFactView({
                         r.overrun && "bg-[var(--row-danger)]",
                       )}
                     >
-                      <td className="px-3 py-1.5 font-mono text-xs whitespace-nowrap">{r.code}</td>
+                      <td className="px-3 py-1.5 tabular-nums text-xs whitespace-nowrap">{r.code}</td>
                       <td className="px-3 py-1.5">
                         {r.name}
                         {r.kind !== "plan" ? (

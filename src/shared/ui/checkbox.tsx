@@ -25,11 +25,12 @@ export function Checkbox({
         <input type="checkbox" className="peer sr-only" {...props} />
         <span
           className={cn(
-            "glass-checkbox absolute inset-0 rounded-[0.3rem] border border-[var(--border-strong)]",
-            "bg-[rgb(var(--tint-rgb)/0.05)] transition-all duration-150",
-            "peer-focus-visible:border-[var(--accent)] peer-focus-visible:shadow-[0_0_0_3px_rgba(110,168,255,0.15)]",
-            "peer-checked:border-[var(--accent)] peer-checked:bg-[var(--accent)]/25",
-            "group-hover:border-[var(--border-strong)] group-hover:bg-[rgb(var(--tint-rgb)/0.08)]",
+            "glass-checkbox absolute inset-0 rounded-[4px] border border-[var(--border-strong)]",
+            "bg-[var(--surface)] transition-colors duration-150",
+            "group-hover:border-[var(--muted-fg)]",
+            "peer-focus-visible:border-[var(--accent)] peer-focus-visible:[box-shadow:var(--focus-ring)]",
+            // Отмечен — сплошной акцент, галочка цветом --accent-fg.
+            "peer-checked:border-[var(--accent)] peer-checked:bg-[var(--accent)]",
           )}
           aria-hidden
         />

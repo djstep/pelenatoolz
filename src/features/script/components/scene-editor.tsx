@@ -168,7 +168,7 @@ export function SceneEditor({
           ) : (
             <span className="px-2 text-sm text-[var(--muted-fg)]">←</span>
           )}
-          <h1 className="font-display px-2 text-xl font-semibold">
+          <h1 className="font-display text-[27px] font-bold leading-tight px-2">
             Сцена <span className={isCut ? "line-through" : undefined}>{title}</span>
           </h1>
           {next ? (
@@ -239,7 +239,7 @@ export function SceneEditor({
           key={formKey}
           id="scene-editor-form"
           action={canWrite ? action : undefined}
-          className="min-w-0 rounded-2xl border border-[var(--border)] bg-[var(--panel-solid)] p-5"
+          className="min-w-0 rounded-xl border border-[var(--border)] bg-[var(--panel-solid)] p-5"
           onSubmit={(e) => {
             if (!canWrite) e.preventDefault();
           }}

@@ -43,7 +43,7 @@ export default async function ProjectOverviewPage({ params }: Props) {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h2 className="font-display text-2xl font-semibold">Обзор проекта</h2>
+          <h2 className="font-display text-[27px] font-bold leading-tight">Обзор проекта</h2>
           <p className="mt-1 text-sm text-[var(--muted-fg)]">
             {[ctx.project.city, ctx.project.timezone, ctx.project.currency]
               .filter(Boolean)
@@ -61,7 +61,7 @@ export default async function ProjectOverviewPage({ params }: Props) {
         <div className="grid gap-4 sm:grid-cols-2">
           {showScriptCard ? (
             <Card>
-              <h3 className="font-display text-lg font-semibold">Сцены (либретто)</h3>
+              <h3 className="font-display text-base font-bold">Сцены (либретто)</h3>
               <dl className="mt-3 space-y-1 text-sm">
                 {stats.scenes !== null ? (
                   <div className="flex justify-between">
@@ -94,7 +94,7 @@ export default async function ProjectOverviewPage({ params }: Props) {
 
           {show.schedule ? (
             <Card>
-              <h3 className="font-display text-lg font-semibold">КПП и вызывные</h3>
+              <h3 className="font-display text-base font-bold">КПП и вызывные</h3>
               <dl className="mt-3 space-y-1 text-sm">
                 <div className="flex justify-between">
                   <dt className="text-[var(--muted-fg)]">Съёмочные дни</dt>
@@ -117,7 +117,7 @@ export default async function ProjectOverviewPage({ params }: Props) {
 
           {showTeamCard ? (
             <Card>
-              <h3 className="font-display text-lg font-semibold">Команда</h3>
+              <h3 className="font-display text-base font-bold">Команда</h3>
               <p className="mt-2 text-sm text-[var(--muted-fg)]">
                 Приглашения, роли и доступ участников проекта.
               </p>
@@ -131,7 +131,7 @@ export default async function ProjectOverviewPage({ params }: Props) {
 
           {showDayDocsCard ? (
             <Card>
-              <h3 className="font-display text-lg font-semibold">Вызывные и отчёты</h3>
+              <h3 className="font-display text-base font-bold">Вызывные и отчёты</h3>
               <p className="mt-2 text-sm text-[var(--muted-fg)]">
                 Вызывной лист, производственный отчёт и занятость актёров по
                 съёмочному дню.
@@ -158,7 +158,7 @@ export default async function ProjectOverviewPage({ params }: Props) {
 
           {showFinanceCard ? (
             <Card>
-              <h3 className="font-display text-lg font-semibold">Финансы и пост</h3>
+              <h3 className="font-display text-base font-bold">Финансы и пост</h3>
               <p className="mt-2 text-sm text-[var(--muted-fg)]">
                 Движение денег по проекту и пайплайн постпродакшна.
               </p>

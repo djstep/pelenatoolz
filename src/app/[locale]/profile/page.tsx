@@ -44,7 +44,7 @@ export default async function ProfilePage({ params, searchParams }: Props) {
     <>
       <AppHeader locale={locale} />
       <main className="mx-auto max-w-5xl px-4 py-8">
-        <h1 className="mb-6 font-display text-3xl font-semibold">Профиль</h1>
+        <h1 className="mb-6 font-display text-[27px] font-bold leading-tight">Профиль</h1>
         <Card>
           {user ? (
             <ProfileForm
@@ -76,7 +76,7 @@ export default async function ProfilePage({ params, searchParams }: Props) {
         </Card>
         <section className="mt-6" id="cloud">
           <Card>
-            <h2 className="mb-1 font-display text-xl font-semibold">Личные диски</h2>
+            <h2 className="mb-1 font-display text-[17px] font-bold">Личные диски</h2>
             <p className="mb-4 text-sm text-[var(--muted-fg)]">
               Свой Google Диск или Яндекс Диск — для выгрузки документов себе. Система видит на диске
               только файлы и папки, которые создала сама.

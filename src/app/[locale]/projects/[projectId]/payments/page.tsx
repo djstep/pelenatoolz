@@ -75,7 +75,7 @@ export default async function PaymentsPage({ params, searchParams }: Props) {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="font-display text-2xl font-semibold">Платежи</h2>
+        <h2 className="font-display text-[27px] font-bold leading-tight">Платежи</h2>
         <p className="mt-1 text-sm text-[var(--muted-fg)]">
           Фактическое движение денег (кассовый метод) · отдельно от начислений ·
           валюта: {ctx.project.currency}

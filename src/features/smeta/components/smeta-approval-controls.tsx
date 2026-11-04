@@ -12,7 +12,7 @@ import { Button } from "@/shared/ui/button";
 import { useToast } from "@/shared/ui/toast";
 
 const linkClass =
-  "inline-flex h-9 items-center rounded-md border border-[var(--border)] px-3 text-sm hover:bg-[var(--nav-hover-bg)]";
+  "inline-flex h-8 items-center rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 text-sm font-semibold hover:bg-[var(--glass-btn-secondary-hover)]";
 
 /** Статус, «Отправить на утверждение», ссылки на сравнение и версии — в шапке редактора. */
 export function SmetaApprovalControls({
@@ -49,7 +49,7 @@ export function SmetaApprovalControls({
         versionNumber={info.lastVersion?.number ?? null}
       />
       {canSubmit ? (
-        <Button type="button" className="h-9" onClick={() => setOpen(true)}>
+        <Button type="button" className="h-8" onClick={() => setOpen(true)}>
           Отправить на утверждение
         </Button>
       ) : null}
@@ -95,7 +95,7 @@ export function SmetaApprovalControls({
 export function SmetaApprovalBanner({ info }: { info: BudgetApprovalInfo }) {
   if (info.status === "RETURNED" && info.returnComment) {
     return (
-      <div className="border-b border-[var(--border)] bg-[var(--row-danger)] px-4 py-2 text-sm">
+      <div className="border-b border-[var(--tone-danger-line)] bg-[var(--tone-danger-bg)] px-4 py-2 text-sm">
         <span className="font-medium">
           Возвращена{info.returnedByName ? ` — ${info.returnedByName}` : ""}
           {info.returnedAt ? `, ${formatDateTimeShort(info.returnedAt)}` : ""}:
@@ -106,7 +106,7 @@ export function SmetaApprovalBanner({ info }: { info: BudgetApprovalInfo }) {
   }
   if (info.status === "DRAFT" && info.changedAfterSubmitAt) {
     return (
-      <div className="border-b border-[var(--border)] bg-[var(--row-warning)] px-4 py-2 text-sm">
+      <div className="border-b border-[var(--tone-warning-line)] bg-[var(--tone-warning-bg)] px-4 py-2 text-sm">
         Смету изменили после отправки ({formatDateTimeShort(info.changedAfterSubmitAt)}) — она
         снова черновик. Продюсер видит её в списке, но утвердить сможет после повторной
         отправки.
@@ -115,7 +115,7 @@ export function SmetaApprovalBanner({ info }: { info: BudgetApprovalInfo }) {
   }
   if (info.status === "SUBMITTED") {
     return (
-      <div className="border-b border-[var(--border)] bg-[var(--row-neutral)] px-4 py-2 text-sm">
+      <div className="border-b border-[var(--tone-info-line)] bg-[var(--tone-info-bg)] px-4 py-2 text-sm">
         На утверждении
         {info.submittedAt ? ` с ${formatDateTimeShort(info.submittedAt)}` : ""}
         {info.submittedByName ? ` (отправил ${info.submittedByName})` : ""}

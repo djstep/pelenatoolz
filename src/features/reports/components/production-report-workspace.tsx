@@ -95,15 +95,15 @@ export function ProductionReportWorkspace({
               Вызывной
             </Link>
           </p>
-          <h2 className="mt-1 font-display text-2xl font-semibold">
+          <h2 className="mt-1 font-display text-[27px] font-bold leading-tight">
             Производственный отчёт · День {day.dayNumber}
           </h2>
         </div>
         {exportMenu}
       </div>
 
-      <section className="rounded-2xl border border-[var(--border)] bg-[var(--panel-solid)] p-5">
-        <h1 className="font-display text-xl font-semibold">
+      <section className="rounded-xl border border-[var(--border)] bg-[var(--panel-solid)] p-5">
+        <h1 className="font-display text-[27px] font-bold leading-tight">
           {project.fullName || project.name}
         </h1>
         <p className="mt-1 text-sm text-[var(--muted-fg)]">
@@ -118,7 +118,7 @@ export function ProductionReportWorkspace({
         </div>
       </section>
 
-      <section className="rounded-2xl border border-[var(--border)] bg-[var(--panel-solid)] p-5">
+      <section className="rounded-xl border border-[var(--border)] bg-[var(--panel-solid)] p-5">
         <h3 className="mb-3 font-semibold">Общие показатели дня</h3>
         <form ref={formRef} action={formAction} className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -215,7 +215,7 @@ export function ProductionReportWorkspace({
         </form>
       </section>
 
-      <section className="rounded-2xl border border-[var(--border)] bg-[var(--panel-solid)] p-5">
+      <section className="rounded-xl border border-[var(--border)] bg-[var(--panel-solid)] p-5">
         <h3 className="mb-1 font-semibold">Информация о съёмках</h3>
         <p className="mb-4 text-sm text-[var(--muted-fg)]">
           Сцены дня из КПП. Нажмите строку, чтобы ввести факт.

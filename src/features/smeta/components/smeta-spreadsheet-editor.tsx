@@ -8,6 +8,7 @@ import {
   saveDepartmentBudgetAction,
   toggleBudgetSheetPinnedAction,
 } from "@/features/smeta/actions";
+import { SMETA_HEADER_STYLE, SMETA_PRIMARY_PALETTE } from "@/features/smeta/lib/univer-theme";
 import { SAVE_BODY_LIMIT_BYTES, stableJson } from "@/features/smeta/lib/stable-json";
 import type { BudgetClient } from "@/features/smeta/queries";
 import {
@@ -43,6 +44,7 @@ export type SmetaApprovalProps = {
 };
 import { formatDateShort } from "@/shared/i18n/format-date";
 import { cn } from "@/shared/lib/cn";
+import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import { useToast } from "@/shared/ui/toast";
 import { useUnsavedChanges } from "@/shared/ui/unsaved/unsaved-changes-provider";
@@ -847,7 +849,7 @@ export function SmetaSpreadsheetEditor({
         const { defaultTheme } = await import("@univerjs/themes");
 
         const { univer, univerAPI } = createUniver({
-          theme: defaultTheme,
+          theme: { ...defaultTheme, primary: SMETA_PRIMARY_PALETTE },
           locale: LocaleType.RU_RU,
           darkMode: false,
           locales: {
@@ -891,7 +893,14 @@ export function SmetaSpreadsheetEditor({
         const api = univerAPI as unknown as UniverAPI;
         apiRef.current = api;
 
-        univerAPI.createWorkbook(budget.workbook as never);
+        const createdBook = univerAPI.createWorkbook(budget.workbook as never);
+        // Цвета шапок строк и колонок: только отрисовка, в данные листа не пишется.
+        try {
+          createdBook.customizeColumnHeader({ headerStyle: SMETA_HEADER_STYLE });
+          createdBook.customizeRowHeader({ headerStyle: SMETA_HEADER_STYLE });
+        } catch {
+          /* оформление необязательно: без него смета работает */
+        }
 
         if (disposed) {
           try {
@@ -1206,20 +1215,22 @@ export function SmetaSpreadsheetEditor({
           : "smeta-editor--embedded",
       )}
     >
-      <header className="flex shrink-0 flex-wrap items-center gap-2 border-b border-[var(--border)] bg-[var(--panel-solid)] px-3 py-2 sm:gap-3 sm:px-4">
-        <div className="flex min-w-[16rem] flex-1 flex-wrap items-center gap-3">
+      <header className="flex shrink-0 flex-wrap items-center gap-2 border-b border-[var(--border)] bg-[var(--surface)] px-3 py-2 sm:gap-3 sm:px-4">
+        <div className="flex min-w-[16rem] flex-1 flex-col gap-0.5">
           <Link
             href={listHref}
-            className="text-sm text-[var(--muted-fg)] hover:underline"
+            className="text-[13px] text-[var(--accent)] hover:underline"
           >
             {mode === "version" ? "← Версии" : "← Все сметы"}
           </Link>
-          <h2 className="font-display truncate text-base font-semibold">
-            {title ?? `Смета — ${department.name}`}
-          </h2>
-          <span className="font-mono text-xs text-[var(--muted-fg)]">
-            {department.codePrefix}
-          </span>
+          <div className="flex min-w-0 items-center gap-2">
+            <h2 className="font-display truncate text-[17px] font-bold leading-tight">
+              {title ?? `Смета — ${department.name}`}
+            </h2>
+            <span className="rounded-[5px] border border-[var(--border-strong)] px-1.5 text-xs tabular-nums text-[var(--muted-fg)]">
+              {department.codePrefix}
+            </span>
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -1239,20 +1250,31 @@ export function SmetaSpreadsheetEditor({
             <span
               className={cn(
                 // Постоянная ширина: смена «Сохранение…» / «Сохранено …» не переносит кнопки.
-                "inline-block w-40 truncate text-xs",
-                status === "error"
+                "inline-flex w-40 items-center gap-1.5 text-xs",
+                status === "error" || status === "conflict"
                   ? "text-[var(--danger)]"
-                  : "text-[var(--foreground)]/70",
+                  : "text-[var(--muted-fg)]",
               )}
             >
-              {statusLabel}
+              <span
+                aria-hidden
+                className={cn(
+                  "h-2 w-2 shrink-0 rounded-full",
+                  status === "error" || status === "conflict"
+                    ? "bg-[var(--danger)]"
+                    : status === "dirty" || status === "saving"
+                      ? "bg-[var(--dirty)]"
+                      : "bg-[var(--tone-success-strong)]",
+                )}
+              />
+              <span className="truncate">{statusLabel}</span>
             </span>
           ) : null}
           {mode === "draft" ? (
             <BudgetExcelExportButton
               projectId={projectId}
               departmentId={department.id}
-              className="h-9"
+              className="h-8"
               beforeExport={canWrite ? saveEditsBeforeExport : undefined}
             />
           ) : null}
@@ -1261,7 +1283,7 @@ export function SmetaSpreadsheetEditor({
               projectId={projectId}
               departmentId={department.id}
               button={driveButton}
-              className="h-9"
+              className="h-8"
               beforeExport={canWrite ? saveEditsBeforeExport : undefined}
             />
           ) : null}
@@ -1270,7 +1292,7 @@ export function SmetaSpreadsheetEditor({
               <Button
                 type="button"
                 variant="secondary"
-                className="h-9"
+                className="h-8"
                 disabled={pending || status === "saving" || status === "conflict"}
                 onClick={() => void flushSave()}
               >
@@ -1279,7 +1301,7 @@ export function SmetaSpreadsheetEditor({
               <Button
                 type="button"
                 variant="secondary"
-                className="h-9"
+                className="h-8"
                 disabled={importing || status === "conflict"}
                 title="Листы файла .xlsx добавятся в книгу листами-черновиками. Основной лист не меняется."
                 onClick={() => fileInputRef.current?.click()}
@@ -1299,19 +1321,19 @@ export function SmetaSpreadsheetEditor({
               />
             </>
           ) : (
-            <span className="text-xs text-[var(--foreground)]/70">
+            <Badge>
               {mode === "version"
                 ? "Утверждённая версия — только чтение"
                 : mode === "summary"
                   ? "Сводная книга — только чтение"
                   : "Только просмотр"}
-            </span>
+            </Badge>
           )}
           {!isFullscreen ? (
             <Button
               type="button"
               variant="secondary"
-              className="h-9"
+              className="h-8"
               onClick={() => setFullscreen(true)}
             >
               На весь экран
@@ -1325,7 +1347,7 @@ export function SmetaSpreadsheetEditor({
       {status === "conflict" ? (
         <div
           role="alert"
-          className="flex flex-wrap items-center gap-3 border-b border-[var(--border)] bg-[var(--row-danger)] px-4 py-2 text-sm"
+          className="flex flex-wrap items-center gap-3 border-b border-[var(--tone-danger-line)] bg-[var(--tone-danger-bg)] px-4 py-2 text-sm"
         >
           <span>
             <span className="font-medium">Смету изменили в другом окне — обновите.</span>{" "}
@@ -1338,7 +1360,7 @@ export function SmetaSpreadsheetEditor({
       ) : status === "error" ? (
         <div
           role="alert"
-          className="flex flex-wrap items-center gap-3 border-b border-[var(--border)] bg-[var(--row-warning)] px-4 py-2 text-sm"
+          className="flex flex-wrap items-center gap-3 border-b border-[var(--tone-warning-line)] bg-[var(--tone-warning-bg)] px-4 py-2 text-sm"
         >
           <span>
             <span className="font-medium">Не сохранено:</span> {saveError ?? "ошибка сервера."}{" "}
@@ -1351,7 +1373,7 @@ export function SmetaSpreadsheetEditor({
       ) : null}
 
       {importNotice ? (
-        <div className="flex flex-wrap items-start gap-3 border-b border-[var(--border)] bg-[var(--row-neutral)] px-4 py-2 text-sm">
+        <div className="flex flex-wrap items-start gap-3 border-b border-[var(--tone-info-line)] bg-[var(--tone-info-bg)] px-4 py-2 text-sm">
           <div className="min-w-0 flex-1">
             <div className="font-medium">
               Импортированы листы: {importNotice.sheets.map((n) => `«${n}»`).join(", ")}

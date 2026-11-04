@@ -122,7 +122,7 @@ export function ShiftEntryWorkspace({
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-3 rounded-2xl border border-[var(--border)] bg-[var(--panel-solid)] p-4 sm:grid-cols-2">
+      <div className="grid gap-3 rounded-xl border border-[var(--border)] bg-[var(--panel-solid)] p-4 sm:grid-cols-2">
         <div>
           <Label htmlFor="shootDayId">Дата смены</Label>
           <Select
@@ -160,7 +160,7 @@ export function ShiftEntryWorkspace({
           объекта.
         </p>
       ) : (
-        <div className="overflow-x-auto rounded-2xl border border-[var(--border)] bg-[var(--panel-solid)]">
+        <div className="overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--panel-solid)]">
           <table className="w-full min-w-[64rem] text-left text-sm">
             <thead>
               <tr className="border-b border-[var(--border)] text-[var(--muted-fg)]">

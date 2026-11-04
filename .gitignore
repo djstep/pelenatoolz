@@ -56,3 +56,8 @@ next-env.d.ts
 /e2e/.downloads/
 /test-results/
 /playwright-report/
+
+# снимки дизайна: в git только пары «эскиз / наш» (compare-*), остальное — локально
+/docs/tasks/ref/design/out/**
+!/docs/tasks/ref/design/out/**/
+!/docs/tasks/ref/design/out/**/compare-*

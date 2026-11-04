@@ -17,6 +17,11 @@ import { MembershipStatus, Prisma } from "@prisma/client";
 import { DEFAULT_LEDGER_TYPES } from "../src/features/contracts/lib/vat";
 import { ensureSectionsIn } from "../src/features/call-sheets/lib/sections";
 import { DEFAULT_APPROVAL_STATUSES } from "../src/features/finance/lib/approval-statuses";
+import {
+  analyzeMainSheet,
+  createMainSheetData,
+  MAIN_HEADER_STYLE,
+} from "../src/features/smeta/lib/main-sheet";
 import { getDefaultProjectRoles, DEFAULT_ROLE_NAMES } from "../src/features/roles/default-roles";
 import {
   buildEmptyMatrix,
@@ -604,6 +609,231 @@ async function ensureLayoutDays(projectId: string) {
   console.log(`Дни ${LAYOUT_DAYS.filled.dayNumber} (заполненный вызывной) и ${LAYOUT_DAYS.empty.dayNumber} (пустой) добавлены`);
 }
 
+/** Строка статьи основного листа: как сохраняет редактор (значения формул уже посчитаны). */
+function budgetRow(row: number, code: string, name: string, days: number, rate: number) {
+  const n = row + 1;
+  const amount = days * rate;
+  return {
+    0: { v: code, t: 1 },
+    1: { v: name, t: 1 },
+    2: { v: "смена", t: 1 },
+    3: { v: 1, t: 2 },
+    4: { v: rate, t: 2 },
+    5: { v: days, t: 2 },
+    6: { v: amount, t: 2, f: `=D${n}*E${n}*F${n}` },
+    7: { v: 0, t: 2 },
+    8: { v: 0, t: 2, f: `=G${n}*H${n}/100` },
+    9: { v: amount, t: 2, f: `=G${n}+I${n}` },
+  };
+}
+
+/** Подытог раздела: СУММ по строкам статей (не статья, без кода). */
+function budgetSubtotal(row: number, name: string, first: number, last: number, value: number) {
+  return {
+    1: { v: name, t: 1, s: "smetaHeader" },
+    6: { v: value, t: 2, f: `=SUM(G${first}:G${last})`, s: "smetaHeader" },
+    9: { v: value, t: 2, f: `=SUM(J${first}:J${last})`, s: "smetaHeader" },
+  };
+}
+
+/** Смета цеха: разделы, 7 статей, подытоги, черновой лист. Цех отдельный — транспортный нужен тестам смет. */
+function buildSeedBudgetSheet() {
+  const sheet = createMainSheetData("main", "Основной");
+  const staff = [
+    ["OP-01.01", "Оператор-постановщик", 32, 45000],
+    ["OP-01.02", "1-й ассистент оператора (фокус)", 32, 18000],
+    ["OP-01.03", "2-й ассистент оператора", 32, 12000],
+    ["OP-01.04", "DIT", 32, 15000],
+  ] as const;
+  const gear = [
+    ["OP-02.01", "Камера, комплект", 32, 38000],
+    ["OP-02.02", "Комплект оптики", 32, 22000],
+    ["OP-02.03", "Видеоассист / плейбек", 32, 9000],
+  ] as const;
+  const cells = sheet.cellData as Record<number, unknown>;
+  const sum = (rows: readonly (readonly [string, string, number, number])[]) =>
+    rows.reduce((total, r) => total + r[2] * r[3], 0);
+  let row = 1;
+  cells[row++] = { 1: { v: "1. Персонал", t: 1, s: "smetaHeader" } };
+  const staffFirst = row + 1;
+  for (const [code, name, days, rate] of staff) {
+    cells[row] = budgetRow(row, code, name, days, rate);
+    row++;
+  }
+  cells[row] = budgetSubtotal(row, "Итого персонал", staffFirst, row, sum(staff));
+  row++;
+  cells[row++] = { 1: { v: "2. Техника", t: 1, s: "smetaHeader" } };
+  const gearFirst = row + 1;
+  for (const [code, name, days, rate] of gear) {
+    cells[row] = budgetRow(row, code, name, days, rate);
+    row++;
+  }
+  cells[row] = budgetSubtotal(row, "Итого техника", gearFirst, row, sum(gear));
+  return sheet;
+}
+
+/** Продюсер — глава цеха со сметой: редактор открывается с правкой (Сохранить, Импорт, отправка). */
+async function ensureSeedBudgetHead(projectId: string, departmentId: string, producerId: string) {
+  const membership = await prisma.projectMembership.findFirstOrThrow({
+    where: { projectId, userId: producerId },
+    select: { id: true },
+  });
+  const head = await prisma.departmentHead.findFirst({
+    where: { departmentId, membershipId: membership.id },
+    select: { id: true },
+  });
+  if (!head) await prisma.departmentHead.create({ data: { departmentId, membershipId: membership.id } });
+}
+
+async function ensureSeedBudget(projectId: string, producerId: string) {
+  const exists = await prisma.department.findFirst({
+    where: { projectId, name: NAMES.smetaDepartment },
+    select: { id: true },
+  });
+  if (exists) {
+    await ensureSeedBudgetHead(projectId, exists.id, producerId);
+    return;
+  }
+  const sheet = buildSeedBudgetSheet();
+  const analysis = analyzeMainSheet(sheet);
+  if (analysis.checks.length > 0) {
+    throw new Error(`Смета сида: ${analysis.checks.map((c) => c.message).join("; ")}`);
+  }
+  await prisma.$transaction(
+    async (tx) => {
+      const department = await tx.department.create({
+        data: { projectId, name: NAMES.smetaDepartment, codePrefix: "OP" },
+      });
+      const budget = await tx.budget.create({
+        data: {
+          projectId,
+          departmentId: department.id,
+          status: "DRAFT",
+          styles: { ...MAIN_HEADER_STYLE },
+          createdById: producerId,
+        },
+      });
+      const main = await tx.budgetSheet.create({
+        data: {
+          budgetId: budget.id,
+          sheetKey: "main",
+          name: "Основной",
+          sortOrder: 0,
+          data: { create: { data: sheet as Prisma.InputJsonValue } },
+        },
+      });
+      await tx.budgetSheet.create({
+        data: {
+          budgetId: budget.id,
+          sheetKey: "draft",
+          name: "Черновые расчёты",
+          sortOrder: 1,
+          data: {
+            create: {
+              data: {
+                id: "draft",
+                name: "Черновые расчёты",
+                cellData: {
+                  0: { 0: { v: "Лимит на смену", t: 1 }, 1: { v: 120000, t: 2 } },
+                  1: { 0: { v: "Смен", t: 1 }, 1: { v: 32, t: 2 } },
+                  2: { 0: { v: "Всего", t: 1 }, 1: { v: 3840000, t: 2, f: "=B1*B2" } },
+                },
+              },
+            },
+          },
+        },
+      });
+      await tx.budget.update({ where: { id: budget.id }, data: { mainSheetId: main.id } });
+      await tx.budgetItem.createMany({
+        data: analysis.items.map((item) => ({
+          projectId,
+          departmentId: department.id,
+          code: item.code,
+          name: item.name,
+          unit: item.unit,
+          quantity: item.quantity,
+          rate: item.rate,
+          days: item.days,
+          amount: item.amount,
+          taxPercent: item.taxPercent,
+          tax: item.tax,
+          total: item.total,
+          sortOrder: item.row,
+        })),
+      });
+    },
+    { timeout: 60_000, maxWait: 20_000 },
+  );
+  const department = await prisma.department.findFirstOrThrow({
+    where: { projectId, name: NAMES.smetaDepartment },
+    select: { id: true },
+  });
+  await ensureSeedBudgetHead(projectId, department.id, producerId);
+  console.log(`Смета цеха «${NAMES.smetaDepartment}» добавлена: статей ${analysis.items.length}`);
+}
+
+/** По одной записи для карточек: контрагент, договор, платёж, проба, кандидат скаута. */
+async function ensureSeedCards(projectId: string, producerId: string) {
+  const present = await prisma.counterparty.findFirst({
+    where: { projectId, name: NAMES.counterparty },
+    select: { id: true },
+  });
+  if (present) return;
+  await prisma.$transaction(
+    async (tx) => {
+      const company = await tx.company.create({ data: { projectId, name: NAMES.company, inn: "7700000000" } });
+      const counterparty = await tx.counterparty.create({
+        data: { projectId, name: NAMES.counterparty, type: "LEGAL_ENTITY", inn: "7711111111", contacts: "+7 900 000-00-09" },
+      });
+      const status = await tx.projectApprovalStatus.findFirstOrThrow({ where: { projectId }, select: { id: true } });
+      const contract = await tx.contract.create({
+        data: {
+          projectId,
+          date: day("2026-10-20"),
+          number: NAMES.contract,
+          companyId: company.id,
+          counterpartyId: counterparty.id,
+          amount: dec("150000"),
+          vatEnabled: false,
+          amountWithVat: dec("150000"),
+          statusId: status.id,
+          summary: "Договор для снимков E2E",
+        },
+      });
+      await tx.cashPayment.create({
+        data: {
+          projectId,
+          counterpartyId: counterparty.id,
+          companyId: company.id,
+          contractId: contract.id,
+          amount: dec("50000"),
+          amountWithTax: dec("50000"),
+          date: day("2026-10-25"),
+          comment: "Платёж для снимков E2E",
+          createdById: producerId,
+        },
+      });
+      const person = await tx.castingPerson.findFirstOrThrow({ where: { projectId }, select: { id: true } });
+      await tx.audition.create({
+        data: {
+          projectId,
+          date: day("2026-10-15"),
+          time: "12:00",
+          comment: NAMES.audition,
+          externalUrl: "https://example.com/e2e-audition",
+          createdById: producerId,
+          actors: { create: [{ personId: person.id }] },
+        },
+      });
+      await tx.scoutCandidate.create({
+        data: { projectId, title: NAMES.scout, address: "Московская обл., дачный посёлок", notes: "Кандидат для снимков E2E" },
+      });
+    },
+    { timeout: 60_000, maxWait: 20_000 },
+  );
+  console.log("Карточки добавлены: контрагент, договор, платёж, проба, кандидат скаута");
+}
+
 async function main() {
   guardDatabase();
   const reset = process.argv.includes("--reset");
@@ -617,7 +847,11 @@ async function main() {
   });
   if (existing.length > 0 && !reset) {
     console.log(`Проект «${E2E_PROJECT_NAME}» уже есть: ${existing.map((p) => p.id).join(", ")} (--reset — создать заново)`);
-    for (const { id } of existing) await ensureLayoutDays(id);
+    for (const { id } of existing) {
+      await ensureLayoutDays(id);
+      await ensureSeedBudget(id, users.producer);
+      await ensureSeedCards(id, users.producer);
+    }
     return;
   }
   if (existing.length > 0) {
@@ -628,6 +862,8 @@ async function main() {
   const projectId = await createProject(users);
   console.log(`Проект «${E2E_PROJECT_NAME}» создан: ${projectId}`);
   await ensureLayoutDays(projectId);
+  await ensureSeedBudget(projectId, users.producer);
+  await ensureSeedCards(projectId, users.producer);
 }
 
 main()

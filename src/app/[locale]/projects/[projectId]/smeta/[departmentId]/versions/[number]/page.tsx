@@ -44,7 +44,7 @@ export default async function BudgetVersionPage({ params }: Props) {
       </Link>
       <div className="space-y-1">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="font-display text-2xl font-semibold">
+          <h2 className="font-display text-[27px] font-bold leading-tight">
             Смета — {department.name} · версия {version.number}
           </h2>
           <div className="flex flex-wrap items-center gap-2">

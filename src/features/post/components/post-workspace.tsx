@@ -224,7 +224,7 @@ export function PostWorkspace({
         {byStage.map(({ stage, items }) => (
           <section
             key={stage}
-            className="flex min-h-[12rem] flex-col rounded-2xl border border-[var(--border)] bg-[var(--panel-solid)]"
+            className="flex min-h-[12rem] flex-col rounded-xl border border-[var(--border)] bg-[var(--panel-solid)]"
           >
             <div className="border-b border-[var(--border)] px-4 py-3">
               <h3 className="font-semibold">{postStageLabels[stage]}</h3>
@@ -300,7 +300,7 @@ export function PostWorkspace({
                         </button>
                         <button
                           type="button"
-                          className="rounded px-1.5 py-0.5 text-[10px] text-[var(--tone-danger)] hover:bg-red-500/15"
+                          className="rounded px-1.5 py-0.5 text-[10px] text-[var(--tone-danger)] hover:bg-[var(--tone-danger-bg)]"
                           onClick={() =>
                             void confirmDelete({
                               title: `Удалить задачу „${task.title}“?`,

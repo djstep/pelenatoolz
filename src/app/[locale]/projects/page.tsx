@@ -31,7 +31,7 @@ export default async function ProjectsPage({ params, searchParams }: Props) {
       <main className="mx-auto max-w-6xl px-4 py-8">
         <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h1 className="font-display text-3xl font-semibold tracking-tight">
+            <h1 className="font-display text-[27px] font-bold leading-tight">
               {showArchived ? "Архивные проекты" : t("title")}
             </h1>
             <p className="mt-1 text-sm text-[var(--muted-fg)]">
@@ -83,7 +83,7 @@ export default async function ProjectsPage({ params, searchParams }: Props) {
                       <Badge>{projectTypeLabels[project.type]}</Badge>
                       <Badge>{projectStatusLabels[project.status]}</Badge>
                     </div>
-                    <h2 className="font-display text-xl font-semibold">
+                    <h2 className="font-display text-[17px] font-bold">
                       {project.name}
                     </h2>
                     <p className="mt-2 text-sm text-[var(--muted-fg)]">
