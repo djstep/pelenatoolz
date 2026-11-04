@@ -3,9 +3,12 @@
 import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/features/auth/session";
+import { crewExportColumns } from "@/features/crew/lib/crew-export";
+import { crewRights } from "@/features/crew/lib/crew-rules";
 import {
   ATTENDANCE_SHEET_WRITE_PERMISSION,
   exportLayoutPermission,
+  exportLayoutSavePermissions,
   isExportLayoutKey,
   keepProjectAttendanceSectionIds,
   normalizeAttendanceSheetSettings,
@@ -19,7 +22,9 @@ import {
   type ExportLayout,
   type ExportLayoutKey,
 } from "@/features/exports/types";
+import { hasPermission } from "@/features/memberships/permissions";
 import { requireProjectAccess } from "@/features/memberships/queries";
+import { parsePermissionMatrix } from "@/features/roles/permissions-matrix";
 import { prisma } from "@/shared/db/prisma";
 
 export type ExportActionState = {
@@ -37,9 +42,10 @@ export async function getExportLayoutAction(
     return { error: "Неизвестный тип экспорта" };
   }
 
+  let membership: Awaited<ReturnType<typeof requireProjectAccess>>;
   try {
     const user = await requireUser();
-    await requireProjectAccess(
+    membership = await requireProjectAccess(
       projectId,
       user.id!,
       exportLayoutPermission(key, "read"),
@@ -55,7 +61,13 @@ export async function getExportLayoutAction(
   if (!project) return { error: "Проект не найден" };
 
   const settings = parseExportSettings(project.exportSettings);
-  return { layout: settings[key] ?? null };
+  const layout = settings[key] ?? null;
+  if (key !== "crew" || !layout) return { layout };
+
+  // Раскладка общая на проект: у каждого — только колонки, на которые есть право.
+  const matrix = parsePermissionMatrix(membership.role.permissions);
+  const rights = crewRights((permission) => hasPermission(matrix, permission));
+  return { layout: { ...layout, columns: crewExportColumns(layout.columns, rights) } };
 }
 
 export async function saveExportLayoutAction(
@@ -73,11 +85,9 @@ export async function saveExportLayoutAction(
 
   try {
     const user = await requireUser();
-    await requireProjectAccess(
-      projectId,
-      user.id!,
-      exportLayoutPermission(key, "write"),
-    );
+    for (const permission of exportLayoutSavePermissions(key)) {
+      await requireProjectAccess(projectId, user.id!, permission);
+    }
   } catch {
     return { error: "Недостаточно прав" };
   }

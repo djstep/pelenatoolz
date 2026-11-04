@@ -48,6 +48,16 @@ const EXPORT_LAYOUT_PERMISSIONS: Record<
   directorsScript: { read: "script:read", write: "script:write" },
   kppFull: { read: "schedule:read", write: "schedule:write" },
   kppShort: { read: "schedule:read", write: "schedule:write" },
+  crew: { read: "crew:read", write: "crew:write" },
+};
+
+/**
+ * Раскладка общая на проект, а часть колонок команды видна не всем: сохранит участник без
+ * «Команда: контакты» — и у остальных пропадут телефоны. Поэтому раскладку команды сохраняет
+ * только тот, кому доступны все её колонки.
+ */
+const EXPORT_LAYOUT_SAVE_EXTRA: Partial<Record<ExportLayoutKey, Permission[]>> = {
+  crew: ["crew:contacts", "contracts:read"],
 };
 
 /**
@@ -61,6 +71,11 @@ export function exportLayoutPermission(
   action: "read" | "write",
 ): Permission {
   return EXPORT_LAYOUT_PERMISSIONS[key][action];
+}
+
+/** Все права, нужные для сохранения раскладки в проект. */
+export function exportLayoutSavePermissions(key: ExportLayoutKey): Permission[] {
+  return [EXPORT_LAYOUT_PERMISSIONS[key].write, ...(EXPORT_LAYOUT_SAVE_EXTRA[key] ?? [])];
 }
 
 export function normalizeExportColumn(raw: unknown): ExportColumn | null {

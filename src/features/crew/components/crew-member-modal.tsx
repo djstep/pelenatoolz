@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useTransition } from "react";
+import { useActionState, useEffect, useRef, useState, useTransition } from "react";
 import {
   archiveCrewMemberAction,
   createCrewMemberAction,
@@ -28,6 +28,7 @@ import { Label } from "@/shared/ui/label";
 import { Modal } from "@/shared/ui/modal";
 import { Select } from "@/shared/ui/select";
 import { toast, useActionToast } from "@/shared/ui/toast";
+import { snapshotFields } from "@/shared/ui/unsaved/snapshot";
 import { useActionSuccess } from "@/shared/ui/unsaved/use-action-success";
 
 const initial: CrewActionState = {};
@@ -215,6 +216,18 @@ export function CrewMemberModal({
   useActionToast(state);
   useActionSuccess(state, onClose);
 
+  // «Обновить из договора» закрывает карточку: при несохранённых правках оно недоступно.
+  const formRef = useRef<HTMLFormElement>(null);
+  const savedFields = useRef("");
+  const [dirty, setDirty] = useState(false);
+  useEffect(() => {
+    if (open && formRef.current) savedFields.current = snapshotFields(formRef.current);
+  }, [open]);
+
+  function checkDirty() {
+    if (formRef.current) setDirty(snapshotFields(formRef.current) !== savedFields.current);
+  }
+
   function toggleArchive() {
     if (!member) return;
     startArchive(async () => {
@@ -270,21 +283,32 @@ export function CrewMemberModal({
         </div>
       }
     >
-      <form id="crew-form" onSubmit={submitKeepingFields(action)} className="space-y-4">
+      <form
+        ref={formRef}
+        id="crew-form"
+        onSubmit={submitKeepingFields(action)}
+        onChange={checkDirty}
+        className="space-y-4"
+      >
         <FormFields member={member} departments={departments} rights={rights} />
         {member ? (
           <ContractsBlock projectId={projectId} locale={locale} member={member} />
         ) : null}
         {member && crewCanUseContracts(rights) ? (
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {member.contracts?.length ? (
-              <Button type="button" variant="secondary" onClick={onSync}>
+              <Button type="button" variant="secondary" disabled={dirty} onClick={onSync}>
                 Обновить из договора
               </Button>
             ) : null}
             <Button type="button" variant="secondary" onClick={onLink}>
               Связать с договором
             </Button>
+            {dirty && member.contracts?.length ? (
+              <p className="w-full text-xs text-[var(--muted-fg)]">
+                Чтобы обновить из договора, сначала сохраните или отмените правки
+              </p>
+            ) : null}
           </div>
         ) : null}
       </form>

@@ -48,4 +48,20 @@ export const crewPullSchema = z
   .min(1, "Никто не выбран")
   .max(100, "За раз можно подтянуть до 100 человек");
 
+/** Запрос выгрузки. Какие поля из него попадут в файл, решает `crewExportColumns` по правам. */
+export const crewExportSchema = z.object({
+  format: z.enum(["xlsx", "pdf"]),
+  columns: z
+    .array(
+      z.object({
+        id: z.string().min(1).max(100),
+        title: z.string().max(200),
+        fieldIds: z.array(z.string().max(50)).max(50),
+      }),
+    )
+    .min(1)
+    .max(50),
+  includeArchived: z.boolean().optional(),
+});
+
 export const crewSyncFieldsSchema = z.array(z.enum(CREW_SYNC_FIELDS)).min(1).max(CREW_SYNC_FIELDS.length);

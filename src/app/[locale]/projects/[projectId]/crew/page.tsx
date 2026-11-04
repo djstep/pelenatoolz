@@ -1,6 +1,7 @@
 import { CrewWorkspace } from "@/features/crew/components/crew-workspace";
 import { crewRights } from "@/features/crew/lib/crew-rules";
 import { listCrew, listCrewDepartments } from "@/features/crew/queries";
+import { exportLayoutSavePermissions } from "@/features/exports/lib/column-utils";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 
 type Props = {
@@ -35,6 +36,7 @@ export default async function CrewPage({ params }: Props) {
         rows={rows}
         departments={departments}
         rights={rights}
+        canSaveExportLayout={exportLayoutSavePermissions("crew").every((p) => ctx.can(p))}
       />
     </div>
   );

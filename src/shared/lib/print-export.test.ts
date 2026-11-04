@@ -16,6 +16,7 @@ function source(relative: string) {
 
 const PRINT_SITES = [
   "src/features/casting/components/cast-list-export-modal.tsx",
+  "src/features/crew/components/crew-export-menu.tsx",
   "src/features/auditions/components/schedule-export-modal.tsx",
   "src/features/script/components/script-export-modals.tsx",
   "src/features/screenplay/components/character-script-button.tsx",
@@ -99,6 +100,13 @@ describe("места печати", () => {
 });
 
 describe("файлы выгрузок в сборке Vercel", () => {
+  test("шрифт печати команды: окно печати вызывается со страницы /crew", () => {
+    assert.match(
+      source("next.config.ts"),
+      /"\/\*\/projects\/\*\/crew\/\*\*": \["\.\/node_modules\/medeo-font\/dist\/fonts\/medeo-sans\/MedeoSansVariable\.woff2"\]/,
+    );
+  });
+
   test("логотип явочного листа: прямой путь в коде и в outputFileTracingIncludes вызывного и отчёта смены", () => {
     const actions = source("src/features/day-docs/actions.ts");
     assert.ok(actions.includes(`path.join(process.cwd(), "public", "brand", "pelena-black.png")`));

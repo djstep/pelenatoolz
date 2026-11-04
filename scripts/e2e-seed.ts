@@ -4,7 +4,7 @@
  *   npx tsx scripts/e2e-seed.ts            — создать, если нет (есть — только пароли и роли)
  *   npx tsx scripts/e2e-seed.ts --reset    — удалить проект «E2E приёмка» e2e-продюсера и создать заново
  *
- * Только для ветки базы e2e: адрес прода (`ep-steep-sound…`) — отказ.
+ * Только на тестовых базах из `SEED_DATABASE_ENDPOINTS`: на любой другой — отказ.
  * Пароли — случайные, в `.env.e2e` (в .gitignore); существующие не меняются. В вывод
  * пароли не попадают. Хеш — как в приложении (`bcrypt`, 12 раундов).
  */
@@ -30,6 +30,7 @@ import {
   type PermissionMatrix,
 } from "../src/features/roles/permissions-matrix";
 import { prisma } from "../src/shared/db/prisma";
+import { seedDatabaseProblem } from "../src/shared/db/seed-database-guard";
 import {
   DAYS,
   CREW,
@@ -44,17 +45,13 @@ import {
   type E2ERoleKey,
 } from "../e2e/fixtures/data";
 
-const PROD_HOST_MARK = "ep-steep-sound";
 const ENV_FILE = path.join(process.cwd(), ".env.e2e");
 const ROLE_KEYS = Object.keys(E2E_ROLES) as E2ERoleKey[];
 
 function guardDatabase() {
-  for (const name of ["DATABASE_URL", "DIRECT_URL"]) {
-    const value = process.env[name] ?? "";
-    if (value.includes(PROD_HOST_MARK)) {
-      throw new Error(`${name} указывает на прод (${PROD_HOST_MARK}…) — остановлено`);
-    }
-  }
+  const { DATABASE_URL, DIRECT_URL } = process.env;
+  const problem = seedDatabaseProblem({ DATABASE_URL, DIRECT_URL });
+  if (problem) throw new Error(problem);
   const host = (process.env.DATABASE_URL ?? "").match(/@([^/?]+)/)?.[1] ?? "?";
   console.log(`База: ${host}`);
 }

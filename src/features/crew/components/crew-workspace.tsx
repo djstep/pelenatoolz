@@ -17,6 +17,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { useId, useMemo, useOptimistic, useState, useTransition } from "react";
 import { reorderCrewAction } from "@/features/crew/actions";
+import { CrewExportMenu } from "@/features/crew/components/crew-export-menu";
 import { CrewLinkModal } from "@/features/crew/components/crew-link-modal";
 import { CrewMemberModal } from "@/features/crew/components/crew-member-modal";
 import { CrewPullModal } from "@/features/crew/components/crew-pull-modal";
@@ -200,12 +201,15 @@ export function CrewWorkspace({
   rows,
   departments,
   rights,
+  canSaveExportLayout,
 }: {
   projectId: string;
   locale: string;
   rows: CrewRow[];
   departments: CrewDepartment[];
   rights: CrewRights;
+  /** Сохранять раскладку экспорта в проект: то же, что проверяет сервер. */
+  canSaveExportLayout: boolean;
 }) {
   const [search, setSearch] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("");
@@ -348,6 +352,11 @@ export function CrewWorkspace({
             ]}
           />
           <div className="flex flex-wrap gap-2 sm:ml-auto">
+            <CrewExportMenu
+              projectId={projectId}
+              rights={rights}
+              canSaveLayout={canSaveExportLayout}
+            />
             {canPull ? (
               <Button type="button" variant="secondary" onClick={() => setPulling(true)}>
                 Подтянуть из договоров
