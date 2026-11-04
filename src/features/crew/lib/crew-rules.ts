@@ -108,6 +108,26 @@ export function toCrewRow(record: CrewRecord, rights: CrewRights): CrewRow {
   return row;
 }
 
+/** «Подтянуть», «Связать с договором» и «Обновить из договора». */
+export function crewCanUseContracts(rights: CrewRights): boolean {
+  return rights.write && rights.contracts;
+}
+
+/** Основной договор: самый новый не отклонённый, а если отклонены все — самый новый. */
+export function crewMainContract(contracts: CrewRowContract[]): CrewRowContract | undefined {
+  return contracts.find((c) => !c.rejected) ?? contracts[0];
+}
+
+/**
+ * Пометка у записи: договора больше нет или все отклонены. Запись при этом остаётся. Без права
+ * на договоры поля `contracts` в строке нет, и пометки тоже.
+ */
+export function crewContractMark(row: CrewRow): "rejected" | "deleted" | null {
+  if (row.contracts === undefined) return null;
+  if (row.contracts.length === 0) return row.source === "CONTRACT" ? "deleted" : null;
+  return row.contracts.every((c) => c.rejected) ? "rejected" : null;
+}
+
 export function crewFullName(person: {
   lastName: string;
   firstName: string | null;

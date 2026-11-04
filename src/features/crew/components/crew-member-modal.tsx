@@ -10,6 +10,8 @@ import {
   type CrewActionState,
 } from "@/features/crew/actions";
 import {
+  crewCanUseContracts,
+  crewContractMark,
   crewFullName,
   crewPhoneHref,
   NO_DEPARTMENT_TITLE,
@@ -53,15 +55,18 @@ function ContractsBlock({
       <p className="text-sm text-[var(--muted-fg)]">Из договора</p>
     ) : null;
   }
-  if (member.contracts.length === 0) {
-    return member.source === "CONTRACT" ? (
-      <p className="text-sm text-[var(--muted-fg)]">Договор удалён</p>
-    ) : null;
-  }
+  const mark = crewContractMark(member);
+  const markNote = mark ? (
+    <p className="text-sm font-semibold text-[var(--danger)]">
+      {mark === "deleted" ? "Договор удалён" : "Договор отклонён"}. Запись остаётся в команде.
+    </p>
+  ) : null;
+  if (member.contracts.length === 0) return markNote;
   return (
-    <div>
+    <div className="space-y-1">
+      {markNote}
       <div className="text-xs font-semibold text-[var(--muted-fg)]">Договоры</div>
-      <ul className="mt-1 space-y-1 text-sm">
+      <ul className="space-y-1 text-sm">
         {member.contracts.map((c) => (
           <li key={c.id} className="flex flex-wrap items-center gap-2">
             <Link
@@ -188,6 +193,8 @@ export function CrewMemberModal({
   rights,
   open,
   onClose,
+  onLink,
+  onSync,
 }: {
   projectId: string;
   locale: string;
@@ -196,6 +203,9 @@ export function CrewMemberModal({
   rights: CrewRights;
   open: boolean;
   onClose: () => void;
+  /** «Связать с договором» и «Обновить из договора»: окна открывает список, поверх карточки. */
+  onLink?: () => void;
+  onSync?: () => void;
 }) {
   const bound = member
     ? updateCrewMemberAction.bind(null, projectId, member.id)
@@ -264,6 +274,18 @@ export function CrewMemberModal({
         <FormFields member={member} departments={departments} rights={rights} />
         {member ? (
           <ContractsBlock projectId={projectId} locale={locale} member={member} />
+        ) : null}
+        {member && crewCanUseContracts(rights) ? (
+          <div className="flex flex-wrap gap-2">
+            {member.contracts?.length ? (
+              <Button type="button" variant="secondary" onClick={onSync}>
+                Обновить из договора
+              </Button>
+            ) : null}
+            <Button type="button" variant="secondary" onClick={onLink}>
+              Связать с договором
+            </Button>
+          </div>
         ) : null}
       </form>
     </Modal>

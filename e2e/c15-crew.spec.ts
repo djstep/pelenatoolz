@@ -5,7 +5,7 @@ import { e2eContext, fetchRsc, projectPath, sniff, storageStatePath } from "./he
 
 /**
  * Волна 8: раздел «Команда». Права проверяются по ответу сервера (документ, `?_rsc`, ответы
- * действий), а не только по экрану. Шаг 3 добавит «Подтянуть», шаг 4 — экспорт.
+ * действий), а не только по экрану. «Подтянуть» и договоры — `c16-crew-contracts.spec.ts`.
  */
 
 const ctx = e2eContext();
@@ -16,6 +16,7 @@ const LINKED = CREW.linked;
 const MANUAL = CREW.manual;
 const SECRETS = [LINKED.phone, LINKED.email, MANUAL.phone, MANUAL.email];
 const CONTRACT_NUMBER = CREW.contracts.individual.number;
+const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
 const AMOUNT_PARTS = [CREW.contractAmount, CREW.contractAmount.replace(".", ",")];
 
 /** Все ответы страницы: документ при открытии, `?_rsc`, что пришло по пути. */
@@ -99,6 +100,17 @@ test.describe("с контактами и договорами", () => {
     const tel = row(page, LINKED.lastName).getByRole("link", { name: LINKED.phone });
     await expect(tel).toHaveAttribute("href", "tel:+79001112233");
     expectNoAmount(bodies);
+  });
+
+  test("колонки «Цех» нет: цех — заголовок группы, и при поиске тоже", async ({ page }) => {
+    await page.goto(CREW_PATH);
+    const group = page.locator(`tbody[data-crew-group="${NAMES.transportDepartment}"]`);
+    await expect(group).toContainText(LINKED.lastName);
+    await expect(page.getByRole("columnheader", { name: "Цех" })).toHaveCount(0);
+
+    await page.getByRole("searchbox", { name: "Поиск" }).fill(LINKED.lastName);
+    await expect(group).toContainText(LINKED.lastName);
+    await expect(group.getByRole("rowheader", { name: NAMES.transportDepartment })).toBeVisible();
   });
 
   test("в поиске телефон в другом написании находит человека", async ({ page }) => {
@@ -283,6 +295,37 @@ test.describe("без контактов и без договоров", () => {
     expect(member.phone).toBe(LINKED.phone);
     expect(member.email).toBe(LINKED.email);
     await db.crewMember.update({ where: { id: member.id }, data: { note: null } });
+  });
+
+  test("правка без контактов: у того, кому контакты видны, телефон и почта на месте", async ({ page, browser }) => {
+    await page.goto(CREW_PATH);
+    await page.waitForLoadState("networkidle");
+    await row(page, MANUAL.lastName).getByRole("button", { name: new RegExp(`^${MANUAL.lastName}`) }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.locator("input[name=phone]")).toHaveCount(0);
+    const position = `Водитель ${Date.now()}`;
+    await dialog.locator("input[name=position]").fill(position);
+    await dialog.getByRole("button", { name: "Сохранить" }).click();
+    await expect(row(page, MANUAL.lastName)).toContainText(position);
+
+    const producer = await browser.newContext({
+      baseURL: BASE_URL,
+      storageState: storageStatePath("producer"),
+    });
+    try {
+      const other = await producer.newPage();
+      await other.goto(CREW_PATH);
+      const person = row(other, MANUAL.lastName);
+      await expect(person).toContainText(position);
+      await expect(person).toContainText(MANUAL.phone);
+      await expect(person).toContainText(MANUAL.email);
+    } finally {
+      await producer.close();
+      await db.crewMember.updateMany({
+        where: { projectId: ctx.projectId, lastName: MANUAL.lastName },
+        data: { position: MANUAL.position },
+      });
+    }
   });
 
   test("договоры закрыты, а без «Команды» закрыт и экран", async ({ page }) => {

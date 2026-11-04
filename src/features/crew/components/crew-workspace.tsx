@@ -17,9 +17,15 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { useId, useMemo, useOptimistic, useState, useTransition } from "react";
 import { reorderCrewAction } from "@/features/crew/actions";
+import { CrewLinkModal } from "@/features/crew/components/crew-link-modal";
 import { CrewMemberModal } from "@/features/crew/components/crew-member-modal";
+import { CrewPullModal } from "@/features/crew/components/crew-pull-modal";
+import { CrewSyncModal } from "@/features/crew/components/crew-sync-modal";
 import {
+  crewCanUseContracts,
+  crewContractMark,
   crewFullName,
+  crewMainContract,
   crewPhoneHref,
   groupCrewRows,
   matchesCrewSearch,
@@ -44,7 +50,8 @@ const NO_DEPARTMENT_FILTER = "none";
 function SourceCell({ row }: { row: CrewRow }) {
   const label = row.source === "CONTRACT" ? "из договора" : "вручную";
   if (row.contracts === undefined) return <>{label}</>;
-  const main = row.contracts[0];
+  const main = crewMainContract(row.contracts);
+  const mark = crewContractMark(row);
   return (
     <>
       <div>{label}</div>
@@ -56,8 +63,11 @@ function SourceCell({ row }: { row: CrewRow }) {
           </span>
           {row.contracts.length > 1 ? `+${row.contracts.length - 1}` : null}
         </div>
-      ) : row.source === "CONTRACT" ? (
-        <div className="mt-0.5 text-xs text-[var(--muted-fg)]">договор удалён</div>
+      ) : null}
+      {mark ? (
+        <div className="mt-0.5 text-xs font-semibold text-[var(--danger)]">
+          {mark === "deleted" ? "договор удалён" : "договор отклонён"}
+        </div>
       ) : null}
     </>
   );
@@ -111,9 +121,6 @@ function CrewTableRow({
         </button>
       </td>
       <td className="px-3 py-2">{row.position || "—"}</td>
-      <td className="px-3 py-2 text-[var(--muted-fg)]">
-        {row.departmentName ?? NO_DEPARTMENT_TITLE}
-      </td>
       {rights.contacts ? (
         <>
           <td className="whitespace-nowrap px-3 py-2 tabular-nums">
@@ -205,6 +212,10 @@ export function CrewWorkspace({
   const [view, setView] = useState<View>("active");
   const [openId, setOpenId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [pulling, setPulling] = useState(false);
+  // Окна поверх карточки: карточка под ними остаётся с тем, что в ней уже введено.
+  const [linkId, setLinkId] = useState<string | null>(null);
+  const [syncId, setSyncId] = useState<string | null>(null);
   const [, startTransition] = useTransition();
   // Новый порядок виден сразу; после ответа сервера список приходит уже упорядоченным.
   const [ordered, setOrdered] = useOptimistic(rows);
@@ -232,8 +243,18 @@ export function CrewWorkspace({
 
   // Порядок считается по всему цеху, поэтому при поиске и в архиве не перетаскиваем.
   const dragEnabled = rights.write && view === "active" && search.trim() === "";
-  const columnCount = (rights.write ? 1 : 0) + 5 + (rights.contacts ? 2 : 0);
+  const columnCount = (rights.write ? 1 : 0) + 4 + (rights.contacts ? 2 : 0);
   const member = ordered.find((r) => r.id === openId);
+  const canPull = crewCanUseContracts(rights);
+
+  const pullModal = pulling ? (
+    <CrewPullModal
+      projectId={projectId}
+      departments={departments}
+      rights={rights}
+      onClose={() => setPulling(false)}
+    />
+  ) : null;
 
   function onDragEnd(event: DragEndEvent) {
     const { active, over } = event;
@@ -265,11 +286,19 @@ export function CrewWorkspace({
     return (
       <div className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6">
         <p className="text-sm text-[var(--muted-fg)]">В команде пока никого нет.</p>
-        {rights.write ? (
-          <Button type="button" onClick={() => setCreating(true)}>
-            Добавить вручную
-          </Button>
-        ) : null}
+        <div className="flex flex-wrap gap-3">
+          {rights.write ? (
+            <Button type="button" onClick={() => setCreating(true)}>
+              Добавить вручную
+            </Button>
+          ) : null}
+          {canPull ? (
+            <Button type="button" variant="secondary" onClick={() => setPulling(true)}>
+              Подтянуть из договоров
+            </Button>
+          ) : null}
+        </div>
+        {pullModal}
         <CrewMemberModal
           key={creating ? "new" : "closed"}
           projectId={projectId}
@@ -318,11 +347,18 @@ export function CrewWorkspace({
               { value: "archive", label: `Архив ${archivedCount}` },
             ]}
           />
-          {rights.write ? (
-            <Button type="button" className="sm:ml-auto" onClick={() => setCreating(true)}>
-              Добавить вручную
-            </Button>
-          ) : null}
+          <div className="flex flex-wrap gap-2 sm:ml-auto">
+            {canPull ? (
+              <Button type="button" variant="secondary" onClick={() => setPulling(true)}>
+                Подтянуть из договоров
+              </Button>
+            ) : null}
+            {rights.write ? (
+              <Button type="button" onClick={() => setCreating(true)}>
+                Добавить вручную
+              </Button>
+            ) : null}
+          </div>
         </div>
 
         {groups.length === 0 ? (
@@ -338,7 +374,7 @@ export function CrewWorkspace({
               <table
                 className={cn(
                   "glass-table w-full border-collapse text-left text-sm",
-                  rights.contacts ? "min-w-[960px]" : "min-w-[760px]",
+                  rights.contacts ? "min-w-[860px]" : "min-w-[640px]",
                 )}
               >
                 <thead>
@@ -346,7 +382,6 @@ export function CrewWorkspace({
                     {rights.write ? <th className="w-8 px-2 py-2" aria-label="Порядок" /> : null}
                     <th className="px-3 py-2">ФИО</th>
                     <th className="px-3 py-2">Должность</th>
-                    <th className="px-3 py-2">Цех</th>
                     {rights.contacts ? (
                       <>
                         <th className="px-3 py-2">Телефон</th>
@@ -386,7 +421,32 @@ export function CrewWorkspace({
           setCreating(false);
           setOpenId(null);
         }}
+        onLink={member ? () => setLinkId(member.id) : undefined}
+        onSync={member ? () => setSyncId(member.id) : undefined}
       />
+      {pullModal}
+      {member && linkId === member.id ? (
+        <CrewLinkModal
+          projectId={projectId}
+          memberId={member.id}
+          memberName={crewFullName(member)}
+          onClose={() => setLinkId(null)}
+        />
+      ) : null}
+      {member && syncId === member.id ? (
+        <CrewSyncModal
+          projectId={projectId}
+          memberId={member.id}
+          memberName={crewFullName(member)}
+          rights={rights}
+          onClose={() => setSyncId(null)}
+          onApplied={() => {
+            // Поля карточки заполнены до обновления: сохранить их — значит откатить его.
+            setSyncId(null);
+            setOpenId(null);
+          }}
+        />
+      ) : null}
     </>
   );
 }

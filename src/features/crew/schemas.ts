@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { CREW_SYNC_FIELDS } from "@/features/crew/lib/crew-sync";
 
 function emptyToNull(value: unknown) {
   const text = typeof value === "string" ? value.trim() : "";
@@ -25,3 +26,26 @@ export const crewMemberFormSchema = z.object({
 });
 
 export const reorderCrewSchema = z.array(z.string().cuid()).min(1).max(1000);
+
+export const crewIdSchema = z.string().cuid();
+
+/** Каждая строка окна «Подтянуть»: новый человек или договор к существующему. */
+export const crewPullSchema = z
+  .array(
+    z.discriminatedUnion("mode", [
+      z.object({
+        mode: z.literal("create"),
+        counterpartyId: crewIdSchema,
+        person: crewMemberFormSchema,
+      }),
+      z.object({
+        mode: z.literal("link"),
+        counterpartyId: crewIdSchema,
+        memberId: crewIdSchema,
+      }),
+    ]),
+  )
+  .min(1, "Никто не выбран")
+  .max(100, "За раз можно подтянуть до 100 человек");
+
+export const crewSyncFieldsSchema = z.array(z.enum(CREW_SYNC_FIELDS)).min(1).max(CREW_SYNC_FIELDS.length);

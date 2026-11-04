@@ -8,6 +8,7 @@ import {
   crewWriteData,
 } from "@/features/crew/lib/crew-rules";
 import { crewMemberFormSchema, reorderCrewSchema } from "@/features/crew/schemas";
+import { nextCrewSortOrder } from "@/features/crew/sort-order";
 import {
   assertInProject,
   isNotInProjectError,
@@ -43,19 +44,6 @@ function parseForm(formData: FormData) {
   });
 }
 
-/**
- * Новый человек в цехе: пока порядок не меняли (у всех 0), список идёт по фамилии,
- * после перетаскивания новый встаёт в конец.
- */
-async function nextSortOrder(projectId: string, departmentId: string | null) {
-  const { _max } = await prisma.crewMember.aggregate({
-    where: { projectId, departmentId },
-    _max: { sortOrder: true },
-  });
-  const max = _max.sortOrder ?? 0;
-  return max > 0 ? max + 1 : 0;
-}
-
 export async function createCrewMemberAction(
   projectId: string,
   _prev: CrewActionState,
@@ -77,7 +65,7 @@ export async function createCrewMemberAction(
   }
 
   const data = crewWriteData(parsed.data, crewRights(ctx.can));
-  const sortOrder = await nextSortOrder(projectId, data.departmentId);
+  const sortOrder = await nextCrewSortOrder(prisma, projectId, data.departmentId);
 
   await auditMutation(
     ctx,
@@ -134,7 +122,9 @@ export async function updateCrewMemberAction(
   const data = crewWriteData(parsed.data, crewRights(ctx.can));
   const { departmentId, ...fields } = data;
   const moved = departmentId !== before.departmentId;
-  const sortOrder = moved ? await nextSortOrder(projectId, departmentId) : before.sortOrder;
+  const sortOrder = moved
+    ? await nextCrewSortOrder(prisma, projectId, departmentId)
+    : before.sortOrder;
   const department = departmentId
     ? await prisma.department.findFirst({
         where: { id: departmentId, projectId },

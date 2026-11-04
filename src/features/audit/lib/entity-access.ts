@@ -146,6 +146,11 @@ const FINANCE_FIELDS: Partial<Record<string, FinanceFieldsRule>> = {
     fields: ["rateChanges"],
     canRead: (v) => v.can("finance:read"),
   },
+  // Журнал команды читают и без договоров: номер договора лежит только здесь, не в `summary`.
+  [AuditEntityType.crewMember]: {
+    fields: ["Договор"],
+    canRead: (v) => v.can("contracts:read"),
+  },
 };
 
 /** Записи этих типов требуют категорию ресурса для проверки фин. полей. */
