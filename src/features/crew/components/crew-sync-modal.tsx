@@ -157,12 +157,13 @@ export function CrewSyncModal({
 
         {rows.length > 0 ? (
           <div className="overflow-x-auto">
-            <table className="glass-table w-full min-w-[640px] border-collapse text-left text-sm">
+            <table className="glass-table w-full border-collapse text-left text-sm sm:min-w-[640px]">
               <thead>
                 <tr className="border-b border-[var(--border)]">
                   <th className="w-8 px-2 py-2" aria-label="Применить" />
                   <th className="px-3 py-2">Поле</th>
-                  <th className="px-3 py-2">Было при обновлении</th>
+                  {/* На телефоне важнее «Сейчас» и «В договоре»: иначе разница уезжает за край окна. */}
+                  <th className="hidden px-3 py-2 sm:table-cell">Было при обновлении</th>
                   <th className="px-3 py-2">Сейчас</th>
                   <th className="px-3 py-2">В договоре</th>
                   <th className="px-3 py-2">Что изменилось</th>
@@ -183,7 +184,7 @@ export function CrewSyncModal({
                       />
                     </td>
                     <td className="px-3 py-2 font-medium">{row.label}</td>
-                    <td className="px-3 py-2 text-[var(--muted-fg)]">{row.snapshot || "—"}</td>
+                    <td className="hidden px-3 py-2 text-[var(--muted-fg)] sm:table-cell">{row.snapshot || "—"}</td>
                     <td className="px-3 py-2">{row.current || "—"}</td>
                     <td className="px-3 py-2">{row.contract || "пусто"}</td>
                     <td className="px-3 py-2 text-[var(--muted-fg)]">{changeNote(row)}</td>

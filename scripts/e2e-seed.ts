@@ -121,9 +121,12 @@ function noCallSheetMatrix(): PermissionMatrix {
   return m;
 }
 
-/** Как «без финансов», но без договоров и без контактов; команду видит и правит. */
+/**
+ * Команду видит и правит; без договоров, контактов и вызывных. Вызывные убраны намеренно: кто их
+ * видит, получает доступ к общей папке на Диске, а тесты Диска считают доступы поимённо.
+ */
 function crewOnlyMatrix(): PermissionMatrix {
-  const m = noFinanceMatrix();
+  const m = noCallSheetMatrix();
   const empty = buildEmptyMatrix();
   m.contracts = empty.contracts;
   m.crew_contacts = empty.crew_contacts;
@@ -856,7 +859,7 @@ async function ensureSeedCrewRoles(projectId: string, crewOnlyUserId: string) {
       note: "Приёмочные тесты",
       permissions: buildPermissionsDocument(crewOnlyMatrix(), {}) as Prisma.InputJsonValue,
     },
-    update: {},
+    update: { permissions: buildPermissionsDocument(crewOnlyMatrix(), {}) as Prisma.InputJsonValue },
     select: { id: true },
   });
   await prisma.projectMembership.upsert({

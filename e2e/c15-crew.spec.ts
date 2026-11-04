@@ -74,7 +74,7 @@ test.describe("права «Команда» в матрице ролей", () =
 });
 
 test.describe("меню", () => {
-  test.use({ storageState: storageStatePath("crewonly") });
+  test.use({ storageState: storageStatePath("producer") });
 
   test("«Команда» сразу после «Вызывных»", async ({ page }) => {
     await page.goto(CREW_PATH);
