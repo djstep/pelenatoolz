@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "deny": [
+      "Bash(*git push*)",
+      "Bash(*git.exe push*)",
+      "Bash(git -C * push*)",
+      "Bash(git -c * push*)",
+      "Bash(git --git-dir* push*)",
+      "Bash(git --work-tree* push*)",
+      "PowerShell(*git push*)",
+      "PowerShell(*git.exe push*)",
+      "PowerShell(git -c * push*)",
+      "PowerShell(git --git-dir* push*)",
+      "PowerShell(git --work-tree* push*)",
+      "Read(.env)",
+      "Read(.env.*)",
+      "Bash(cat *.env*)",
+      "Bash(type *.env*)",
+      "Bash(more *.env*)",
+      "Bash(*Get-Content *.env*)",
+      "PowerShell(Get-Content *.env*)",
+      "PowerShell(more *.env*)"
+    ]
+  }
+}
