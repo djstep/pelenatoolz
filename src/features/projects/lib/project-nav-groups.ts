@@ -106,6 +106,7 @@ export const projectNavGroups: NavGroupDef[] = [
         label: "Вызывные",
         visible: anyOf("callsheet:read", "schedule:read"),
       },
+      { href: "/crew", label: "Команда", visible: anyOf("crew:read") },
     ],
   },
   {

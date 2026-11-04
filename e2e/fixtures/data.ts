@@ -10,6 +10,8 @@ export const E2E_ROLES = {
   producer: { key: "producer", email: "e2e-producer@pelena.test", name: "E2E Продюсер" },
   nofin: { key: "nofin", email: "e2e-nofin@pelena.test", name: "E2E Без финансов" },
   nocallsheet: { key: "nocallsheet", email: "e2e-nocallsheet@pelena.test", name: "E2E Без вызывных" },
+  /** Команда: просмотр и правка, но без контактов и без договоров. */
+  crewonly: { key: "crewonly", email: "e2e-crewonly@pelena.test", name: "E2E Только команда" },
 } as const;
 
 export type E2ERoleKey = keyof typeof E2E_ROLES;
@@ -17,6 +19,7 @@ export type E2ERoleKey = keyof typeof E2E_ROLES;
 export const E2E_ROLE_NAMES = {
   nofin: "E2E без финансов",
   nocallsheet: "E2E без вызывных",
+  crewonly: "E2E без договоров и контактов",
 } as const;
 
 /** Переменные `.env.e2e`: пароль роли. */
@@ -90,6 +93,58 @@ export const FILLED_DAY = {
   element: "Зонт чёрный E2E",
   secondUnit: "Детали интерьера E2E",
   schemePoint: "Основной караван E2E",
+} as const;
+
+/**
+ * Договоры и люди команды. Контрагент К1 уже в команде; К2 и К3 — для «Подтянуть»; ООО в
+ * «Подтянуть» не попадает. Сумма не должна дойти до экрана команды ни у кого.
+ */
+export const CREW = {
+  contractAmount: "73519.47",
+  contracts: {
+    individual: {
+      counterparty: "Светов Игорь Павлович",
+      type: "INDIVIDUAL",
+      contacts: "+7 900 111-22-33, svetov@e2e.test",
+      number: "E2E-К1",
+    },
+    selfEmployed: {
+      counterparty: "Гримова Анна Сергеевна",
+      type: "SELF_EMPLOYED",
+      contacts: "8 (900) 222-33-44 anna.grim@e2e.test",
+      number: "E2E-К2",
+    },
+    ip: {
+      counterparty: "ИП Звуков Олег Иванович",
+      type: "IP",
+      contacts: "тел. +7 900 333-44-55",
+      number: "E2E-К3",
+    },
+    llc: {
+      counterparty: "ООО «Свет и кран E2E»",
+      type: "LEGAL_ENTITY",
+      contacts: "+7 495 000-00-01, office@e2e.test",
+      number: "E2E-К4",
+    },
+  },
+  /** В команде по договору К1. */
+  linked: {
+    lastName: "Светов",
+    firstName: "Игорь",
+    middleName: "Павлович",
+    position: "Осветитель",
+    phone: "+7 900 111-22-33",
+    email: "svetov@e2e.test",
+  },
+  /** Добавлен вручную, без договора. */
+  manual: {
+    lastName: "Вручнов",
+    firstName: "Пётр",
+    position: "Водитель",
+    phone: "+7 900 777-88-99",
+    email: "vruchnov@e2e.test",
+    note: "Заметка сида",
+  },
 } as const;
 
 export const NAMES = {

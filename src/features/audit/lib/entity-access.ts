@@ -87,6 +87,7 @@ const AUDIT_ENTITY_VISIBILITY: Record<AuditEntityTypeValue, AuditVisibility> = {
   [AuditEntityType.project]: anyOf("project:read"),
   // Как canManageDepartments (features/smeta/lib/smeta-access.ts) — меню «Цеха».
   [AuditEntityType.department]: (v) => v.isProducer || v.can("members:manage"),
+  [AuditEntityType.crewMember]: anyOf("crew:read"),
   [AuditEntityType.budget]: smetaAll,
   [AuditEntityType.budgetVersion]: smetaAll,
   [AuditEntityType.budgetLine]: smetaAll,

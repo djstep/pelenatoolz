@@ -32,6 +32,7 @@ import {
 import { prisma } from "../src/shared/db/prisma";
 import {
   DAYS,
+  CREW,
   E2E_PROJECT_NAME,
   E2E_ROLE_NAMES,
   E2E_ROLES,
@@ -123,6 +124,15 @@ function noCallSheetMatrix(): PermissionMatrix {
   return m;
 }
 
+/** Как «без финансов», но без договоров и без контактов; команду видит и правит. */
+function crewOnlyMatrix(): PermissionMatrix {
+  const m = noFinanceMatrix();
+  const empty = buildEmptyMatrix();
+  m.contracts = empty.contracts;
+  m.crew_contacts = empty.crew_contacts;
+  return m;
+}
+
 async function upsertUsers(passwords: Record<E2ERoleKey, string>) {
   const ids = {} as Record<E2ERoleKey, string>;
   for (const role of ROLE_KEYS) {
@@ -168,6 +178,7 @@ async function createProject(users: Record<E2ERoleKey, string>) {
       for (const [name, matrix] of [
         [E2E_ROLE_NAMES.nofin, noFinanceMatrix()],
         [E2E_ROLE_NAMES.nocallsheet, noCallSheetMatrix()],
+        [E2E_ROLE_NAMES.crewonly, crewOnlyMatrix()],
       ] as const) {
         const row = await tx.projectRoleDefinition.create({
           data: {
@@ -190,6 +201,7 @@ async function createProject(users: Record<E2ERoleKey, string>) {
           { projectId, userId: users.producer, roleId: roles.get(DEFAULT_ROLE_NAMES.producer)!, status: MembershipStatus.ACTIVE },
           { projectId, userId: users.nofin, roleId: roles.get(E2E_ROLE_NAMES.nofin)!, status: MembershipStatus.ACTIVE },
           { projectId, userId: users.nocallsheet, roleId: roles.get(E2E_ROLE_NAMES.nocallsheet)!, status: MembershipStatus.ACTIVE },
+          { projectId, userId: users.crewonly, roleId: roles.get(E2E_ROLE_NAMES.crewonly)!, status: MembershipStatus.ACTIVE },
         ],
       });
 
@@ -834,12 +846,130 @@ async function ensureSeedCards(projectId: string, producerId: string) {
   console.log("Карточки добавлены: контрагент, договор, платёж, проба, кандидат скаута");
 }
 
+/**
+ * Проект, созданный до волны 8: роль без договоров и контактов и её участник; права команды у
+ * остальных тестовых ролей — как в только что созданном проекте (миграция дала им просмотр).
+ */
+async function ensureSeedCrewRoles(projectId: string, crewOnlyUserId: string) {
+  const role = await prisma.projectRoleDefinition.upsert({
+    where: { projectId_name: { projectId, name: E2E_ROLE_NAMES.crewonly } },
+    create: {
+      projectId,
+      name: E2E_ROLE_NAMES.crewonly,
+      note: "Приёмочные тесты",
+      permissions: buildPermissionsDocument(crewOnlyMatrix(), {}) as Prisma.InputJsonValue,
+    },
+    update: {},
+    select: { id: true },
+  });
+  await prisma.projectMembership.upsert({
+    where: { projectId_userId: { projectId, userId: crewOnlyUserId } },
+    create: { projectId, userId: crewOnlyUserId, roleId: role.id, status: MembershipStatus.ACTIVE },
+    update: {},
+  });
+  const full = noFinanceMatrix();
+  const others = await prisma.projectRoleDefinition.findMany({
+    where: { projectId, name: { in: [E2E_ROLE_NAMES.nofin, E2E_ROLE_NAMES.nocallsheet] } },
+    select: { id: true, permissions: true },
+  });
+  for (const row of others) {
+    await prisma.projectRoleDefinition.update({
+      where: { id: row.id },
+      data: {
+        permissions: {
+          ...(row.permissions as Prisma.JsonObject),
+          crew: full.crew,
+          crew_contacts: full.crew_contacts,
+        } as Prisma.InputJsonValue,
+      },
+    });
+  }
+}
+
+/** Договоры с людьми и команда для экрана /crew. Повторный запуск ничего не добавляет. */
+async function ensureSeedCrew(projectId: string, producerId: string) {
+  const company = await prisma.company.findFirstOrThrow({
+    where: { projectId, name: NAMES.company },
+    select: { id: true },
+  });
+  const status = await prisma.projectApprovalStatus.findFirstOrThrow({
+    where: { projectId, key: "UNSIGNED" },
+    select: { id: true },
+  });
+  const contractIds = new Map<string, string>();
+  for (const item of Object.values(CREW.contracts)) {
+    const present = await prisma.counterparty.findFirst({
+      where: { projectId, name: item.counterparty },
+      select: { id: true },
+    });
+    const counterparty =
+      present ??
+      (await prisma.counterparty.create({
+        data: { projectId, name: item.counterparty, type: item.type, contacts: item.contacts },
+        select: { id: true },
+      }));
+    const contractPresent = await prisma.contract.findFirst({
+      where: { projectId, number: item.number },
+      select: { id: true },
+    });
+    const contract =
+      contractPresent ??
+      (await prisma.contract.create({
+        data: {
+          projectId,
+          date: day("2026-10-21"),
+          number: item.number,
+          companyId: company.id,
+          counterpartyId: counterparty.id,
+          amount: dec(CREW.contractAmount),
+          vatEnabled: false,
+          amountWithVat: dec(CREW.contractAmount),
+          statusId: status.id,
+        },
+        select: { id: true },
+      }));
+    contractIds.set(item.number, contract.id);
+  }
+
+  const department = await prisma.department.findFirstOrThrow({
+    where: { projectId, name: NAMES.transportDepartment },
+    select: { id: true },
+  });
+  const linkedPresent = await prisma.crewMember.findFirst({
+    where: { projectId, lastName: CREW.linked.lastName, firstName: CREW.linked.firstName },
+    select: { id: true },
+  });
+  if (!linkedPresent) {
+    await prisma.crewMember.create({
+      data: {
+        projectId,
+        ...CREW.linked,
+        departmentId: department.id,
+        source: "CONTRACT",
+        syncedAt: new Date(),
+        syncedValues: { phone: CREW.linked.phone, email: CREW.linked.email },
+        createdById: producerId,
+        contractLinks: { create: { contractId: contractIds.get(CREW.contracts.individual.number)! } },
+      },
+    });
+  }
+  const manualPresent = await prisma.crewMember.findFirst({
+    where: { projectId, lastName: CREW.manual.lastName, firstName: CREW.manual.firstName },
+    select: { id: true },
+  });
+  if (!manualPresent) {
+    await prisma.crewMember.create({
+      data: { projectId, ...CREW.manual, departmentId: department.id, createdById: producerId },
+    });
+  }
+}
+
 async function main() {
   guardDatabase();
   const reset = process.argv.includes("--reset");
   const passwords = ensurePasswords();
   const users = await upsertUsers(passwords);
-  console.log("Пользователи: e2e-producer, e2e-nofin, e2e-nocallsheet — готовы");
+  console.log("Пользователи: e2e-producer, e2e-nofin, e2e-nocallsheet, e2e-crewonly — готовы");
 
   const existing = await prisma.project.findMany({
     where: { name: E2E_PROJECT_NAME, ownerUserId: users.producer },
@@ -851,6 +981,8 @@ async function main() {
       await ensureLayoutDays(id);
       await ensureSeedBudget(id, users.producer);
       await ensureSeedCards(id, users.producer);
+      await ensureSeedCrewRoles(id, users.crewonly);
+      await ensureSeedCrew(id, users.producer);
     }
     return;
   }
@@ -864,6 +996,7 @@ async function main() {
   await ensureLayoutDays(projectId);
   await ensureSeedBudget(projectId, users.producer);
   await ensureSeedCards(projectId, users.producer);
+  await ensureSeedCrew(projectId, users.producer);
 }
 
 main()
