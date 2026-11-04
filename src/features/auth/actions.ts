@@ -11,6 +11,7 @@ import {
   hashPasswordResetToken,
   sendPasswordResetEmail,
 } from "@/features/auth/lib/password-reset";
+import { passwordProblem } from "@/features/auth/lib/password-rules";
 import { prisma } from "@/shared/db/prisma";
 import { safeRedirectPath } from "@/shared/lib/safe-redirect";
 
@@ -34,9 +35,10 @@ export async function registerAction(
   });
 
   if (!parsed.success) {
+    const fieldErrors = parsed.error.flatten().fieldErrors;
     return {
-      error: "Проверьте правильность заполнения формы",
-      fieldErrors: parsed.error.flatten().fieldErrors,
+      error: fieldErrors.password?.[0] ?? "Проверьте правильность заполнения формы",
+      fieldErrors,
     };
   }
 
@@ -111,6 +113,13 @@ export async function logoutAction() {
   await signOut({ redirectTo: "/ru/login" });
 }
 
+/**
+ * Сброс пароля по письму выключен до своего домена (волна 6б). Страница показывает «Обратитесь к
+ * администратору проекта», а действие ниже — публичная точка доступа, поэтому и оно отвечает одинаково
+ * на любую почту: не обращается к базе и не отправляет письмо.
+ */
+const PASSWORD_RESET_BY_EMAIL_ENABLED: boolean = false;
+
 const forgotPasswordSuccess =
   "Если аккаунт с таким email существует, мы отправили ссылку для сброса пароля.";
 
@@ -118,6 +127,10 @@ export async function requestPasswordResetAction(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  if (!PASSWORD_RESET_BY_EMAIL_ENABLED) {
+    return { error: "Обратитесь к администратору проекта" };
+  }
+
   const parsed = forgotPasswordSchema.safeParse({
     email: formData.get("email"),
   });
@@ -179,9 +192,10 @@ export async function resetPasswordAction(
   });
 
   if (!parsed.success) {
+    const fieldErrors = parsed.error.flatten().fieldErrors;
     return {
-      error: "Проверьте пароль (минимум 8 символов) и попробуйте снова",
-      fieldErrors: parsed.error.flatten().fieldErrors,
+      error: fieldErrors.password?.[0] ?? "Ссылка недействительна или устарела. Запросите сброс снова.",
+      fieldErrors,
     };
   }
 
@@ -194,6 +208,9 @@ export async function resetPasswordAction(
   if (!record || record.usedAt || record.expiresAt < new Date()) {
     return { error: "Ссылка недействительна или устарела. Запросите сброс снова." };
   }
+
+  const problem = passwordProblem(parsed.data.password, record.user.email);
+  if (problem) return { error: problem };
 
   const passwordHash = await bcrypt.hash(parsed.data.password, 12);
 

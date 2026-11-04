@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { getTranslations } from "next-intl/server";
-import { ForgotPasswordForm } from "@/features/auth/components/forgot-password-form";
 import { AppBrand } from "@/shared/ui/app-brand";
 import { ThemeToggle } from "@/shared/theme/theme-toggle";
 import { Card } from "@/shared/ui/card";
@@ -29,7 +28,15 @@ export default async function ForgotPasswordPage({ params }: Props) {
         <h1 className="mb-6 font-display text-[27px] font-bold leading-tight">
           {t("forgotPasswordTitle")}
         </h1>
-        <ForgotPasswordForm locale={locale} />
+        <p className="text-sm">{t("forgotPasswordAdmin")}</p>
+        <p className="mt-4 text-center text-sm">
+          <Link
+            href={`/${locale}/login`}
+            className="text-[var(--accent)] underline-offset-2 hover:underline"
+          >
+            {t("backToLogin")}
+          </Link>
+        </p>
       </Card>
     </main>
   );
