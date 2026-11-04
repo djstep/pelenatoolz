@@ -2,7 +2,9 @@ import { expect, test, type Browser } from "@playwright/test";
 import bcrypt from "bcryptjs";
 import {
   LOGIN_BLOCKED_MESSAGE,
+  LOGIN_EMAIL_RATE_LIMIT,
   LOGIN_RATE_LIMIT,
+  loginLimitEmailKey,
   loginLimitEmailPrefix,
   loginLimitKey,
 } from "../src/features/auth/lib/login-limit";
@@ -205,6 +207,63 @@ test.describe("ограничение попыток входа", () => {
     const other = await openLogin(browser, IP_B);
     expect((await directLogin(other.page))?.user).toBeTruthy();
     await Promise.all([context.close(), other.context.close()]);
+  });
+
+  test.describe("лимит на почту с любых IP", () => {
+    /** Неудачи с разных адресов: счётчик пары у каждого IP остаётся на единице. */
+    async function failFromManyIps(page: LoginPage, email: string) {
+      for (let i = 0; i < LOGIN_EMAIL_RATE_LIMIT.limit; i += 1) {
+        await page.setExtraHTTPHeaders({ "x-forwarded-for": `198.51.100.${i + 1}` });
+        await loginFails(page, email, WRONG_PASSWORD, WRONG_LOGIN_MESSAGE);
+      }
+    }
+
+    test("20 неудач с разных IP — 21-я с нового IP отказ; через час вход снова работает", async ({ browser }) => {
+      const email = await createTmpUser("many-ips");
+      const { context, page } = await openLogin(browser, IP_A);
+      await failFromManyIps(page, email);
+
+      await page.setExtraHTTPHeaders({ "x-forwarded-for": "198.51.100.200" });
+      await loginFails(page, email, PASSWORD, LOGIN_BLOCKED_MESSAGE);
+
+      const key = loginLimitEmailKey(email);
+      const counter = await db.rateLimitCounter.findUniqueOrThrow({ where: { key } });
+      expect(counter.blockedUntil).not.toBeNull();
+
+      const hourAgo = new Date(Date.now() - LOGIN_EMAIL_RATE_LIMIT.windowMs - 1000);
+      await db.rateLimitCounter.update({
+        where: { key },
+        data: { blockedUntil: hourAgo, windowStart: hourAgo },
+      });
+      await submitLogin(page, email, PASSWORD);
+      await expectLoggedIn(page);
+      expect(await db.rateLimitCounter.count({ where: { key } })).toBe(0);
+      await context.close();
+    });
+
+    test("блок почты не мешает другой почте с тех же IP", async ({ browser }) => {
+      const email = await createTmpUser("many-ips-blocked");
+      const other = await createTmpUser("many-ips-other");
+      const { context, page } = await openLogin(browser, IP_A);
+      await failFromManyIps(page, email);
+      await loginFails(page, email, PASSWORD, LOGIN_BLOCKED_MESSAGE);
+
+      await submitLogin(page, other, PASSWORD);
+      await expectLoggedIn(page);
+      await context.close();
+    });
+
+    test("один IP почту не блокирует: после блока пары счётчик почты не растёт", async ({ browser }) => {
+      const email = await createTmpUser("one-ip");
+      const { context, page } = await openLogin(browser, IP_A);
+      await failFiveTimes(page, email);
+      for (let i = 0; i < 3; i += 1) {
+        await loginFails(page, email, WRONG_PASSWORD, LOGIN_BLOCKED_MESSAGE);
+      }
+      const counter = await db.rateLimitCounter.findUniqueOrThrow({ where: { key: loginLimitEmailKey(email) } });
+      expect(counter.count).toBe(LOGIN_RATE_LIMIT.limit);
+      await context.close();
+    });
   });
 
   test("одновременные попытки: сверх лимита не проходит ни одна", async () => {

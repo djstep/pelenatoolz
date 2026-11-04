@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import {
   clientIp,
+  LOGIN_EMAIL_RATE_LIMIT,
   LOGIN_RATE_LIMIT,
+  loginLimitEmailKey,
   loginLimitEmailPrefix,
   loginLimitKey,
 } from "@/features/auth/lib/login-limit";
@@ -55,8 +57,26 @@ describe("loginLimitKey", () => {
   });
 });
 
-describe("LOGIN_RATE_LIMIT", () => {
-  test("как в задании: 5 попыток, окно и блок по 15 минут", () => {
+describe("loginLimitEmailKey", () => {
+  test("почта не лежит в открытом виде, регистр не важен", () => {
+    const key = loginLimitEmailKey("Ivan@Example.com");
+    assert.ok(!key.toLowerCase().includes("ivan"));
+    assert.equal(key, loginLimitEmailKey("ivan@example.com"));
+  });
+
+  test("не совпадает с ключом пары и входит в общее начало ключей почты", () => {
+    const key = loginLimitEmailKey("ivan@example.com");
+    assert.notEqual(key, loginLimitKey("ivan@example.com", "all"));
+    assert.ok(key.startsWith(loginLimitEmailPrefix("ivan@example.com")));
+  });
+});
+
+describe("лимиты входа", () => {
+  test("пара: 5 попыток, окно и блок по 15 минут", () => {
     assert.deepEqual(LOGIN_RATE_LIMIT, { limit: 5, windowMs: 900_000, blockMs: 900_000 });
+  });
+
+  test("почта: 20 попыток за час, блок 15 минут", () => {
+    assert.deepEqual(LOGIN_EMAIL_RATE_LIMIT, { limit: 20, windowMs: 3_600_000, blockMs: 900_000 });
   });
 });

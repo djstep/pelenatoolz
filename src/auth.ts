@@ -3,7 +3,9 @@ import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import {
   clientIp,
+  LOGIN_EMAIL_RATE_LIMIT,
   LOGIN_RATE_LIMIT,
+  loginLimitEmailKey,
   loginLimitKey,
 } from "@/features/auth/lib/login-limit";
 import { loginSchema } from "@/features/auth/schemas";
@@ -39,8 +41,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         // Здесь, а не в форме: сюда приходят и форма, и прямой запрос к /api/auth.
         // Попытка занимается до проверки пароля, одинаково для существующей и чужой почты.
-        const limitKey = loginLimitKey(email, clientIp(request.headers));
-        const { allowed } = await checkRateLimit(limitKey, LOGIN_RATE_LIMIT);
+        // Сначала пара: заблокированная пара не копит счётчик почты, и один IP почту не заблокирует.
+        const pairKey = loginLimitKey(email, clientIp(request.headers));
+        const emailKey = loginLimitEmailKey(email);
+        const pair = await checkRateLimit(pairKey, LOGIN_RATE_LIMIT);
+        const allowed = pair.allowed && (await checkRateLimit(emailKey, LOGIN_EMAIL_RATE_LIMIT)).allowed;
         if (!allowed) {
           throw new LoginBlockedError();
         }
@@ -54,7 +59,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           return null;
         }
 
-        await resetRateLimit(limitKey);
+        await Promise.all([resetRateLimit(pairKey), resetRateLimit(emailKey)]);
 
         return {
           id: user.id,
