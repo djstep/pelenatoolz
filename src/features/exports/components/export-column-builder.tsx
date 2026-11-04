@@ -47,6 +47,8 @@ type Props = {
   value: ExportColumn[];
   onChange: (columns: ExportColumn[]) => void;
   className?: string;
+  /** Пункт меню «Доп. ресурсы». Выключается там, где ресурсов нет (команда). */
+  allowExtrasBucket?: boolean;
 };
 
 function colDragId(columnId: string) {
@@ -241,6 +243,7 @@ function ExportColumnCard({
   column,
   fields,
   canRemove,
+  allowExtrasBucket,
   usedElsewhere,
   onChange,
   onAddColumnAfter,
@@ -251,6 +254,7 @@ function ExportColumnCard({
   column: ExportColumn;
   fields: ExportFieldDef[];
   canRemove: boolean;
+  allowExtrasBucket: boolean;
   usedElsewhere: Set<string>;
   onChange: (patch: Partial<ExportColumn>) => void;
   onAddColumnAfter: () => void;
@@ -336,16 +340,18 @@ function ExportColumnCard({
             >
               Добавить столбец
             </MenuItem>
-            <MenuItem
-              onClick={() => {
-                onChange({ isExtrasBucket: !column.isExtrasBucket });
-                setMenuOpen(false);
-              }}
-            >
-              {column.isExtrasBucket
-                ? "Обычный столбец"
-                : "Доп. ресурсы"}
-            </MenuItem>
+            {allowExtrasBucket ? (
+              <MenuItem
+                onClick={() => {
+                  onChange({ isExtrasBucket: !column.isExtrasBucket });
+                  setMenuOpen(false);
+                }}
+              >
+                {column.isExtrasBucket
+                  ? "Обычный столбец"
+                  : "Доп. ресурсы"}
+              </MenuItem>
+            ) : null}
             {canRemove ? (
               <MenuItem
                 danger
@@ -390,6 +396,7 @@ export function ExportColumnBuilder({
   value,
   onChange,
   className,
+  allowExtrasBucket = true,
 }: Props) {
   const toast = useToast();
   const [activeFieldLabel, setActiveFieldLabel] = useState<string | null>(null);
@@ -607,6 +614,7 @@ export function ExportColumnBuilder({
                 column={col}
                 fields={fields}
                 canRemove={columns.length > 1}
+                allowExtrasBucket={allowExtrasBucket}
                 usedElsewhere={usedGlobal}
                 onChange={(patch) =>
                   updateColumns(

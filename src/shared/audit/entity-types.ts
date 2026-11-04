@@ -56,6 +56,8 @@ export const AuditEntityType = {
   scriptComment: "script_comment",
   budgetTemplate: "budget_template",
   department: "department",
+  /** Человек команды. Телефон и почта в журнал не пишутся: его читают и без этого права. */
+  crewMember: "crew_member",
   budget: "budget",
   budgetVersion: "budget_version",
   smetaExport: "smeta_export",
@@ -125,6 +127,7 @@ export const auditEntityLabels: Record<string, string> = {
   [AuditEntityType.scriptComment]: "Комментарий к сценарию",
   [AuditEntityType.budgetTemplate]: "Шаблон сметы",
   [AuditEntityType.department]: "Цех",
+  [AuditEntityType.crewMember]: "Команда",
   [AuditEntityType.budget]: "Смета цеха",
   [AuditEntityType.budgetVersion]: "Версия сметы",
   [AuditEntityType.smetaExport]: "Выгрузка смет",

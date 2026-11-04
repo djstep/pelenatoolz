@@ -8,7 +8,7 @@ import {
   parseResetPasswordArgs,
 } from "@/features/auth/lib/reset-password-cli";
 
-const DEV = "postgresql://user:secret@ep-flat-lake-1.neon.tech/neondb?sslmode=require";
+const DEV = "postgresql://user:secret@ep-floral-bread-1.neon.tech/neondb?sslmode=require";
 const PROD = "postgresql://user:secret@ep-steep-sound-1.neon.tech/neondb?sslmode=require";
 
 describe("parseResetPasswordArgs", () => {
@@ -103,7 +103,7 @@ describe("databaseProblem", () => {
 
 describe("databaseHost", () => {
   test("только адрес, без пользователя и пароля", () => {
-    assert.equal(databaseHost(DEV), "ep-flat-lake-1.neon.tech");
+    assert.equal(databaseHost(DEV), "ep-floral-bread-1.neon.tech");
   });
 });
 

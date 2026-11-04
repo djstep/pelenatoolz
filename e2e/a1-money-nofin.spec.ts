@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { NAMES } from "./fixtures/data";
+import { CREW, NAMES } from "./fixtures/data";
 import { findLeaks, mentionedMoneyFields, workbookText, type Leak } from "./helpers/leaks";
 import { dayId, downloadBuffer, e2eContext, fetchRsc, projectPath, sniff, storageStatePath } from "./helpers/session";
 
@@ -50,6 +50,7 @@ const PAGES: { name: string; path: string; marker: string | RegExp }[] = [
   { name: "смета (нет доступа)", path: projectPath(ctx, "/smeta"), marker: "Нет доступа к сметам" },
   { name: "актёры и персонажи", path: projectPath(ctx, "/actors"), marker: NAMES.character },
   { name: "локации", path: projectPath(ctx, "/locations"), marker: NAMES.location },
+  { name: "команда", path: projectPath(ctx, "/crew"), marker: CREW.linked.lastName },
   { name: "ресурсы", path: projectPath(ctx, "/resources"), marker: /Игровой транспорт/ },
   { name: "либретто", path: projectPath(ctx, "/libretto"), marker: "Показано 3 из 3 сцен" },
   { name: "обзор проекта", path: projectPath(ctx), marker: "Обзор проекта" },

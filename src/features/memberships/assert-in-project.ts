@@ -25,6 +25,7 @@ export type AssertInProjectEntity =
   | "CastingCandidate"
   | "CastingPerson"
   | "Department"
+  | "CrewMember"
   | "BudgetItem"
   | "ShootDay"
   | "CallSheetSection"
@@ -66,6 +67,7 @@ type ProjectDb = Pick<
   | "castingCandidate"
   | "castingPerson"
   | "department"
+  | "crewMember"
   | "budgetItem"
   | "shootDay"
   | "callSheetSection"
@@ -206,6 +208,10 @@ async function countInProject(
       });
     case "Department":
       return db.department.count({
+        where: { id: { in: ids }, projectId },
+      });
+    case "CrewMember":
+      return db.crewMember.count({
         where: { id: { in: ids }, projectId },
       });
     case "BudgetItem":

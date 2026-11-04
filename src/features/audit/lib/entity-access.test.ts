@@ -103,6 +103,31 @@ describe("visibleAuditEntityTypes", () => {
 });
 
 describe("stripHiddenFinanceFields", () => {
+  test("команда: номер договора скрыт без права на договоры, остальные поля остаются", () => {
+    const changes = {
+      fields: {
+        Договор: { from: null, to: "№ К-1" },
+        Телефон: { from: "скрыто", to: "скрыто" },
+      },
+    };
+    assert.deepEqual(
+      stripHiddenFinanceFields(AuditEntityType.crewMember, changes, viewer(readOnly("crew"))),
+      { fields: { Телефон: { from: "скрыто", to: "скрыто" } } },
+    );
+    assert.deepEqual(
+      stripHiddenFinanceFields(AuditEntityType.crewMember, changes, viewer(readOnly("crew", "contracts"))),
+      changes,
+    );
+    assert.equal(
+      stripHiddenFinanceFields(
+        AuditEntityType.crewMember,
+        { fields: { Договор: { from: null, to: "№ К-1" } } },
+        viewer(readOnly("crew")),
+      ),
+      null,
+    );
+  });
+
   const defaults = { before: { defaultBudgetItemId: "a" }, after: { defaultBudgetItemId: "b" } };
 
   test("актёр: статьи сметы скрыты без фин. просмотра актёров, без них changes пусты", () => {
