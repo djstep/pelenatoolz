@@ -1,12 +1,15 @@
 /**
  * Сброс пароля владельцем, пока нет сброса по письму (волна 6б):
  *
- *   npm run user:reset-password -- <почта>          — база из .env
- *   npm run user:reset-password -- <почта> --prod   — то же, если в .env прод
+ *   npm run user:reset-password -- <почта>                                  — база из .env
+ *   npm run user:reset-password -- <почта> --prod                           — то же, если в .env прод
+ *   npm run user:reset-password -- <почта> --env-file .env.prod --prod      — база из другого файла
  *
  * Новый пароль генерируется и один раз выводится в консоль, в базе только его хеш. В журнал идёт
  * запись без пароля. Человек выходит со всех устройств, блокировка входа снимается, ссылки сброса гаснут.
- * Строки подключения берутся только из файла .env: значения из окружения оболочки игнорируются.
+ * Строки подключения берутся только из этого файла: значения из окружения оболочки игнорируются.
+ * `--prod` обязателен, если в файле прод, и запрещён, если не прод.
+ * Файла нет: Node сам видит флаг --env-file и останавливается раньше скрипта с текстом «not found».
  */
 import path from "node:path";
 import { config } from "dotenv";
@@ -27,8 +30,8 @@ async function main() {
   const args = parseResetPasswordArgs(process.argv.slice(2));
   if ("error" in args) fail(args.error);
 
-  const { parsed } = config({ path: path.join(process.cwd(), ".env"), override: true, quiet: true });
-  const problem = databaseProblem([parsed?.DATABASE_URL, parsed?.DIRECT_URL], args.prod);
+  const { parsed } = config({ path: path.resolve(args.envFile), override: true, quiet: true });
+  const problem = databaseProblem([parsed?.DATABASE_URL, parsed?.DIRECT_URL], args.prod, args.envFile);
   if (problem) fail(problem);
   console.log(`База: ${databaseHost(parsed?.DATABASE_URL ?? "")}`);
 

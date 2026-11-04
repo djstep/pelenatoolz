@@ -51,6 +51,7 @@ next-env.d.ts
 
 # приёмка (Playwright): пароли тестовых аккаунтов, сессии входа, отчёты и скриншоты
 .env.e2e
+.env.prod
 /e2e/.auth/
 /e2e/screenshots/
 /e2e/.downloads/

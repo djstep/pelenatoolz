@@ -16,11 +16,12 @@ describe("parseResetPasswordArgs", () => {
     assert.deepEqual(parseResetPasswordArgs(["Ivan@Example.com"]), {
       email: "ivan@example.com",
       prod: false,
+      envFile: ".env",
     });
   });
 
   test("почта и --prod в любом порядке", () => {
-    const expected = { email: "ivan@example.com", prod: true };
+    const expected = { email: "ivan@example.com", prod: true, envFile: ".env" };
     assert.deepEqual(parseResetPasswordArgs(["ivan@example.com", "--prod"]), expected);
     assert.deepEqual(parseResetPasswordArgs(["--prod", "ivan@example.com"]), expected);
   });
@@ -34,6 +35,29 @@ describe("parseResetPasswordArgs", () => {
     assert.ok("error" in parseResetPasswordArgs([]));
     assert.ok("error" in parseResetPasswordArgs(["ivan"]));
     assert.ok("error" in parseResetPasswordArgs(["ivan@example.com", "--force"]));
+  });
+});
+
+describe("parseResetPasswordArgs: --env-file", () => {
+  const expected = { email: "ivan@example.com", prod: true, envFile: ".env.prod" };
+
+  test("через пробел и через =, в любом месте", () => {
+    assert.deepEqual(parseResetPasswordArgs(["ivan@example.com", "--env-file", ".env.prod", "--prod"]), expected);
+    assert.deepEqual(parseResetPasswordArgs(["--env-file=.env.prod", "--prod", "ivan@example.com"]), expected);
+  });
+
+  test("путь не считается паролем", () => {
+    const parsed = parseResetPasswordArgs(["ivan@example.com", "--env-file", "C:/secrets/.env.prod"]);
+    assert.equal("error" in parsed ? "" : parsed.envFile, "C:/secrets/.env.prod");
+  });
+
+  test("без пути и дважды — отказ", () => {
+    assert.ok("error" in parseResetPasswordArgs(["ivan@example.com", "--env-file"]));
+    assert.ok("error" in parseResetPasswordArgs(["ivan@example.com", "--env-file="]));
+    assert.ok("error" in parseResetPasswordArgs(["ivan@example.com", "--env-file", "--prod"]));
+    assert.ok(
+      "error" in parseResetPasswordArgs(["ivan@example.com", "--env-file", "a", "--env-file", "b"]),
+    );
   });
 });
 
@@ -60,6 +84,16 @@ describe("databaseProblem", () => {
 
   test("базы в .env нет — отказ", () => {
     assert.match(databaseProblem([undefined, ""], false) ?? "", /\.env/);
+  });
+
+  test("в тексте отказа назван файл, с которым работали", () => {
+    assert.match(databaseProblem([PROD], false, ".env.prod") ?? "", /\.env\.prod/);
+    assert.match(databaseProblem([DEV], true, ".env.prod") ?? "", /\.env\.prod/);
+    assert.match(databaseProblem([undefined], false, ".env.prod") ?? "", /\.env\.prod/);
+  });
+
+  test("есть только DIRECT_URL, без DATABASE_URL — отказ", () => {
+    assert.match(databaseProblem([undefined, DEV], false) ?? "", /DATABASE_URL/);
   });
 
   test("в тексте отказа нет строки подключения", () => {

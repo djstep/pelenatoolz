@@ -645,6 +645,65 @@ test.describe("скрипт владельца: сброс пароля", () => 
     });
   });
 
+  test.describe("--env-file", () => {
+    const fakeProdEnv = `DATABASE_URL="${FAKE_PROD}"\nDIRECT_URL="${FAKE_PROD}"\n`;
+
+    /** Поддельный файл в отдельной папке. Настоящие строки подключения никуда не копируем. */
+    const inFile = (content: string, run: (file: string) => void) =>
+      withEnvFile(content, (dir) => run(path.join(dir, ".env")));
+
+    test("прод в файле без --prod: отказ, хотя .env — не прод", () => {
+      inFile(fakeProdEnv, (file) => {
+        const result = runScript(["someone@pelena.test", "--env-file", file]);
+        expect(result.status).toBe(1);
+        expect(result.stderr).toContain("--prod");
+        expect(result.stdout).not.toContain("База:");
+      });
+    });
+
+    test("прод в файле с --prod: работа идёт с базой из файла, а не из .env", () => {
+      inFile(fakeProdEnv, (file) => {
+        const result = runScript(["someone@pelena.test", "--env-file", file, "--prod"]);
+        expect(result.stdout).toContain("База: ep-steep-sound-fake.invalid");
+        expect(result.status).toBe(1);
+        expect(result.stderr).not.toContain("secret");
+      });
+    });
+
+    test("--prod на файле, где не прод: отказ", () => {
+      inFile(`DATABASE_URL="${FAKE_DEV}"\n`, (file) => {
+        const result = runScript(["someone@pelena.test", "--env-file", file, "--prod"]);
+        expect(result.status).toBe(1);
+        expect(result.stderr).toContain("не прод");
+      });
+    });
+
+    test("файла нет или в нём нет базы: отказ", () => {
+      const missing = runScript(["someone@pelena.test", "--env-file", path.join(ROOT, ".env.no-such-file")]);
+      // Сам Node видит флаг с таким именем и останавливается раньше скрипта, со своим текстом и кодом.
+      expect(missing.status).not.toBe(0);
+      expect(missing.stderr).toContain(".env.no-such-file");
+      expect(missing.stdout).not.toContain("База:");
+      inFile("OTHER=1\n", (file) => {
+        const result = runScript(["someone@pelena.test", "--env-file", file]);
+        expect(result.status).toBe(1);
+        expect(result.stderr).toContain("DATABASE_URL");
+      });
+    });
+
+    test("файл важнее .env в папке запуска", async () => {
+      const email = await createTmpUser("script-env-file");
+      const before = await db.user.findUniqueOrThrow({ where: { email } });
+      withEnvFile(fakeProdEnv, (cwd) => {
+        const result = runScript([email, "--env-file", path.join(ROOT, ".env")], { cwd });
+        expect(result.status).toBe(0);
+        expect(result.stdout).toContain("База: ep-flat-lake");
+      });
+      const after = await db.user.findUniqueOrThrow({ where: { email } });
+      expect(after.passwordHash).not.toBe(before.passwordHash);
+    });
+  });
+
   test("пароль в командной строке не принимается, пароль в базе прежний", async () => {
     const email = await createTmpUser("script-arg");
     const before = await db.user.findUniqueOrThrow({ where: { email } });
