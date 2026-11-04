@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { createHash, randomBytes } from "node:crypto";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -719,6 +720,54 @@ test.describe("скрипт владельца: сброс пароля", () => 
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("не найден");
     expect(`${result.stdout}${result.stderr}`).not.toContain("e2e-producer");
+  });
+});
+
+test.describe("новый пароль по ссылке сброса", () => {
+  /** Ссылка из базы: письма выключены, но страница и старые ссылки остаются рабочими. */
+  async function resetLink(email: string) {
+    const user = await db.user.findUniqueOrThrow({ where: { email } });
+    const token = randomBytes(32).toString("base64url");
+    await db.passwordResetToken.create({
+      data: {
+        userId: user.id,
+        tokenHash: createHash("sha256").update(token).digest("hex"),
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+      },
+    });
+    return `/ru/reset-password?token=${encodeURIComponent(token)}`;
+  }
+
+  test("правила те же, после сброса все сессии выходят", async ({ browser }) => {
+    const email = await createTmpUser("reset-link");
+    const session = await openLogin(browser, IP_B);
+    await submitLogin(session.page, email, PASSWORD);
+    await expectLoggedIn(session.page);
+
+    const { context, page } = await openLogin(browser, IP_A);
+    await page.goto(await resetLink(email));
+    const submit = page.locator('form button[type="submit"]');
+
+    await page.locator("#password").fill("QwertyUiop");
+    await submit.click();
+    await expect(page.locator('form [role="alert"]')).toContainText("распространён");
+
+    await page.locator("#password").fill(email.split("@")[0]);
+    await submit.click();
+    await expect(page.locator('form [role="alert"]')).toContainText("почтой");
+    expect((await db.user.findUniqueOrThrow({ where: { email } })).sessionVersion).toBe(0);
+
+    await page.locator("#password").fill("монтаж-пятница-21-дубль");
+    await submit.click();
+    await page.waitForURL(/\/login\?reset=1/);
+
+    expect((await db.user.findUniqueOrThrow({ where: { email } })).sessionVersion).toBe(1);
+    const answer = await session.page.request.get("/api/auth/session");
+    expect((await answer.json())?.user).toBeFalsy();
+
+    await submitLogin(page, email, "монтаж-пятница-21-дубль");
+    await expectLoggedIn(page);
+    await Promise.all([session.context.close(), context.close()]);
   });
 });
 
