@@ -268,6 +268,7 @@ model User {
   uploadedFiles             ProjectFile[]              @relation("FileUploader")
   approvedCallSheets        CallSheet[]                @relation("CallSheetApprover")
   approvedCallSheetVersions CallSheetApprovedVersion[] @relation("CallSheetVersionApprover")
+  createdCrewMembers        CrewMember[]               @relation("CrewMemberCreator")
   driveFolderGrants         DriveFolderGrant[]
   driveExports              DriveExport[]              @relation("DriveExportUploader")
 }
@@ -347,6 +348,7 @@ model Project {
   resourceCategories         ResourceCategory[]
   actorAvailabilityRows      ActorAvailabilityRow[]
   departments                Department[]
+  crewMembers                CrewMember[]
   callSheetTemplateLeaders   CallSheetTemplateLeader[]
   callSheetTemplateCrewCalls CallSheetTemplateCrewCall[]
   callSheetTemplateBaseItems CallSheetTemplateBaseItem[]
@@ -421,10 +423,69 @@ model Department {
   callSheetTemplateCrewCalls CallSheetTemplateCrewCall[]
   callSheetCrewCalls         CallSheetCrewCall[]
   driveFolders               DriveFolder[]
+  crewMembers                CrewMember[]
 
   @@unique([projectId, name])
   @@unique([projectId, codePrefix])
   @@index([projectId, sortOrder])
+}
+
+enum CrewMemberSource {
+  MANUAL
+  CONTRACT
+}
+
+/// Человек команды проекта. Не аккаунт: участники с входом — ProjectMembership.
+/// Данные — копия. С договором связи только для кнопки «Обновить из договора».
+model CrewMember {
+  id           String           @id @default(cuid())
+  projectId    String
+  lastName     String
+  firstName    String?
+  middleName   String?
+  position     String?
+  departmentId String?
+  /// Телефон и почта уходят в браузер только с правом crew:contacts. Телефон — как ввели.
+  phone        String?
+  email        String?
+  note         String?
+  sortOrder    Int              @default(0)
+  source       CrewMemberSource @default(MANUAL)
+  /// Когда последний раз взято из договора.
+  syncedAt     DateTime?
+  /// Значения последней синхронизации: «поле меняли вручную» = значение отличается от снимка.
+  /// В браузер не отдавать (внутри телефон и почта).
+  syncedValues Json?
+  /// В архиве: ушёл с проекта. Записи не удаляются.
+  archivedAt   DateTime?
+  createdById  String
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  project       Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  department    Department?          @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  createdBy     User                 @relation("CrewMemberCreator", fields: [createdById], references: [id])
+  contractLinks CrewMemberContract[]
+
+  @@index([projectId, archivedAt])
+  @@index([projectId, departmentId, sortOrder])
+  @@index([departmentId])
+  @@index([createdById])
+}
+
+/// Связь человека команды с договором. У человека договоров может быть несколько;
+/// у договора с ООО — несколько людей. Удалили договор — связь уходит, человек остаётся.
+model CrewMemberContract {
+  id           String   @id @default(cuid())
+  crewMemberId String
+  contractId   String
+  createdAt    DateTime @default(now())
+
+  crewMember CrewMember @relation(fields: [crewMemberId], references: [id], onDelete: Cascade)
+  contract   Contract   @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@unique([crewMemberId, contractId])
+  @@index([contractId])
 }
 
 /// Глава цеха — участник проекта (не пользователь). Доступ даёт только активное участие.
@@ -2044,6 +2105,7 @@ model Contract {
   certificates Certificate[]
   accruals     Accrual[]
   cashPayments CashPayment[]
+  crewLinks    CrewMemberContract[]
 
   @@index([projectId, date])
   @@index([projectId, counterpartyId])

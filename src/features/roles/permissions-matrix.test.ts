@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
 import nodeModule from "node:module";
 import { before, describe, test } from "node:test";
+import { hasPermission } from "@/features/memberships/permissions";
 import {
   buildEmptyMatrix,
   buildFullMatrix,
+  buildNewRoleMatrix,
   buildViewerMatrix,
   can,
+  emptySectionPermissions,
   fullSectionPermissions,
   normalizePermissionMatrix,
   parsePermissionMatrix,
@@ -248,5 +251,69 @@ describe("«Финансы»: фин. условия — только просм
     const m = buildEmptyMatrix();
     m.actors = { ...m.actors, access: true, financeWrite: true };
     assert.equal(normalizePermissionMatrix(m).actors.financeWrite, true);
+  });
+});
+
+describe("Волна 8: права «Команда»", () => {
+  test("продюсеру — просмотр, правка и контакты", () => {
+    const m = buildFullMatrix();
+    assert.equal(hasPermission(m, "crew:read"), true);
+    assert.equal(hasPermission(m, "crew:write"), true);
+    assert.equal(hasPermission(m, "crew:contacts"), true);
+  });
+
+  test("наблюдателю — только просмотр", () => {
+    const m = buildViewerMatrix();
+    assert.equal(hasPermission(m, "crew:read"), true);
+    assert.equal(hasPermission(m, "crew:write"), false);
+    assert.equal(hasPermission(m, "crew:contacts"), false);
+  });
+
+  test("новая своя роль — только просмотр команды", () => {
+    const m = buildNewRoleMatrix();
+    assert.equal(hasPermission(m, "crew:read"), true);
+    assert.equal(hasPermission(m, "crew:write"), false);
+    assert.equal(hasPermission(m, "crew:contacts"), false);
+    for (const s of PERMISSION_SECTIONS) {
+      if (s.id === "crew") continue;
+      assert.deepEqual(m[s.id], emptySectionPermissions(), s.id);
+    }
+  });
+
+  test("«Контакты» сами по себе не дают просмотр и правку", () => {
+    const m = buildEmptyMatrix();
+    m.crew_contacts = { ...m.crew_contacts, access: true };
+    assert.equal(hasPermission(m, "crew:contacts"), true);
+    assert.equal(hasPermission(m, "crew:read"), false);
+    assert.equal(hasPermission(m, "crew:write"), false);
+  });
+
+  test("в «Команде» нет создания и удаления, в «Контактах» — ничего, кроме доступа", () => {
+    const m = normalizePermissionMatrix(matrixWithUnlockEverywhere());
+    assert.equal(m.crew.update, true);
+    assert.equal(m.crew.create, false);
+    assert.equal(m.crew.delete, false);
+    assert.equal(m.crew.financeRead, false);
+    assert.equal(m.crew_contacts.access, true);
+    assert.equal(m.crew_contacts.read, false);
+    assert.equal(m.crew_contacts.update, false);
+  });
+
+  test("старая роль без разделов команды читается как «выключено»", () => {
+    const m = parsePermissionMatrix({ scenes: { access: true, read: true } });
+    assert.equal(hasPermission(m, "crew:read"), false);
+    assert.equal(hasPermission(m, "crew:contacts"), false);
+  });
+
+  test("нельзя выдать «Контакты» шире своих прав", () => {
+    const actor = { crew: { access: true, read: true, update: true } };
+    assert.equal(isPermissionSubset({ crew_contacts: { access: true } }, actor), false);
+    assert.equal(
+      isPermissionSubset({ crew_contacts: { access: true } }, {
+        ...actor,
+        crew_contacts: { access: true },
+      }),
+      true,
+    );
   });
 });

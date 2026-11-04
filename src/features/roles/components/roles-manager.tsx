@@ -11,7 +11,7 @@ import {
 import { PermissionMatrixEditor } from "@/features/roles/components/permission-matrix-editor";
 import type { ResourceCategoryOption } from "@/features/roles/components/permission-matrix-editor";
 import {
-  buildEmptyMatrix,
+  buildNewRoleMatrix,
   parsePermissionMatrix,
   parseResourceCategoryFinance,
   type PermissionMatrix,
@@ -57,7 +57,7 @@ function RoleEditorModal({
   useActionSuccess(state, onClose);
   const matrix: PermissionMatrix = role
     ? parsePermissionMatrix(role.permissions)
-    : buildEmptyMatrix();
+    : buildNewRoleMatrix();
   const categoryFinance = role
     ? parseResourceCategoryFinance(role.permissions)
     : {};

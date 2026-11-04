@@ -3,6 +3,8 @@ export const PERMISSION_SECTIONS = [
   { id: "script_import", label: "Импорт сценария" },
   { id: "schedule", label: "КПП и вызывные" },
   { id: "callsheet_approve", label: "Вызывные — утверждение" },
+  { id: "crew", label: "Команда" },
+  { id: "crew_contacts", label: "Команда: контакты" },
   { id: "post_edit_timing", label: "Хронометраж монтажа" },
   { id: "actors", label: "Актёры" },
   { id: "characters", label: "Персонажи" },
@@ -65,6 +67,10 @@ const RESTRICTED_SECTION_FLAGS: Partial<
   smeta_all: ["access", "read"],
   // Утвердить вызывной — одно право, без просмотра и правки (их даёт «КПП и вызывные»).
   callsheet_approve: ["access"],
+  // Команда: людей не удаляют, а отправляют в архив — это та же правка.
+  crew: ["access", "read", "update"],
+  // Телефон и почта команды — одно право, без просмотра и правки (их даёт «Команда»).
+  crew_contacts: ["access"],
 };
 
 export function isSectionFlagAllowed(
@@ -160,6 +166,14 @@ export function buildFullMatrix(): PermissionMatrix {
   ) as PermissionMatrix;
 }
 
+/** Новая своя роль: всё выключено, кроме просмотра команды (ФИО и должность без контактов). */
+export function buildNewRoleMatrix(): PermissionMatrix {
+  return {
+    ...buildEmptyMatrix(),
+    crew: { ...emptySectionPermissions(), access: true, read: true },
+  };
+}
+
 export function buildViewerMatrix(): PermissionMatrix {
   const matrix = buildEmptyMatrix();
   for (const section of PERMISSION_SECTIONS) {
@@ -167,6 +181,8 @@ export function buildViewerMatrix(): PermissionMatrix {
     if (section.id === "smeta_all") continue;
     // Наблюдатель вызывные не утверждает.
     if (section.id === "callsheet_approve") continue;
+    // Телефоны и почты команды выдаются в ролях вручную.
+    if (section.id === "crew_contacts") continue;
     matrix[section.id] = {
       ...emptySectionPermissions(),
       access: true,

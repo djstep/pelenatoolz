@@ -17,6 +17,9 @@ export const PERMISSIONS = [
   "callsheet:read",
   "callsheet:write",
   "callsheet:approve",
+  "crew:read",
+  "crew:write",
+  "crew:contacts",
   "cast:read",
   "cast:write",
   "smeta:read_all",
@@ -60,6 +63,10 @@ const PERMISSION_TO_SECTION: Record<
   "callsheet:write": { section: "schedule", action: "write" },
   /** Утвердить вызывной: раздел-флаг «Вызывные — утверждение», только «Доступ». */
   "callsheet:approve": { section: "callsheet_approve", action: "access" },
+  "crew:read": { section: "crew", action: "read" },
+  "crew:write": { section: "crew", action: "write" },
+  /** Телефон и почта команды: раздел-флаг «Команда: контакты», только «Доступ». */
+  "crew:contacts": { section: "crew_contacts", action: "access" },
   "cast:read": { section: "actors", action: "read" },
   "cast:write": { section: "actors", action: "write" },
   /** Сметы цехов: просмотр всех (без правки и утверждения). Продюсер видит их и без флага. */
