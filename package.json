@@ -11,6 +11,7 @@
     "test": "node --import tsx --test \"src/**/*.test.ts\"",
     "e2e": "tsx scripts/e2e-seed.ts && playwright test",
     "e2e:reset": "tsx scripts/e2e-seed.ts --reset",
+    "user:reset-password": "tsx scripts/reset-password.ts",
     "preview:callsheet": "tsx scripts/preview-callsheet.ts",
     "cloud-stub": "tsx e2e/cloud-stub/run.ts",
     "db:generate": "prisma generate",

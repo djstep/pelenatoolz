@@ -1,3 +1,7 @@
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { expect, test, type Browser } from "@playwright/test";
 import bcrypt from "bcryptjs";
 import {
@@ -543,6 +547,119 @@ test.describe("политика обработки персональных да
     await expect(policy).toHaveURL(/\/ru\/privacy/);
     await expect(page.locator("#firstName")).toHaveValue("Тест");
     await context.close();
+  });
+});
+
+test.describe("скрипт владельца: сброс пароля", () => {
+  const ROOT = process.cwd();
+  const FAKE_PROD = "postgresql://user:secret@ep-steep-sound-fake.invalid/neondb";
+  const FAKE_DEV = "postgresql://user:secret@ep-flat-lake-fake.invalid/neondb";
+
+  function runScript(args: string[], options: { cwd?: string; env?: Record<string, string> } = {}) {
+    return spawnSync(
+      process.execPath,
+      [
+        path.join(ROOT, "node_modules/tsx/dist/cli.mjs"),
+        "--tsconfig",
+        path.join(ROOT, "tsconfig.json"),
+        path.join(ROOT, "scripts/reset-password.ts"),
+        ...args,
+      ],
+      { cwd: options.cwd ?? ROOT, encoding: "utf8", env: { ...process.env, ...options.env } },
+    );
+  }
+
+  /** Папка с поддельным .env: строки ведут в никуда, настоящая база не затрагивается. */
+  function withEnvFile<T>(content: string | null, run: (cwd: string) => T): T {
+    const dir = mkdtempSync(path.join(tmpdir(), "reset-password-"));
+    try {
+      if (content !== null) writeFileSync(path.join(dir, ".env"), content);
+      return run(dir);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
+  const newPassword = (stdout: string) => stdout.match(/Новый пароль[^:]*: (\S+)/)?.[1] ?? "";
+
+  test("новый пароль один раз в консоли, выход со всех устройств, блокировка снята, журнал без пароля", async ({ browser }) => {
+    const email = await createTmpUser("script");
+    const session = await openLogin(browser, IP_B);
+    await submitLogin(session.page, email, PASSWORD);
+    await expectLoggedIn(session.page);
+
+    const blocked = await openLogin(browser, IP_A);
+    await failFiveTimes(blocked.page, email);
+    await loginFails(blocked.page, email, PASSWORD, LOGIN_BLOCKED_MESSAGE);
+
+    const result = runScript([email]);
+    expect(result.status).toBe(0);
+    const password = newPassword(result.stdout);
+    expect(password.length).toBe(24);
+    expect(result.stdout.split(password)).toHaveLength(2);
+    expect(result.stderr).not.toContain(password);
+
+    const answer = await session.page.request.get("/api/auth/session");
+    expect((await answer.json())?.user).toBeFalsy();
+
+    await loginFails(blocked.page, email, PASSWORD, WRONG_LOGIN_MESSAGE);
+    await submitLogin(blocked.page, email, password);
+    await expectLoggedIn(blocked.page);
+
+    const user = await db.user.findUniqueOrThrow({ where: { email } });
+    expect(user.sessionVersion).toBe(1);
+    expect(await bcrypt.compare(password, user.passwordHash)).toBe(true);
+    const audit = await db.auditLog.findMany({ where: { userId: user.id, entityType: "user_password" } });
+    expect(audit).toHaveLength(1);
+    expect(audit[0].summary).toContain("скрипт");
+    expect(JSON.stringify(audit[0])).not.toContain(password);
+    await Promise.all([session.context.close(), blocked.context.close()]);
+  });
+
+  test("база из оболочки игнорируется, работает только .env", async () => {
+    const email = await createTmpUser("script-env");
+    const result = runScript([email], { env: { DATABASE_URL: FAKE_PROD, DIRECT_URL: FAKE_PROD } });
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("База: ep-flat-lake");
+  });
+
+  test("прод в .env без --prod: отказ, даже если в оболочке другая база", () => {
+    withEnvFile(`DATABASE_URL="${FAKE_PROD}"\nDIRECT_URL="${FAKE_PROD}"\n`, (cwd) => {
+      const result = runScript(["someone@pelena.test"], { cwd, env: { DATABASE_URL: FAKE_DEV, DIRECT_URL: FAKE_DEV } });
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain("--prod");
+      expect(result.stderr).not.toContain("secret");
+    });
+  });
+
+  test("нет .env — отказ; --prod на базе не прод — отказ", () => {
+    withEnvFile(null, (cwd) => {
+      const result = runScript(["someone@pelena.test"], { cwd });
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain(".env");
+    });
+    withEnvFile(`DATABASE_URL="${FAKE_DEV}"\n`, (cwd) => {
+      const result = runScript(["someone@pelena.test", "--prod"], { cwd });
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain("не прод");
+    });
+  });
+
+  test("пароль в командной строке не принимается, пароль в базе прежний", async () => {
+    const email = await createTmpUser("script-arg");
+    const before = await db.user.findUniqueOrThrow({ where: { email } });
+    const result = runScript([email, "новый-пароль-из-строки"]);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("не принимается");
+    const after = await db.user.findUniqueOrThrow({ where: { email } });
+    expect(after.passwordHash).toBe(before.passwordHash);
+  });
+
+  test("почта не найдена: отказ, список пользователей не выводится", () => {
+    const result = runScript([tmpEmail("nobody-script")]);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("не найден");
+    expect(`${result.stdout}${result.stderr}`).not.toContain("e2e-producer");
   });
 });
 
