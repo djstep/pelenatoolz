@@ -238,6 +238,9 @@ model User {
   passwordHash String
   /// Растёт при смене и сбросе пароля: выданные раньше сессии перестают действовать.
   sessionVersion Int @default(0)
+  /// Когда и какую редакцию политики принял при регистрации. У зарегистрированных раньше пусто: их не спрашивали.
+  personalDataConsentAt DateTime?
+  personalDataConsentVersion String?
   phone        String?
   /// Почта для Google (доступы к Диску); может отличаться от почты входа.
   googleEmail  String?

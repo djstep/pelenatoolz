@@ -9,6 +9,7 @@ import {
 } from "@/features/auth/actions";
 import { NewPasswordField } from "@/features/auth/components/new-password-field";
 import { Button } from "@/shared/ui/button";
+import { Checkbox } from "@/shared/ui/checkbox";
 import { submitKeepingFields } from "@/shared/ui/forms/submit-keeping-fields";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
@@ -65,6 +66,18 @@ export function RegisterForm({
         />
       </div>
       <NewPasswordField label={t("password")} email={email} />
+      <Checkbox name="personalDataConsent" required className="items-start">
+        <span>
+          {t("consentBeforeLink")}{" "}
+          <Link
+            href={`/${locale}/privacy`}
+            target="_blank"
+            className="text-[var(--accent)] underline-offset-2 hover:underline"
+          >
+            {t("consentLink")}
+          </Link>
+        </span>
+      </Checkbox>
       {state.error ? (
         <p className="text-sm text-[var(--danger)]" role="alert">
           {state.error}

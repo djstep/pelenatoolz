@@ -8,6 +8,10 @@ import {
   loginLimitEmailPrefix,
   loginLimitKey,
 } from "../src/features/auth/lib/login-limit";
+import {
+  PERSONAL_DATA_CONSENT_REQUIRED,
+  PERSONAL_DATA_POLICY_VERSION,
+} from "../src/features/auth/lib/personal-data-consent";
 import { checkRateLimit, resetRateLimit } from "../src/shared/lib/rate-limit";
 import { e2eDb } from "./helpers/db";
 
@@ -397,13 +401,16 @@ test.describe("смена пароля в профиле", () => {
 });
 
 test.describe("требования к паролю", () => {
-  async function openRegister(browser: Browser, email: string) {
+  const consentBox = (page: LoginPage) => page.locator('input[name="personalDataConsent"]');
+
+  async function openRegister(browser: Browser, email: string, { consent = true } = {}) {
     const context = await browser.newContext();
     const page = await context.newPage();
     await page.goto("/ru/register");
     await page.locator("#firstName").fill("Тест");
     await page.locator("#lastName").fill("Волна");
     await page.locator("#email").fill(email);
+    if (consent) await consentBox(page).check({ force: true });
     return { context, page };
   }
 
@@ -450,6 +457,91 @@ test.describe("требования к паролю", () => {
     await page.locator('form button[type="submit"]').click();
     await page.waitForURL(/\/projects/);
     expect(await db.user.count({ where: { email } })).toBe(1);
+    await context.close();
+  });
+
+  test("без галочки форма не уходит", async ({ browser }) => {
+    const email = tmpEmail("no-consent");
+    const { context, page } = await openRegister(browser, email, { consent: false });
+    await page.locator("#password").fill(PASSWORD);
+    await page.locator('form button[type="submit"]').click();
+    await expect(page).toHaveURL(/\/register/);
+    expect(await consentBox(page).evaluate((el: HTMLInputElement) => el.validity.valueMissing)).toBe(true);
+    expect(await db.user.count({ where: { email } })).toBe(0);
+    await context.close();
+  });
+
+  test("обойти галочку в браузере нельзя: отказ на сервере", async ({ browser }) => {
+    const email = tmpEmail("no-consent-server");
+    const { context, page } = await openRegister(browser, email, { consent: false });
+    await page.locator("#password").fill(PASSWORD);
+    await consentBox(page).evaluate((el: HTMLInputElement) => el.removeAttribute("required"));
+    await page.locator('form button[type="submit"]').click();
+    await expect(page.locator('form [role="alert"]')).toHaveText(PERSONAL_DATA_CONSENT_REQUIRED);
+    await expect(page).toHaveURL(/\/register/);
+    expect(await db.user.count({ where: { email } })).toBe(0);
+    await context.close();
+  });
+
+  test("с галочкой: в базе дата и редакция политики, в журнале запись о регистрации", async ({ browser }) => {
+    const email = tmpEmail("consent");
+    const { context, page } = await openRegister(browser, email);
+    await page.locator("#password").fill(PASSWORD);
+    const started = Date.now();
+    await page.locator('form button[type="submit"]').click();
+    await page.waitForURL(/\/projects/);
+
+    const user = await db.user.findUniqueOrThrow({ where: { email } });
+    expect(user.personalDataConsentVersion).toBe(PERSONAL_DATA_POLICY_VERSION);
+    expect(user.personalDataConsentAt).not.toBeNull();
+    expect(user.personalDataConsentAt!.getTime()).toBeGreaterThan(started - 60_000);
+
+    const audit = await db.auditLog.findMany({ where: { userId: user.id, action: "CREATE" } });
+    expect(audit).toHaveLength(1);
+    expect(audit[0].projectId).toBeNull();
+    expect(audit[0].summary).toContain("согласие");
+    expect(JSON.stringify(audit[0])).not.toContain(email);
+    await context.close();
+  });
+});
+
+test.describe("политика обработки персональных данных", () => {
+  test("открывается без входа, текст-заглушка с пометкой", async ({ browser }) => {
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    await page.goto("/ru/privacy");
+    await expect(page).toHaveURL(/\/privacy/);
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Политика обработки персональных данных");
+    await expect(page.getByTestId("privacy-stub")).toContainText("Нужен текст юриста");
+    await context.close();
+  });
+
+  for (const path of ["/ru/login", "/ru/register"]) {
+    test(`ссылка в подвале ${path}`, async ({ browser }) => {
+      const context = await browser.newContext();
+      const page = await context.newPage();
+      await page.goto(path);
+      const [policy] = await Promise.all([
+        context.waitForEvent("page"),
+        page.getByTestId("privacy-footer-link").click(),
+      ]);
+      await expect(policy).toHaveURL(/\/ru\/privacy/);
+      await expect(policy.getByTestId("privacy-stub")).toBeVisible();
+      await context.close();
+    });
+  }
+
+  test("ссылка в галочке открывает политику, заполненная форма остаётся", async ({ browser }) => {
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    await page.goto("/ru/register");
+    await page.locator("#firstName").fill("Тест");
+    const [policy] = await Promise.all([
+      context.waitForEvent("page"),
+      page.locator("form").getByRole("link", { name: "политику обработки персональных данных" }).click(),
+    ]);
+    await expect(policy).toHaveURL(/\/ru\/privacy/);
+    await expect(page.locator("#firstName")).toHaveValue("Тест");
     await context.close();
   });
 });

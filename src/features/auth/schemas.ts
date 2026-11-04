@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { PERSONAL_DATA_CONSENT_REQUIRED } from "@/features/auth/lib/personal-data-consent";
 import { passwordProblem } from "@/features/auth/lib/password-rules";
 
 /** Новый пароль без сверки с почтой (почта бывает известна позже, как при сбросе). */
@@ -13,6 +14,7 @@ export const registerSchema = z
     lastName: z.string().trim().min(1).max(80),
     email: z.email().max(255),
     password: newPasswordSchema,
+    personalDataConsent: z.literal("on", { error: PERSONAL_DATA_CONSENT_REQUIRED }),
   })
   .superRefine((data, ctx) => {
     const problem = passwordProblem(data.password, data.email);

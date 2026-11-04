@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getTranslations } from "next-intl/server";
 import { LoginForm } from "@/features/auth/components/login-form";
+import { PrivacyPolicyFooter } from "@/features/auth/components/privacy-policy-footer";
 import { AppBrand } from "@/shared/ui/app-brand";
 import { ThemeToggle } from "@/shared/theme/theme-toggle";
 import { Card } from "@/shared/ui/card";
@@ -35,6 +36,7 @@ export default async function LoginPage({ params, searchParams }: Props) {
           resetSuccess={reset === "1"}
         />
       </Card>
+      <PrivacyPolicyFooter locale={locale} />
     </main>
   );
 }

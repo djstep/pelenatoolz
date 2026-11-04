@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getTranslations } from "next-intl/server";
+import { PrivacyPolicyFooter } from "@/features/auth/components/privacy-policy-footer";
 import { RegisterForm } from "@/features/auth/components/register-form";
 import { AppBrand } from "@/shared/ui/app-brand";
 import { Card } from "@/shared/ui/card";
@@ -29,6 +30,7 @@ export default async function RegisterPage({ params, searchParams }: Props) {
         </h1>
         <RegisterForm callbackUrl={callbackUrl} locale={locale} />
       </Card>
+      <PrivacyPolicyFooter locale={locale} />
     </main>
   );
 }

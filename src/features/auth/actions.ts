@@ -12,7 +12,10 @@ import {
   sendPasswordResetEmail,
 } from "@/features/auth/lib/password-reset";
 import { LOGIN_BLOCKED_MESSAGE } from "@/features/auth/lib/login-limit";
+import { PERSONAL_DATA_POLICY_VERSION } from "@/features/auth/lib/personal-data-consent";
 import { passwordProblem } from "@/features/auth/lib/password-rules";
+import { AuditEntityType } from "@/shared/audit/entity-types";
+import { auditMutation } from "@/shared/audit/with-audit";
 import { prisma } from "@/shared/db/prisma";
 import { safeRedirectPath } from "@/shared/lib/safe-redirect";
 
@@ -33,12 +36,16 @@ export async function registerAction(
     lastName: formData.get("lastName"),
     email: formData.get("email"),
     password: formData.get("password"),
+    personalDataConsent: formData.get("personalDataConsent"),
   });
 
   if (!parsed.success) {
     const fieldErrors = parsed.error.flatten().fieldErrors;
     return {
-      error: fieldErrors.password?.[0] ?? "Проверьте правильность заполнения формы",
+      error:
+        fieldErrors.password?.[0] ??
+        fieldErrors.personalDataConsent?.[0] ??
+        "Проверьте правильность заполнения формы",
       fieldErrors,
     };
   }
@@ -51,12 +58,30 @@ export async function registerAction(
 
   const name = `${parsed.data.firstName} ${parsed.data.lastName}`.trim();
   const passwordHash = await bcrypt.hash(parsed.data.password, 12);
-  await prisma.user.create({
-    data: {
-      name,
-      email,
-      passwordHash,
-    },
+  await prisma.$transaction(async (tx) => {
+    const user = await tx.user.create({
+      data: {
+        name,
+        email,
+        passwordHash,
+        personalDataConsentAt: new Date(),
+        personalDataConsentVersion: PERSONAL_DATA_POLICY_VERSION,
+      },
+    });
+    await auditMutation(
+      { user: { id: user.id } },
+      async () => user,
+      null,
+      {
+        projectId: null,
+        entityType: AuditEntityType.userProfile,
+        entityId: user.id,
+        action: "CREATE",
+        summary: "Регистрация, дано согласие на обработку персональных данных",
+        changes: { personalDataConsentVersion: PERSONAL_DATA_POLICY_VERSION },
+      },
+      { db: tx },
+    );
   });
 
   try {
