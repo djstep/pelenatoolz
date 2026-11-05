@@ -220,6 +220,31 @@ test.describe("память разделов меню", () => {
       expect(failures).toEqual([]);
     });
   }
+
+  test("свёрнутый и раскрытый разделы помнятся после перезагрузки", async ({ page }) => {
+    await page.goto(projectPath(ctx));
+    const settings = page.getByRole("button", { name: "Настройки", exact: true });
+    await expect(settings).toHaveAttribute("aria-expanded", "false");
+    await settings.click();
+    await expect(settings).toHaveAttribute("aria-expanded", "true");
+    await page.reload();
+    await expect(settings).toHaveAttribute("aria-expanded", "true");
+    await settings.click();
+    await expect(settings).toHaveAttribute("aria-expanded", "false");
+    await page.reload();
+    await expect(settings).toHaveAttribute("aria-expanded", "false");
+  });
+
+  test("раздел с активной страницей можно свернуть, переход по вкладке раскрывает его", async ({ page }) => {
+    await page.goto(CASTING);
+    const section = page.getByRole("button", { name: "Препродакшн здесь" });
+    await expect(section).toHaveAttribute("aria-expanded", "true");
+    await section.click();
+    await expect(section).toHaveAttribute("aria-expanded", "false");
+    await tab(page, "Пробы").click();
+    await expect(page).toHaveURL(new RegExp(`${AUDITIONS}$`));
+    await expect(section).toHaveAttribute("aria-expanded", "true");
+  });
 });
 
 test.describe("вкладки Съёмочного дня", () => {
@@ -519,6 +544,21 @@ test.describe("полоса вкладок на телефоне", () => {
     await expectAuditionsTab(page);
     await expectNoOverflow(page);
   });
+
+  for (const [section, path] of [
+    ["Операции", "/finance"],
+    ["Контрагенты", "/counterparties"],
+  ] as const) {
+    test(`390 px: main не шире экрана в разделе с тремя вкладками, ${section}`, async ({ page }) => {
+      await page.goto(projectPath(ctx, path));
+      await expect(tabsBar(page).getByRole("link")).toHaveCount(3);
+      await expectNoOverflow(page);
+      const rows = await tabsBar(page).evaluate(
+        (bar) => new Set([...bar.querySelectorAll("a")].map((link) => Math.round(link.getBoundingClientRect().top))).size,
+      );
+      expect(rows, "полоса в одну строку").toBe(1);
+    });
+  }
 
   test("не помещается: одна строка, прокрутка внутри полосы, активная вкладка видна", async ({ page }) => {
     // Две короткие вкладки на 390 px помещаются: сужаем окно, чтобы полосе пришлось прокручиваться.
