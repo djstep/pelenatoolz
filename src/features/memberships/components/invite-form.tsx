@@ -10,6 +10,8 @@ import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Select } from "@/shared/ui/select";
+import { useActionSuccess } from "@/shared/ui/unsaved/use-action-success";
+import { useFormGuard } from "@/shared/ui/unsaved/use-form-guard";
 import { useOnChange } from "@/shared/hooks/use-on-change";
 
 const initial: ActionState = {};
@@ -28,6 +30,9 @@ export function InviteForm({
   const [state, action, pending] = useActionState(bound, initial);
   const [copied, setCopied] = useState(false);
   const defaultRoleId = roles.find((r) => r.name === "Наблюдатель")?.id ?? roles[0]?.id;
+  // Форма на самой странице: при уходе с введёнными данными — обычный вопрос о сохранении.
+  const { ref, markClean } = useFormGuard(true, undefined, state);
+  useActionSuccess(state, markClean);
 
   useOnChange([state.inviteUrl], () => {
     setCopied(false);
@@ -40,7 +45,7 @@ export function InviteForm({
   }
 
   return (
-    <form action={action} className="space-y-4">
+    <form ref={ref} action={action} className="space-y-4">
       <div>
         <Label htmlFor="email">{t("inviteEmail")}</Label>
         <Input id="email" name="email" type="email" />

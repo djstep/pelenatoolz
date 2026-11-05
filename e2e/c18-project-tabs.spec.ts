@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { e2eDb } from "./helpers/db";
 import { e2eContext, projectPath, storageStatePath } from "./helpers/session";
 
 /**
@@ -164,6 +165,58 @@ for (const role of ["producer", "nofin", "crewonly"] as const) {
     });
   });
 }
+
+test.describe("форма приглашения на «Участниках»", () => {
+  test.use({ storageState: storageStatePath("producer") });
+
+  const EMAIL = "e2e-tabs-invite@pelena.test";
+  const db = e2eDb();
+  const invites = () => db.projectInvite.count({ where: { projectId: ctx.projectId, email: EMAIL } });
+
+  test.afterAll(async () => {
+    await db.projectInvite.deleteMany({ where: { projectId: ctx.projectId, email: EMAIL } });
+    await db.$disconnect();
+  });
+
+  async function fillInvite(page: Page) {
+    await page.goto(projectPath(ctx, "/members"));
+    await expectTabs(page, ["Участники", "Роли и права"], "Участники");
+    // Форма запоминает исходные значения через 150 мс (`use-form-guard.ts`).
+    await page.waitForTimeout(300);
+    await page.locator("#email").fill(EMAIL);
+  }
+
+  test("без изменений клик по вкладке вопроса не задаёт", async ({ page }) => {
+    await page.goto(projectPath(ctx, "/members"));
+    await expectTabs(page, ["Участники", "Роли и права"], "Участники");
+    await page.waitForTimeout(300);
+    await tab(page, "Роли и права").click();
+    await expect(page).toHaveURL(new RegExp(`${projectPath(ctx, "/roles")}$`));
+  });
+
+  test("«Остаться» оставляет почту, «Не сохранять» уходит, приглашения нет", async ({ page }) => {
+    await fillInvite(page);
+    await tab(page, "Роли и права").click();
+    const question = page.getByRole("alertdialog");
+    await expect(question.getByRole("button", { name: "Сохранить" })).toBeVisible();
+    await question.getByRole("button", { name: "Остаться" }).click();
+    await expect(question).toBeHidden();
+    await expect(page.locator("#email")).toHaveValue(EMAIL);
+
+    await tab(page, "Роли и права").click();
+    await question.getByRole("button", { name: "Не сохранять" }).click();
+    await expect(page).toHaveURL(new RegExp(`${projectPath(ctx, "/roles")}$`));
+    expect(await invites()).toBe(0);
+  });
+
+  test("«Сохранить» создаёт приглашение и переходит", async ({ page }) => {
+    await fillInvite(page);
+    await tab(page, "Роли и права").click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Сохранить" }).click();
+    await expect(page).toHaveURL(new RegExp(`${projectPath(ctx, "/roles")}$`));
+    expect(await invites()).toBe(1);
+  });
+});
 
 test.describe("полоса вкладок на телефоне", () => {
   test.use({ storageState: storageStatePath("producer"), viewport: { width: 390, height: 844 } });
