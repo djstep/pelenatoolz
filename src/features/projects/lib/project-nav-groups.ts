@@ -133,20 +133,21 @@ export const projectNavGroups: NavGroupDef[] = [
         visible: (a) =>
           a.isProducer || a.can("smeta:read_all") || a.headDepartmentIds.length > 0,
       },
-      { href: "/accruals", label: "Начисления", visible: anyOf("finance:read") },
       {
         href: "/resource-usage",
         label: "Ведомость по использованию",
         // В ведомости только суммы — без фин. просмотра хотя бы одного источника она пустая.
         visible: (a) => a.anyEntityFinanceRead,
       },
-      { href: "/payments", label: "Платежи", visible: anyOf("finance:read") },
       { href: "/finance/reports", label: "Отчёты", visible: anyOf("finance:read") },
       {
-        href: "/finance",
+        // Отчёты и настройки под /finance — свои пункты: их адрес длиннее, они и подсвечиваются.
         label: "Операции",
-        exact: true,
-        visible: anyOf("finance:read"),
+        tabs: [
+          { href: "/finance", label: "Операции", visible: anyOf("finance:read") },
+          { href: "/accruals", label: "Начисления", visible: anyOf("finance:read") },
+          { href: "/payments", label: "Платежи", visible: anyOf("finance:read") },
+        ],
       },
       { href: "/finance/settings", label: "Настройки", visible: anyOf("finance:read") },
       {

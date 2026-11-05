@@ -166,6 +166,49 @@ for (const role of ["producer", "nofin", "crewonly"] as const) {
   });
 }
 
+test.describe("вкладки Операций", () => {
+  test.use({ storageState: storageStatePath("producer") });
+
+  const TABS = ["Операции", "Начисления", "Платежи"];
+
+  test("переход, подсветка, подпись раздела; на вводе смен полосы нет", async ({ page }) => {
+    await page.goto(projectPath(ctx, "/finance"));
+    await expectTabs(page, TABS, "Операции");
+    await expect(page.getByRole("heading", { name: "Финансовый контроль" })).toBeVisible();
+
+    for (const [label, rest] of [["Начисления", "/accruals"], ["Платежи", "/payments"]] as const) {
+      await tab(page, label).click();
+      await expect(page).toHaveURL(new RegExp(`${projectPath(ctx, rest)}$`));
+      await expectTabs(page, TABS, label);
+      await expect(page.locator("main").getByText("Финансы", { exact: true })).toBeVisible();
+      await expect(groupButton(page, "Финансы")).toHaveAttribute("aria-expanded", "true");
+      await expect(
+        page.getByRole("complementary").getByRole("link", { name: "Операции", exact: true }),
+      ).toHaveClass(/font-semibold/);
+    }
+
+    await page.goto(projectPath(ctx, "/accruals/shift-entry"));
+    await expect(page.locator("main").getByText("Финансы", { exact: true })).toBeVisible();
+    await expect(tabsBar(page)).toHaveCount(0);
+  });
+
+  test("отчёты финансов — свой пункт, без полосы", async ({ page }) => {
+    await page.goto(projectPath(ctx, "/finance/reports"));
+    await expect(page.getByRole("heading", { name: "Отчёты", exact: true })).toBeVisible();
+    await expect(tabsBar(page)).toHaveCount(0);
+  });
+});
+
+test.describe("вкладки Операций, без финансов", () => {
+  test.use({ storageState: storageStatePath("nofin") });
+
+  test("прямой заход — как раньше: нет доступа, полосы нет", async ({ page }) => {
+    await page.goto(projectPath(ctx, "/accruals"));
+    await expect(page.getByText("Нет доступа", { exact: false }).first()).toBeVisible();
+    await expect(tabsBar(page)).toHaveCount(0);
+  });
+});
+
 test.describe("форма приглашения на «Участниках»", () => {
   test.use({ storageState: storageStatePath("producer") });
 

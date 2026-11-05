@@ -140,6 +140,48 @@ describe("Словарь сценария в меню проекта", () => {
   });
 });
 
+describe("Операции в меню проекта", () => {
+  const groups = () => nav.filterNavGroups(nav.projectNavGroups, access(["finance:read"]));
+
+  test("один пункт и три вкладки, название «Операции»", () => {
+    const finance = groups().find((group) => group.id === "finance")!;
+    const item = finance.items.find((entry) => entry.label === "Операции")!;
+    assert.equal(item.href, "/finance");
+    assert.deepEqual(item.tabs?.map((tab) => tab.href), ["/finance", "/accruals", "/payments"]);
+    assert.equal(finance.items.some((entry) => entry.href === "/accruals"), false);
+    assert.equal(finance.items.some((entry) => entry.href === "/payments"), false);
+  });
+
+  test("на вкладках и их карточках активен пункт и видна подпись раздела", () => {
+    const items = groups().flatMap((group) => group.items);
+    for (const rest of [
+      "/finance",
+      "/accruals",
+      "/payments",
+      "/accruals/shift-entry",
+      "/payments/payment",
+    ]) {
+      assert.equal(findActiveNavHref(items, BASE, `${BASE}${rest}`), "/finance", rest);
+      assert.equal(activeSectionTitle(groups(), BASE, `${BASE}${rest}`), "Финансы", rest);
+    }
+  });
+
+  test("отчёты и настройки финансов остаются своими пунктами", () => {
+    const items = groups().flatMap((group) => group.items);
+    assert.equal(findActiveNavHref(items, BASE, `${BASE}/finance/reports`), "/finance/reports");
+    assert.equal(findActiveNavHref(items, BASE, `${BASE}/finance/settings`), "/finance/settings");
+  });
+
+  test("полоса только на самих вкладках", () => {
+    for (const rest of ["/finance", "/accruals", "/payments"]) {
+      assert.equal(activeNavTabs(groups(), BASE, `${BASE}${rest}`)?.length, 3, rest);
+    }
+    for (const rest of ["/finance/reports", "/accruals/shift-entry", "/payments/payment"]) {
+      assert.equal(activeNavTabs(groups(), BASE, `${BASE}${rest}`), null, rest);
+    }
+  });
+});
+
 describe("Кастинг в меню проекта", () => {
   const allItems = (granted: string[]) =>
     nav.filterNavGroups(nav.projectNavGroups, access(granted)).flatMap((group) => group.items);
