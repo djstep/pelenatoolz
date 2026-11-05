@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { NO_CONNECTION_ERROR } from "@/shared/ui/forms/network-error";
 import { useToast } from "@/shared/ui/toast/toast-provider";
 
 type ActionToastState = {
@@ -13,7 +14,8 @@ export function useActionToast(state: ActionToastState) {
   const seen = useRef<ActionToastState>({});
 
   useEffect(() => {
-    if (state.error && state.error !== seen.current.error) {
+    // Обрыв показывает сама отправка: при повторном обрыве текст тот же, а тост нужен снова.
+    if (state.error && state.error !== seen.current.error && state.error !== NO_CONNECTION_ERROR) {
       toast.error(state.error);
     }
     if (state.success && state.success !== seen.current.success) {

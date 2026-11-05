@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
+import { useSafeActionState } from "@/shared/ui/forms/use-safe-action-state";
 import {
   createCashPaymentAction,
   deleteCashPaymentAction,
@@ -357,7 +358,7 @@ function PaymentModal({
   const bound = payment
     ? updateCashPaymentAction.bind(null, projectId, payment.id)
     : createCashPaymentAction.bind(null, projectId);
-  const [state, action, pending] = useActionState(bound, initial);
+  const [state, action, pending] = useSafeActionState(bound, initial);
   useActionToast(state);
   useActionSuccess(state, onClose);
 

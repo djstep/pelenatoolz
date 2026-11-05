@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useActionState, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
+import { useSafeActionState } from "@/shared/ui/forms/use-safe-action-state";
 import type { ProjectType } from "@prisma/client";
 import {
   duplicateSceneAction,
@@ -65,7 +66,7 @@ export function SceneEditor({
 }) {
   const router = useRouter();
   const boundAction = updateSceneAction.bind(null, projectId, scene.id);
-  const [state, action, pending] = useActionState(boundAction, initial);
+  const [state, action, pending] = useSafeActionState(boundAction, initial);
   const [dupPending, startDup] = useTransition();
   const [dupError, setDupError] = useState<string | null>(null);
   const [cutPending, startCut] = useTransition();

@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useState } from "react";
+import { useSafeActionState } from "@/shared/ui/forms/use-safe-action-state";
 import Link from "next/link";
 import {
   addLocationPhotoAction,
@@ -57,10 +58,10 @@ export function LocationDetailView({
   const [editOpen, setEditOpen] = useState(false);
   const confirmDelete = useConfirm();
   const boundPhoto = addLocationPhotoAction.bind(null, projectId, location.id);
-  const [photoState, photoAction, photoPending] = useActionState(boundPhoto, initial);
+  const [photoState, photoAction, photoPending] = useSafeActionState(boundPhoto, initial);
 
   const reqBound = updateLocationRequirementsAction.bind(null, projectId, location.id);
-  const [reqState, reqAction, reqPending] = useActionState(reqBound, initial);
+  const [reqState, reqAction, reqPending] = useSafeActionState(reqBound, initial);
   useActionToast(reqState);
   const { ref: reqFormRef, markClean: markReqClean } = useFormGuard(
     true,
@@ -70,7 +71,7 @@ export function LocationDetailView({
   useActionSuccess(reqState, markReqClean);
 
   const snapBound = updateLocationScoutSnapshotAction.bind(null, projectId, location.id);
-  const [snapState, snapAction, snapPending] = useActionState(snapBound, initial);
+  const [snapState, snapAction, snapPending] = useSafeActionState(snapBound, initial);
   useActionToast(snapState);
   const { ref: snapFormRef, markClean: markSnapClean } = useFormGuard(
     true,
@@ -85,7 +86,7 @@ export function LocationDetailView({
   });
 
   const finBound = updateLocationFinancialAction.bind(null, projectId, location.id);
-  const [finState, finAction, finPending] = useActionState(finBound, initial);
+  const [finState, finAction, finPending] = useSafeActionState(finBound, initial);
   useActionToast(finState);
   const { ref: finFormRef, markClean: markFinClean } = useFormGuard(
     true,

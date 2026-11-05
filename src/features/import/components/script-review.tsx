@@ -1,15 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import {
-  Fragment,
-  startTransition,
-  useActionState,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { Fragment, startTransition, useEffect, useMemo, useRef, useState } from "react";
+import { useSafeActionState } from "@/shared/ui/forms/use-safe-action-state";
 import { importScriptAction, syncScriptAction } from "@/features/import/actions";
 import {
   normalizeScript,
@@ -91,7 +84,7 @@ export function ScriptReview({
   const [titleEdits, setTitleEdits] = useState<TitleEdits>({});
   const [openScene, setOpenScene] = useState<number | null>(null);
   const [timeForAll, setTimeForAll] = useState("");
-  const [importState, importAction, importing] = useActionState(
+  const [importState, importAction, importing] = useSafeActionState(
     data.sync
       ? syncScriptAction.bind(null, projectId, data.sync.versionId)
       : importScriptAction.bind(null, projectId),

@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useSafeActionState } from "@/shared/ui/forms/use-safe-action-state";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import {
@@ -15,7 +15,7 @@ const initial: ActionState = {};
 
 export function ForgotPasswordForm({ locale }: { locale: string }) {
   const t = useTranslations("auth");
-  const [state, action, pending] = useActionState(
+  const [state, action, pending] = useSafeActionState(
     requestPasswordResetAction,
     initial,
   );

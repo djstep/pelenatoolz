@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import { useSafeActionState } from "@/shared/ui/forms/use-safe-action-state";
 import { useRouter } from "next/navigation";
 import { ProjectStatus } from "@prisma/client";
 import {
@@ -92,7 +93,7 @@ export function ProjectDangerZone({
 }) {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const boundDelete = deleteProjectAction.bind(null, projectId);
-  const [deleteState, deleteAction, deletePending] = useActionState(
+  const [deleteState, deleteAction, deletePending] = useSafeActionState(
     boundDelete,
     initial,
   );

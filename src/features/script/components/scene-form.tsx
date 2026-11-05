@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useSafeActionState } from "@/shared/ui/forms/use-safe-action-state";
 import { DayNight, IntExt } from "@prisma/client";
 import {
   createSceneAction,
@@ -34,7 +34,7 @@ export function SceneForm({
   canWrite: boolean;
 }) {
   const bound = createSceneAction.bind(null, projectId);
-  const [state, action, pending] = useActionState(bound, initial);
+  const [state, action, pending] = useSafeActionState(bound, initial);
 
   if (!canWrite) return null;
 

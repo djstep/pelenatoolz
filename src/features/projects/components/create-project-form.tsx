@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useState } from "react";
+import { useSafeActionState } from "@/shared/ui/forms/use-safe-action-state";
 import { useTranslations } from "next-intl";
 import { ProjectStatus, ProjectType, TimingMode } from "@prisma/client";
 import {
@@ -29,7 +30,7 @@ const initial: ActionState = {};
 export function CreateProjectForm() {
   const t = useTranslations("projects");
   const tCommon = useTranslations("common");
-  const [state, action, pending] = useActionState(createProjectAction, initial);
+  const [state, action, pending] = useSafeActionState(createProjectAction, initial);
   // Без «Сохранить» в вопросе: после создания действие уводит на проект и ответа форме не даёт.
   const { ref: formRef } = useFormGuard();
   const [projectType, setProjectType] = useState<ProjectType>(ProjectType.FEATURE);

@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useState } from "react";
+import { useSafeActionState } from "@/shared/ui/forms/use-safe-action-state";
 import { ProjectStatus, ProjectType, TimingMode } from "@prisma/client";
 import {
   updateProjectAction,
@@ -36,7 +37,7 @@ function formatDateInput(value: Date | null | undefined) {
 
 export function ProjectSettingsForm({ project }: { project: ProjectSettingsValues }) {
   const bound = updateProjectAction.bind(null, project.id);
-  const [state, action, pending] = useActionState(bound, initial);
+  const [state, action, pending] = useSafeActionState(bound, initial);
   useActionToast(state);
   // Предупреждение о несохранённых изменениях при уходе со страницы.
   const { ref: formRef, markClean } = useFormGuard(true, undefined, state);

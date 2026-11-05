@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
+import { useSafeActionState } from "@/shared/ui/forms/use-safe-action-state";
 import { ShootDayStatus } from "@prisma/client";
 import {
   createShootDayAction,
@@ -55,7 +56,7 @@ export function ShootDayForm({
   canWrite: boolean;
 }) {
   const bound = createShootDayAction.bind(null, projectId);
-  const [state, action, pending] = useActionState(bound, initial);
+  const [state, action, pending] = useSafeActionState(bound, initial);
   // После добавления поля возвращаются к началу: новый номер дня и статус по умолчанию.
   const [formKey, setFormKey] = useState(0);
   const { ref: formRef } = useFormGuard(canWrite, undefined, state);

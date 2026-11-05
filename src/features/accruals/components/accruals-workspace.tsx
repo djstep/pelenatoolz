@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useState } from "react";
+import { useSafeActionState } from "@/shared/ui/forms/use-safe-action-state";
 import { AccrualType } from "@prisma/client";
 import {
   createAccrualAction,
@@ -350,7 +351,7 @@ function AccrualModal({
   const bound = accrual
     ? updateAccrualAction.bind(null, projectId, accrual.id)
     : createAccrualAction.bind(null, projectId);
-  const [state, action, pending] = useActionState(bound, initial);
+  const [state, action, pending] = useSafeActionState(bound, initial);
   useActionToast(state);
   useActionSuccess(state, onClose);
 

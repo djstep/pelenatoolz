@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useSafeActionState } from "@/shared/ui/forms/use-safe-action-state";
 import { useRouter } from "next/navigation";
 import {
   attachCertificateFileAction,
@@ -126,7 +127,7 @@ export function CertificateFormModal({
   const bound = isEdit
     ? updateCertificateAction.bind(null, projectId, defaults!.id!)
     : createCertificateAction.bind(null, projectId);
-  const [state, action, pending] = useActionState(bound, initial);
+  const [state, action, pending] = useSafeActionState(bound, initial);
   useActionToast(state);
   const router = useRouter();
   const [deleting, setDeleting] = useState(false);

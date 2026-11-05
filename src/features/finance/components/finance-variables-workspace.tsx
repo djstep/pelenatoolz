@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useState } from "react";
+import { useSafeActionState } from "@/shared/ui/forms/use-safe-action-state";
 import {
   createCustomFinanceVariableAction,
   deleteCustomFinanceVariableAction,
@@ -35,7 +36,7 @@ function SystemVariableRow({
     projectId,
     variable.key,
   );
-  const [state, action, pending] = useActionState(bound, initial);
+  const [state, action, pending] = useSafeActionState(bound, initial);
   useActionToast(state);
 
   return (
@@ -118,7 +119,7 @@ function CustomVariableModal({
     variable?.id != null
       ? updateCustomFinanceVariableAction.bind(null, projectId, variable.id)
       : createCustomFinanceVariableAction.bind(null, projectId);
-  const [state, action, pending] = useActionState(bound, initial);
+  const [state, action, pending] = useSafeActionState(bound, initial);
   useActionToast(state);
   useActionSuccess(state, onClose);
 

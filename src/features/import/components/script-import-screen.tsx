@@ -1,6 +1,7 @@
 "use client";
 
-import { startTransition, useActionState, useRef, useState, type FormEvent } from "react";
+import { startTransition, useRef, useState, type FormEvent } from "react";
+import { useSafeActionState } from "@/shared/ui/forms/use-safe-action-state";
 import { previewScriptImportAction } from "@/features/import/actions";
 import { ScriptReview } from "@/features/import/components/script-review";
 import { isDocxSlimError, slimDocx } from "@/features/import/normalize/docx-slim";
@@ -51,8 +52,8 @@ async function prepare(source: File): Promise<Prepared> {
 }
 
 export function ScriptImportScreen({ projectId, locale }: { projectId: string; locale: string }) {
-  const [state, action, pending] = useActionState(
-    // Прошлое состояние на сервер не отправляем: useActionState передал бы его аргументом —
+  const [state, action, pending] = useSafeActionState(
+    // Прошлое состояние на сервер не отправляем: useSafeActionState передал бы его аргументом —
     // это весь прошлый предпросмотр ещё раз в запросе (лимит запроса — 4 МБ).
     (_prev: ScriptPreviewState, formData: FormData) =>
       previewScriptImportAction(projectId, initial, formData),

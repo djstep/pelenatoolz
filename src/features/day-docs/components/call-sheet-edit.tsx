@@ -2,7 +2,8 @@
 
 import { ActorTransportMode, CallSheetUnit, TimeSlotType } from "@prisma/client";
 import { useRouter } from "next/navigation";
-import { useActionState, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
+import { useSafeActionState } from "@/shared/ui/forms/use-safe-action-state";
 import {
   addPerShiftResourceAction,
   removePerShiftResourceAction,
@@ -79,7 +80,7 @@ function JsonRowsForm({
   rowsJson: string;
   label: string;
 }) {
-  const [state, formAction, pending] = useActionState(useRevisionAction(action), {});
+  const [state, formAction, pending] = useSafeActionState(useRevisionAction(action), {});
   // Строки таблицы лежат в скрытом поле этой формы — по нему видно несохранённое.
   const { ref: formRef, markClean: markFormClean } = useFormGuard();
   useActionSuccess(state, markFormClean);
@@ -219,7 +220,7 @@ export function CallSheetEditor({
   const perShiftAction = saveResourceUsagesAction.bind(null, projectId, dayId);
 
   const { revision, track } = useCallSheetRevision();
-  const [headerState, headerFormAction, headerPending] = useActionState(
+  const [headerState, headerFormAction, headerPending] = useSafeActionState(
     useRevisionAction(headerAction),
     {},
   );

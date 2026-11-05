@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useRef, useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
+import { useSafeActionState } from "@/shared/ui/forms/use-safe-action-state";
 import { useTranslations } from "next-intl";
 import {
   createInviteAction,
@@ -29,7 +30,7 @@ export function InviteForm({
 }) {
   const t = useTranslations("members");
   const bound = createInviteAction.bind(null, projectId);
-  const [state, action, pending] = useActionState(bound, initial);
+  const [state, action, pending] = useSafeActionState(bound, initial);
   const [copied, setCopied] = useState(false);
   const defaultRoleId = roles.find((r) => r.name === "Наблюдатель")?.id ?? roles[0]?.id;
   // Форма на самой странице: при уходе с введёнными данными — обычный вопрос о сохранении.

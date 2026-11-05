@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
+import { useSafeActionState } from "@/shared/ui/forms/use-safe-action-state";
 import type { ScoutCandidateStatus } from "@prisma/client";
 import Link from "next/link";
 import {
@@ -59,7 +60,7 @@ export function ScoutCandidateDetail({
   const isEditable = canWrite && candidate.status !== "APPROVED";
 
   const bound = updateScoutCandidateAction.bind(null, projectId, candidate.id);
-  const [state, action, formPending] = useActionState(bound, initial);
+  const [state, action, formPending] = useSafeActionState(bound, initial);
   useActionToast(state);
 
   useActionSuccess(state, () => setEditOpen(false));

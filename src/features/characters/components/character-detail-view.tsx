@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
+import { useSafeActionState } from "@/shared/ui/forms/use-safe-action-state";
 import Link from "next/link";
 import {
   updateCharacterCastSnapshotAction,
@@ -78,7 +79,7 @@ export function CharacterDetailView({
     projectId,
     character.id,
   );
-  const [reqState, reqAction, reqPending] = useActionState(reqBound, initial);
+  const [reqState, reqAction, reqPending] = useSafeActionState(reqBound, initial);
   useActionToast(reqState);
   const { ref: reqFormRef, markClean: markReqClean } = useFormGuard(
     true,
@@ -97,7 +98,7 @@ export function CharacterDetailView({
     projectId,
     character.id,
   );
-  const [snapState, snapAction, snapPending] = useActionState(snapBound, initial);
+  const [snapState, snapAction, snapPending] = useSafeActionState(snapBound, initial);
   useActionToast(snapState);
   const { ref: snapFormRef, markClean: markSnapClean } = useFormGuard(
     true,
@@ -400,7 +401,7 @@ function CharacterPayrollSection({
   canFinanceWrite: boolean;
 }) {
   const bound = updateActorAction.bind(null, projectId, actor.id);
-  const [state, action, pending] = useActionState(bound, actorInitial);
+  const [state, action, pending] = useSafeActionState(bound, actorInitial);
   useActionToast(state);
   const { ref: feeFormRef, markClean: markFeeClean } = useFormGuard(
     true,

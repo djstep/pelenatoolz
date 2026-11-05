@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useRef, useState } from "react";
+import { useRef, useState } from "react";
+import { useSafeActionState } from "@/shared/ui/forms/use-safe-action-state";
 import {
   saveCallSheetSheetAction,
   type CallSheetTemplateActionState,
@@ -70,7 +71,7 @@ export function CallSheetSheetEditor({
   onSaved: () => void;
 }) {
   const bound = saveCallSheetSheetAction.bind(null, projectId, dayId);
-  const [state, action, pending] = useActionState(useRevisionAction(bound), initial);
+  const [state, action, pending] = useSafeActionState(useRevisionAction(bound), initial);
   useActionToast(state);
   const { ref, markClean } = useFormGuard<HTMLFormElement>(true, undefined, state);
   useActionSuccess(state, () => {

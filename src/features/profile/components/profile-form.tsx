@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useSafeActionState } from "@/shared/ui/forms/use-safe-action-state";
 import { updateProfileAction, type ProfileActionState } from "@/features/profile/actions";
 import { PHONE_HINT } from "@/shared/lib/phone";
 import { Button } from "@/shared/ui/button";
@@ -20,7 +20,7 @@ export function ProfileForm({
   email: string;
   profile: { name: string; phone: string; googleEmail: string };
 }) {
-  const [state, action, pending] = useActionState(updateProfileAction, initial);
+  const [state, action, pending] = useSafeActionState(updateProfileAction, initial);
   useActionToast(state);
   const { ref, markClean } = useFormGuard<HTMLFormElement>(true, undefined, state);
   useActionSuccess(state, markClean);

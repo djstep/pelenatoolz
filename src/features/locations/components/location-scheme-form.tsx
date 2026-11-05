@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useId, useRef, useState, type ReactNode } from "react";
+import { useId, useRef, useState, type ReactNode } from "react";
+import { useSafeActionState } from "@/shared/ui/forms/use-safe-action-state";
 import {
   DndContext,
   PointerSensor,
@@ -132,7 +133,7 @@ export function LocationSchemeForm({
   canWrite: boolean;
 }) {
   const bound = saveLocationSchemeAction.bind(null, projectId, location.id);
-  const [state, action, pending] = useActionState(bound, initial);
+  const [state, action, pending] = useSafeActionState(bound, initial);
   useActionToast(state);
   const { ref, markClean } = useFormGuard<HTMLFormElement>(canWrite, undefined, state);
   useActionSuccess(state, markClean);

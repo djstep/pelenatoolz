@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useSafeActionState } from "@/shared/ui/forms/use-safe-action-state";
 import { NewPasswordField } from "@/features/auth/components/new-password-field";
 import { changePasswordAction, type ProfileActionState } from "@/features/profile/actions";
 import { Button } from "@/shared/ui/button";
@@ -12,7 +12,7 @@ const initial: ProfileActionState = {};
 
 /** Смена своего пароля. При успехе действие переводит на профиль с новым `key`, и поля очищаются. */
 export function ChangePasswordForm({ email }: { email: string }) {
-  const [state, action, pending] = useActionState(changePasswordAction, initial);
+  const [state, action, pending] = useSafeActionState(changePasswordAction, initial);
 
   return (
     <form

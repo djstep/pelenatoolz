@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useState } from "react";
+import { useSafeActionState } from "@/shared/ui/forms/use-safe-action-state";
 import {
   createResourceItemAction,
   updateResourceItemAction,
@@ -157,7 +158,7 @@ export function ItemModal({
   const bound = itemId
     ? updateResourceItemAction.bind(null, projectId, categoryId, itemId)
     : createResourceItemAction.bind(null, projectId, categoryId);
-  const [state, action, pending] = useActionState(bound, initial);
+  const [state, action, pending] = useSafeActionState(bound, initial);
   useActionToast(state);
   useActionSuccess(state, onClose);
 

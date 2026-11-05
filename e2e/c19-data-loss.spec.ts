@@ -12,6 +12,7 @@ const ctx = e2eContext();
 const db = e2eDb();
 const CREW_PATH = projectPath(ctx, "/crew");
 const SCHEDULE_PATH = projectPath(ctx, "/schedule");
+const NO_CONNECTION = "Нет связи, данные не сохранены — попробуйте ещё раз";
 const NO_LINK = "нет связи с сервером";
 const BASELINE_MS = 300;
 
@@ -82,6 +83,44 @@ test.describe("обрыв связи в окнах экспорта", () => {
     await expect(dialog.getByRole("button", { name: "Отмена" })).toBeEnabled();
     await expect(dialog.getByRole("button", { name: /Экспортировать/ })).toBeDisabled();
     await restore();
+  });
+});
+
+test.describe("обрыв связи при сохранении формы", () => {
+  test.use({ storageState: storageStatePath("producer") });
+
+  test("карточка сцены: ввод на месте, тост, повторное сохранение проходит", async ({ page }) => {
+    const scene = await db.scene.findFirstOrThrow({
+      where: { projectId: ctx.projectId, number: "2" },
+    });
+    const typed = "Текст, написанный без связи";
+    try {
+      await page.goto(projectPath(ctx, `/libretto/${scene.id}`));
+      await page.waitForLoadState("networkidle");
+      await page.locator("#summary").fill(typed);
+      await page.locator("#description").fill(`${typed} — примечание`);
+
+      const restore = await cutActions(page);
+      await page.getByRole("button", { name: "Сохранить", exact: true }).click();
+
+      await expect(page.getByText(NO_CONNECTION).first()).toBeVisible();
+      await expect(page.getByText("Что-то пошло не так")).toHaveCount(0);
+      await expect(page.locator("#summary")).toHaveValue(typed);
+      await expect(page.locator("#description")).toHaveValue(`${typed} — примечание`);
+      const untouched = await db.scene.findUniqueOrThrow({ where: { id: scene.id } });
+      expect(untouched.summary).toBe(scene.summary);
+
+      await restore();
+      await page.getByRole("button", { name: "Сохранить", exact: true }).click();
+      await expect
+        .poll(async () => (await db.scene.findUniqueOrThrow({ where: { id: scene.id } })).summary)
+        .toBe(typed);
+    } finally {
+      await db.scene.update({
+        where: { id: scene.id },
+        data: { summary: scene.summary, description: scene.description },
+      });
+    }
   });
 });
 
@@ -265,24 +304,48 @@ test.describe("«Сохранить» в вопросе при уходе", () =
     expect(await invites()).toBe(1);
   });
 
-  test("действие упало: вопрос закрывается сразу, экран ошибки, «Повторить» возвращает страницу", async ({ page }) => {
+  test("обрыв: вопрос закрывается сразу, форма с вводом на месте, экрана ошибки нет", async ({ page }) => {
     const settings = projectPath(ctx, "/settings");
+    const typed = "Изменение, которое не дойдёт до сервера";
     await page.goto(settings);
     await page.waitForLoadState("networkidle");
     await page.waitForTimeout(BASELINE_MS);
-    await page.locator("#description").fill("Изменение, которое не дойдёт до сервера");
+    await page.locator("#description").fill(typed);
 
     const restore = await cutActions(page);
     await page.getByRole("link", { name: "Обзор", exact: true }).click();
     await page.getByRole("alertdialog").getByRole("button", { name: "Сохранить" }).click();
 
     // Раньше вопрос ждал ответа до 30 секунд.
+    await expect(page.getByText(NO_CONNECTION).first()).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole("alertdialog")).toHaveCount(0);
+    await expect(page).toHaveURL(new RegExp(`${settings}$`));
+    await expect(page.getByText("Что-то пошло не так")).toHaveCount(0);
+    await expect(page.locator("#description")).toHaveValue(typed);
+    await restore();
+  });
+
+  test("настоящее падение: вопрос закрывается сразу, экран ошибки, «Повторить» возвращает страницу", async ({ page }) => {
+    const settings = projectPath(ctx, "/settings");
+    await page.goto(settings);
+    await page.waitForLoadState("networkidle");
+    await page.waitForTimeout(BASELINE_MS);
+    await page.locator("#description").fill("Изменение, на котором сервер упал");
+
+    const crash = async (route: Parameters<Parameters<Page["route"]>[1]>[0]) => {
+      if (!route.request().headers()["next-action"]) return route.fallback();
+      await route.fulfill({ status: 500, contentType: "text/plain", body: "Сбой сервера" });
+    };
+    await page.route("**/*", crash);
+    await page.getByRole("link", { name: "Обзор", exact: true }).click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Сохранить" }).click();
+
     await expect(page.getByText("Что-то пошло не так")).toBeVisible({ timeout: 10_000 });
     await expect(page.getByRole("alertdialog")).toHaveCount(0);
     await expect(page).toHaveURL(new RegExp(`${settings}$`));
     await expect(page.getByRole("link", { name: "Обзор", exact: true })).toBeVisible();
 
-    await restore();
+    await page.unroute("**/*", crash);
     await page.getByRole("button", { name: "Повторить" }).click();
     await expect(page.locator("#name")).toBeVisible();
   });

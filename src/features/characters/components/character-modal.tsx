@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useState } from "react";
+import { useSafeActionState } from "@/shared/ui/forms/use-safe-action-state";
 import {
   createCharacterRecordAction,
   updateCharacterRecordAction,
@@ -35,7 +36,7 @@ export function CharacterModal({
   const bound = isEdit
     ? updateCharacterRecordAction.bind(null, projectId, character!.id)
     : createCharacterRecordAction.bind(null, projectId);
-  const [state, action, pending] = useActionState(bound, initial);
+  const [state, action, pending] = useSafeActionState(bound, initial);
   const [makeupOffset, setMakeupOffset] = useState(
     () => formatMinutesHhMm(character?.makeupOffsetMin) || "",
   );
