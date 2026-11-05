@@ -1,3 +1,4 @@
+import "./use-e2e-database";
 import { config } from "dotenv";
 
 /**
@@ -10,17 +11,11 @@ import { config } from "dotenv";
  *   sync <projectId> <actorUserId>              — пересчёт доступов, как кнопка «Синхронизировать»;
  *   rename <projectId> <departmentId> <actorUserId> — переименование папок цеха (`renameDepartmentFolders`);
  *   overview <projectId>                        — раздел «Диск проекта» (`getDriveAccessOverview`).
- * Нужны `CLOUD_STUB_GOOGLE_URL` (адрес заглушки) и база не прод. Печатает итог одной строкой JSON.
+ * Нужны `CLOUD_STUB_GOOGLE_URL` (адрес заглушки) и база из `.env.e2e`. Печатает итог одной строкой JSON.
  */
 
 config({ quiet: true });
 
-for (const name of ["DATABASE_URL", "DIRECT_URL"]) {
-  if ((process.env[name] ?? "").includes("ep-steep-sound")) {
-    console.error(`${name} указывает на прод — остановлено`);
-    process.exit(2);
-  }
-}
 const STUB_GOOGLE = process.env.CLOUD_STUB_GOOGLE_URL;
 if (!STUB_GOOGLE || process.env.NODE_ENV === "production") {
   console.error("Нужен CLOUD_STUB_GOOGLE_URL (заглушка) и не production");

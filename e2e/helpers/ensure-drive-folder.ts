@@ -1,20 +1,15 @@
+import "./use-e2e-database";
 import { config } from "dotenv";
 
 /**
  * Для e2e шага 5: создать папку на диске проекта настоящей `ensureProjectDriveFolder` (как это
  * сделает выгрузка шага 6) — против заглушки дисков. Запуск из теста:
  *   node --conditions=react-server --import tsx e2e/helpers/ensure-drive-folder.ts <projectId> <actorUserId> common|<departmentId>
- * Нужны `CLOUD_STUB_GOOGLE_URL` (адрес заглушки) и база не прод. Печатает итог одной строкой JSON.
+ * Нужны `CLOUD_STUB_GOOGLE_URL` (адрес заглушки) и база из `.env.e2e`. Печатает итог одной строкой JSON.
  */
 
 config({ quiet: true });
 
-for (const name of ["DATABASE_URL", "DIRECT_URL"]) {
-  if ((process.env[name] ?? "").includes("ep-steep-sound")) {
-    console.error(`${name} указывает на прод — остановлено`);
-    process.exit(2);
-  }
-}
 if (!process.env.CLOUD_STUB_GOOGLE_URL || process.env.NODE_ENV === "production") {
   console.error("Нужен CLOUD_STUB_GOOGLE_URL (заглушка) и не production");
   process.exit(2);

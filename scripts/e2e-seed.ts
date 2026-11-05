@@ -4,15 +4,18 @@
  *   npx tsx scripts/e2e-seed.ts            — создать, если нет (есть — только пароли и роли)
  *   npx tsx scripts/e2e-seed.ts --reset    — удалить проект «E2E приёмка» e2e-продюсера и создать заново
  *
- * Только на тестовых базах из `SEED_DATABASE_ENDPOINTS`: на любой другой — отказ.
+ * База — только `E2E_DATABASE_URL` и `E2E_DIRECT_URL` из `.env.e2e`: без них или на другой базе — отказ.
+ * Вдобавок база должна быть в `SEED_DATABASE_ENDPOINTS`.
  * Пароли — случайные, в `.env.e2e` (в .gitignore); существующие не меняются. В вывод
  * пароли не попадают. Хеш — как в приложении (`bcrypt`, 12 раундов).
  */
+import "../e2e/helpers/use-e2e-database";
 import "dotenv/config";
 import { randomBytes } from "node:crypto";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import bcrypt from "bcryptjs";
+import { parse } from "dotenv";
 import { MembershipStatus, Prisma } from "@prisma/client";
 import { DEFAULT_LEDGER_TYPES } from "../src/features/contracts/lib/vat";
 import { ensureSectionsIn } from "../src/features/call-sheets/lib/sections";
@@ -29,6 +32,7 @@ import {
   buildPermissionsDocument,
   type PermissionMatrix,
 } from "../src/features/roles/permissions-matrix";
+import { e2eDatabaseEnvProblem, resolveE2EDatabaseEnv } from "../src/shared/db/e2e-database-guard";
 import { prisma } from "../src/shared/db/prisma";
 import { seedDatabaseProblem } from "../src/shared/db/seed-database-guard";
 import {
@@ -50,7 +54,9 @@ const ROLE_KEYS = Object.keys(E2E_ROLES) as E2ERoleKey[];
 
 function guardDatabase() {
   const { DATABASE_URL, DIRECT_URL } = process.env;
-  const problem = seedDatabaseProblem({ DATABASE_URL, DIRECT_URL });
+  const problem =
+    e2eDatabaseEnvProblem({ DATABASE_URL, DIRECT_URL }, resolveE2EDatabaseEnv()) ??
+    seedDatabaseProblem({ DATABASE_URL, DIRECT_URL });
   if (problem) throw new Error(problem);
   const host = (process.env.DATABASE_URL ?? "").match(/@([^/?]+)/)?.[1] ?? "?";
   console.log(`База: ${host}`);
@@ -61,40 +67,33 @@ function gitignoreHasEnvFile() {
   return gitignore.split(/\r?\n/).some((line) => line.trim() === ".env.e2e");
 }
 
-function readEnvFile(): Record<string, string> {
-  if (!existsSync(ENV_FILE)) return {};
-  const out: Record<string, string> = {};
-  for (const line of readFileSync(ENV_FILE, "utf8").split(/\r?\n/)) {
-    const m = line.match(/^([A-Z0-9_]+)=(.*)$/);
-    if (m) out[m[1]] = m[2];
-  }
-  return out;
-}
-
-/** Пароли из `.env.e2e`; недостающие — случайные, файл дописывается. */
+/**
+ * Пароли из `.env.e2e`; недостающие — случайные. Новые строки только дописываются в конец:
+ * адреса базы и комментарии владельца в файле не трогаем, при повторе ключа dotenv берёт последний.
+ */
 function ensurePasswords(): Record<E2ERoleKey, string> {
   if (!gitignoreHasEnvFile()) throw new Error(".env.e2e нет в .gitignore — остановлено");
-  const env = readEnvFile();
-  let changed = false;
+  const current = existsSync(ENV_FILE) ? readFileSync(ENV_FILE, "utf8") : "";
+  const env = parse(current);
+  const added: string[] = [];
   for (const role of ROLE_KEYS) {
     const name = passwordEnvName(role);
     if (!env[name]) {
       env[name] = randomBytes(18).toString("base64url");
-      changed = true;
+      added.push(`${name}=${env[name]}`);
     }
     const emailName = `E2E_${role.toUpperCase()}_EMAIL`;
     if (env[emailName] !== E2E_ROLES[role].email) {
       env[emailName] = E2E_ROLES[role].email;
-      changed = true;
+      added.push(`${emailName}=${env[emailName]}`);
     }
   }
-  if (changed) {
-    const body = [
-      "# Тестовые аккаунты приёмки (scripts/e2e-seed.ts). Не коммитить, не выводить в лог.",
-      ...Object.entries(env).map(([k, v]) => `${k}=${v}`),
-      "",
-    ].join("\n");
-    writeFileSync(ENV_FILE, body, { encoding: "utf8", mode: 0o600 });
+  if (added.length > 0) {
+    const lines = current
+      ? added
+      : ["# Тестовые аккаунты приёмки (scripts/e2e-seed.ts). Не коммитить, не выводить в лог.", ...added];
+    const separator = current && !current.endsWith("\n") ? "\n" : "";
+    appendFileSync(ENV_FILE, `${separator}${lines.join("\n")}\n`, { encoding: "utf8", mode: 0o600 });
     console.log(".env.e2e обновлён");
   }
   return Object.fromEntries(ROLE_KEYS.map((r) => [r, env[passwordEnvName(r)]])) as Record<E2ERoleKey, string>;

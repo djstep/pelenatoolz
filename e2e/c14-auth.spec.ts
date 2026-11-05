@@ -556,6 +556,25 @@ test.describe("скрипт владельца: сброс пароля", () => 
   const FAKE_PROD = "postgresql://user:secret@ep-steep-sound-fake.invalid/neondb";
   const FAKE_DEV = "postgresql://user:secret@ep-floral-bread-fake.invalid/neondb";
 
+  /**
+   * Скрипт берёт базу только из `.env` в папке запуска. Чтобы он шёл в базу тестов, а не в настоящий
+   * `.env`, запускаем его из временной папки с адресами e2e. Папка живёт только на время группы.
+   */
+  let e2eEnvDir: string;
+
+  test.beforeAll(() => {
+    e2eEnvDir = mkdtempSync(path.join(tmpdir(), "reset-password-e2e-"));
+    writeFileSync(
+      path.join(e2eEnvDir, ".env"),
+      `DATABASE_URL="${process.env.DATABASE_URL}"\nDIRECT_URL="${process.env.DIRECT_URL}"\n`,
+      { mode: 0o600 },
+    );
+  });
+
+  test.afterAll(() => {
+    rmSync(e2eEnvDir, { recursive: true, force: true });
+  });
+
   function runScript(args: string[], options: { cwd?: string; env?: Record<string, string> } = {}) {
     return spawnSync(
       process.execPath,
@@ -566,7 +585,7 @@ test.describe("скрипт владельца: сброс пароля", () => 
         path.join(ROOT, "scripts/reset-password.ts"),
         ...args,
       ],
-      { cwd: options.cwd ?? ROOT, encoding: "utf8", env: { ...process.env, ...options.env } },
+      { cwd: options.cwd ?? e2eEnvDir, encoding: "utf8", env: { ...process.env, ...options.env } },
     );
   }
 
@@ -621,7 +640,7 @@ test.describe("скрипт владельца: сброс пароля", () => 
     const email = await createTmpUser("script-env");
     const result = runScript([email], { env: { DATABASE_URL: FAKE_PROD, DIRECT_URL: FAKE_PROD } });
     expect(result.status).toBe(0);
-    expect(result.stdout).toContain("База: ep-floral-bread");
+    expect(result.stdout).toContain("База: ep-wispy-unit");
   });
 
   test("прод в .env без --prod: отказ, даже если в оболочке другая база", () => {
@@ -696,9 +715,9 @@ test.describe("скрипт владельца: сброс пароля", () => 
       const email = await createTmpUser("script-env-file");
       const before = await db.user.findUniqueOrThrow({ where: { email } });
       withEnvFile(fakeProdEnv, (cwd) => {
-        const result = runScript([email, "--env-file", path.join(ROOT, ".env")], { cwd });
+        const result = runScript([email, "--env-file", path.join(e2eEnvDir, ".env")], { cwd });
         expect(result.status).toBe(0);
-        expect(result.stdout).toContain("База: ep-floral-bread");
+        expect(result.stdout).toContain("База: ep-wispy-unit");
       });
       const after = await db.user.findUniqueOrThrow({ where: { email } });
       expect(after.passwordHash).not.toBe(before.passwordHash);

@@ -4,16 +4,16 @@
  * у одной базы два адреса, прямой и через пул.
  */
 export const SEED_DATABASE_ENDPOINTS = [
-  // dev, он же база `npm run e2e`
+  // dev. Сам `scripts/e2e-seed.ts` сюда не попадёт: он идёт только в базу из `.env.e2e`
   "ep-floral-bread-zabr5sop",
-  // отдельная e2e-ветка (`.env.old-e2e`)
+  // отдельная e2e-ветка (`E2E_DATABASE_URL` в `.env.e2e`)
   "ep-wispy-unit-za418ey3",
 ] as const;
 
 const NEON_HOST_SUFFIX = ".neon.tech";
 
 /** Имя сервера из строки подключения. Только оно: логин, пароль и параметры не считаются. */
-function databaseHost(url: string): string | null {
+export function databaseHost(url: string): string | null {
   try {
     return new URL(url).hostname.toLowerCase() || null;
   } catch {
@@ -21,10 +21,15 @@ function databaseHost(url: string): string | null {
   }
 }
 
+/** Имя узла Neon без `-pooler`; не Neon — `null`. */
+export function neonEndpoint(host: string): string | null {
+  if (!host.endsWith(NEON_HOST_SUFFIX)) return null;
+  return host.split(".")[0].replace(/-pooler$/, "");
+}
+
 function isSeedDatabaseHost(host: string): boolean {
-  if (!host.endsWith(NEON_HOST_SUFFIX)) return false;
-  const endpoint = host.split(".")[0].replace(/-pooler$/, "");
-  return (SEED_DATABASE_ENDPOINTS as readonly string[]).includes(endpoint);
+  const endpoint = neonEndpoint(host);
+  return endpoint !== null && (SEED_DATABASE_ENDPOINTS as readonly string[]).includes(endpoint);
 }
 
 /**

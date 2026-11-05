@@ -1,18 +1,12 @@
+import "./use-e2e-database";
 import { PrismaClient } from "@prisma/client";
 import { config } from "dotenv";
 import { E2E_PROJECT_NAME, E2E_ROLES, NAMES } from "../fixtures/data";
 
 config({ quiet: true });
 
-const PROD_HOST_MARK = "ep-steep-sound";
-
-/** База тестов: только не прод (ветка e2e). */
+/** База тестов: только из `.env.e2e`, проверена в `use-e2e-database`. */
 export function e2eDb() {
-  for (const name of ["DATABASE_URL", "DIRECT_URL"]) {
-    if ((process.env[name] ?? "").includes(PROD_HOST_MARK)) {
-      throw new Error(`${name} указывает на прод — тесты остановлены`);
-    }
-  }
   return new PrismaClient();
 }
 
