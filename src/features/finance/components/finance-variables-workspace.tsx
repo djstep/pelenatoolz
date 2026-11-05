@@ -40,7 +40,7 @@ function SystemVariableRow({
 
   return (
     <form
-      action={action}
+      onSubmit={submitKeepingFields(action)}
       className="grid gap-3 border-b border-[var(--border)]/60 px-4 py-4 sm:grid-cols-[1fr_8rem_auto] sm:items-end"
     >
       <div>
@@ -74,6 +74,7 @@ function SystemVariableRow({
           type="number"
           min={0}
           step="any"
+          key={variable.value}
           defaultValue={variable.value}
           disabled={!canWrite || pending}
           required

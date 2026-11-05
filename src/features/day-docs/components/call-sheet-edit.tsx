@@ -45,6 +45,7 @@ import { toast, useActionToast } from "@/shared/ui/toast";
 import { cn } from "@/shared/lib/cn";
 import { useActionSuccess } from "@/shared/ui/unsaved/use-action-success";
 import { useFormGuard } from "@/shared/ui/unsaved/use-form-guard";
+import { submitKeepingFields } from "@/shared/ui/forms/submit-keeping-fields";
 import { useUnsavedChanges } from "@/shared/ui/unsaved/unsaved-changes-provider";
 
 type SlotRow = {
@@ -258,7 +259,7 @@ export function CallSheetEditor({
       }
     >
       <div className="space-y-8">
-        <form ref={headerFormRef} action={headerFormAction} className="space-y-3">
+        <form ref={headerFormRef} onSubmit={submitKeepingFields(headerFormAction)} className="space-y-3">
           <RevisionField />
           <h4 className="sheet-subhead">Шапка дня</h4>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">

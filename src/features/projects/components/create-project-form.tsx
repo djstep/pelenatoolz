@@ -14,6 +14,8 @@ import {
 } from "@/shared/i18n/domain-labels";
 import { Button } from "@/shared/ui/button";
 import { Checkbox } from "@/shared/ui/checkbox";
+import { submitKeepingFields } from "@/shared/ui/forms/submit-keeping-fields";
+import { useFormGuard } from "@/shared/ui/unsaved/use-form-guard";
 import { ProjectLocationFields } from "@/features/projects/components/project-location-fields";
 import { HhMmInput } from "@/shared/ui/hh-mm-input";
 import { Input } from "@/shared/ui/input";
@@ -28,6 +30,8 @@ export function CreateProjectForm() {
   const t = useTranslations("projects");
   const tCommon = useTranslations("common");
   const [state, action, pending] = useActionState(createProjectAction, initial);
+  // Без «Сохранить» в вопросе: после создания действие уводит на проект и ответа форме не даёт.
+  const { ref: formRef } = useFormGuard();
   const [projectType, setProjectType] = useState<ProjectType>(ProjectType.FEATURE);
   const [timingMode, setTimingMode] = useState<TimingMode>(TimingMode.MINUTES);
   const [shootOnFilm, setShootOnFilm] = useState(false);
@@ -35,7 +39,7 @@ export function CreateProjectForm() {
   const [plannedDailyOutput, setPlannedDailyOutput] = useState("");
 
   return (
-    <form action={action} className="glass-card max-w-3xl space-y-6 p-6">
+    <form ref={formRef} onSubmit={submitKeepingFields(action)} className="glass-card max-w-3xl space-y-6 p-6">
       <div className="grid gap-4 md:grid-cols-2">
         <div className="md:col-span-2">
           <Label htmlFor="name">{t("name")} *</Label>

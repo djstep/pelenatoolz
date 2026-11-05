@@ -25,6 +25,7 @@ import { cn } from "@/shared/lib/cn";
 import { useActionToast } from "@/shared/ui/toast";
 import { useActionSuccess } from "@/shared/ui/unsaved/use-action-success";
 import { useFormGuard } from "@/shared/ui/unsaved/use-form-guard";
+import { submitKeepingFields } from "@/shared/ui/forms/submit-keeping-fields";
 
 const initial: ActionState = {};
 
@@ -54,7 +55,7 @@ export function ProjectSettingsForm({ project }: { project: ProjectSettingsValue
   const isArchived = project.status === ProjectStatus.ARCHIVED;
 
   return (
-    <form ref={formRef} action={action} className="space-y-6">
+    <form ref={formRef} onSubmit={submitKeepingFields(action)} className="space-y-6">
       {isArchived ? (
         <div className="rounded-md border border-[var(--tone-warning-line)] bg-[var(--tone-warning-bg)] p-3 text-sm">
           Проект в архиве. Для редактирования сначала восстановите его.

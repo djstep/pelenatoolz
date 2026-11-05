@@ -29,6 +29,7 @@ import { Label } from "@/shared/ui/label";
 import { Select } from "@/shared/ui/select";
 import { useActionSuccess } from "@/shared/ui/unsaved/use-action-success";
 import { useFormGuard } from "@/shared/ui/unsaved/use-form-guard";
+import { submitKeepingFields } from "@/shared/ui/forms/submit-keeping-fields";
 import { useUnsavedChanges } from "@/shared/ui/unsaved/unsaved-changes-provider";
 import { PersonFormFields } from "./casting-person-form-fields";
 
@@ -74,7 +75,7 @@ export function CastingPersonDetail({
   const [state, action, formPending] = useActionState(bound, initial);
   useActionToast(state);
 
-  const { ref: formRef } = useFormGuard(editOpen);
+  const { ref: formRef } = useFormGuard(editOpen, undefined, state);
   const unsaved = useUnsavedChanges();
   // «Отмена» прячет форму — несохранённое в ней пропало бы.
   function cancelEdit() {
@@ -311,7 +312,7 @@ export function CastingPersonDetail({
       {editOpen ? (
         <div className="glass-card space-y-4 p-5">
           <h2 className="font-semibold">Редактирование</h2>
-          <form ref={formRef} action={action} className="space-y-4">
+          <form ref={formRef} onSubmit={submitKeepingFields(action)} className="space-y-4">
             <PersonFormFields projectId={projectId} person={person} finance={finance} />
             <div className="flex gap-3">
               <Button type="submit" disabled={formPending}>

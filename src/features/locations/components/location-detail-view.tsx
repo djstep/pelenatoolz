@@ -33,6 +33,7 @@ import { Label } from "@/shared/ui/label";
 import { Card } from "@/shared/ui/card";
 import { useActionSuccess } from "@/shared/ui/unsaved/use-action-success";
 import { useFormGuard } from "@/shared/ui/unsaved/use-form-guard";
+import { submitKeepingFields } from "@/shared/ui/forms/submit-keeping-fields";
 
 const initial: LocationActionState = {};
 
@@ -161,7 +162,7 @@ export function LocationDetailView({
             Открыть скаут →
           </Link>
         </div>
-        <form ref={reqFormRef} action={reqAction} className="space-y-3">
+        <form ref={reqFormRef} onSubmit={submitKeepingFields(reqAction)} className="space-y-3">
           <div>
             <Label htmlFor="requirementNotes">Что нужно найти</Label>
             <textarea
@@ -221,7 +222,7 @@ export function LocationDetailView({
           <p className="text-xs text-[var(--muted-fg)]">
             Скопировано при утверждении. Изменения здесь не затрагивают карточку в Скауте.
           </p>
-          <form ref={snapFormRef} action={snapAction} className="grid gap-3 md:grid-cols-2">
+          <form ref={snapFormRef} onSubmit={submitKeepingFields(snapAction)} className="grid gap-3 md:grid-cols-2">
             <div>
               <Label htmlFor="snapAddress">Адрес</Label>
               <Input
@@ -309,7 +310,7 @@ export function LocationDetailView({
         <Card className="space-y-4 p-5">
           <h3 className="font-semibold">Финансовые условия</h3>
           {canFinanceWrite ? (
-            <form ref={finFormRef} action={finAction} className="space-y-4">
+            <form ref={finFormRef} onSubmit={submitKeepingFields(finAction)} className="space-y-4">
               <FinancialTermsBlock
                 shiftRate={location.shiftRate ? Number(location.shiftRate) : 0}
                 taxPercent={location.taxPercent ? Number(location.taxPercent) : 0}

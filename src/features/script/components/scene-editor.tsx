@@ -22,6 +22,7 @@ import { Button } from "@/shared/ui/button";
 import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
 import { useActionSuccess } from "@/shared/ui/unsaved/use-action-success";
 import { useFormGuard } from "@/shared/ui/unsaved/use-form-guard";
+import { submitKeepingFields } from "@/shared/ui/forms/submit-keeping-fields";
 import { useOnChange } from "@/shared/hooks/use-on-change";
 
 const initial: ActionState = {};
@@ -238,11 +239,8 @@ export function SceneEditor({
           ref={formRef}
           key={formKey}
           id="scene-editor-form"
-          action={canWrite ? action : undefined}
           className="min-w-0 rounded-xl border border-[var(--border)] bg-[var(--panel-solid)] p-5"
-          onSubmit={(e) => {
-            if (!canWrite) e.preventDefault();
-          }}
+          onSubmit={canWrite ? submitKeepingFields(action) : (e) => e.preventDefault()}
         >
           <SceneFormFields
             projectId={projectId}

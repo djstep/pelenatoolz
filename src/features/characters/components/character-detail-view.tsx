@@ -29,6 +29,7 @@ import { AvailabilityMiniPreview } from "@/features/actor-availability/component
 import { useActionToast, useToast } from "@/shared/ui/toast";
 import { useActionSuccess } from "@/shared/ui/unsaved/use-action-success";
 import { useFormGuard } from "@/shared/ui/unsaved/use-form-guard";
+import { submitKeepingFields } from "@/shared/ui/forms/submit-keeping-fields";
 import { CharacterScriptButton } from "@/features/screenplay/components/character-script-button";
 import { CastListExportButton } from "@/features/casting/components/cast-list-export-button";
 import { CastingCandidateComments } from "@/features/casting/components/casting-candidate-comments";
@@ -161,7 +162,7 @@ export function CharacterDetailView({
 
       <section className="glass-card space-y-4 p-5">
         <h2 className="font-semibold">Требования к роли</h2>
-        <form ref={reqFormRef} action={reqAction} className="space-y-3">
+        <form ref={reqFormRef} onSubmit={submitKeepingFields(reqAction)} className="space-y-3">
           <div>
             <Label htmlFor="description">Описание персонажа</Label>
             <textarea
@@ -268,7 +269,7 @@ export function CharacterDetailView({
             Данные скопированы при утверждении. Редактирование здесь не меняет карточку
             в Кастинге.
           </p>
-          <form ref={snapFormRef} action={snapAction} className="space-y-4">
+          <form ref={snapFormRef} onSubmit={submitKeepingFields(snapAction)} className="space-y-4">
             <div className="grid gap-3 md:grid-cols-2 text-sm">
               <div>
                 <span className="text-[var(--muted-fg)]">ФИО</span>
@@ -403,7 +404,7 @@ function CharacterPayrollSection({
     <div className="space-y-4 border-t border-[var(--border)] pt-4">
       {canFinanceRead ? (
         canFinanceWrite ? (
-          <form ref={feeFormRef} action={action}>
+          <form ref={feeFormRef} onSubmit={submitKeepingFields(action)}>
             <input type="hidden" name="lastName" value={actor.lastName} />
             <input type="hidden" name="firstName" value={actor.firstName ?? ""} />
             <input type="hidden" name="middleName" value={actor.middleName ?? ""} />
