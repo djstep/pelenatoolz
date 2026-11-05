@@ -56,11 +56,19 @@
       "Bash(*Copy-Item *.env*)",
       "Bash(*xcopy *.env*)",
       "Bash(*robocopy *.env*)",
+      "Bash(*cpi *.env*)",
+      "Bash(*mv *.env*)",
+      "Bash(*Move-Item *.env*)",
+      "Bash(*ren *.env*)",
       "PowerShell(*cp *.env*)",
       "PowerShell(*copy *.env*)",
       "PowerShell(*Copy-Item *.env*)",
       "PowerShell(*xcopy *.env*)",
-      "PowerShell(*robocopy *.env*)"
+      "PowerShell(*robocopy *.env*)",
+      "PowerShell(*cpi *.env*)",
+      "PowerShell(*mv *.env*)",
+      "PowerShell(*Move-Item *.env*)",
+      "PowerShell(*ren *.env*)"
     ],
     "ask": [
       "Bash(git branch -d *)",
