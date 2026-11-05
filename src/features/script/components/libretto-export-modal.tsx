@@ -10,6 +10,7 @@ import {
   columnsReadyForExport,
   createExportColumnId,
 } from "@/features/exports/lib/column-utils";
+import { EXPORT_FAILED, EXPORT_LAYOUT_LOAD_FAILED } from "@/features/exports/lib/export-errors";
 import {
   EXPORT_LAYOUT_NOT_SAVED_HINT,
   type ExportColumn,
@@ -69,16 +70,23 @@ export function LibrettoExportModal({
     if (!open) return;
     let cancelled = false;
     setLoading(true);
-    void getExportLayoutAction(projectId, "libretto").then((result) => {
-      if (cancelled) return;
-      if (result.layout?.columns?.length) {
-        setColumns(result.layout.columns);
-      } else {
+    void getExportLayoutAction(projectId, "libretto")
+      .then((result) => {
+        if (cancelled) return;
+        if (result.layout?.columns?.length) {
+          setColumns(result.layout.columns);
+        } else {
+          setColumns(createDefaultExportColumns(tableResourceCategories));
+        }
+        setLoading(false);
+        if (result.error) toast.error(result.error);
+      })
+      .catch(() => {
+        if (cancelled) return;
         setColumns(createDefaultExportColumns(tableResourceCategories));
-      }
-      setLoading(false);
-      if (result.error) toast.error(result.error);
-    });
+        setLoading(false);
+        toast.error(EXPORT_LAYOUT_LOAD_FAILED);
+      });
     return () => {
       cancelled = true;
     };
@@ -102,12 +110,16 @@ export function LibrettoExportModal({
     const ready = columnsReadyForExport(columns);
     if (ready.length === 0) return;
     startTransition(async () => {
-      if (canSaveLayout) {
-        const save = await saveExportLayoutAction(projectId, "libretto", columns);
-        if (save.error) toast.warning(save.error);
+      try {
+        if (canSaveLayout) {
+          const save = await saveExportLayoutAction(projectId, "libretto", columns);
+          if (save.error) toast.warning(save.error);
+        }
+        await onExport(ready, fieldLabels);
+        onClose();
+      } catch {
+        toast.error(EXPORT_FAILED);
       }
-      await onExport(ready, fieldLabels);
-      onClose();
     });
   }
 

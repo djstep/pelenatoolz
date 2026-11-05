@@ -11,6 +11,7 @@ import {
   columnsReadyForExport,
   createExportColumnId,
 } from "@/features/exports/lib/column-utils";
+import { EXPORT_DATA_LOAD_FAILED, EXPORT_FAILED } from "@/features/exports/lib/export-errors";
 import {
   EXPORT_LAYOUT_NOT_SAVED_HINT,
   type ExportColumn,
@@ -166,32 +167,40 @@ function KppExportModal({
     void Promise.all([
       getKppExportBundleAction(projectId),
       getExportLayoutAction(projectId, layoutKey),
-    ]).then(([dataResult, layoutResult]) => {
-      if (cancelled) return;
-      if (dataResult.error) toast.error(dataResult.error);
-      const nextBundle = dataResult.bundle ?? null;
-      setBundle(nextBundle);
+    ])
+      .then(([dataResult, layoutResult]) => {
+        if (cancelled) return;
+        if (dataResult.error) toast.error(dataResult.error);
+        const nextBundle = dataResult.bundle ?? null;
+        setBundle(nextBundle);
 
-      const cats = nextBundle?.resourceCategories ?? [];
-      const units = nextBundle?.units ?? ["main"];
-      setSelectedUnit(units[0] ?? "main");
-      setUnitScope(units.length > 1 ? units[0]! : "all");
+        const cats = nextBundle?.resourceCategories ?? [];
+        const units = nextBundle?.units ?? ["main"];
+        setSelectedUnit(units[0] ?? "main");
+        setUnitScope(units.length > 1 ? units[0]! : "all");
 
-      if (layoutResult.layout?.columns?.length) {
-        setColumns(layoutResult.layout.columns);
-        if (typeof layoutResult.layout.includeTechnicalBreaks === "boolean") {
-          setIncludeBreaks(layoutResult.layout.includeTechnicalBreaks);
+        if (layoutResult.layout?.columns?.length) {
+          setColumns(layoutResult.layout.columns);
+          if (typeof layoutResult.layout.includeTechnicalBreaks === "boolean") {
+            setIncludeBreaks(layoutResult.layout.includeTechnicalBreaks);
+          }
+          if (typeof layoutResult.layout.showWeekday === "boolean") {
+            setShowWeekday(layoutResult.layout.showWeekday);
+          }
+        } else if (mode === "full") {
+          setColumns(createDefaultKppFullColumns(cats));
+        } else {
+          setColumns(createDefaultKppShortColumns(true));
         }
-        if (typeof layoutResult.layout.showWeekday === "boolean") {
-          setShowWeekday(layoutResult.layout.showWeekday);
-        }
-      } else if (mode === "full") {
-        setColumns(createDefaultKppFullColumns(cats));
-      } else {
-        setColumns(createDefaultKppShortColumns(true));
-      }
-      setLoading(false);
-    });
+        setLoading(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        // Без данных выгружать нечего: кнопка экспорта остаётся неактивной.
+        setBundle(null);
+        setLoading(false);
+        toast.error(EXPORT_DATA_LOAD_FAILED);
+      });
     return () => {
       cancelled = true;
     };
@@ -235,15 +244,15 @@ function KppExportModal({
       multiUnit && unitScope !== "all" ? selectedUnit : unitScope;
 
     startTransition(async () => {
-      if (canSaveLayout) {
-        const save = await saveExportLayoutAction(projectId, layoutKey, columns, {
-          includeTechnicalBreaks: mode === "full" ? includeBreaks : undefined,
-          showWeekday: mode === "short" ? showWeekday : undefined,
-        });
-        if (save.error) toast.warning(save.error);
-      }
-
       try {
+        if (canSaveLayout) {
+          const save = await saveExportLayoutAction(projectId, layoutKey, columns, {
+            includeTechnicalBreaks: mode === "full" ? includeBreaks : undefined,
+            showWeekday: mode === "short" ? showWeekday : undefined,
+          });
+          if (save.error) toast.warning(save.error);
+        }
+
         await exportKppXls(bundle, {
           mode,
           columns: ready,
@@ -255,7 +264,7 @@ function KppExportModal({
         });
         onClose();
       } catch {
-        toast.error("Не удалось сформировать файл");
+        toast.error(EXPORT_FAILED);
       }
     });
   }
