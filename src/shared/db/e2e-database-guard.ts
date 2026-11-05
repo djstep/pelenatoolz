@@ -63,6 +63,33 @@ export function resolveE2EDatabaseEnv(root: string = process.cwd()) {
   return { DATABASE_URL: e2e.E2E_DATABASE_URL as string, DIRECT_URL: e2e.E2E_DIRECT_URL as string };
 }
 
+const E2E_PRISMA_COMMANDS = new Map([
+  ["status", ["migrate", "status"]],
+  ["migrate", ["migrate", "deploy"]],
+]);
+
+/**
+ * Аргументы Prisma для `scripts/db-e2e.ts`: ровно одна команда из двух. Посторонние аргументы —
+ * `null`: через этот скрипт на базу e2e идёт только то, что перечислено здесь.
+ */
+export function e2ePrismaArgs(argv: string[]): string[] | null {
+  if (argv.length !== 1) return null;
+  return E2E_PRISMA_COMMANDS.get(argv[0]) ?? null;
+}
+
+/**
+ * Подходит ли `E2E_DIRECT_URL` для миграций: они идут только по прямому адресу, не через пул.
+ * Адреса в тексте нет.
+ */
+export function e2eDirectUrlProblem(directUrl: string): string | null {
+  const host = databaseHost(directUrl);
+  if (!host) return "Миграции остановлены: не удалось разобрать адрес базы в E2E_DIRECT_URL";
+  if (host.split(".")[0].endsWith("-pooler")) {
+    return `Миграции остановлены: E2E_DIRECT_URL в ${E2E_ENV_FILE} идёт через пул. Нужен прямой адрес, без -pooler`;
+  }
+  return null;
+}
+
 /**
  * Те ли адреса в окружении процесса, что подставлены для e2e. Звать после загрузки `.env`: например,
  * `DOTENV_CONFIG_OVERRIDE=true` даёт `dotenv/config` перетереть базу e2e. Адресов в тексте нет.

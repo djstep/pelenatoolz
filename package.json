@@ -19,6 +19,8 @@
     "db:migrate:dev": "prisma migrate dev",
     "db:studio": "prisma studio",
     "db:whoami": "tsx scripts/db-whoami.ts",
+    "db:status:e2e": "tsx scripts/db-e2e.ts status",
+    "db:migrate:e2e": "tsx scripts/db-e2e.ts migrate",
     "postinstall": "prisma generate"
   },
   "dependencies": {

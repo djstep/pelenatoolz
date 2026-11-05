@@ -6,6 +6,8 @@ import { describe, test } from "node:test";
 import {
   e2eDatabaseEnvProblem,
   e2eDatabaseProblem,
+  e2eDirectUrlProblem,
+  e2ePrismaArgs,
   resolveE2EDatabaseEnv,
 } from "@/shared/db/e2e-database-guard";
 
@@ -87,6 +89,51 @@ describe("база e2e: e2eDatabaseProblem", () => {
 
   test("в .env нет базы: сравнивать не с чем, отказа нет", () => {
     assert.equal(e2eDatabaseProblem(e2eUrls, {}), null);
+  });
+});
+
+describe("база e2e: e2ePrismaArgs", () => {
+  test("две команды и только такие аргументы Prisma", () => {
+    assert.deepEqual(e2ePrismaArgs(["status"]), ["migrate", "status"]);
+    assert.deepEqual(e2ePrismaArgs(["migrate"]), ["migrate", "deploy"]);
+  });
+
+  test("всё остальное: отказ, в том числе лишний аргумент", () => {
+    for (const argv of [
+      [],
+      ["reset"],
+      ["deploy"],
+      ["dev"],
+      ["Status"],
+      ["constructor"],
+      ["__proto__"],
+      ["status", "--schema=other.prisma"],
+      ["migrate", "--help"],
+      ["status", "migrate"],
+    ]) {
+      assert.equal(e2ePrismaArgs(argv), null, JSON.stringify(argv));
+    }
+  });
+});
+
+describe("база e2e: e2eDirectUrlProblem", () => {
+  test("прямой адрес: отказа нет", () => {
+    assert.equal(e2eDirectUrlProblem(url(E2E)), null);
+  });
+
+  test("адрес через пул: отказ без адреса в тексте", () => {
+    for (const host of [E2E_POOLER, E2E_POOLER.toUpperCase()]) {
+      const problem = e2eDirectUrlProblem(url(host));
+      assert.ok(problem?.includes("без -pooler"), problem ?? "нет отказа");
+      assert.ok(!problem?.includes("secret"), problem ?? "");
+      assert.ok(!problem?.includes("neon.tech"), problem ?? "");
+    }
+  });
+
+  test("адрес не разбирается: отказ, строка не попадает в текст", () => {
+    const problem = e2eDirectUrlProblem("не адрес secret");
+    assert.ok(problem?.includes("E2E_DIRECT_URL"), problem ?? "нет отказа");
+    assert.ok(!problem?.includes("secret"), problem ?? "");
   });
 });
 
