@@ -76,12 +76,13 @@ test.describe("права «Команда» в матрице ролей", () =
 test.describe("меню", () => {
   test.use({ storageState: storageStatePath("producer") });
 
-  test("«Команда» сразу после «Вызывных»", async ({ page }) => {
+  test("«Команда» сразу после «Съёмочного дня»", async ({ page }) => {
     await page.goto(CREW_PATH);
     const labels = await page
       .locator("nav a, aside a")
       .evaluateAll((links) => links.map((a) => a.textContent?.trim() ?? ""));
-    const index = labels.indexOf("Вызывные");
+    // У пункта бывает счётчик вызывных на согласовании, он входит в текст ссылки.
+    const index = labels.findIndex((label) => label.startsWith("Съёмочный день"));
     expect(index).toBeGreaterThanOrEqual(0);
     expect(labels[index + 1]).toBe("Команда");
   });

@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { e2eDb } from "./helpers/db";
-import { e2eContext, projectPath, storageStatePath } from "./helpers/session";
+import { dayId, e2eContext, projectPath, storageStatePath } from "./helpers/session";
 
 /**
  * Волна 7: полоса вкладок раздела над существующими страницами, адреса те же. На Кастинге
@@ -13,7 +13,9 @@ const CASTING = projectPath(ctx, "/preproduction/casting");
 const AUDITIONS = projectPath(ctx, "/preproduction/auditions");
 
 const tabsBar = (page: Page) => page.getByRole("navigation", { name: "Вкладки раздела" });
-const tab = (page: Page, name: string) => tabsBar(page).getByRole("link", { name, exact: true });
+/** По началу имени: счётчик внутри вкладки входит в её имя. */
+const tab = (page: Page, name: string) =>
+  tabsBar(page).getByRole("link", { name: new RegExp(`^${name}( |$)`) });
 const menuItem = (page: Page) => page.getByRole("link", { name: "Кастинг", exact: true });
 
 /** Раздел меню раскрыт и отмечен активным, пункт «Кастинг» выделен. */
@@ -200,6 +202,111 @@ for (const role of ["producer", "nofin", "crewonly"] as const) {
     });
   });
 }
+
+test.describe("вкладки Съёмочного дня", () => {
+  const CALL_SHEETS = projectPath(ctx, "/call-sheets");
+  const REPORTS = projectPath(ctx, "/reports");
+  const TABS = ["Вызывные", "Отчёты смены"];
+  const menuDay = (page: Page) =>
+    page.getByRole("complementary").getByRole("link", { name: /^Съёмочный день/ });
+
+  for (const role of ["producer", "nofin"] as const) {
+    test.describe(role, () => {
+      test.use({ storageState: storageStatePath(role) });
+
+      test("Вызывные · Отчёты смены; подсветка, подпись, на днях полосы нет", async ({ page }) => {
+        await page.goto(CALL_SHEETS);
+        await expectTabs(page, TABS, "Вызывные");
+        await expect(menuDay(page)).toHaveAttribute("href", CALL_SHEETS);
+        await tab(page, "Отчёты смены").click();
+        await expect(page).toHaveURL(new RegExp(`${REPORTS}$`));
+        await expectTabs(page, TABS, "Отчёты смены");
+        await expect(menuDay(page)).toHaveClass(/font-semibold/);
+        await expect(page.locator("main").getByText("Планирование", { exact: true })).toBeVisible();
+        await expect(page.getByRole("button", { name: /^Отчёты/ })).toHaveCount(0);
+
+        await page.goto(`${CALL_SHEETS}/${dayId(ctx, 1)}`);
+        await expect(page.locator("main").getByText("Планирование", { exact: true })).toBeVisible();
+        await expect(tabsBar(page)).toHaveCount(0);
+      });
+
+      test("кнопки «Обзора»: и вызывные, и отчёты на месте", async ({ page }) => {
+        await page.goto(projectPath(ctx));
+        const main = page.locator("main");
+        await expect(main.getByRole("link", { name: "Вызывные", exact: true })).toHaveAttribute("href", CALL_SHEETS);
+        await expect(main.getByRole("link", { name: "Отчёты", exact: true })).toHaveAttribute("href", REPORTS);
+      });
+    });
+  }
+
+  for (const role of ["crewonly", "nocallsheet"] as const) {
+    test.describe(role, () => {
+      test.use({ storageState: storageStatePath(role) });
+
+      test("одна вкладка: полосы нет, пункт ведёт на отчёты, вызывных нет", async ({ page }) => {
+        await page.goto(REPORTS);
+        await expect(page.getByRole("heading", { name: "Производственные отчёты" })).toBeVisible();
+        await expect(tabsBar(page)).toHaveCount(0);
+        await expect(menuDay(page)).toHaveAttribute("href", REPORTS);
+        await expect(menuDay(page)).toHaveClass(/font-semibold/);
+        await expect(page.locator(`a[href*="/call-sheets"]`)).toHaveCount(0);
+
+        await page.goto(projectPath(ctx));
+        await expect(page.locator("main").getByRole("link", { name: "Отчёты", exact: true })).toHaveAttribute("href", REPORTS);
+        await expect(page.locator(`a[href*="/call-sheets"]`)).toHaveCount(0);
+
+        await page.goto(CALL_SHEETS);
+        await expect(page.getByText("Нет доступа к вызывным")).toBeVisible();
+        await expect(tabsBar(page)).toHaveCount(0);
+      });
+    });
+  }
+
+  test.describe("счётчик «На согласовании»", () => {
+    const db = e2eDb();
+    let restore: (() => Promise<unknown>) | null = null;
+
+    test.beforeEach(async () => {
+      const sheet = await db.callSheet.findFirstOrThrow({ where: { projectId: ctx.projectId } });
+      await db.callSheet.update({ where: { id: sheet.id }, data: { status: "IN_REVIEW" } });
+      restore = () =>
+        db.callSheet.update({ where: { id: sheet.id }, data: { status: sheet.status } });
+    });
+
+    test.afterEach(async () => {
+      await restore?.();
+      restore = null;
+    });
+
+    test.afterAll(() => db.$disconnect());
+
+    test.describe("продюсер", () => {
+      test.use({ storageState: storageStatePath("producer") });
+
+      test("и на пункте, и на вкладке «Вызывные»", async ({ page }) => {
+        await page.goto(CALL_SHEETS);
+        const count = await db.callSheet.count({
+          where: { projectId: ctx.projectId, status: "IN_REVIEW" },
+        });
+        const label = `на согласовании: ${count}`;
+        await expect(menuDay(page).getByLabel(label)).toHaveText(String(count));
+        await expect(tab(page, "Вызывные").getByLabel(label)).toHaveText(String(count));
+        await expect(tab(page, "Отчёты смены").getByLabel(/на согласовании/)).toHaveCount(0);
+      });
+    });
+
+    test.describe("без права утверждать", () => {
+      test.use({ storageState: storageStatePath("nofin") });
+
+      test("счётчика нет ни на пункте, ни на вкладке", async ({ page }) => {
+        await page.goto(CALL_SHEETS);
+        await expectTabs(page, TABS, "Вызывные");
+        await expect(menuDay(page).getByLabel(/на согласовании/)).toHaveCount(0);
+        await expect(tab(page, "Вызывные").getByLabel(/на согласовании/)).toHaveCount(0);
+      });
+    });
+  });
+});
 
 test.describe("вкладки Операций", () => {
   test.use({ storageState: storageStatePath("producer") });

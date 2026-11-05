@@ -66,7 +66,8 @@ export function SegmentLinks({
 }: {
   /** Название полосы для чтения с экрана. */
   label: string;
-  items: { href: string; label: string }[];
+  /** `count` — приглушённый счётчик внутри ссылки, `countLabel` — что он значит. */
+  items: { href: string; label: string; count?: number; countLabel?: string }[];
   /** Адрес выбранной ссылки; `null` — ни одна не выбрана. */
   activeHref: string | null;
   className?: string;
@@ -100,6 +101,17 @@ export function SegmentLinks({
             className={cn("shrink-0 whitespace-nowrap", segmentClass(selected))}
           >
             {item.label}
+            {/* Пробел нужен для чтения с экрана: иначе подпись и счётчик сливаются в одно слово. */}
+            {item.count ? " " : null}
+            {item.count ? (
+              <span
+                className="ml-0.5 font-normal text-[var(--muted-fg)] tabular-nums"
+                title={item.countLabel}
+                aria-label={`${item.countLabel}: ${item.count}`}
+              >
+                {item.count}
+              </span>
+            ) : null}
           </Link>
         );
       })}

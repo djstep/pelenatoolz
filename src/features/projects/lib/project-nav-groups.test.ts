@@ -319,6 +319,64 @@ describe("Персонажи в меню проекта", () => {
   });
 });
 
+describe("Съёмочный день в меню проекта", () => {
+  const groups = (granted: string[]) => nav.filterNavGroups(nav.projectNavGroups, access(granted));
+  const dayItem = (all: ReturnType<typeof groups>) =>
+    all.flatMap((group) => group.items).find((entry) => entry.label === "Съёмочный день");
+
+  test("с КПП — две вкладки, сразу за пунктом «Команда», группы «Отчёты» нет", () => {
+    const all = groups(["schedule:read", "crew:read"]);
+    const planning = all.find((group) => group.id === "planning")!;
+    const labels = planning.items.map((item) => item.label);
+    assert.equal(labels[labels.indexOf("Съёмочный день") + 1], "Команда");
+    assert.equal(all.some((group) => group.id === "reports"), false);
+    assert.deepEqual(dayItem(all)!.tabs, [
+      { href: "/call-sheets", label: "Вызывные" },
+      { href: "/reports", label: "Отчёты смены" },
+    ]);
+    assert.equal(dayItem(all)!.href, "/call-sheets");
+  });
+
+  test("только отчёты: пункт ведёт на них, полосы нет, адреса вызывных нигде нет", () => {
+    const all = groups(["report:read"]);
+    const item = dayItem(all)!;
+    assert.equal(item.href, "/reports");
+    assert.equal(item.tabs, undefined);
+    assert.ok(!JSON.stringify(all).includes("/call-sheets"));
+    assert.ok(!JSON.stringify(all).includes("Вызывные"));
+    assert.equal(activeNavTabs(all, BASE, `${BASE}/reports`), null);
+    assert.equal(activeNavTabs(all, BASE, `${BASE}/call-sheets`), null);
+  });
+
+  test("без прав пункта нет", () => {
+    assert.equal(dayItem(groups(["script:read"])), undefined);
+  });
+
+  test("доступные адреса — пункты и их вкладки, скрытых нет", () => {
+    const full = nav.navHrefs(groups(["schedule:read"]));
+    assert.ok(full.includes("/call-sheets"));
+    assert.ok(full.includes("/reports"));
+    const limited = nav.navHrefs(groups(["report:read"]));
+    assert.ok(limited.includes("/reports"));
+    assert.ok(!limited.includes("/call-sheets"));
+  });
+
+  test("счётчик и на пункте, и на вкладке «Вызывные»; вторая вкладка без него", () => {
+    const item = dayItem(nav.withNavCount(groups(["schedule:read"]), "/call-sheets", 3))!;
+    assert.equal(item.count, 3);
+    assert.deepEqual(item.tabs, [
+      { href: "/call-sheets", label: "Вызывные", count: 3 },
+      { href: "/reports", label: "Отчёты смены" },
+    ]);
+  });
+
+  test("вкладка «Вызывные» скрыта: счётчика нет", () => {
+    const item = dayItem(nav.withNavCount(groups(["report:read"]), "/call-sheets", 3))!;
+    assert.equal(item.count, undefined);
+    assert.ok(!JSON.stringify(item).includes("count"));
+  });
+});
+
 describe("Кастинг в меню проекта", () => {
   const allItems = (granted: string[]) =>
     nav.filterNavGroups(nav.projectNavGroups, access(granted)).flatMap((group) => group.items);

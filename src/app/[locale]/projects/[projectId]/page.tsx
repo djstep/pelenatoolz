@@ -3,6 +3,7 @@ import { requireProjectContext } from "@/features/projects/lib/project-context";
 import {
   filterNavGroups,
   navAccessFromContext,
+  navHrefs,
   projectNavGroups,
 } from "@/features/projects/lib/project-nav-groups";
 import { getOverviewStats } from "@/features/projects/queries";
@@ -19,8 +20,8 @@ export default async function ProjectOverviewPage({ params }: Props) {
 
   // Кнопки разделов и цифры — по тем же условиям, что и пункты меню.
   const nav = filterNavGroups(projectNavGroups, navAccessFromContext(ctx));
-  const navHrefs = new Set(nav.flatMap((group) => group.items.map((item) => item.href)));
-  const canOpen = (href: string) => navHrefs.has(href);
+  const available = new Set(navHrefs(nav));
+  const canOpen = (href: string) => available.has(href);
   const canOpenPost = nav.some((group) => group.id === "post");
 
   const show = {

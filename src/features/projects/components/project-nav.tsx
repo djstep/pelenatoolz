@@ -4,7 +4,6 @@ import {
   CalendarDays,
   ChevronDown,
   ChevronRight,
-  ClipboardList,
   FileText,
   Film,
   Folder,
@@ -26,6 +25,8 @@ export type NavTab = {
   label: string;
   /** Выбрана только на своём адресе, а не на вложенных (нужно при `tabsPrefix`). */
   exact?: boolean;
+  /** Счётчик внутри вкладки (вызывные на согласовании); нет — не показывается. */
+  count?: number;
 };
 
 export type NavItem = {
@@ -58,7 +59,6 @@ const STORAGE_KEY = "filmprod-nav-sections";
 const GROUP_ICONS: Record<string, LucideIcon> = {
   preproduction: Users,
   planning: CalendarDays,
-  reports: ClipboardList,
   finance: Wallet,
   post: Film,
   settings: Settings,

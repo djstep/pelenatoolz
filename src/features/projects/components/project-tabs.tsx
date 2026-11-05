@@ -16,7 +16,12 @@ export function ProjectTabs({ base, groups }: { base: string; groups: NavGroup[]
       label="Вкладки раздела"
       className="mb-4 shrink-0"
       activeHref={active === null ? null : `${base}${active}`}
-      items={tabs.map((tab) => ({ href: `${base}${tab.href}`, label: tab.label }))}
+      items={tabs.map((tab) => ({
+        href: `${base}${tab.href}`,
+        label: tab.label,
+        count: tab.count,
+        countLabel: "на согласовании",
+      }))}
     />
   );
 }

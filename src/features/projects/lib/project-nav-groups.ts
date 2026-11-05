@@ -113,22 +113,21 @@ export const projectNavGroups: NavGroupDef[] = [
       },
       { href: "/schedule", label: "КПП", visible: anyOf("schedule:read") },
       {
-        href: "/call-sheets",
-        label: "Вызывные",
-        visible: anyOf("callsheet:read", "schedule:read"),
+        label: "Съёмочный день",
+        tabs: [
+          {
+            href: "/call-sheets",
+            label: "Вызывные",
+            visible: anyOf("callsheet:read", "schedule:read"),
+          },
+          {
+            href: "/reports",
+            label: "Отчёты смены",
+            visible: anyOf("report:read", "schedule:read"),
+          },
+        ],
       },
       { href: "/crew", label: "Команда", visible: anyOf("crew:read") },
-    ],
-  },
-  {
-    id: "reports",
-    title: "Отчёты",
-    items: [
-      {
-        href: "/reports",
-        label: "Производственные отчёты",
-        visible: anyOf("report:read", "schedule:read"),
-      },
     ],
   },
   {
@@ -280,11 +279,23 @@ export function navHrefs(groups: NavGroup[]): string[] {
   );
 }
 
-/** Счётчик у пункта меню (`href` — как в `projectNavGroups`); `null` или 0 — без счётчика. */
+function itemWithCount(item: NavItem, href: string, count: number): NavItem {
+  const onTab = item.tabs?.some((tab) => tab.href === href);
+  if (onTab) {
+    const tabs = item.tabs?.map((tab) => (tab.href === href ? { ...tab, count } : tab));
+    return { ...item, tabs, count };
+  }
+  return item.href === href ? { ...item, count } : item;
+}
+
+/**
+ * Счётчик у пункта меню и у вкладки с этим адресом (`href` — как в `projectNavGroups`);
+ * `null` или 0 — без счётчика. Вкладка скрыта — счётчика нет ни на ней, ни на пункте.
+ */
 export function withNavCount(groups: NavGroup[], href: string, count: number | null): NavGroup[] {
   if (!count) return groups;
   return groups.map((group) => ({
     ...group,
-    items: group.items.map((item) => (item.href === href ? { ...item, count } : item)),
+    items: group.items.map((item) => itemWithCount(item, href, count)),
   }));
 }

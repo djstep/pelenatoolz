@@ -80,9 +80,10 @@ test("без финансов — переход по меню (?_rsc при н�
   await page.goto(projectPath(ctx));
   for (const [group, label] of [
     [null, "КПП"],
-    [null, "Вызывные"],
+    [null, "Съёмочный день"],
+    // Отчёты смены — вкладка рядом с вызывными.
+    [null, "Отчёты смены"],
     [null, "Локации"],
-    ["Отчёты", "Производственные отчёты"],
     ["Препродакшн", "Кастинг"],
   ] as const) {
     const link = page.getByRole("link", { name: label, exact: true }).first();
@@ -90,7 +91,10 @@ test("без финансов — переход по меню (?_rsc при н�
       const toggle = page.getByRole("button", { name: group, exact: true }).first();
       if ((await toggle.getAttribute("aria-expanded")) === "false") await toggle.click();
     }
+    const href = await link.getAttribute("href");
     await link.click();
+    // Клик идёт только после перехода: иначе на холодном сервере следующий клик отменяет предыдущий.
+    await page.waitForURL((url) => url.pathname === href);
     await page.waitForLoadState("networkidle");
   }
   const captured = await sniffer.done();
