@@ -90,10 +90,17 @@ function expectNoContracts(text: string) {
   expect(text).not.toContain("Номер договора");
 }
 
-async function openExport(page: Page, item: "Excel" | "Печать") {
+/** layoutBodies — сюда попадёт ответ сервера с раскладкой, если тест проверяет его содержимое. */
+async function openExport(page: Page, item: "Excel" | "Печать", layoutBodies?: string[]) {
   await page.goto(CREW_PATH);
+  // Запросы после загрузки могут оборвать действие, отправленное сразу же.
+  await page.waitForLoadState("networkidle");
   await page.getByRole("button", { name: "Экспорт", exact: true }).click();
+  // Окно один раз запрашивает раскладку: ждём ответ и читаем его до следующих шагов теста.
+  const layout = page.waitForResponse((res) => Boolean(res.request().headers()["next-action"]));
   await page.getByRole("menuitem", { name: item, exact: true }).click();
+  const body = await (await layout).text();
+  layoutBodies?.push(body);
   const dialog = page.getByRole("dialog");
   await expect(dialog.getByText("Загрузка раскладки…")).toHaveCount(0);
   return dialog;
@@ -376,14 +383,11 @@ test.describe("без контактов и договоров", () => {
     await setCrewLayout(layout);
 
     const ids = captureActions(page);
-    const responses: Promise<string>[] = [];
-    page.on("response", (res) => {
-      if (res.request().headers()["next-action"]) responses.push(res.text());
-    });
-    await openExport(page, "Excel");
+    const layoutBodies: string[] = [];
+    await openExport(page, "Excel", layoutBodies);
     expect(await builderTitles(page)).toEqual(["ФИО"]);
-    const bodies = (await Promise.all(responses)).join("\n");
-    expect(bodies).not.toContain("Звонить сюда");
+    expect(layoutBodies).toHaveLength(1);
+    expect(layoutBodies.join("\n")).not.toContain("Звонить сюда");
     expect(ids.length).toBeGreaterThan(0);
 
     const forged = await callAction(page, actions.save, [

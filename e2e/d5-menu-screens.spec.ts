@@ -4,7 +4,7 @@ import { type E2ERoleKey } from "./fixtures/data";
 import { e2eContext, projectPath, storageStatePath } from "./helpers/session";
 
 /**
- * Снимки меню проекта: продюсер, без финансов, crewonly; обе темы, 1280 px, разделы раскрыты,
+ * Снимки меню проекта: продюсер, без финансов, crewonly; обе темы, 1280 и 390 px, разделы раскрыты,
  * чтобы был виден полный состав. Только по команде: `E2E_MENU_SHOTS=<папка>`.
  * `E2E_MENU_BAR=<адрес без косой черты в начале>` — ещё снимок страницы с полосой вкладок на 390 px.
  */
@@ -45,6 +45,17 @@ for (const role of ["producer", "nofin", "crewonly"] as const satisfies readonly
       for (const theme of ["light", "dark"]) {
         await setTheme(page, theme);
         await page.screenshot({ path: path.join(DIR!, `menu-${role}-${theme}-1280.png`) });
+      }
+    });
+
+    test("меню на 390 px, обе темы", async ({ page }) => {
+      await page.setViewportSize({ width: 390, height: TALL });
+      await page.goto(projectPath(ctx));
+      await page.getByRole("button", { name: "Меню", exact: true }).click();
+      await openAllSections(page);
+      for (const theme of ["light", "dark"]) {
+        await setTheme(page, theme);
+        await page.screenshot({ path: path.join(DIR!, `menu-${role}-${theme}-390.png`) });
       }
     });
 
