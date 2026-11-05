@@ -203,6 +203,25 @@ for (const role of ["producer", "nofin", "crewonly"] as const) {
   });
 }
 
+test.describe("память разделов меню", () => {
+  test.use({ storageState: storageStatePath("producer") });
+
+  const KEY = "filmprod-nav-sections";
+
+  for (const raw of ["null", "[1,2]", "5", '"строка"', "{битый", '{"reports":true,"старое":"да"}']) {
+    test(`в хранилище ${raw}: меню работает`, async ({ page }) => {
+      const failures: string[] = [];
+      page.on("pageerror", (error) => failures.push(error.message));
+      await page.addInitScript(([key, value]) => localStorage.setItem(key!, value!), [KEY, raw]);
+      await page.goto(projectPath(ctx));
+      // «Планирование» раскрыто по умолчанию: память пуста, меню показывает обычное состояние.
+      await expect(page.getByRole("button", { name: "Планирование" })).toHaveAttribute("aria-expanded", "true");
+      await expect(page.getByRole("button", { name: "Настройки", exact: true })).toHaveAttribute("aria-expanded", "false");
+      expect(failures).toEqual([]);
+    });
+  }
+});
+
 test.describe("вкладки Съёмочного дня", () => {
   const CALL_SHEETS = projectPath(ctx, "/call-sheets");
   const REPORTS = projectPath(ctx, "/reports");

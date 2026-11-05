@@ -17,6 +17,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { findActiveNavHref } from "@/features/projects/lib/active-nav";
+import { parseNavSections } from "@/features/projects/lib/nav-sections";
 import { cn } from "@/shared/lib/cn";
 
 /** Вкладка раздела: своя страница со своим адресом. */
@@ -248,8 +249,7 @@ export function ProjectNav({
   useEffect(() => {
     let stored: Record<string, boolean> = {};
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) stored = JSON.parse(raw) as Record<string, boolean>;
+      stored = parseNavSections(localStorage.getItem(STORAGE_KEY));
     } catch {
       /* ignore */
     }
