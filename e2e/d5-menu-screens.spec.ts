@@ -6,7 +6,7 @@ import { e2eContext, projectPath, storageStatePath } from "./helpers/session";
 /**
  * Снимки меню проекта: продюсер, без финансов, crewonly; обе темы, 1280 px, разделы раскрыты,
  * чтобы был виден полный состав. Только по команде: `E2E_MENU_SHOTS=<папка>`.
- * `E2E_MENU_BAR=<адрес>` — ещё снимок страницы с полосой вкладок на 390 px.
+ * `E2E_MENU_BAR=<адрес без косой черты в начале>` — ещё снимок страницы с полосой вкладок на 390 px.
  */
 
 const DIR = process.env.E2E_MENU_SHOTS;
@@ -51,7 +51,7 @@ for (const role of ["producer", "nofin", "crewonly"] as const satisfies readonly
     test("полоса вкладок на 390 px", async ({ page }) => {
       test.skip(!BAR, "только с E2E_MENU_BAR");
       await page.setViewportSize({ width: 390, height: 844 });
-      await page.goto(projectPath(ctx, BAR));
+      await page.goto(projectPath(ctx, `/${BAR}`));
       for (const theme of ["light", "dark"]) {
         await setTheme(page, theme);
         await page.screenshot({ path: path.join(DIR!, `bar-${role}-${theme}-390.png`) });

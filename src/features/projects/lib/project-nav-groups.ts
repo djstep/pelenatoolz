@@ -151,9 +151,18 @@ export const projectNavGroups: NavGroupDef[] = [
       },
       { href: "/finance/settings", label: "Настройки", visible: anyOf("finance:read") },
       {
-        href: "/counterparties",
         label: "Контрагенты",
-        visible: anyOf("finance:read", "contracts:read"),
+        tabsPrefix: "/counterparties",
+        tabs: [
+          {
+            href: "/counterparties",
+            label: "Справочник",
+            exact: true,
+            visible: anyOf("finance:read"),
+          },
+          { href: "/counterparties/contracts", label: "Договоры", visible: anyOf("contracts:read") },
+          { href: "/counterparties/acts", label: "Акты", visible: anyOf("contracts:read") },
+        ],
       },
     ],
   },
@@ -208,19 +217,22 @@ export const projectNavGroups: NavGroupDef[] = [
 ];
 
 function filterTabbedItem(item: NavTabbedItemDef, access: NavAccess): NavItem | null {
-  const { tabs: defs, matchPrefixes = [], ...rest } = item;
+  const { tabs: defs, matchPrefixes = [], tabsPrefix, ...rest } = item;
   // Только доступные вкладки: адрес скрытой не уходит в браузер ни в каком поле.
+  // Исключение — `tabsPrefix`: основа раздела не секрет, с неё и так переадресует на вкладку.
   const tabs = defs
     .filter((tab) => !tab.visible || tab.visible(access))
-    .map(({ href, label }) => ({ href, label }));
+    .map(({ href, label, exact }) => (exact ? { href, label, exact } : { href, label }));
   const [first, ...others] = tabs;
   if (!first) return null;
   const prefixes = [...matchPrefixes, ...others.map((tab) => tab.href)];
+  if (tabsPrefix && tabsPrefix !== first.href) prefixes.push(tabsPrefix);
   return {
     ...rest,
     href: first.href,
     matchPrefixes: prefixes.length > 0 ? prefixes : undefined,
     tabs: others.length > 0 ? tabs : undefined,
+    tabsPrefix: others.length > 0 ? tabsPrefix : undefined,
   };
 }
 

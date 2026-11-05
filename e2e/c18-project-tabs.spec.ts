@@ -209,6 +209,78 @@ test.describe("вкладки Операций, без финансов", () => 
   });
 });
 
+test.describe("вкладки Контрагентов", () => {
+  const BASE = projectPath(ctx, "/counterparties");
+  const db = e2eDb();
+
+  test.afterAll(() => db.$disconnect());
+
+  test.describe("продюсер", () => {
+    test.use({ storageState: storageStatePath("producer") });
+
+    test("три вкладки, переходы, полоса на карточках, заголовок раздела под полосой", async ({ page }) => {
+      const contract = await db.contract.findFirstOrThrow({ where: { projectId: ctx.projectId } });
+      const TABS = ["Справочник", "Договоры", "Акты"];
+      await page.goto(BASE);
+      await expectTabs(page, TABS, "Справочник");
+      await expect(page.getByRole("heading", { name: "Контрагенты", exact: true })).toBeVisible();
+
+      await tab(page, "Акты").click();
+      await expect(page).toHaveURL(new RegExp(`${BASE}/acts$`));
+      await expectTabs(page, TABS, "Акты");
+
+      await page.goto(`${BASE}/contracts/${contract.id}`);
+      await expectTabs(page, TABS, "Договоры");
+
+      await page.goto(`${BASE}/${contract.counterpartyId}`);
+      await expectTabs(page, TABS, null);
+    });
+  });
+
+  test.describe("без финансов", () => {
+    test.use({ storageState: storageStatePath("nofin") });
+
+    test("Договоры · Акты без Справочника; пункт ведёт на договоры", async ({ page }) => {
+      const contract = await db.contract.findFirstOrThrow({ where: { projectId: ctx.projectId } });
+      await page.goto(`${BASE}/acts`);
+      await expectTabs(page, ["Договоры", "Акты"], "Акты");
+      await expect(tab(page, "Справочник")).toHaveCount(0);
+      const item = page.getByRole("complementary").getByRole("link", { name: "Контрагенты", exact: true });
+      await expect(item).toHaveAttribute("href", `${BASE}/contracts`);
+
+      await page.goto(`${BASE}/contracts/${contract.id}`);
+      await expectTabs(page, ["Договоры", "Акты"], "Договоры");
+    });
+
+    test("прямой заход на справочник — как раньше: переход к договорам", async ({ page }) => {
+      await page.goto(BASE);
+      await expect(page).toHaveURL(new RegExp(`${BASE}/contracts$`));
+      await expectTabs(page, ["Договоры", "Акты"], "Договоры");
+    });
+
+    test("карточка контрагента — как раньше: нет доступа, полоса на месте", async ({ page }) => {
+      const contract = await db.contract.findFirstOrThrow({ where: { projectId: ctx.projectId } });
+      await page.goto(`${BASE}/${contract.counterpartyId}`);
+      await expect(page.getByText("Нет доступа к финансам")).toBeVisible();
+      await expectTabs(page, ["Договоры", "Акты"], null);
+    });
+  });
+
+  test.describe("crewonly", () => {
+    test.use({ storageState: storageStatePath("crewonly") });
+
+    test("пункта нет, прямой заход — нет доступа, полосы нет", async ({ page }) => {
+      await page.goto(`${BASE}/contracts`);
+      await expect(page.getByText("Нет доступа к договорам")).toBeVisible();
+      await expect(page.getByRole("link", { name: "Контрагенты", exact: true })).toHaveCount(0);
+      await expect(tabsBar(page)).toHaveCount(0);
+      await page.goto(BASE);
+      await expect(page.getByText("Нет доступа к финансам")).toBeVisible();
+      await expect(tabsBar(page)).toHaveCount(0);
+    });
+  });
+});
+
 test.describe("форма приглашения на «Участниках»", () => {
   test.use({ storageState: storageStatePath("producer") });
 

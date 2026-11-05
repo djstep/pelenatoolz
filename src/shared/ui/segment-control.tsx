@@ -67,7 +67,8 @@ export function SegmentLinks({
   /** Название полосы для чтения с экрана. */
   label: string;
   items: { href: string; label: string }[];
-  activeHref: string;
+  /** Адрес выбранной ссылки; `null` — ни одна не выбрана. */
+  activeHref: string | null;
   className?: string;
 }) {
   const trackRef = useRef<HTMLElement>(null);

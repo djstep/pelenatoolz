@@ -1,40 +1,4 @@
-"use client";
-
-import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { cn } from "@/shared/lib/cn";
-
-const TABS: Array<{
-  href: string;
-  label: string;
-  exact?: boolean;
-  /** Справочник — по правам «Финансов», договоры и акты — по правам «Договоров и актов». */
-  access: "directory" | "contracts";
-}> = [
-  { href: "", label: "Справочник", exact: true, access: "directory" },
-  { href: "/contracts", label: "Договоры", access: "contracts" },
-  { href: "/acts", label: "Акты", access: "contracts" },
-];
-
-export function CounterpartiesShell({
-  locale,
-  projectId,
-  showDirectory,
-  showContracts,
-  children,
-}: {
-  locale: string;
-  projectId: string;
-  showDirectory: boolean;
-  showContracts: boolean;
-  children: React.ReactNode;
-}) {
-  const pathname = usePathname();
-  const base = `/${locale}/projects/${projectId}/counterparties`;
-  const tabs = TABS.filter((tab) =>
-    tab.access === "directory" ? showDirectory : showContracts,
-  );
-
+export function CounterpartiesShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="space-y-6">
       <div>
@@ -43,29 +7,6 @@ export function CounterpartiesShell({
           Юрлица, контрагенты, договоры и акты
         </p>
       </div>
-
-      <nav className="flex flex-wrap gap-1 border-b border-[var(--border)] pb-px">
-        {tabs.map((tab) => {
-          const href = `${base}${tab.href}`;
-          const active = tab.exact
-            ? pathname === base || pathname === `${base}/`
-            : pathname === href || pathname.startsWith(`${href}/`);
-          return (
-            <Link
-              key={tab.href || "root"}
-              href={href}
-              className={cn(
-                "rounded-t-lg px-3 py-2 text-sm font-medium transition",
-                active
-                  ? "border border-b-transparent border-[var(--border)] bg-[var(--panel-solid)] text-[var(--foreground)]"
-                  : "text-[var(--muted-fg)] hover:text-[var(--foreground)]",
-              )}
-            >
-              {tab.label}
-            </Link>
-          );
-        })}
-      </nav>
 
       {children}
     </div>

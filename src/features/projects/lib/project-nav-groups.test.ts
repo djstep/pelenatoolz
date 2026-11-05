@@ -5,6 +5,7 @@ import type { NavAccess, NavVisibility } from "@/features/projects/lib/project-n
 import {
   activeNavTabs,
   activeSectionTitle,
+  activeTabHref,
   findActiveNavHref,
 } from "@/features/projects/lib/active-nav";
 import { buildEmptyMatrix } from "@/features/roles/permissions-matrix";
@@ -179,6 +180,74 @@ describe("Операции в меню проекта", () => {
     for (const rest of ["/finance/reports", "/accruals/shift-entry", "/payments/payment"]) {
       assert.equal(activeNavTabs(groups(), BASE, `${BASE}${rest}`), null, rest);
     }
+  });
+});
+
+describe("Контрагенты в меню проекта", () => {
+  const groups = (granted: string[]) => nav.filterNavGroups(nav.projectNavGroups, access(granted));
+  const item = (granted: string[]) =>
+    groups(granted)
+      .flatMap((group) => group.items)
+      .find((entry) => entry.label === "Контрагенты");
+
+  test("все права: три вкладки, адрес — справочник", () => {
+    const entry = item(["finance:read", "contracts:read"])!;
+    assert.equal(entry.href, "/counterparties");
+    assert.equal(entry.tabsPrefix, "/counterparties");
+    assert.deepEqual(entry.tabs?.map((tab) => tab.label), ["Справочник", "Договоры", "Акты"]);
+  });
+
+  test("без финансов: договоры и акты, справочника среди вкладок нет", () => {
+    const entry = item(["contracts:read"])!;
+    assert.equal(entry.href, "/counterparties/contracts");
+    assert.deepEqual(entry.tabs?.map((tab) => tab.href), [
+      "/counterparties/contracts",
+      "/counterparties/acts",
+    ]);
+    assert.ok(!JSON.stringify(entry).includes("Справочник"));
+    // Основа раздела — отдельное поле, это не вкладка: nofin с неё переадресует на договоры.
+    const { tabsPrefix, matchPrefixes, ...rest } = entry;
+    assert.equal(tabsPrefix, "/counterparties");
+    assert.deepEqual(matchPrefixes, ["/counterparties/acts", "/counterparties"]);
+    assert.ok(!JSON.stringify(rest).includes('"/counterparties"'));
+  });
+
+  test("только финансы: одна вкладка — полосы нет, адрес — справочник", () => {
+    const entry = item(["finance:read"])!;
+    assert.equal(entry.href, "/counterparties");
+    assert.equal(entry.tabs, undefined);
+    assert.equal(entry.tabsPrefix, undefined);
+    assert.equal(activeNavTabs(groups(["finance:read"]), BASE, `${BASE}/counterparties`), null);
+  });
+
+  test("без прав: ни пункта, ни адресов", () => {
+    assert.equal(item(["script:read"]), undefined);
+    assert.ok(!JSON.stringify(groups(["script:read"])).includes("/counterparties"));
+  });
+
+  test("полоса на карточках; выбранная вкладка по адресу", () => {
+    const full = groups(["finance:read", "contracts:read"]);
+    const tabs = activeNavTabs(full, BASE, `${BASE}/counterparties/person`)!;
+    assert.equal(tabs.length, 3);
+    const selected = (rest: string) => activeTabHref(tabs, BASE, `${BASE}${rest}`);
+    assert.equal(selected("/counterparties"), "/counterparties");
+    assert.equal(selected("/counterparties/person"), null);
+    assert.equal(selected("/counterparties/contracts"), "/counterparties/contracts");
+    assert.equal(selected("/counterparties/contracts/contract"), "/counterparties/contracts");
+    assert.equal(selected("/counterparties/acts"), "/counterparties/acts");
+  });
+
+  test("граница основы: похожий адрес не считается разделом", () => {
+    const full = groups(["finance:read", "contracts:read"]);
+    assert.equal(activeNavTabs(full, BASE, `${BASE}/counterparties-other`), null);
+  });
+
+  test("у роли без финансов на карточке пункт активен и полоса на месте", () => {
+    const limited = groups(["contracts:read"]);
+    const path = `${BASE}/counterparties/person`;
+    const href = findActiveNavHref(limited.flatMap((group) => group.items), BASE, path);
+    assert.equal(href, "/counterparties/contracts");
+    assert.equal(activeNavTabs(limited, BASE, path)?.length, 2);
   });
 });
 

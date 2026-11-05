@@ -24,6 +24,8 @@ import { cn } from "@/shared/lib/cn";
 export type NavTab = {
   href: string;
   label: string;
+  /** Выбрана только на своём адресе, а не на вложенных (нужно при `tabsPrefix`). */
+  exact?: boolean;
 };
 
 export type NavItem = {
@@ -38,6 +40,8 @@ export type NavItem = {
   count?: number;
   /** Вкладки раздела над страницей: только доступные пользователю и только если их больше одной. */
   tabs?: NavTab[];
+  /** Основа раздела: полоса видна на всех адресах под ней, в том числе на карточках. */
+  tabsPrefix?: string;
 };
 
 export type NavGroup = {
