@@ -377,6 +377,22 @@ describe("Съёмочный день в меню проекта", () => {
   });
 });
 
+describe("Календарь препродакшена", () => {
+  test("место занято: в описании меню после «Кастинга»", () => {
+    const { items } = nav.projectNavGroups.find((group) => group.id === "preproduction")!;
+    assert.equal(items[0]!.label, "Кастинг");
+    assert.equal(items[1]!.label, "Календарь препродакшена");
+    assert.equal(items[1]!.soon, undefined);
+  });
+
+  test("флаг выключен: пункта нет ни у кого, в браузер адрес не уходит", () => {
+    const producer: NavAccess = { ...access([]), can: () => true, isProducer: true };
+    const json = JSON.stringify(nav.filterNavGroups(nav.projectNavGroups, producer));
+    assert.ok(!json.includes("/preproduction/calendar"));
+    assert.ok(!json.includes("Календарь"));
+  });
+});
+
 describe("Кастинг в меню проекта", () => {
   const allItems = (granted: string[]) =>
     nav.filterNavGroups(nav.projectNavGroups, access(granted)).flatMap((group) => group.items);
