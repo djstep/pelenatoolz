@@ -4,6 +4,7 @@ import { ProjectDriveAlertBanner } from "@/features/cloud/components/project-dri
 import { canSeeProjectDrive, projectDriveAlert } from "@/features/cloud/lib/project-drive-rules";
 import { getProjectDriveView, projectDriveActor } from "@/features/cloud/lib/project-drive-service";
 import { ProjectShell } from "@/features/projects/components/project-shell";
+import { ProjectTabs } from "@/features/projects/components/project-tabs";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import {
   filterNavGroups,
@@ -48,6 +49,7 @@ export default async function ProjectLayout({ children, params }: Props) {
           settingsHref={`/${locale}/projects/${projectId}/settings`}
         />
       ) : null}
+      <ProjectTabs base={`/${locale}/projects/${projectId}`} groups={navGroups} />
       {children}
     </ProjectShell>
   );

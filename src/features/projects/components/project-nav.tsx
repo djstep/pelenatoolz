@@ -1,11 +1,9 @@
 "use client";
 
 import {
-  BookOpen,
   CalendarDays,
   ChevronDown,
   ChevronRight,
-  ClipboardList,
   FileText,
   Film,
   Folder,
@@ -17,9 +15,21 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { findActiveNavHref } from "@/features/projects/lib/active-nav";
+import { parseNavSections } from "@/features/projects/lib/nav-sections";
+import { useOnChange } from "@/shared/hooks/use-on-change";
 import { cn } from "@/shared/lib/cn";
+
+/** Вкладка раздела: своя страница со своим адресом. */
+export type NavTab = {
+  href: string;
+  label: string;
+  /** Выбрана только на своём адресе, а не на вложенных (нужно при `tabsPrefix`). */
+  exact?: boolean;
+  /** Счётчик внутри вкладки (вызывные на согласовании); нет — не показывается. */
+  count?: number;
+};
 
 export type NavItem = {
   href: string;
@@ -31,6 +41,10 @@ export type NavItem = {
   exact?: boolean;
   /** Счётчик справа (например, вызывные на согласовании); нет — не показывается. */
   count?: number;
+  /** Вкладки раздела над страницей: только доступные пользователю и только если их больше одной. */
+  tabs?: NavTab[];
+  /** Основа раздела: полоса видна на всех адресах под ней, в том числе на карточках. */
+  tabsPrefix?: string;
 };
 
 export type NavGroup = {
@@ -43,11 +57,12 @@ export type NavGroup = {
 
 const STORAGE_KEY = "filmprod-nav-sections";
 
+const subscribeNever = () => () => {};
+
 /** Иконки разделов (уровень 1) — по id группы. */
 const GROUP_ICONS: Record<string, LucideIcon> = {
   preproduction: Users,
   planning: CalendarDays,
-  reports: ClipboardList,
   finance: Wallet,
   post: Film,
   settings: Settings,
@@ -57,7 +72,6 @@ const GROUP_ICONS: Record<string, LucideIcon> = {
 const TOP_ITEM_ICONS: Record<string, LucideIcon> = {
   "": LayoutGrid,
   "/screenplay": FileText,
-  "/screenplay/dictionary": BookOpen,
   "/files": Folder,
 };
 
@@ -81,7 +95,7 @@ function SoonPill() {
   );
 }
 
-/** Раздел без подразделов (Обзор, Сценарий, Словарь, Файлы): иконка + название, 36 px. */
+/** Раздел без подразделов (Обзор, Сценарий, Файлы): иконка + название, 36 px. */
 function TopLink({
   locale,
   projectId,
@@ -214,7 +228,8 @@ export function ProjectNav({
 }) {
   const pathname = usePathname();
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
-  const [ready, setReady] = useState(false);
+  // Память разделов есть только в браузере: до гидратации меню такое же, как с сервера.
+  const hydrated = useSyncExternalStore(subscribeNever, () => true, () => false);
 
   const allItems = useMemo(() => groups.flatMap((group) => group.items), [groups]);
 
@@ -235,11 +250,11 @@ export function ProjectNav({
 
   const topGroups = useMemo(() => groups.filter((g) => !g.title), [groups]);
 
-  useEffect(() => {
+  useOnChange([hydrated, collapsibleGroups, isActive], () => {
+    if (!hydrated) return;
     let stored: Record<string, boolean> = {};
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) stored = JSON.parse(raw) as Record<string, boolean>;
+      stored = parseNavSections(localStorage.getItem(STORAGE_KEY));
     } catch {
       /* ignore */
     }
@@ -252,11 +267,11 @@ export function ProjectNav({
     }
 
     setOpenSections(next);
-    setReady(true);
-  }, [collapsibleGroups, isActive]);
+  });
 
-  useEffect(() => {
-    if (!ready) return;
+  // Переход по вкладке не меняет активный пункт, но свёрнутый раздел снова раскрывается.
+  useOnChange([pathname, hydrated, collapsibleGroups, isActive], () => {
+    if (!hydrated) return;
     for (const group of collapsibleGroups) {
       if (group.items.some((item) => isActive(item.href))) {
         setOpenSections((prev) =>
@@ -264,12 +279,12 @@ export function ProjectNav({
         );
       }
     }
-  }, [pathname, ready, collapsibleGroups, isActive]);
+  });
 
   useEffect(() => {
-    if (!ready) return;
+    if (!hydrated) return;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(openSections));
-  }, [openSections, ready]);
+  }, [openSections, hydrated]);
 
   function toggleSection(id: string) {
     setOpenSections((prev) => ({ ...prev, [id]: !prev[id] }));

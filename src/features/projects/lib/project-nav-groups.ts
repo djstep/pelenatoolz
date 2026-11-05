@@ -1,4 +1,4 @@
-import type { NavGroup, NavItem } from "@/features/projects/components/project-nav";
+import type { NavGroup, NavItem, NavTab } from "@/features/projects/components/project-nav";
 import type { Permission } from "@/features/memberships/permissions";
 import {
   canReadAnyEntityFinance,
@@ -43,12 +43,23 @@ export function navAccessFromContext(ctx: {
 /** Условие видимости пункта или группы меню. Нет условия — виден всем участникам проекта. */
 export type NavVisibility = (access: NavAccess) => boolean;
 
-type NavItemDef = NavItem & { visible?: NavVisibility };
+type NavTabDef = NavTab & { visible?: NavVisibility };
+
+/** Пункт с вкладками: виден, если видна хотя бы одна; адрес — первая доступная вкладка. */
+type NavTabbedItemDef = Omit<NavItem, "href" | "tabs"> & { tabs: NavTabDef[]; visible?: never };
+
+type NavItemDef = (Omit<NavItem, "tabs"> & { visible?: NavVisibility }) | NavTabbedItemDef;
 
 type NavGroupDef = Omit<NavGroup, "items"> & {
   items: NavItemDef[];
   visible?: NavVisibility;
 };
+
+/**
+ * Календарь препродакшена: место в меню занято, страницы пока нет. Пункт выключен для всех и не
+ * уходит в браузер; волна 9 включает его вместе со страницей и настоящими правами.
+ */
+const PREPRODUCTION_CALENDAR_ENABLED: boolean = false;
 
 /** Виден, если есть любое из прав (раздел, к которому ведут несколько прав). */
 function anyOf(...permissions: Permission[]): NavVisibility {
@@ -63,11 +74,6 @@ export const projectNavGroups: NavGroupDef[] = [
       { href: "", label: "Обзор" },
       { href: "/screenplay", label: "Сценарий", visible: anyOf("script:read") },
       {
-        href: "/screenplay/dictionary",
-        label: "Словарь сценария",
-        visible: anyOf("script:read"),
-      },
-      {
         href: "/files",
         label: "Файлы",
         visible: anyOf("script:read", "project:read"),
@@ -78,13 +84,18 @@ export const projectNavGroups: NavGroupDef[] = [
     id: "preproduction",
     title: "Препродакшн",
     items: [
-      { href: "/preproduction/casting", label: "Кастинг", visible: anyOf("cast:read") },
       {
-        href: "/preproduction/auditions",
-        label: "Кастинг-пробы",
-        visible: anyOf("cast:read"),
+        label: "Кастинг",
+        tabs: [
+          { href: "/preproduction/casting", label: "Кандидаты", visible: anyOf("cast:read") },
+          { href: "/preproduction/auditions", label: "Пробы", visible: anyOf("cast:read") },
+        ],
       },
-      { href: "/preproduction/scout", label: "Скаут", visible: anyOf("script:read") },
+      {
+        href: "/preproduction/calendar",
+        label: "Календарь препродакшена",
+        visible: () => PREPRODUCTION_CALENDAR_ENABLED,
+      },
     ],
   },
   {
@@ -93,31 +104,41 @@ export const projectNavGroups: NavGroupDef[] = [
     defaultOpen: true,
     items: [
       { href: "/libretto", label: "Сцены (либретто)", visible: anyOf("script:read") },
-      { href: "/locations", label: "Локации", visible: anyOf("script:read") },
-      { href: "/characters", label: "Персонажи", visible: anyOf("cast:read") },
+      {
+        label: "Локации",
+        tabs: [
+          { href: "/locations", label: "Локации", visible: anyOf("script:read") },
+          { href: "/preproduction/scout", label: "Скаут", visible: anyOf("script:read") },
+        ],
+      },
+      {
+        label: "Персонажи",
+        tabs: [
+          { href: "/characters", label: "Персонажи", visible: anyOf("cast:read") },
+          {
+            href: "/schedule/availability",
+            label: "Занятость",
+            visible: anyOf("schedule:read", "cast:read"),
+          },
+        ],
+      },
       { href: "/schedule", label: "КПП", visible: anyOf("schedule:read") },
       {
-        href: "/schedule/availability",
-        label: "Занятость",
-        visible: anyOf("schedule:read", "cast:read"),
-      },
-      {
-        href: "/call-sheets",
-        label: "Вызывные",
-        visible: anyOf("callsheet:read", "schedule:read"),
+        label: "Съёмочный день",
+        tabs: [
+          {
+            href: "/call-sheets",
+            label: "Вызывные",
+            visible: anyOf("callsheet:read", "schedule:read"),
+          },
+          {
+            href: "/reports",
+            label: "Отчёты смены",
+            visible: anyOf("report:read", "schedule:read"),
+          },
+        ],
       },
       { href: "/crew", label: "Команда", visible: anyOf("crew:read") },
-    ],
-  },
-  {
-    id: "reports",
-    title: "Отчёты",
-    items: [
-      {
-        href: "/reports",
-        label: "Производственные отчёты",
-        visible: anyOf("report:read", "schedule:read"),
-      },
     ],
   },
   {
@@ -132,26 +153,36 @@ export const projectNavGroups: NavGroupDef[] = [
         visible: (a) =>
           a.isProducer || a.can("smeta:read_all") || a.headDepartmentIds.length > 0,
       },
-      { href: "/accruals", label: "Начисления", visible: anyOf("finance:read") },
       {
         href: "/resource-usage",
         label: "Ведомость по использованию",
         // В ведомости только суммы — без фин. просмотра хотя бы одного источника она пустая.
         visible: (a) => a.anyEntityFinanceRead,
       },
-      { href: "/payments", label: "Платежи", visible: anyOf("finance:read") },
       { href: "/finance/reports", label: "Отчёты", visible: anyOf("finance:read") },
       {
-        href: "/finance",
+        // Отчёты и настройки под /finance — свои пункты: их адрес длиннее, они и подсвечиваются.
         label: "Операции",
-        exact: true,
-        visible: anyOf("finance:read"),
+        tabs: [
+          { href: "/finance", label: "Операции", visible: anyOf("finance:read") },
+          { href: "/accruals", label: "Начисления", visible: anyOf("finance:read") },
+          { href: "/payments", label: "Платежи", visible: anyOf("finance:read") },
+        ],
       },
       { href: "/finance/settings", label: "Настройки", visible: anyOf("finance:read") },
       {
-        href: "/counterparties",
         label: "Контрагенты",
-        visible: anyOf("finance:read", "contracts:read"),
+        tabsPrefix: "/counterparties",
+        tabs: [
+          {
+            href: "/counterparties",
+            label: "Справочник",
+            exact: true,
+            visible: anyOf("finance:read"),
+          },
+          { href: "/counterparties/contracts", label: "Договоры", visible: anyOf("contracts:read") },
+          { href: "/counterparties/acts", label: "Акты", visible: anyOf("contracts:read") },
+        ],
       },
     ],
   },
@@ -166,8 +197,13 @@ export const projectNavGroups: NavGroupDef[] = [
     id: "settings",
     title: "Настройки",
     items: [
-      { href: "/members", label: "Участники", visible: anyOf("members:read") },
-      { href: "/roles", label: "Роли и права", visible: anyOf("members:read") },
+      {
+        label: "Участники",
+        tabs: [
+          { href: "/members", label: "Участники", visible: anyOf("members:read") },
+          { href: "/roles", label: "Роли и права", visible: anyOf("members:read") },
+        ],
+      },
       {
         href: "/settings",
         label: "Настройки проекта",
@@ -187,6 +223,11 @@ export const projectNavGroups: NavGroupDef[] = [
         visible: (a) => a.isProducer || a.can("members:manage"),
       },
       {
+        href: "/screenplay/dictionary",
+        label: "Словарь сценария",
+        visible: anyOf("script:read"),
+      },
+      {
         href: "/audit",
         label: "Журнал изменений",
         visible: anyOf("members:read", "project:read"),
@@ -195,9 +236,37 @@ export const projectNavGroups: NavGroupDef[] = [
   },
 ];
 
+function filterTabbedItem(item: NavTabbedItemDef, access: NavAccess): NavItem | null {
+  const { tabs: defs, matchPrefixes = [], tabsPrefix, ...rest } = item;
+  // Только доступные вкладки: адрес скрытой не уходит в браузер ни в каком поле.
+  // Исключение — основа раздела (`tabsPrefix`, она же в `matchPrefixes` для подсветки на карточке):
+  // это не секрет, с неё и так переадресует на вкладку.
+  const tabs = defs
+    .filter((tab) => !tab.visible || tab.visible(access))
+    .map(({ href, label, exact }) => (exact ? { href, label, exact } : { href, label }));
+  const [first, ...others] = tabs;
+  if (!first) return null;
+  const prefixes = [...matchPrefixes, ...others.map((tab) => tab.href)];
+  if (tabsPrefix && tabsPrefix !== first.href) prefixes.push(tabsPrefix);
+  return {
+    ...rest,
+    href: first.href,
+    matchPrefixes: prefixes.length > 0 ? prefixes : undefined,
+    tabs: others.length > 0 ? tabs : undefined,
+    tabsPrefix: others.length > 0 ? tabsPrefix : undefined,
+  };
+}
+
+function filterNavItem(item: NavItemDef, access: NavAccess): NavItem | null {
+  if ("tabs" in item) return filterTabbedItem(item, access);
+  if (item.visible && !item.visible(access)) return null;
+  const { href, label, soon, matchPrefixes, exact } = item;
+  return { href, label, soon, matchPrefixes, exact };
+}
+
 /**
- * Меню для конкретного пользователя: скрывает пункты без прав и группы, где не осталось
- * пунктов. Условия выполняются на сервере, в браузер уходят только данные пунктов.
+ * Меню для конкретного пользователя: скрывает пункты и вкладки без прав и группы, где не
+ * осталось пунктов. Условия выполняются на сервере, в браузер уходят только данные пунктов.
  */
 export function filterNavGroups(
   groups: NavGroupDef[],
@@ -207,25 +276,38 @@ export function filterNavGroups(
   for (const { visible, items, ...group } of groups) {
     if (visible && !visible(access)) continue;
     const shown = items
-      .filter((item) => !item.visible || item.visible(access))
-      .map(({ href, label, soon, matchPrefixes, exact }) => ({
-        href,
-        label,
-        soon,
-        matchPrefixes,
-        exact,
-      }));
+      .map((item) => filterNavItem(item, access))
+      .filter((item) => item !== null);
     if (items.length > 0 && shown.length === 0) continue;
     result.push({ ...group, items: shown });
   }
   return result;
 }
 
-/** Счётчик у пункта меню (`href` — как в `projectNavGroups`); `null` или 0 — без счётчика. */
+/** Адреса, доступные пользователю: пункты меню и их вкладки. */
+export function navHrefs(groups: NavGroup[]): string[] {
+  return groups.flatMap((group) =>
+    group.items.flatMap((item) => [item.href, ...(item.tabs ?? []).map((tab) => tab.href)]),
+  );
+}
+
+function itemWithCount(item: NavItem, href: string, count: number): NavItem {
+  const onTab = item.tabs?.some((tab) => tab.href === href);
+  if (onTab) {
+    const tabs = item.tabs?.map((tab) => (tab.href === href ? { ...tab, count } : tab));
+    return { ...item, tabs, count };
+  }
+  return item.href === href ? { ...item, count } : item;
+}
+
+/**
+ * Счётчик у пункта меню и у вкладки с этим адресом (`href` — как в `projectNavGroups`);
+ * `null` или 0 — без счётчика. Вкладка скрыта — счётчика нет ни на ней, ни на пункте.
+ */
 export function withNavCount(groups: NavGroup[], href: string, count: number | null): NavGroup[] {
   if (!count) return groups;
   return groups.map((group) => ({
     ...group,
-    items: group.items.map((item) => (item.href === href ? { ...item, count } : item)),
+    items: group.items.map((item) => itemWithCount(item, href, count)),
   }));
 }
