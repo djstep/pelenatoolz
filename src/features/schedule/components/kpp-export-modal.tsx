@@ -11,7 +11,11 @@ import {
   columnsReadyForExport,
   createExportColumnId,
 } from "@/features/exports/lib/column-utils";
-import { EXPORT_DATA_LOAD_FAILED, EXPORT_FAILED } from "@/features/exports/lib/export-errors";
+import {
+  EXPORT_BUILD_FAILED,
+  EXPORT_DATA_LOAD_FAILED,
+  EXPORT_LAYOUT_SAVE_FAILED,
+} from "@/features/exports/lib/export-errors";
 import {
   EXPORT_LAYOUT_NOT_SAVED_HINT,
   type ExportColumn,
@@ -244,15 +248,20 @@ function KppExportModal({
       multiUnit && unitScope !== "all" ? selectedUnit : unitScope;
 
     startTransition(async () => {
-      try {
-        if (canSaveLayout) {
+      if (canSaveLayout) {
+        try {
           const save = await saveExportLayoutAction(projectId, layoutKey, columns, {
             includeTechnicalBreaks: mode === "full" ? includeBreaks : undefined,
             showWeekday: mode === "short" ? showWeekday : undefined,
           });
           if (save.error) toast.warning(save.error);
+        } catch {
+          // Файл собирается в браузере: без сохранённой раскладки он всё равно получится.
+          toast.warning(EXPORT_LAYOUT_SAVE_FAILED);
         }
+      }
 
+      try {
         await exportKppXls(bundle, {
           mode,
           columns: ready,
@@ -264,7 +273,7 @@ function KppExportModal({
         });
         onClose();
       } catch {
-        toast.error(EXPORT_FAILED);
+        toast.error(EXPORT_BUILD_FAILED);
       }
     });
   }

@@ -77,7 +77,12 @@ export function LocationDetailView({
     undefined,
     snapState,
   );
-  useActionSuccess(snapState, markSnapClean);
+  // Пересоздание показывает то, что в базе: пустое поле сервер может оставить без изменений.
+  const [snapKey, setSnapKey] = useState(0);
+  useActionSuccess(snapState, () => {
+    markSnapClean();
+    setSnapKey((key) => key + 1);
+  });
 
   const finBound = updateLocationFinancialAction.bind(null, projectId, location.id);
   const [finState, finAction, finPending] = useActionState(finBound, initial);
@@ -222,7 +227,7 @@ export function LocationDetailView({
           <p className="text-xs text-[var(--muted-fg)]">
             Скопировано при утверждении. Изменения здесь не затрагивают карточку в Скауте.
           </p>
-          <form ref={snapFormRef} onSubmit={submitKeepingFields(snapAction)} className="grid gap-3 md:grid-cols-2">
+          <form key={snapKey} ref={snapFormRef} onSubmit={submitKeepingFields(snapAction)} className="grid gap-3 md:grid-cols-2">
             <div>
               <Label htmlFor="snapAddress">Адрес</Label>
               <Input

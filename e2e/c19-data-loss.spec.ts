@@ -163,6 +163,44 @@ test.describe("ввод не теряется при ошибке сервера
   });
 });
 
+test.describe("после успешного сохранения", () => {
+  test.use({ storageState: storageStatePath("producer") });
+
+  test("настройки проекта: поле показывает то, что в базе", async ({ page }) => {
+    const before = await db.project.findUniqueOrThrow({ where: { id: ctx.projectId } });
+    await db.project.update({ where: { id: ctx.projectId }, data: { description: "Описание из базы" } });
+    try {
+      await page.goto(projectPath(ctx, "/settings"));
+      await page.waitForLoadState("networkidle");
+      await page.waitForTimeout(BASELINE_MS);
+      await page.locator("#description").fill("");
+      await page.getByRole("button", { name: "Сохранить изменения" }).click();
+      await expect(page.getByText("Проект сохранён").first()).toBeVisible();
+
+      const saved = await db.project.findUniqueOrThrow({ where: { id: ctx.projectId } });
+      await expect(page.locator("#description")).toHaveValue(saved.description ?? "");
+    } finally {
+      await db.project.update({ where: { id: ctx.projectId }, data: { description: before.description } });
+    }
+  });
+
+  test("новый проект: создание уводит на проект без вопроса", async ({ page }) => {
+    const name = "E2E проект без вопроса";
+    await db.project.deleteMany({ where: { name } });
+    try {
+      await page.goto("/ru/projects/new");
+      await page.waitForLoadState("networkidle");
+      await page.waitForTimeout(BASELINE_MS);
+      await page.locator("#name").fill(name);
+      await page.getByRole("button", { name: "Создать", exact: false }).click();
+      await expect(page).toHaveURL(/\/ru\/projects\/c[a-z0-9]+/);
+      await expect(page.getByRole("alertdialog")).toHaveCount(0);
+    } finally {
+      await db.project.deleteMany({ where: { name } });
+    }
+  });
+});
+
 test.describe("новый съёмочный день", () => {
   test.use({ storageState: storageStatePath("producer") });
 

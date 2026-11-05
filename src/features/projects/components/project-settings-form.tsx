@@ -40,7 +40,12 @@ export function ProjectSettingsForm({ project }: { project: ProjectSettingsValue
   useActionToast(state);
   // Предупреждение о несохранённых изменениях при уходе со страницы.
   const { ref: formRef, markClean } = useFormGuard(true, undefined, state);
-  useActionSuccess(state, markClean);
+  // Пересоздание показывает то, что в базе: пустое поле сервер может оставить без изменений.
+  const [formKey, setFormKey] = useState(0);
+  useActionSuccess(state, () => {
+    markClean();
+    setFormKey((key) => key + 1);
+  });
   const [projectType, setProjectType] = useState(project.type);
   const [timingMode, setTimingMode] = useState(project.timingMode);
   const [shootOnFilm, setShootOnFilm] = useState(project.shootOnFilm);
@@ -55,7 +60,7 @@ export function ProjectSettingsForm({ project }: { project: ProjectSettingsValue
   const isArchived = project.status === ProjectStatus.ARCHIVED;
 
   return (
-    <form ref={formRef} onSubmit={submitKeepingFields(action)} className="space-y-6">
+    <form key={formKey} ref={formRef} onSubmit={submitKeepingFields(action)} className="space-y-6">
       {isArchived ? (
         <div className="rounded-md border border-[var(--tone-warning-line)] bg-[var(--tone-warning-bg)] p-3 text-sm">
           Проект в архиве. Для редактирования сначала восстановите его.

@@ -77,7 +77,7 @@ export function ShootDayForm({
 
   return (
     <form
-      key={`${formKey}:${nextDayNumber}`}
+      key={formKey}
       ref={formRef}
       onSubmit={submitKeepingFields(action)}
       className="rounded-xl border border-[var(--border)] bg-[var(--panel-solid)] p-3"

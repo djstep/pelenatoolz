@@ -4,3 +4,5 @@ export const EXPORT_LAYOUT_LOAD_FAILED =
 export const EXPORT_DATA_LOAD_FAILED =
   "Не удалось загрузить данные: нет связи с сервером. Закройте окно и попробуйте ещё раз";
 export const EXPORT_FAILED = "Не удалось выгрузить: нет связи с сервером. Попробуйте ещё раз";
+export const EXPORT_LAYOUT_SAVE_FAILED = "Раскладка не сохранилась: нет связи с сервером";
+export const EXPORT_BUILD_FAILED = "Не удалось сформировать файл";

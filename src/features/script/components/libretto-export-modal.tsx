@@ -10,7 +10,11 @@ import {
   columnsReadyForExport,
   createExportColumnId,
 } from "@/features/exports/lib/column-utils";
-import { EXPORT_FAILED, EXPORT_LAYOUT_LOAD_FAILED } from "@/features/exports/lib/export-errors";
+import {
+  EXPORT_BUILD_FAILED,
+  EXPORT_LAYOUT_LOAD_FAILED,
+  EXPORT_LAYOUT_SAVE_FAILED,
+} from "@/features/exports/lib/export-errors";
 import {
   EXPORT_LAYOUT_NOT_SAVED_HINT,
   type ExportColumn,
@@ -110,15 +114,20 @@ export function LibrettoExportModal({
     const ready = columnsReadyForExport(columns);
     if (ready.length === 0) return;
     startTransition(async () => {
-      try {
-        if (canSaveLayout) {
+      if (canSaveLayout) {
+        try {
           const save = await saveExportLayoutAction(projectId, "libretto", columns);
           if (save.error) toast.warning(save.error);
+        } catch {
+          // Файл собирается в браузере: без сохранённой раскладки он всё равно получится.
+          toast.warning(EXPORT_LAYOUT_SAVE_FAILED);
         }
+      }
+      try {
         await onExport(ready, fieldLabels);
         onClose();
       } catch {
-        toast.error(EXPORT_FAILED);
+        toast.error(EXPORT_BUILD_FAILED);
       }
     });
   }

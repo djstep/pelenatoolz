@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useTransition } from "react";
+import { useActionState, useState, useTransition } from "react";
 import Link from "next/link";
 import {
   updateCharacterCastSnapshotAction,
@@ -85,7 +85,12 @@ export function CharacterDetailView({
     undefined,
     reqState,
   );
-  useActionSuccess(reqState, markReqClean);
+  // Пересоздание показывает то, что в базе: пустое поле сервер может оставить без изменений.
+  const [reqKey, setReqKey] = useState(0);
+  useActionSuccess(reqState, () => {
+    markReqClean();
+    setReqKey((key) => key + 1);
+  });
 
   const snapBound = updateCharacterCastSnapshotAction.bind(
     null,
@@ -99,7 +104,11 @@ export function CharacterDetailView({
     undefined,
     snapState,
   );
-  useActionSuccess(snapState, markSnapClean);
+  const [snapKey, setSnapKey] = useState(0);
+  useActionSuccess(snapState, () => {
+    markSnapClean();
+    setSnapKey((key) => key + 1);
+  });
 
   const actor = character.actors[0];
   const snapshot = character.snapshot;
@@ -162,7 +171,7 @@ export function CharacterDetailView({
 
       <section className="glass-card space-y-4 p-5">
         <h2 className="font-semibold">Требования к роли</h2>
-        <form ref={reqFormRef} onSubmit={submitKeepingFields(reqAction)} className="space-y-3">
+        <form key={reqKey} ref={reqFormRef} onSubmit={submitKeepingFields(reqAction)} className="space-y-3">
           <div>
             <Label htmlFor="description">Описание персонажа</Label>
             <textarea
@@ -269,7 +278,7 @@ export function CharacterDetailView({
             Данные скопированы при утверждении. Редактирование здесь не меняет карточку
             в Кастинге.
           </p>
-          <form ref={snapFormRef} onSubmit={submitKeepingFields(snapAction)} className="space-y-4">
+          <form key={snapKey} ref={snapFormRef} onSubmit={submitKeepingFields(snapAction)} className="space-y-4">
             <div className="grid gap-3 md:grid-cols-2 text-sm">
               <div>
                 <span className="text-[var(--muted-fg)]">ФИО</span>
