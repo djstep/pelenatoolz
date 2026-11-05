@@ -50,7 +50,17 @@
       "Bash(more *.env*)",
       "Bash(*Get-Content *.env*)",
       "PowerShell(Get-Content *.env*)",
-      "PowerShell(more *.env*)"
+      "PowerShell(more *.env*)",
+      "Bash(*cp *.env*)",
+      "Bash(*copy *.env*)",
+      "Bash(*Copy-Item *.env*)",
+      "Bash(*xcopy *.env*)",
+      "Bash(*robocopy *.env*)",
+      "PowerShell(*cp *.env*)",
+      "PowerShell(*copy *.env*)",
+      "PowerShell(*Copy-Item *.env*)",
+      "PowerShell(*xcopy *.env*)",
+      "PowerShell(*robocopy *.env*)"
     ],
     "ask": [
       "Bash(git branch -d *)",
