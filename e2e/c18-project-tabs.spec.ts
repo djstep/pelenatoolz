@@ -136,6 +136,35 @@ for (const role of ["nofin", "crewonly"] as const) {
   });
 }
 
+/** Полоса на месте: ровно эти вкладки, выбрана нужная. */
+async function expectTabs(page: Page, labels: string[], active: string | null) {
+  await expect(tabsBar(page).getByRole("link")).toHaveCount(labels.length);
+  for (const label of labels) {
+    const link = tab(page, label);
+    if (label === active) await expect(link).toHaveAttribute("aria-current", "page");
+    else await expect(link).not.toHaveAttribute("aria-current", "page");
+  }
+}
+
+const groupButton = (page: Page, name: string) =>
+  page.getByRole("button", { name: `${name} здесь` });
+
+for (const role of ["producer", "nofin", "crewonly"] as const) {
+  test.describe(`вкладки Участников, ${role}`, () => {
+    test.use({ storageState: storageStatePath(role) });
+
+    test("Участники · Роли и права; раздел меню раскрыт на обеих", async ({ page }) => {
+      await page.goto(projectPath(ctx, "/members"));
+      await expectTabs(page, ["Участники", "Роли и права"], "Участники");
+      await tab(page, "Роли и права").click();
+      await expect(page).toHaveURL(new RegExp(`${projectPath(ctx, "/roles")}$`));
+      await expectTabs(page, ["Участники", "Роли и права"], "Роли и права");
+      await expect(groupButton(page, "Настройки")).toHaveAttribute("aria-expanded", "true");
+      await expect(page.getByRole("link", { name: "Роли и права" })).toHaveCount(1);
+    });
+  });
+}
+
 test.describe("полоса вкладок на телефоне", () => {
   test.use({ storageState: storageStatePath("producer"), viewport: { width: 390, height: 844 } });
 

@@ -64,7 +64,7 @@ function visibleHrefs(matrix: PermissionMatrix): string[] {
     headDepartmentIds: [],
     anyEntityFinanceRead: canReadAnyEntityFinance(matrix, {}),
   });
-  return groups.flatMap((g) => g.items.map((i) => i.href));
+  return nav.navHrefs(groups);
 }
 
 describe("«Участники» и «Роли»: пункт меню виден ⇔ страница открывается", () => {
@@ -73,7 +73,7 @@ describe("«Участники» и «Роли»: пункт меню виден
       const pageOpens = hasPermission(matrix, MEMBERS_PAGES_PERMISSION);
       const hrefs = visibleHrefs(matrix);
       assert.equal(hrefs.includes("/members"), pageOpens, "пункт «Участники»");
-      assert.equal(hrefs.includes("/roles"), pageOpens, "пункт «Роли и права»");
+      assert.equal(hrefs.includes("/roles"), pageOpens, "вкладка «Роли и права»");
     });
   }
 });

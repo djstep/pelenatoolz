@@ -167,8 +167,13 @@ export const projectNavGroups: NavGroupDef[] = [
     id: "settings",
     title: "Настройки",
     items: [
-      { href: "/members", label: "Участники", visible: anyOf("members:read") },
-      { href: "/roles", label: "Роли и права", visible: anyOf("members:read") },
+      {
+        label: "Участники",
+        tabs: [
+          { href: "/members", label: "Участники", visible: anyOf("members:read") },
+          { href: "/roles", label: "Роли и права", visible: anyOf("members:read") },
+        ],
+      },
       {
         href: "/settings",
         label: "Настройки проекта",
@@ -243,6 +248,13 @@ export function filterNavGroups(
     result.push({ ...group, items: shown });
   }
   return result;
+}
+
+/** Адреса, доступные пользователю: пункты меню и их вкладки. */
+export function navHrefs(groups: NavGroup[]): string[] {
+  return groups.flatMap((group) =>
+    group.items.flatMap((item) => [item.href, ...(item.tabs ?? []).map((tab) => tab.href)]),
+  );
 }
 
 /** Счётчик у пункта меню (`href` — как в `projectNavGroups`); `null` или 0 — без счётчика. */
