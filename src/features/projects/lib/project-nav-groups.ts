@@ -239,7 +239,8 @@ export const projectNavGroups: NavGroupDef[] = [
 function filterTabbedItem(item: NavTabbedItemDef, access: NavAccess): NavItem | null {
   const { tabs: defs, matchPrefixes = [], tabsPrefix, ...rest } = item;
   // Только доступные вкладки: адрес скрытой не уходит в браузер ни в каком поле.
-  // Исключение — `tabsPrefix`: основа раздела не секрет, с неё и так переадресует на вкладку.
+  // Исключение — основа раздела (`tabsPrefix`, она же в `matchPrefixes` для подсветки на карточке):
+  // это не секрет, с неё и так переадресует на вкладку.
   const tabs = defs
     .filter((tab) => !tab.visible || tab.visible(access))
     .map(({ href, label, exact }) => (exact ? { href, label, exact } : { href, label }));

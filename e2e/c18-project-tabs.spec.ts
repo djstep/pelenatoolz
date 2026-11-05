@@ -409,7 +409,12 @@ test.describe("вкладки Контрагентов", () => {
       const TABS = ["Справочник", "Договоры", "Акты"];
       await page.goto(BASE);
       await expectTabs(page, TABS, "Справочник");
-      await expect(page.getByRole("heading", { name: "Контрагенты", exact: true })).toBeVisible();
+      const heading = page.getByRole("heading", { name: "Контрагенты", exact: true });
+      await expect(heading).toBeVisible();
+      const barBottom = (await tabsBar(page).boundingBox())!;
+      expect((await heading.boundingBox())!.y, "заголовок под полосой").toBeGreaterThanOrEqual(
+        barBottom.y + barBottom.height,
+      );
 
       await tab(page, "Акты").click();
       await expect(page).toHaveURL(new RegExp(`${BASE}/acts$`));
@@ -472,10 +477,18 @@ test.describe("форма приглашения на «Участниках»",
 
   const EMAIL = "e2e-tabs-invite@pelena.test";
   const db = e2eDb();
+  const TEMP_ROLE = "E2E временная роль вкладок";
   const invites = () => db.projectInvite.count({ where: { projectId: ctx.projectId, email: EMAIL } });
+  const cleanup = async () => {
+    await db.projectInvite.deleteMany({ where: { projectId: ctx.projectId, email: EMAIL } });
+    await db.projectRoleDefinition.deleteMany({ where: { projectId: ctx.projectId, name: TEMP_ROLE } });
+  };
+
+  // Прерванный прогон мог оставить приглашение: счётчики ниже считают от нуля.
+  test.beforeEach(cleanup);
 
   test.afterAll(async () => {
-    await db.projectInvite.deleteMany({ where: { projectId: ctx.projectId, email: EMAIL } });
+    await cleanup();
     await db.$disconnect();
   });
 
@@ -516,6 +529,39 @@ test.describe("форма приглашения на «Участниках»",
     await page.getByRole("alertdialog").getByRole("button", { name: "Сохранить" }).click();
     await expect(page).toHaveURL(new RegExp(`${projectPath(ctx, "/roles")}$`));
     expect(await invites()).toBe(1);
+    await expect(page.getByText("Ссылка — в «Активных приглашениях»")).toBeVisible();
+  });
+
+  test("ошибка сервера при «Сохранить»: остаёмся, почта и роль на месте", async ({ page }) => {
+    const role = await db.projectRoleDefinition.create({
+      data: { projectId: ctx.projectId, name: TEMP_ROLE, permissions: {} },
+    });
+    await fillInvite(page);
+    await page.locator("#roleId-trigger").click();
+    await page.getByRole("option", { name: TEMP_ROLE }).click();
+    await db.projectRoleDefinition.delete({ where: { id: role.id } });
+
+    await tab(page, "Роли и права").click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Сохранить" }).click();
+    await expect(page.locator("main").getByText("Роль не найдена")).toBeVisible();
+    await expect(page).toHaveURL(new RegExp(`${projectPath(ctx, "/members")}$`));
+    await expect(page.locator("#email")).toHaveValue(EMAIL);
+    await expect(page.locator("#roleId-trigger")).toHaveText(TEMP_ROLE);
+    expect(await invites()).toBe(0);
+  });
+
+  test("кнопка формы: ссылка на экране, поля пустые, вопроса при уходе нет", async ({ page }) => {
+    await fillInvite(page);
+    await page.locator("main").getByRole("button", { name: "Создать ссылку" }).click();
+    // Та же ссылка есть и в списке приглашений ниже, нужен блок в самой форме.
+    await expect(page.locator("form:has(#email)").getByText("/invite/")).toBeVisible();
+    await expect(page.locator("#email")).toHaveValue("");
+    await expect(page.getByText("Ссылка — в «Активных приглашениях»")).toHaveCount(0);
+    expect(await invites()).toBe(1);
+
+    await page.waitForTimeout(300);
+    await tab(page, "Роли и права").click();
+    await expect(page).toHaveURL(new RegExp(`${projectPath(ctx, "/roles")}$`));
   });
 });
 
