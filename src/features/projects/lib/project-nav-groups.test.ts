@@ -284,6 +284,41 @@ describe("Локации в меню проекта", () => {
   });
 });
 
+describe("Персонажи в меню проекта", () => {
+  const groups = (granted: string[]) => nav.filterNavGroups(nav.projectNavGroups, access(granted));
+  const AVAILABILITY = `${BASE}/schedule/availability`;
+
+  test("один пункт и две вкладки", () => {
+    const planning = groups(["cast:read", "schedule:read"]).find((group) => group.id === "planning")!;
+    const item = planning.items.find((entry) => entry.label === "Персонажи")!;
+    assert.equal(item.href, "/characters");
+    assert.deepEqual(item.tabs, [
+      { href: "/characters", label: "Персонажи" },
+      { href: "/schedule/availability", label: "Занятость" },
+    ]);
+    assert.equal(planning.items.some((entry) => entry.label === "Занятость"), false);
+  });
+
+  test("подсветка на занятости: «Персонажи», а не «КПП» с более коротким адресом", () => {
+    const all = groups(["cast:read", "schedule:read"]);
+    const items = all.flatMap((group) => group.items);
+    assert.equal(findActiveNavHref(items, BASE, AVAILABILITY), "/characters");
+    assert.equal(findActiveNavHref(items, BASE, `${BASE}/schedule`), "/schedule");
+    assert.equal(activeSectionTitle(all, BASE, AVAILABILITY), "Планирование");
+  });
+
+  test("только КПП: пункт ведёт на занятость, полосы нет, подсветка на нём", () => {
+    const limited = groups(["schedule:read"]);
+    const items = limited.flatMap((group) => group.items);
+    const item = items.find((entry) => entry.label === "Персонажи")!;
+    assert.equal(item.href, "/schedule/availability");
+    assert.equal(item.tabs, undefined);
+    assert.ok(!JSON.stringify(limited).includes("/characters"));
+    assert.equal(findActiveNavHref(items, BASE, AVAILABILITY), "/schedule/availability");
+    assert.equal(activeNavTabs(limited, BASE, AVAILABILITY), null);
+  });
+});
+
 describe("Кастинг в меню проекта", () => {
   const allItems = (granted: string[]) =>
     nav.filterNavGroups(nav.projectNavGroups, access(granted)).flatMap((group) => group.items);

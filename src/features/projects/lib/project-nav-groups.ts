@@ -100,13 +100,18 @@ export const projectNavGroups: NavGroupDef[] = [
           { href: "/preproduction/scout", label: "Скаут", visible: anyOf("script:read") },
         ],
       },
-      { href: "/characters", label: "Персонажи", visible: anyOf("cast:read") },
-      { href: "/schedule", label: "КПП", visible: anyOf("schedule:read") },
       {
-        href: "/schedule/availability",
-        label: "Занятость",
-        visible: anyOf("schedule:read", "cast:read"),
+        label: "Персонажи",
+        tabs: [
+          { href: "/characters", label: "Персонажи", visible: anyOf("cast:read") },
+          {
+            href: "/schedule/availability",
+            label: "Занятость",
+            visible: anyOf("schedule:read", "cast:read"),
+          },
+        ],
       },
+      { href: "/schedule", label: "КПП", visible: anyOf("schedule:read") },
       {
         href: "/call-sheets",
         label: "Вызывные",

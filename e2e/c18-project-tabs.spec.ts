@@ -184,6 +184,23 @@ for (const role of ["producer", "nofin", "crewonly"] as const) {
   });
 }
 
+for (const role of ["producer", "nofin", "crewonly"] as const) {
+  test.describe(`вкладки Персонажей, ${role}`, () => {
+    test.use({ storageState: storageStatePath(role) });
+
+    test("Персонажи · Занятость; на занятости подсвечены «Персонажи»", async ({ page }) => {
+      await page.goto(projectPath(ctx, "/characters"));
+      await expectTabs(page, ["Персонажи", "Занятость"], "Персонажи");
+      await tab(page, "Занятость").click();
+      await expect(page).toHaveURL(new RegExp(`${projectPath(ctx, "/schedule/availability")}$`));
+      await expectTabs(page, ["Персонажи", "Занятость"], "Занятость");
+      const menu = page.getByRole("complementary");
+      await expect(menu.getByRole("link", { name: "Персонажи", exact: true })).toHaveClass(/font-semibold/);
+      await expect(menu.getByRole("link", { name: "Занятость" })).toHaveCount(0);
+    });
+  });
+}
+
 test.describe("вкладки Операций", () => {
   test.use({ storageState: storageStatePath("producer") });
 
