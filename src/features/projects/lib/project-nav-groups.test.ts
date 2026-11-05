@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import nodeModule from "node:module";
 import { before, describe, test } from "node:test";
 import type { NavAccess, NavVisibility } from "@/features/projects/lib/project-nav-groups";
-import { activeNavTabs, findActiveNavHref } from "@/features/projects/lib/active-nav";
+import {
+  activeNavTabs,
+  activeSectionTitle,
+  findActiveNavHref,
+} from "@/features/projects/lib/active-nav";
 import { buildEmptyMatrix } from "@/features/roles/permissions-matrix";
 
 // project-nav-groups.ts → role-rules.ts — серверный модуль ("server-only"):
@@ -121,6 +125,18 @@ describe("пункт меню с вкладками", () => {
     const item = filter(["plain"])[0]!.items[0]!;
     assert.equal(item.tabs, undefined);
     assert.equal("visible" in item, false);
+  });
+});
+
+describe("Словарь сценария в меню проекта", () => {
+  test("пункт в «Настройках», адрес тот же, на странице словаря активен он", () => {
+    const groups = nav.filterNavGroups(nav.projectNavGroups, access(["script:read"]));
+    const settings = groups.find((group) => group.id === "settings")!;
+    assert.ok(settings.items.some((item) => item.href === "/screenplay/dictionary"));
+    assert.equal(groups.find((group) => group.id === "home")!.items.some((item) => item.label === "Словарь сценария"), false);
+    const path = `${BASE}/screenplay/dictionary`;
+    assert.equal(findActiveNavHref(groups.flatMap((group) => group.items), BASE, path), "/screenplay/dictionary");
+    assert.equal(activeSectionTitle(groups, BASE, path), "Настройки");
   });
 });
 

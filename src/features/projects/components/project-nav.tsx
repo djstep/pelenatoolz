@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  BookOpen,
   CalendarDays,
   ChevronDown,
   ChevronRight,
@@ -65,7 +64,6 @@ const GROUP_ICONS: Record<string, LucideIcon> = {
 const TOP_ITEM_ICONS: Record<string, LucideIcon> = {
   "": LayoutGrid,
   "/screenplay": FileText,
-  "/screenplay/dictionary": BookOpen,
   "/files": Folder,
 };
 
@@ -89,7 +87,7 @@ function SoonPill() {
   );
 }
 
-/** Раздел без подразделов (Обзор, Сценарий, Словарь, Файлы): иконка + название, 36 px. */
+/** Раздел без подразделов (Обзор, Сценарий, Файлы): иконка + название, 36 px. */
 function TopLink({
   locale,
   projectId,
