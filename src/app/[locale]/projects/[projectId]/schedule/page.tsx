@@ -10,6 +10,7 @@ import {
   listShootDays,
   listUnscheduledScenes,
 } from "@/features/schedule/queries";
+import { serializeForClient } from "@/shared/db/serialize-decimal";
 
 type Props = {
   params: Promise<{ locale: string; projectId: string }>;
@@ -74,8 +75,8 @@ export default async function SchedulePage({ params }: Props) {
         <ScheduleDnDBoard
           projectId={projectId}
           locale={locale}
-          shootDays={shootDays}
-          unscheduled={unscheduled}
+          shootDays={serializeForClient(shootDays)}
+          unscheduled={serializeForClient(unscheduled)}
           canWrite={canWrite}
           availability={availability}
         />

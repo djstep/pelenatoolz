@@ -4,6 +4,7 @@ import {
   LOCATION_FIELDS,
   SCOUT_SNAPSHOT_FIELDS,
 } from "@/features/locations/lib/location-fields";
+import { serializeForClient } from "@/shared/db/serialize-decimal";
 import { pickFinanceFields } from "@/shared/lib/finance-fields";
 
 const sceneBriefSelect = {
@@ -50,12 +51,12 @@ function locationForClient<T extends { scoutSnapshot: unknown }>(
   canFinanceRead: boolean,
 ) {
   const snapshot = parseScoutSnapshot(location.scoutSnapshot);
-  return {
+  return serializeForClient({
     ...pickFinanceFields(location, LOCATION_FIELDS, canFinanceRead),
     scoutSnapshot: snapshot
       ? pickFinanceFields(snapshot, SCOUT_SNAPSHOT_FIELDS, canFinanceRead)
       : null,
-  };
+  });
 }
 
 export async function listProjectAddresses(projectId: string) {
