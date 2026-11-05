@@ -17,6 +17,11 @@ describe("serializeForClient", () => {
     });
   });
 
+  it("объект с ключом toFixed из данных пользователя остаётся объектом", () => {
+    const params = { toFixed: "185", toString: "x" };
+    assert.deepEqual(serializeForClient({ params }), { params });
+  });
+
   it("остальное не меняется: пусто, дата, строка", () => {
     const date = new Date("2026-11-10T00:00:00.000Z");
     const result = serializeForClient({ empty: null, missing: undefined, date, text: "1.5" });

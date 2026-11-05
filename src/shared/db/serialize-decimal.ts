@@ -27,7 +27,8 @@ function isPrismaDecimal(value: unknown): value is { toString(): string } {
     typeof value === "object" &&
     !Array.isArray(value) &&
     !(value instanceof Date) &&
-    "toFixed" in value &&
+    // Проверка метода, а не ключа: `toFixed` может оказаться названием поля из данных пользователя.
+    typeof (value as { toFixed?: unknown }).toFixed === "function" &&
     "toString" in value
   );
 }
