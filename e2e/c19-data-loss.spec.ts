@@ -191,3 +191,61 @@ test.describe("новый съёмочный день", () => {
     }
   });
 });
+
+test.describe("«Сохранить» в вопросе при уходе", () => {
+  test.use({ storageState: storageStatePath("producer") });
+
+  const EMAIL = "e2e-double-invite@pelena.test";
+  const invites = () => db.projectInvite.count({ where: { projectId: ctx.projectId, email: EMAIL } });
+  const cleanup = () => db.projectInvite.deleteMany({ where: { projectId: ctx.projectId, email: EMAIL } });
+  test.beforeEach(cleanup);
+  test.afterAll(cleanup);
+
+  test("форма уже отправлена: второй раз не отправляется, приглашение одно", async ({ page }) => {
+    await page.goto(projectPath(ctx, "/members"));
+    await page.waitForLoadState("networkidle");
+    await page.waitForTimeout(BASELINE_MS);
+    await page.locator("#email").fill(EMAIL);
+
+    let sent = 0;
+    await page.route("**/*", async (route) => {
+      if (route.request().headers()["next-action"]) {
+        sent += 1;
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+      }
+      await route.fallback();
+    });
+    await page.locator("main").getByRole("button", { name: "Создать ссылку" }).click();
+    await page
+      .getByRole("navigation", { name: "Вкладки раздела" })
+      .getByRole("link", { name: /^Роли и права/ })
+      .click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Сохранить" }).click();
+
+    await expect(page).toHaveURL(new RegExp(`${projectPath(ctx, "/roles")}$`));
+    expect(sent).toBe(1);
+    expect(await invites()).toBe(1);
+  });
+
+  test("действие упало: вопрос закрывается сразу, экран ошибки, «Повторить» возвращает страницу", async ({ page }) => {
+    const settings = projectPath(ctx, "/settings");
+    await page.goto(settings);
+    await page.waitForLoadState("networkidle");
+    await page.waitForTimeout(BASELINE_MS);
+    await page.locator("#description").fill("Изменение, которое не дойдёт до сервера");
+
+    const restore = await cutActions(page);
+    await page.getByRole("link", { name: "Обзор", exact: true }).click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Сохранить" }).click();
+
+    // Раньше вопрос ждал ответа до 30 секунд.
+    await expect(page.getByText("Что-то пошло не так")).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole("alertdialog")).toHaveCount(0);
+    await expect(page).toHaveURL(new RegExp(`${settings}$`));
+    await expect(page.getByRole("link", { name: "Обзор", exact: true })).toBeVisible();
+
+    await restore();
+    await page.getByRole("button", { name: "Повторить" }).click();
+    await expect(page.locator("#name")).toBeVisible();
+  });
+});

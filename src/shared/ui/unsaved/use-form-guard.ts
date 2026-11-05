@@ -30,6 +30,8 @@ export function useFormGuard<T extends HTMLElement = HTMLFormElement>(
   const baseline = useRef<string | null>(null);
   const timer = useRef<number | undefined>(undefined);
   const saveWaiter = useRef<((ok: boolean) => void) | null>(null);
+  /** Форма отправлена и ждёт ответа: «Сохранить» из вопроса не должно отправить её второй раз. */
+  const submitting = useRef(false);
   const canSave = saveState !== undefined;
 
   const snapshotNow = useCallback(() => {
@@ -48,7 +50,17 @@ export function useFormGuard<T extends HTMLElement = HTMLFormElement>(
     (el: T | null) => {
       element.current = el;
       baseline.current = null;
-      if (el) snapshotLater(BASELINE_DELAY_MS);
+      if (!el) return;
+      snapshotLater(BASELINE_DELAY_MS);
+      const onSubmit = () => {
+        submitting.current = true;
+      };
+      el.addEventListener("submit", onSubmit);
+      return () => {
+        el.removeEventListener("submit", onSubmit);
+        element.current = null;
+        baseline.current = null;
+      };
     },
     [snapshotLater],
   );
@@ -60,11 +72,22 @@ export function useFormGuard<T extends HTMLElement = HTMLFormElement>(
 
   // Ответ сервера на отправку формы завершает ожидающее «Сохранить».
   useEffect(() => {
+    submitting.current = false;
     const done = saveWaiter.current;
     if (!done) return;
     saveWaiter.current = null;
     done(Boolean(saveState?.success));
   }, [saveState]);
+
+  // Действие упало: страницу заменил экран ошибки, ответа не будет — ждать его незачем.
+  useEffect(
+    () => () => {
+      const done = saveWaiter.current;
+      saveWaiter.current = null;
+      done?.(false);
+    },
+    [],
+  );
 
   const save = useCallback(
     () =>
@@ -90,7 +113,7 @@ export function useFormGuard<T extends HTMLElement = HTMLFormElement>(
           resolve(ok);
         };
         saveWaiter.current = finish;
-        form.requestSubmit();
+        if (!submitting.current) form.requestSubmit();
       }),
     [],
   );
