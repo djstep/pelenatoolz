@@ -21,6 +21,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { findActiveNavHref } from "@/features/projects/lib/active-nav";
 import { cn } from "@/shared/lib/cn";
 
+/** Вкладка раздела: своя страница со своим адресом. */
+export type NavTab = {
+  href: string;
+  label: string;
+};
+
 export type NavItem = {
   href: string;
   label: string;
@@ -31,6 +37,8 @@ export type NavItem = {
   exact?: boolean;
   /** Счётчик справа (например, вызывные на согласовании); нет — не показывается. */
   count?: number;
+  /** Вкладки раздела над страницей: только доступные пользователю и только если их больше одной. */
+  tabs?: NavTab[];
 };
 
 export type NavGroup = {

@@ -1,4 +1,4 @@
-import type { NavGroup, NavItem } from "@/features/projects/components/project-nav";
+import type { NavGroup, NavItem, NavTab } from "@/features/projects/components/project-nav";
 
 /**
  * Активный пункт меню проекта: самый длинный подходящий адрес. Обзор и пункты `exact` —
@@ -27,4 +27,14 @@ export function activeSectionTitle(groups: NavGroup[], base: string, pathname: s
   const href = findActiveNavHref(groups.flatMap((g) => g.items), base, pathname);
   if (href === null) return null;
   return groups.find((g) => g.items.some((item) => item.href === href))?.title ?? null;
+}
+
+/** Вкладки раздела, если страница — одна из них; на вложенных адресах (карточках) полосы нет. */
+export function activeNavTabs(groups: NavGroup[], base: string, pathname: string): NavTab[] | null {
+  for (const group of groups) {
+    for (const { tabs } of group.items) {
+      if (tabs?.some((tab) => `${base}${tab.href}` === pathname)) return tabs;
+    }
+  }
+  return null;
 }

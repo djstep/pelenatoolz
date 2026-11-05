@@ -1,4 +1,4 @@
-import type { NavGroup, NavItem } from "@/features/projects/components/project-nav";
+import type { NavGroup, NavItem, NavTab } from "@/features/projects/components/project-nav";
 import type { Permission } from "@/features/memberships/permissions";
 import {
   canReadAnyEntityFinance,
@@ -43,7 +43,12 @@ export function navAccessFromContext(ctx: {
 /** Условие видимости пункта или группы меню. Нет условия — виден всем участникам проекта. */
 export type NavVisibility = (access: NavAccess) => boolean;
 
-type NavItemDef = NavItem & { visible?: NavVisibility };
+type NavTabDef = NavTab & { visible?: NavVisibility };
+
+/** Пункт с вкладками: виден, если видна хотя бы одна; адрес — первая доступная вкладка. */
+type NavTabbedItemDef = Omit<NavItem, "href" | "tabs"> & { tabs: NavTabDef[]; visible?: never };
+
+type NavItemDef = (Omit<NavItem, "tabs"> & { visible?: NavVisibility }) | NavTabbedItemDef;
 
 type NavGroupDef = Omit<NavGroup, "items"> & {
   items: NavItemDef[];
@@ -78,11 +83,12 @@ export const projectNavGroups: NavGroupDef[] = [
     id: "preproduction",
     title: "Препродакшн",
     items: [
-      { href: "/preproduction/casting", label: "Кастинг", visible: anyOf("cast:read") },
       {
-        href: "/preproduction/auditions",
-        label: "Кастинг-пробы",
-        visible: anyOf("cast:read"),
+        label: "Кастинг",
+        tabs: [
+          { href: "/preproduction/casting", label: "Кандидаты", visible: anyOf("cast:read") },
+          { href: "/preproduction/auditions", label: "Пробы", visible: anyOf("cast:read") },
+        ],
       },
       { href: "/preproduction/scout", label: "Скаут", visible: anyOf("script:read") },
     ],
@@ -195,9 +201,33 @@ export const projectNavGroups: NavGroupDef[] = [
   },
 ];
 
+function filterTabbedItem(item: NavTabbedItemDef, access: NavAccess): NavItem | null {
+  const { tabs: defs, matchPrefixes = [], ...rest } = item;
+  // Только доступные вкладки: адрес скрытой не уходит в браузер ни в каком поле.
+  const tabs = defs
+    .filter((tab) => !tab.visible || tab.visible(access))
+    .map(({ href, label }) => ({ href, label }));
+  const [first, ...others] = tabs;
+  if (!first) return null;
+  const prefixes = [...matchPrefixes, ...others.map((tab) => tab.href)];
+  return {
+    ...rest,
+    href: first.href,
+    matchPrefixes: prefixes.length > 0 ? prefixes : undefined,
+    tabs: others.length > 0 ? tabs : undefined,
+  };
+}
+
+function filterNavItem(item: NavItemDef, access: NavAccess): NavItem | null {
+  if ("tabs" in item) return filterTabbedItem(item, access);
+  if (item.visible && !item.visible(access)) return null;
+  const { href, label, soon, matchPrefixes, exact } = item;
+  return { href, label, soon, matchPrefixes, exact };
+}
+
 /**
- * Меню для конкретного пользователя: скрывает пункты без прав и группы, где не осталось
- * пунктов. Условия выполняются на сервере, в браузер уходят только данные пунктов.
+ * Меню для конкретного пользователя: скрывает пункты и вкладки без прав и группы, где не
+ * осталось пунктов. Условия выполняются на сервере, в браузер уходят только данные пунктов.
  */
 export function filterNavGroups(
   groups: NavGroupDef[],
@@ -207,14 +237,8 @@ export function filterNavGroups(
   for (const { visible, items, ...group } of groups) {
     if (visible && !visible(access)) continue;
     const shown = items
-      .filter((item) => !item.visible || item.visible(access))
-      .map(({ href, label, soon, matchPrefixes, exact }) => ({
-        href,
-        label,
-        soon,
-        matchPrefixes,
-        exact,
-      }));
+      .map((item) => filterNavItem(item, access))
+      .filter((item) => item !== null);
     if (items.length > 0 && shown.length === 0) continue;
     result.push({ ...group, items: shown });
   }
