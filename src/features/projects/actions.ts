@@ -32,6 +32,7 @@ import {
   transferRefusal,
 } from "@/features/projects/lib/owner";
 import { prisma } from "@/shared/db/prisma";
+import { clearEmptied } from "@/shared/lib/cleared-fields";
 import { scheduleProjectDriveAccessSync } from "@/features/cloud/lib/drive-access-sync";
 import {
   detachProjectDriveIfKeeperLeft,
@@ -63,6 +64,26 @@ function parseDate(value?: string) {
   const d = new Date(value);
   return Number.isNaN(d.getTime()) ? undefined : d;
 }
+
+function clearableDate(value: string | null | undefined) {
+  return value === null ? null : parseDate(value);
+}
+
+const PROJECT_CLEARABLE = [
+  "fullName",
+  "description",
+  "city",
+  "startDate",
+  "endDate",
+  "episodeCount",
+  "episodeRuntimeMin",
+  "shootingDaysCount",
+  "cameraUnits",
+  "cameraCount",
+  "plannedDailyOutputMin",
+  "filmType",
+  "filmCoefficient",
+] as const;
 
 function parseProjectFormData(formData: FormData) {
   const type = formData.get("type") as ProjectType | null;
@@ -265,6 +286,11 @@ export async function updateProjectAction(
     return { error: "Не удалось обновить проект" };
   }
 
+  const data = clearEmptied(parsed.data, formData, PROJECT_CLEARABLE);
+  if (data.type === ProjectType.SERIES && data.episodeCount === null) {
+    return { error: "Для сериала укажите количество серий" };
+  }
+
   if (
     parsed.data.type === ProjectType.SERIES &&
     parsed.data.episodeCount === undefined
@@ -279,20 +305,18 @@ export async function updateProjectAction(
   await prisma.project.update({
     where: { id: projectId },
     data: {
-      ...parsed.data,
-      startDate: parsed.data.startDate
-        ? parseDate(parsed.data.startDate)
-        : undefined,
-      endDate: parsed.data.endDate ? parseDate(parsed.data.endDate) : undefined,
+      ...data,
+      startDate: clearableDate(data.startDate),
+      endDate: clearableDate(data.endDate),
       episodeCount:
         type === ProjectType.SERIES
-          ? parsed.data.episodeCount
+          ? data.episodeCount
           : type != null
             ? null
             : undefined,
       episodeRuntimeMin:
         type === ProjectType.SERIES
-          ? parsed.data.episodeRuntimeMin
+          ? data.episodeRuntimeMin
           : type != null
             ? null
             : undefined,

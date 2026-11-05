@@ -10,6 +10,7 @@ import { resourcesRevalidatePaths } from "@/features/resources/lib/paths";
 import { parseExtraPaymentFormRows } from "@/features/payroll/lib/parse-extra-payments";
 import { parseOvertimeFormRows } from "@/features/payroll/lib/parse-overtime-form";
 import { prisma } from "@/shared/db/prisma";
+import { clearEmptied } from "@/shared/lib/cleared-fields";
 import { countOf } from "@/shared/lib/plural";
 import type { Tx } from "@/features/call-sheets/queries";
 import { ensureCallSheetSections } from "@/features/call-sheets/sections-db";
@@ -418,7 +419,14 @@ export async function updateResourceItemAction(
     unpaidOvertimeMode,
     kmRate,
     ...base
-  } = parsed.data;
+  } = clearEmptied(parsed.data, formData, [
+    "notes",
+    "shiftRate",
+    "shiftHoursMin",
+    "unpaidOvertimeMin",
+    "arrivalOffsetMin",
+    "taxPercent",
+  ]);
 
   await auditMutation(
     ctx,

@@ -23,6 +23,7 @@ import { auditMemberName } from "@/shared/audit/member-name";
 import { recordAudit } from "@/shared/audit/with-audit";
 import { isForeignKeyError, LINKED_ERROR } from "@/shared/db/foreign-key";
 import { prisma } from "@/shared/db/prisma";
+import { clearEmptied } from "@/shared/lib/cleared-fields";
 import { impactLines, listCounts } from "@/shared/lib/plural";
 import { DEFAULT_ROLE_NAMES } from "@/features/roles/default-roles";
 import { z } from "zod";
@@ -223,7 +224,7 @@ export async function updateRoleAction(
       where: { id: roleId, projectId },
       data: {
         name: parsed.data.name,
-        note: parsed.data.note,
+        note: clearEmptied(parsed.data, formData, ["note"]).note,
         permissions,
       },
     });

@@ -23,6 +23,7 @@ import {
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { prisma } from "@/shared/db/prisma";
 import { impactLines } from "@/shared/lib/plural";
+import { clearEmptied, orCurrent } from "@/shared/lib/cleared-fields";
 import { pickFinanceFields } from "@/shared/lib/finance-fields";
 import { SCOUT_SNAPSHOT_INPUT_FIELDS } from "@/features/locations/lib/location-fields";
 import { AuditEntityType } from "@/shared/audit/entity-types";
@@ -327,7 +328,7 @@ export async function updateLocationScoutSnapshotAction(
   if (!parsed.success) return { error: "Проверьте данные" };
   // Стоимость площадки — только с фин. правкой объектов, иначе присланное не пишется.
   const input = pickFinanceFields(
-    parsed.data,
+    clearEmptied(parsed.data, formData, ["address", "cost", "contactName", "contactPhone", "notes"]),
     SCOUT_SNAPSHOT_INPUT_FIELDS,
     gate.ctx.canFinanceWrite("locations"),
   );
@@ -337,19 +338,19 @@ export async function updateLocationScoutSnapshotAction(
 
   const next: LocationScoutSnapshot = {
     ...current,
-    address: input.address ?? current.address,
-    cost: input.cost ?? current.cost,
-    contactName: input.contactName ?? current.contactName,
-    contactPhone: input.contactPhone ?? current.contactPhone,
-    notes: input.notes ?? current.notes,
+    address: orCurrent(input.address, current.address),
+    cost: orCurrent(input.cost, current.cost),
+    contactName: orCurrent(input.contactName, current.contactName),
+    contactPhone: orCurrent(input.contactPhone, current.contactPhone),
+    notes: orCurrent(input.notes, current.notes),
   };
 
   await prisma.location.update({
     where: { id: locationId },
     data: {
       scoutSnapshot: next as unknown as Prisma.InputJsonValue,
-      address: next.address ?? undefined,
-      notes: next.notes ?? undefined,
+      address: input.address === null ? null : next.address ?? undefined,
+      notes: input.notes === null ? null : next.notes ?? undefined,
     },
   });
 
@@ -405,15 +406,21 @@ export async function updateLocationFinancialAction(
   });
   if (!existing) return { error: "Локация не найдена" };
 
-  const shiftRate = parsed.data.shiftRate ?? 0;
-  const taxPct = parsed.data.taxPercent ?? 0;
+  const data = clearEmptied(parsed.data, formData, [
+    "shiftRate",
+    "shiftHoursMin",
+    "unpaidOvertimeMin",
+    "taxPercent",
+  ]);
+  const shiftRate = data.shiftRate ?? 0;
+  const taxPct = data.taxPercent ?? 0;
   const overtime = parseOvertimeFormRows(formData, shiftRate, taxPct);
 
   await prisma.$transaction([
     prisma.locationOvertimeRate.deleteMany({ where: { locationId } }),
     prisma.location.update({
       where: { id: locationId },
-      data: parsed.data,
+      data,
     }),
     ...(overtime.length
       ? [

@@ -14,6 +14,7 @@ import {
   type CastingPersonDeleteCounts,
 } from "@/features/casting/lib/delete-person";
 import { CASTING_PERSON_INPUT_FIELDS } from "@/features/casting/lib/casting-person-fields";
+import { clearEmptied } from "@/shared/lib/cleared-fields";
 import { pickFinanceFields } from "@/shared/lib/finance-fields";
 import { deleteAuditions } from "@/features/auditions/lib/delete-auditions";
 import { approveCastingCandidate } from "@/features/preproduction/lib/approve-casting";
@@ -93,6 +94,23 @@ function parsePhysicalParams(formData: FormData) {
   return params;
 }
 
+const PERSON_CLEARABLE = [
+  "firstName",
+  "middleName",
+  "phone",
+  "email",
+  "agentName",
+  "agentPhone",
+  "agentEmail",
+  "proposedRate",
+  "proposedTerms",
+  "tags",
+  "notes",
+  "photoUrl",
+  "education",
+  "filmography",
+] as const;
+
 function personFromForm(formData: FormData) {
   const parsed = personSchema.safeParse({
     lastName: formData.get("lastName"),
@@ -119,7 +137,7 @@ function personFromForm(formData: FormData) {
     }
     return { error: "Проверьте данные кандидата" as const };
   }
-  const { birthDate: birthRaw, ...rest } = parsed.data;
+  const { birthDate: birthRaw, ...rest } = clearEmptied(parsed.data, formData, PERSON_CLEARABLE);
   return {
     data: {
       ...rest,

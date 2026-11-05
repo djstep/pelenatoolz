@@ -8,7 +8,7 @@
     "vercel-build": "prisma generate && next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --import tsx --test \"src/**/*.test.ts\"",
+    "test": "node --import tsx --experimental-test-module-mocks --test \"src/**/*.test.ts\"",
     "e2e": "tsx scripts/e2e-seed.ts && playwright test",
     "e2e:reset": "tsx scripts/e2e-seed.ts --reset",
     "user:reset-password": "tsx scripts/reset-password.ts",

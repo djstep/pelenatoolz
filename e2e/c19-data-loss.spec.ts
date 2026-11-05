@@ -205,7 +205,7 @@ test.describe("ввод не теряется при ошибке сервера
 test.describe("после успешного сохранения", () => {
   test.use({ storageState: storageStatePath("producer") });
 
-  test("настройки проекта: поле показывает то, что в базе", async ({ page }) => {
+  test("настройки проекта: стёр, сохранил, перезагрузил — пусто", async ({ page }) => {
     const before = await db.project.findUniqueOrThrow({ where: { id: ctx.projectId } });
     await db.project.update({ where: { id: ctx.projectId }, data: { description: "Описание из базы" } });
     try {
@@ -217,7 +217,12 @@ test.describe("после успешного сохранения", () => {
       await expect(page.getByText("Проект сохранён").first()).toBeVisible();
 
       const saved = await db.project.findUniqueOrThrow({ where: { id: ctx.projectId } });
-      await expect(page.locator("#description")).toHaveValue(saved.description ?? "");
+      expect(saved.description).toBeNull();
+      await expect(page.locator("#description")).toHaveValue("");
+
+      await page.reload();
+      await expect(page.locator("#name")).toBeVisible();
+      await expect(page.locator("#description")).toHaveValue("");
     } finally {
       await db.project.update({ where: { id: ctx.projectId }, data: { description: before.description } });
     }

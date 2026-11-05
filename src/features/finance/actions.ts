@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { prisma } from "@/shared/db/prisma";
+import { clearEmptied } from "@/shared/lib/cleared-fields";
 import { AuditEntityType } from "@/shared/audit/entity-types";
 import { recordAudit } from "@/shared/audit/with-audit";
 
@@ -150,7 +151,7 @@ export async function updateFinanceOpAction(
       companyId,
       counterpartyId,
       counterparty,
-      notes: parsed.data.notes,
+      notes: clearEmptied(parsed.data, formData, ["notes"]).notes,
       actorId: parsed.data.actorId || null,
     },
   });

@@ -10,6 +10,7 @@ import { SCOUT_CANDIDATE_INPUT_FIELDS } from "@/features/scout/lib/scout-fields"
 import { AuditEntityType } from "@/shared/audit/entity-types";
 import { recordAudit } from "@/shared/audit/with-audit";
 import { prisma } from "@/shared/db/prisma";
+import { clearEmptied } from "@/shared/lib/cleared-fields";
 import { pickFinanceFields } from "@/shared/lib/finance-fields";
 
 export type ScoutActionState = { error?: string; success?: string };
@@ -147,6 +148,12 @@ export async function updateScoutCandidateAction(
   if (!parsed.success) return { error: "Проверьте данные" };
   const photos = parsePhotoUrls(parsed.data.photoUrls);
   if (!photos) return { error: PHOTO_URL_ERROR };
+  // Стоимость отсеивается и здесь: форма без права могла прислать её пустой.
+  const cleared = pickFinanceFields(
+    clearEmptied(parsed.data, formData, ["address", "cost", "contactName", "contactPhone", "notes"]),
+    SCOUT_CANDIDATE_INPUT_FIELDS,
+    ctx.canFinanceWrite("locations"),
+  );
 
   if (!(await assertLocations(projectId, parsed.data.locationIds))) {
     return { error: "Одна или несколько локаций не найдены" };
@@ -158,11 +165,11 @@ export async function updateScoutCandidateAction(
       where: { id: candidateId },
       data: {
         title: parsed.data.title,
-        address: parsed.data.address,
-        cost: parsed.data.cost,
-        contactName: parsed.data.contactName,
-        contactPhone: parsed.data.contactPhone,
-        notes: parsed.data.notes,
+        address: cleared.address,
+        cost: cleared.cost,
+        contactName: cleared.contactName,
+        contactPhone: cleared.contactPhone,
+        notes: cleared.notes,
         photos,
         videos: parseMediaUrls(parsed.data.videoUrls),
         locationLinks: {
