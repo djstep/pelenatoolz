@@ -251,6 +251,39 @@ describe("Контрагенты в меню проекта", () => {
   });
 });
 
+describe("Локации в меню проекта", () => {
+  const groups = () => nav.filterNavGroups(nav.projectNavGroups, access(["script:read"]));
+
+  test("пункт в «Планировании», вкладки Локации и Скаут; Скаута в «Препродакшне» нет", () => {
+    const item = groups()
+      .find((group) => group.id === "planning")!
+      .items.find((entry) => entry.label === "Локации")!;
+    assert.equal(item.href, "/locations");
+    assert.deepEqual(item.tabs, [
+      { href: "/locations", label: "Локации" },
+      { href: "/preproduction/scout", label: "Скаут" },
+    ]);
+    const defs = nav.projectNavGroups.find((group) => group.id === "preproduction")!;
+    assert.ok(!JSON.stringify(defs).includes("/preproduction/scout"));
+  });
+
+  test("на вкладках и карточках активны «Локации» и подпись «Планирование»", () => {
+    const items = groups().flatMap((group) => group.items);
+    for (const rest of [
+      "/locations",
+      "/preproduction/scout",
+      "/locations/location",
+      "/preproduction/scout/candidate",
+    ]) {
+      assert.equal(findActiveNavHref(items, BASE, `${BASE}${rest}`), "/locations", rest);
+      assert.equal(activeSectionTitle(groups(), BASE, `${BASE}${rest}`), "Планирование", rest);
+    }
+    assert.equal(activeNavTabs(groups(), BASE, `${BASE}/preproduction/scout`)?.length, 2);
+    assert.equal(activeNavTabs(groups(), BASE, `${BASE}/locations/location`), null);
+    assert.equal(activeNavTabs(groups(), BASE, `${BASE}/preproduction/scout/candidate`), null);
+  });
+});
+
 describe("Кастинг в меню проекта", () => {
   const allItems = (granted: string[]) =>
     nav.filterNavGroups(nav.projectNavGroups, access(granted)).flatMap((group) => group.items);

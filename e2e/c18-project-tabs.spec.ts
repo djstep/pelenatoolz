@@ -24,7 +24,7 @@ async function expectMenuOnCasting(page: Page) {
     "true",
   );
   await expect(menuItem(page)).toHaveClass(/font-semibold/);
-  await expect(page.getByRole("link", { name: "Скаут", exact: true })).not.toHaveClass(/font-semibold/);
+  await expect(page.getByRole("link", { name: "Команда", exact: true })).not.toHaveClass(/font-semibold/);
 }
 
 async function expectCastingTab(page: Page) {
@@ -89,8 +89,8 @@ test.describe("вкладки Кастинга, продюсер", () => {
   });
 
   test("на странице без вкладок полосы нет", async ({ page }) => {
-    await page.goto(projectPath(ctx, "/preproduction/scout"));
-    await expect(page.locator("main").getByText("Препродакшн", { exact: true })).toBeVisible();
+    await page.goto(projectPath(ctx, "/crew"));
+    await expect(page.locator("main").getByText("Планирование", { exact: true })).toBeVisible();
     await expect(tabsBar(page)).toHaveCount(0);
   });
 
@@ -162,6 +162,24 @@ for (const role of ["producer", "nofin", "crewonly"] as const) {
       await expectTabs(page, ["Участники", "Роли и права"], "Роли и права");
       await expect(groupButton(page, "Настройки")).toHaveAttribute("aria-expanded", "true");
       await expect(page.getByRole("link", { name: "Роли и права" })).toHaveCount(1);
+    });
+  });
+}
+
+for (const role of ["producer", "nofin", "crewonly"] as const) {
+  test.describe(`вкладки Локаций, ${role}`, () => {
+    test.use({ storageState: storageStatePath(role) });
+
+    test("Локации · Скаут; пункт в «Планировании», Скаута в меню нет", async ({ page }) => {
+      await page.goto(projectPath(ctx, "/locations"));
+      await expectTabs(page, ["Локации", "Скаут"], "Локации");
+      await tab(page, "Скаут").click();
+      await expect(page).toHaveURL(new RegExp(`${projectPath(ctx, "/preproduction/scout")}$`));
+      await expectTabs(page, ["Локации", "Скаут"], "Скаут");
+      await expect(page.locator("main").getByText("Планирование", { exact: true })).toBeVisible();
+      const menu = page.getByRole("complementary");
+      await expect(menu.getByRole("link", { name: "Локации", exact: true })).toHaveClass(/font-semibold/);
+      await expect(menu.getByRole("link", { name: "Скаут" })).toHaveCount(0);
     });
   });
 }

@@ -85,7 +85,6 @@ export const projectNavGroups: NavGroupDef[] = [
           { href: "/preproduction/auditions", label: "Пробы", visible: anyOf("cast:read") },
         ],
       },
-      { href: "/preproduction/scout", label: "Скаут", visible: anyOf("script:read") },
     ],
   },
   {
@@ -94,7 +93,13 @@ export const projectNavGroups: NavGroupDef[] = [
     defaultOpen: true,
     items: [
       { href: "/libretto", label: "Сцены (либретто)", visible: anyOf("script:read") },
-      { href: "/locations", label: "Локации", visible: anyOf("script:read") },
+      {
+        label: "Локации",
+        tabs: [
+          { href: "/locations", label: "Локации", visible: anyOf("script:read") },
+          { href: "/preproduction/scout", label: "Скаут", visible: anyOf("script:read") },
+        ],
+      },
       { href: "/characters", label: "Персонажи", visible: anyOf("cast:read") },
       { href: "/schedule", label: "КПП", visible: anyOf("schedule:read") },
       {
