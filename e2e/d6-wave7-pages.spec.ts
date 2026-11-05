@@ -124,7 +124,7 @@ async function linksIn(page: Page, selector: string, base: string) {
   return hrefs.map((href) => inProject(href, base)).filter((href): href is string => href !== null);
 }
 
-for (const role of ["producer", "nofin", "crewonly"] as const satisfies readonly E2ERoleKey[]) {
+for (const role of ["producer", "nofin", "crewonly", "nocallsheet"] as const satisfies readonly E2ERoleKey[]) {
   test.describe(role, () => {
     test.use({ storageState: storageStatePath(role) });
 

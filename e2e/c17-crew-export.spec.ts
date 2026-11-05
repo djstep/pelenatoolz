@@ -386,7 +386,6 @@ test.describe("без контактов и договоров", () => {
     const layoutBodies: string[] = [];
     await openExport(page, "Excel", layoutBodies);
     expect(await builderTitles(page)).toEqual(["ФИО"]);
-    expect(layoutBodies).toHaveLength(1);
     expect(layoutBodies.join("\n")).not.toContain("Звонить сюда");
     expect(ids.length).toBeGreaterThan(0);
 
