@@ -575,6 +575,9 @@ test.describe("скрипт владельца: сброс пароля", () => 
     rmSync(e2eEnvDir, { recursive: true, force: true });
   });
 
+  /** Сервер базы e2e: скрипт печатает его, и только его, в строке «База:». */
+  const e2eHost = () => new URL(process.env.DATABASE_URL as string).hostname;
+
   function runScript(args: string[], options: { cwd?: string; env?: Record<string, string> } = {}) {
     return spawnSync(
       process.execPath,
@@ -640,7 +643,7 @@ test.describe("скрипт владельца: сброс пароля", () => 
     const email = await createTmpUser("script-env");
     const result = runScript([email], { env: { DATABASE_URL: FAKE_PROD, DIRECT_URL: FAKE_PROD } });
     expect(result.status).toBe(0);
-    expect(result.stdout).toContain("База: ep-wispy-unit");
+    expect(result.stdout).toContain(`База: ${e2eHost()}`);
   });
 
   test("прод в .env без --prod: отказ, даже если в оболочке другая база", () => {
@@ -717,7 +720,7 @@ test.describe("скрипт владельца: сброс пароля", () => 
       withEnvFile(fakeProdEnv, (cwd) => {
         const result = runScript([email, "--env-file", path.join(e2eEnvDir, ".env")], { cwd });
         expect(result.status).toBe(0);
-        expect(result.stdout).toContain("База: ep-wispy-unit");
+        expect(result.stdout).toContain(`База: ${e2eHost()}`);
       });
       const after = await db.user.findUniqueOrThrow({ where: { email } });
       expect(after.passwordHash).not.toBe(before.passwordHash);

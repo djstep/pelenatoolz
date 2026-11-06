@@ -5,7 +5,7 @@
  *   npx tsx scripts/e2e-seed.ts --reset    — удалить проект «E2E приёмка» e2e-продюсера и создать заново
  *
  * База — только `E2E_DATABASE_URL` и `E2E_DIRECT_URL` из `.env.e2e`: без них или на другой базе — отказ.
- * Вдобавок база должна быть в `SEED_DATABASE_ENDPOINTS`.
+ * Вдобавок база должна быть в `SEED_DATABASE_ENDPOINTS` или быть локальной `pelena_e2e`.
  * Пароли — случайные, в `.env.e2e` (в .gitignore); существующие не меняются. В вывод
  * пароли не попадают. Хеш — как в приложении (`bcrypt`, 12 раундов).
  */
@@ -35,7 +35,7 @@ import {
 } from "../src/features/roles/permissions-matrix";
 import { e2eDatabaseEnvProblem, resolveE2EDatabaseEnv } from "../src/shared/db/e2e-database-guard";
 import { prisma } from "../src/shared/db/prisma";
-import { seedDatabaseProblem } from "../src/shared/db/seed-database-guard";
+import { databaseHost, seedDatabaseProblem } from "../src/shared/db/seed-database-guard";
 import {
   DAYS,
   CREW,
@@ -59,8 +59,7 @@ function guardDatabase() {
     e2eDatabaseEnvProblem({ DATABASE_URL, DIRECT_URL }, resolveE2EDatabaseEnv()) ??
     seedDatabaseProblem({ DATABASE_URL, DIRECT_URL });
   if (problem) throw new Error(problem);
-  const host = (process.env.DATABASE_URL ?? "").match(/@([^/?]+)/)?.[1] ?? "?";
-  console.log(`База: ${host}`);
+  console.log(`База: ${databaseHost(process.env.DATABASE_URL ?? "") ?? "?"}`);
 }
 
 function gitignoreHasEnvFile() {

@@ -14,11 +14,32 @@ describe("сид: только перечисленные тестовые ба�
     assert.equal(seedDatabaseProblem({ DATABASE_URL: url(E2E_BRANCH), DIRECT_URL: url(E2E_BRANCH) }), null);
   });
 
+  test("локальные базы проекта: только по имени базы", () => {
+    const local = (host: string, name: string) => `postgresql://user:secret@${host}:5432/${name}`;
+    for (const host of ["localhost", "127.0.0.1"]) {
+      for (const name of ["pelena_dev", "pelena_e2e"]) {
+        assert.equal(seedDatabaseProblem({ DATABASE_URL: local(host, name), DIRECT_URL: local(host, name) }), null);
+      }
+    }
+    for (const value of [
+      local("localhost", "postgres"),
+      local("localhost", "pelena"),
+      local("localhost", "pelena_prod"),
+      local("localhost", "pelena_e2e_copy"),
+      `postgresql://user:secret@localhost:5432/`,
+      local("db.pelena.example.ru", "pelena_e2e"),
+      `${local("localhost", "pelena_e2e")}?host=db.pelena.example.ru`,
+      `${local("localhost", "pelena_e2e")}?hostaddr=10.0.0.1`,
+    ]) {
+      assert.notEqual(seedDatabaseProblem({ DATABASE_URL: value }), null, value);
+    }
+  });
+
   test("DIRECT_URL может не быть", () => {
     assert.equal(seedDatabaseProblem({ DATABASE_URL: url(DEV) }), null);
   });
 
-  test("прод, будущий VPS и локальная база — отказ с именем сервера", () => {
+  test("прод, будущий VPS и локальная база с чужим именем — отказ с именем сервера", () => {
     for (const host of [
       "ep-steep-sound-abc123.c-2.eu-west-2.aws.neon.tech",
       "db.pelena.example.ru",
