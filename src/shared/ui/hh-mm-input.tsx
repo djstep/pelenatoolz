@@ -49,14 +49,13 @@ function parseFromDigitStream(
 
   if (digits.length === 3) {
     const hh = Number(digits.slice(0, 2));
-    if (hh > maxHour) {
-      if (mode === "clock") {
-        const h = Number(digits[0]);
-        const m = Number(digits.slice(1).padEnd(2, "0"));
-        if (Number.isNaN(h) || Number.isNaN(m) || m >= 60) return undefined;
-        return finalize ? h * 60 + m : undefined;
-      }
-      return undefined;
+    // То же правило, что на экране (formatFromDigitStream): 430 — это 04:30, а не 43:00,
+    // и для длительности тоже. Больше 23 часов вводится четырьмя цифрами: 4300.
+    if (hh > 23) {
+      const h = Number(digits[0]);
+      const m = Number(digits.slice(1).padEnd(2, "0"));
+      if (Number.isNaN(h) || Number.isNaN(m) || m >= 60) return undefined;
+      return finalize ? h * 60 + m : undefined;
     }
     const h = hh;
     const m = Number(digits[2]!.padEnd(2, "0"));

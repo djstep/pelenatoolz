@@ -27,6 +27,7 @@ async function cleanup() {
   const ids = users.map((user) => user.id);
   if (ids.length === 0) return;
   await db.auditLog.deleteMany({ where: { userId: { in: ids } } });
+  await db.project.deleteMany({ where: { ownerUserId: { in: ids } } });
   await db.projectMembership.deleteMany({ where: { userId: { in: ids } } });
   await db.user.deleteMany({ where: { id: { in: ids } } });
 }
@@ -103,6 +104,44 @@ test.describe("закрытая регистрация", () => {
     await expect(page.getByRole("link", { name: "Создать проект" }).first()).toBeVisible();
     await page.goto("/ru/projects/new");
     await expect(page).toHaveURL(/\/projects\/new/);
+
+    // Выработка: на экране и в базе одно и то же значение, как ни вводить.
+    const output = page.locator("#plannedDailyOutputMin");
+    for (const typed of ["430", "0430", "04:30"]) {
+      await output.click();
+      await output.press("Delete");
+      await output.pressSequentially(typed, { delay: 40 });
+      await output.blur();
+      await expect(output, `ввод ${typed}`).toHaveValue("04:30");
+    }
+
+    await page.locator("#name").fill("Проверка выработки");
+    await page.getByRole("button", { name: "Создать", exact: false }).click();
+    await page.waitForURL(/\/projects\/c/);
+    const project = await db.project.findFirstOrThrow({
+      where: { name: "Проверка выработки", owner: { email } },
+      select: { plannedDailyOutputMin: true },
+    });
+    expect(Number(project.plannedDailyOutputMin)).toBe(270);
+    await context.close();
+  });
+
+  test("слишком большая выработка: отказ называет поле", async ({ browser }) => {
+    const { context, page } = await newPage(browser);
+    await page.goto("/ru/login");
+    await page.locator("#email").fill(E2E_REGISTRATION_EMAILS.listed);
+    await page.locator("#password").fill(PASSWORD);
+    await page.locator('form button[type="submit"]').click();
+    await page.waitForURL(/\/projects/);
+    await page.goto("/ru/projects/new");
+    await page.locator("#name").fill("Большая выработка");
+    const output = page.locator("#plannedDailyOutputMin");
+    await output.click();
+    await output.pressSequentially("4300", { delay: 40 });
+    await output.blur();
+    await expect(output).toHaveValue("43:00");
+    await page.getByRole("button", { name: "Создать", exact: false }).click();
+    await expect(page.getByText("Плановая выработка (до 24 часов)")).toBeVisible();
     await context.close();
   });
 
