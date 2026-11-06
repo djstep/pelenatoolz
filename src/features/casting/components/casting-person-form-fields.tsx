@@ -1,6 +1,7 @@
 "use client";
 
 import { birthDateKey } from "@/features/casting/lib/casting-person-fields";
+import { customPhysicalParamKeys } from "@/features/casting/lib/physical-params";
 import { useState } from "react";
 import {
   PHYSICAL_PARAM_LABELS,
@@ -170,6 +171,16 @@ export function PersonFormFields({
                 id={`phys_${key}`}
                 name={`phys_${key}`}
                 defaultValue={physical[key] ?? ""}
+              />
+            </div>
+          ))}
+          {customPhysicalParamKeys(physical).map((key, index) => (
+            <div key={key}>
+              <Label htmlFor={`phys_saved_${index}`}>{key}</Label>
+              <Input
+                id={`phys_saved_${index}`}
+                name={`phys_${key}`}
+                defaultValue={physical[key]}
               />
             </div>
           ))}

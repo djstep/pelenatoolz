@@ -199,6 +199,44 @@ test.describe("ввод не теряется при ошибке сервера
     }
   });
 
+  test("кандидат кастинга: свой физический параметр не пропадает, стёртый убирается", async ({ page }) => {
+    const before = await db.castingPerson.findUniqueOrThrow({ where: { id: ctx.castingPersonId } });
+    const params = async () =>
+      (await db.castingPerson.findUniqueOrThrow({ where: { id: ctx.castingPersonId } })).physicalParams;
+    const edit = async () => {
+      await page.goto(projectPath(ctx, `/preproduction/casting/${ctx.castingPersonId}`));
+      await page.waitForLoadState("networkidle");
+      await page.getByRole("button", { name: "Редактировать", exact: true }).click();
+    };
+    const save = async () => {
+      await page.getByRole("button", { name: "Сохранить", exact: true }).click();
+      await expect(page.getByText("Кандидат сохранён").first()).toBeVisible();
+      await expect(page.getByRole("button", { name: "Редактировать", exact: true })).toBeVisible();
+    };
+    await db.castingPerson.update({
+      where: { id: ctx.castingPersonId },
+      data: { physicalParams: { height: "180", тату: "дракон", custom_key: "тату", custom_value: "дракон" } },
+    });
+    try {
+      await edit();
+      await expect(page.locator('input[name="phys_тату"]')).toHaveValue("дракон");
+      await page.locator("#phys_custom_key").fill("шрам");
+      await page.locator("#phys_custom_value").fill("левая бровь");
+      await save();
+      expect(await params()).toEqual({ height: "180", тату: "дракон", шрам: "левая бровь" });
+
+      await edit();
+      await page.locator('input[name="phys_тату"]').fill("");
+      await save();
+      expect(await params()).toEqual({ height: "180", шрам: "левая бровь" });
+    } finally {
+      await db.castingPerson.update({
+        where: { id: ctx.castingPersonId },
+        data: { physicalParams: before.physicalParams ?? {} },
+      });
+    }
+  });
+
   test("новый проект: ошибка сохраняет ввод, уход спрашивает", async ({ page }) => {
     const before = await db.project.count();
     await page.goto("/ru/projects/new");

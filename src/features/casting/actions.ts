@@ -14,6 +14,7 @@ import {
   type CastingPersonDeleteCounts,
 } from "@/features/casting/lib/delete-person";
 import { CASTING_PERSON_INPUT_FIELDS } from "@/features/casting/lib/casting-person-fields";
+import { parsePhysicalParams } from "@/features/casting/lib/physical-params";
 import { clearEmptied } from "@/shared/lib/cleared-fields";
 import { pickFinanceFields } from "@/shared/lib/finance-fields";
 import { deleteAuditions } from "@/features/auditions/lib/delete-auditions";
@@ -80,20 +81,6 @@ function parseBirthDate(raw: string | undefined): Date | null {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
-function parsePhysicalParams(formData: FormData) {
-  const params: Record<string, string> = {};
-  for (const key of formData.keys()) {
-    if (!key.startsWith("phys_")) continue;
-    const paramKey = key.slice(5);
-    const val = String(formData.get(key) ?? "").trim();
-    if (val) params[paramKey] = val;
-  }
-  const customKey = String(formData.get("phys_custom_key") ?? "").trim();
-  const customVal = String(formData.get("phys_custom_value") ?? "").trim();
-  if (customKey && customVal) params[customKey] = customVal;
-  return params;
-}
-
 const PERSON_CLEARABLE = [
   "firstName",
   "middleName",
@@ -111,7 +98,7 @@ const PERSON_CLEARABLE = [
   "filmography",
 ] as const;
 
-function personFromForm(formData: FormData) {
+function personFromForm(formData: FormData, savedPhysicalParams?: unknown) {
   const parsed = personSchema.safeParse({
     lastName: formData.get("lastName"),
     firstName: formData.get("firstName") || undefined,
@@ -143,7 +130,7 @@ function personFromForm(formData: FormData) {
       ...rest,
       birthDate: parseBirthDate(birthRaw),
       skills: parseSkills(parsed.data.skills),
-      physicalParams: parsePhysicalParams(formData),
+      physicalParams: parsePhysicalParams(formData, savedPhysicalParams),
     },
   };
 }
@@ -235,7 +222,7 @@ export async function updateCastingPersonAction(
   });
   if (!existing) return { error: "Кандидат не найден" };
 
-  const parsed = personFromForm(formData);
+  const parsed = personFromForm(formData, existing.physicalParams);
   if ("error" in parsed) return { error: parsed.error };
 
   const { skills, physicalParams, ...personData } = castingPersonWritable(ctx, parsed.data);
