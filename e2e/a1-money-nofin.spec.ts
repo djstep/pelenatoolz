@@ -13,6 +13,8 @@ const ctx = e2eContext();
 const day1 = dayId(ctx, 1);
 
 test.use({ storageState: storageStatePath("nofin") });
+// Самый долгий файл группы `read`: тесты только читают и не зависят друг от друга.
+test.describe.configure({ mode: "parallel" });
 
 function expectNoLeaks(leaks: Leak[]) {
   expect(leaks, leaks.map((l) => `${l.where}: ${l.what} … ${l.around}`).join("\n")).toEqual([]);
@@ -178,17 +180,21 @@ test("без финансов — выгрузка КПП в Excel без ста
   expectNoLeaks((await sniffer.done()).flatMap((c) => findLeaks(c.url, c.body)));
 });
 
-test("без финансов — утверждённые версии дня 2 (лист и Excel из снимка) без ставок", async ({ page }) => {
-  const day2 = dayId(ctx, 2);
+test("без финансов — утверждённые версии (лист и Excel из снимка) без ставок", async ({ page }) => {
   await page.goto(projectPath(ctx));
-  // Версии появляются после сценария утверждения (c1-flows); до первого прогона их может не быть.
-  for (const version of [1, 2, 3]) {
-    const sheet = await page.request.get(`/api/projects/${ctx.projectId}/call-sheets/${day2}/sheet?version=${version}`);
-    if (sheet.status() === 404) continue;
-    expect(sheet.status()).toBe(200);
-    expectNoLeaks(findLeaks(`sheet v${version}`, await sheet.text()));
-    const xlsx = await page.request.get(`/api/projects/${ctx.projectId}/call-sheets/${day2}/xlsx?version=${version}`);
-    expect(xlsx.status()).toBe(200);
-    expectNoLeaks(findLeaks(`xlsx v${version}`, await workbookText(await xlsx.body())));
+  // День 1 — версия из сида. День 2 — из c1-flows: этот файл идёт раньше, её может ещё не быть.
+  let found = 0;
+  for (const day of [day1, dayId(ctx, 2)]) {
+    for (const version of [1, 2, 3]) {
+      const sheet = await page.request.get(`/api/projects/${ctx.projectId}/call-sheets/${day}/sheet?version=${version}`);
+      if (sheet.status() === 404) continue;
+      expect(sheet.status()).toBe(200);
+      found++;
+      expectNoLeaks(findLeaks(`sheet v${version}`, await sheet.text()));
+      const xlsx = await page.request.get(`/api/projects/${ctx.projectId}/call-sheets/${day}/xlsx?version=${version}`);
+      expect(xlsx.status()).toBe(200);
+      expectNoLeaks(findLeaks(`xlsx v${version}`, await workbookText(await xlsx.body())));
+    }
   }
+  expect(found, "сид даёт утверждённую версию дня 1").toBeGreaterThan(0);
 });

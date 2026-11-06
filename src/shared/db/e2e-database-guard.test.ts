@@ -90,6 +90,78 @@ describe("база e2e: e2eDatabaseProblem", () => {
   test("в .env нет базы: сравнивать не с чем, отказа нет", () => {
     assert.equal(e2eDatabaseProblem(e2eUrls, {}), null);
   });
+
+  describe("локальный Postgres", () => {
+    const local = (host: string, name: string) => `postgresql://user:secret@${host}:5432/${name}`;
+    const localE2E = { E2E_DATABASE_URL: local("localhost", "pelena_e2e"), E2E_DIRECT_URL: local("localhost", "pelena_e2e") };
+
+    test("своя база pelena_e2e: при Neon или локальной dev в .env", () => {
+      assert.equal(e2eDatabaseProblem(localE2E, appUrls), null);
+      assert.equal(e2eDatabaseProblem(localE2E, { DATABASE_URL: local("localhost", "pelena_dev") }), null);
+      assert.equal(
+        e2eDatabaseProblem(
+          { E2E_DATABASE_URL: local("127.0.0.1", "pelena_e2e"), E2E_DIRECT_URL: local("127.0.0.1", "pelena_e2e") },
+          appUrls,
+        ),
+        null,
+      );
+    });
+
+    test("другая база на этой машине, в том числе dev: отказ", () => {
+      for (const name of ["pelena_dev", "postgres", "pelena_prod", "pelena_e2e_copy", "PELENA_E2E"]) {
+        const problem = e2eDatabaseProblem({ ...localE2E, E2E_DIRECT_URL: local("localhost", name) }, appUrls);
+        assert.ok(problem?.includes("не в списке баз e2e"), name);
+      }
+    });
+
+    test("параметр подменяет сервер: отказ", () => {
+      for (const param of ["host=db.pelena.example.ru", "hostaddr=10.0.0.1"]) {
+        const value = `${local("localhost", "pelena_e2e")}?${param}`;
+        const problem = e2eDatabaseProblem({ ...localE2E, E2E_DATABASE_URL: value }, appUrls);
+        assert.ok(problem?.includes("не в списке баз e2e"), param);
+      }
+    });
+
+    test("та же база в .env: отказ при другом написании адреса", () => {
+      for (const value of [
+        local("localhost", "pelena_e2e"),
+        local("127.0.0.1", "pelena_e2e"),
+        local("LOCALHOST", "pelena_e2e"),
+        `postgresql://other:pass@localhost:5433/pelena_e2e?schema=public`,
+        local("localhost", "pelena%5Fe2e"),
+        local("[::1]", "pelena_e2e"),
+        local("127.0.0.2", "pelena_e2e"),
+        local("my-computer", "pelena_e2e"),
+        local("localhost", "pelena_e2e/"),
+        `${local("other", "pelena_e2e")}?host=localhost`,
+      ]) {
+        const problem = e2eDatabaseProblem(localE2E, { DIRECT_URL: value });
+        assert.ok(problem?.includes("совпадает с DIRECT_URL"), value);
+      }
+    });
+
+    test("адрес через [::1] и большие буквы в имени сервера", () => {
+      const ipv6 = local("[::1]", "pelena_e2e");
+      const problem = e2eDatabaseProblem({ E2E_DATABASE_URL: ipv6, E2E_DIRECT_URL: ipv6 }, appUrls);
+      assert.ok(problem?.includes("не в списке баз e2e"), problem ?? "нет отказа");
+      const upper = local("LOCALHOST", "pelena_e2e");
+      assert.equal(e2eDatabaseProblem({ E2E_DATABASE_URL: upper, E2E_DIRECT_URL: upper }, appUrls), null);
+    });
+
+    test("две строки .env.e2e ведут в разные разрешённые базы: отказ", () => {
+      for (const urls of [
+        { E2E_DATABASE_URL: local("localhost", "pelena_e2e"), E2E_DIRECT_URL: url(E2E) },
+        { E2E_DATABASE_URL: url(E2E_POOLER), E2E_DIRECT_URL: local("localhost", "pelena_e2e") },
+      ]) {
+        const problem = e2eDatabaseProblem(urls, appUrls);
+        assert.ok(problem?.includes("ведут в разные базы"), problem ?? "нет отказа");
+      }
+    });
+
+    test("прямой адрес локальной базы подходит для миграций", () => {
+      assert.equal(e2eDirectUrlProblem(local("localhost", "pelena_e2e")), null);
+    });
+  });
 });
 
 describe("база e2e: e2ePrismaArgs", () => {

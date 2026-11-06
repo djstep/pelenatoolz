@@ -5,12 +5,13 @@
  *   npx tsx scripts/e2e-seed.ts --reset    — удалить проект «E2E приёмка» e2e-продюсера и создать заново
  *
  * База — только `E2E_DATABASE_URL` и `E2E_DIRECT_URL` из `.env.e2e`: без них или на другой базе — отказ.
- * Вдобавок база должна быть в `SEED_DATABASE_ENDPOINTS`.
+ * Вдобавок база должна быть в `SEED_DATABASE_ENDPOINTS` или быть локальной `pelena_e2e`.
  * Пароли — случайные, в `.env.e2e` (в .gitignore); существующие не меняются. В вывод
  * пароли не попадают. Хеш — как в приложении (`bcrypt`, 12 раундов).
  */
 import "../e2e/helpers/use-e2e-database";
 import "dotenv/config";
+import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import path from "node:path";
@@ -34,7 +35,7 @@ import {
 } from "../src/features/roles/permissions-matrix";
 import { e2eDatabaseEnvProblem, resolveE2EDatabaseEnv } from "../src/shared/db/e2e-database-guard";
 import { prisma } from "../src/shared/db/prisma";
-import { seedDatabaseProblem } from "../src/shared/db/seed-database-guard";
+import { databaseHost, seedDatabaseProblem } from "../src/shared/db/seed-database-guard";
 import {
   DAYS,
   CREW,
@@ -51,6 +52,8 @@ import {
 
 const ENV_FILE = path.join(process.cwd(), ".env.e2e");
 const ROLE_KEYS = Object.keys(E2E_ROLES) as E2ERoleKey[];
+const FOREIGN_OWNER_EMAIL = "e2e-foreign-owner@pelena.test";
+const FOREIGN_PROJECT_NAME = "E2E чужой проект";
 
 function guardDatabase() {
   const { DATABASE_URL, DIRECT_URL } = process.env;
@@ -58,8 +61,7 @@ function guardDatabase() {
     e2eDatabaseEnvProblem({ DATABASE_URL, DIRECT_URL }, resolveE2EDatabaseEnv()) ??
     seedDatabaseProblem({ DATABASE_URL, DIRECT_URL });
   if (problem) throw new Error(problem);
-  const host = (process.env.DATABASE_URL ?? "").match(/@([^/?]+)/)?.[1] ?? "?";
-  console.log(`База: ${host}`);
+  console.log(`База: ${databaseHost(process.env.DATABASE_URL ?? "") ?? "?"}`);
 }
 
 function gitignoreHasEnvFile() {
@@ -885,6 +887,52 @@ async function ensureSeedCrewRoles(projectId: string, crewOnlyUserId: string) {
   }
 }
 
+/**
+ * Утверждённая версия вызывного дня 1: без неё файлы Диска зависели бы от утверждения в `c1-flows`.
+ * Снимок собирает настоящий код сайта, поэтому отдельным процессом: он отключает защиту `server-only`.
+ * Повторный запуск ничего не добавляет.
+ */
+async function ensureSeedApprovedCallSheet(projectId: string, producerId: string) {
+  const day = await prisma.shootDay.findFirstOrThrow({
+    where: { projectId, dayNumber: 1 },
+    select: { id: true, callSheet: { select: { approvedVersions: { select: { id: true }, take: 1 } } } },
+  });
+  if (day.callSheet?.approvedVersions.length) return;
+  const helper = path.join(process.cwd(), "e2e/helpers/seed-approved-call-sheet.ts");
+  const result = spawnSync(
+    process.execPath,
+    ["--import", "tsx", helper, projectId, day.id, producerId],
+    { stdio: "inherit" },
+  );
+  if (result.status !== 0) throw new Error("Сид остановлен: не удалось утвердить вызывной дня 1");
+}
+
+/**
+ * Чужой проект для `a2`: ни один тестовый пользователь в нём не состоит. Без него на новой базе
+ * проверка доступа молча пропускалась бы. Под его владельцем никто не входит: пароль случайный и
+ * нигде не хранится. Повторный запуск ничего не добавляет.
+ */
+async function ensureSeedForeignProject() {
+  const owner = await prisma.user.upsert({
+    where: { email: FOREIGN_OWNER_EMAIL },
+    create: {
+      email: FOREIGN_OWNER_EMAIL,
+      name: "E2E Владелец чужого проекта",
+      passwordHash: await bcrypt.hash(randomBytes(32).toString("hex"), 12),
+    },
+    update: {},
+    select: { id: true },
+  });
+  const exists = await prisma.project.findFirst({
+    where: { name: FOREIGN_PROJECT_NAME, ownerUserId: owner.id },
+    select: { id: true },
+  });
+  if (exists) return;
+  await prisma.project.create({
+    data: { name: FOREIGN_PROJECT_NAME, type: "FEATURE", createdById: owner.id, ownerUserId: owner.id },
+  });
+}
+
 /** Договоры с людьми и команда для экрана /crew. Повторный запуск ничего не добавляет. */
 async function ensureSeedCrew(projectId: string, producerId: string) {
   const company = await prisma.company.findFirstOrThrow({
@@ -969,6 +1017,7 @@ async function main() {
   const passwords = ensurePasswords();
   const users = await upsertUsers(passwords);
   console.log("Пользователи: e2e-producer, e2e-nofin, e2e-nocallsheet, e2e-crewonly — готовы");
+  await ensureSeedForeignProject();
 
   const existing = await prisma.project.findMany({
     where: { name: E2E_PROJECT_NAME, ownerUserId: users.producer },
@@ -982,6 +1031,7 @@ async function main() {
       await ensureSeedCards(id, users.producer);
       await ensureSeedCrewRoles(id, users.crewonly);
       await ensureSeedCrew(id, users.producer);
+      await ensureSeedApprovedCallSheet(id, users.producer);
     }
     return;
   }
@@ -996,6 +1046,7 @@ async function main() {
   await ensureSeedBudget(projectId, users.producer);
   await ensureSeedCards(projectId, users.producer);
   await ensureSeedCrew(projectId, users.producer);
+  await ensureSeedApprovedCallSheet(projectId, users.producer);
 }
 
 main()
