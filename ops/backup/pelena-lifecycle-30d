@@ -43,10 +43,12 @@ python3 -c "import sys,xml.dom.minidom as m;m.parse(sys.argv[1])" "$WD/rules.xml
 
 read -r -p "Блокировка в панели уже 30 дней? Введите yes: " OK
 [ "$OK" = yes ] || { echo "Отменено, ничего не изменено."; exit 1; }
-read -r -p "Временный Key ID: " KID
-read -r -s -p "Временный Key Secret (символы на экране не появятся): " KSEC
-echo
-[ -n "$KID" ] && [ -n "$KSEC" ] || { echo "Пустое значение, ничего не изменено."; exit 1; }
+# shellcheck source=/dev/null
+source /usr/local/lib/pelena-backup/secret-input.sh
+ask_line KID "Временный Key ID: "
+require_format "$KID" "$S3_VALUE_RE" "Key ID" "от 8 символов без пробелов"
+ask_secret KSEC "Временный Key Secret (символы на экране не появятся): "
+require_format "$KSEC" "$S3_VALUE_RE" "Key Secret" "от 8 символов без пробелов"
 ESC=${KSEC//\\/\\\\}; ESC=${ESC//\"/\\\"}
 unset KSEC
 cfg() { printf 'user = "%s.%s:%s"\naws-sigv4 = "aws:amz:ru-central-1:s3"\nsilent\nmax-time = 30\n' "$TENANT" "$KID" "$ESC"; }

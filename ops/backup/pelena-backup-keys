@@ -6,11 +6,13 @@ TENANT=c2022d9f-bbb1-42d4-9adb-97fdf8b45cbc
 CONF=/etc/pelena-backup/rclone.conf
 umask 077
 install -d -m 700 /etc/pelena-backup
+# shellcheck source=/dev/null
+source /usr/local/lib/pelena-backup/secret-input.sh
 
-read -r -p "Key ID: " KID
-read -r -s -p "Key Secret (символы на экране не появятся): " KSEC
-echo
-[ -n "$KID" ] && [ -n "$KSEC" ] || { echo "Пустое значение, ничего не сохранено"; exit 1; }
+ask_line KID "Key ID: "
+require_format "$KID" "$S3_VALUE_RE" "Key ID" "от 8 символов без пробелов"
+ask_secret KSEC "Key Secret (символы на экране не появятся): "
+require_format "$KSEC" "$S3_VALUE_RE" "Key Secret" "от 8 символов без пробелов"
 
 TMP=$(mktemp /etc/pelena-backup/rclone.XXXXXX)
 trap 'rm -f "$TMP"' EXIT

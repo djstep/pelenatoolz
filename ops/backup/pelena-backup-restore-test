@@ -8,15 +8,24 @@ CONF=/etc/pelena-backup/rclone.conf
 PROJECT=/home/pelena_admin/pelena
 NAME=pelena-restore-test
 umask 077
+# shellcheck source=/dev/null
+source /usr/local/lib/pelena-backup/secret-input.sh
 
 WD=$(mktemp -d /dev/shm/pelena-restore.XXXXXX)
 cleanup() { docker rm -f "$NAME" > /dev/null 2>&1 || true; rm -rf "$WD"; }
 trap cleanup EXIT
 
-read -r -s -p "Закрытый ключ age (символы не появятся): " AGE_KEY; echo
-read -r -s -p "Пароль файлов rclone: " CRYPT_PASS; echo
-read -r -s -p "Соль файлов rclone: " CRYPT_SALT; echo
-case "$AGE_KEY" in AGE-SECRET-KEY-*) ;; *) echo "Это не ключ age"; exit 1 ;; esac
+ask_secret AGE_KEY "Закрытый ключ age (символы не появятся): "
+require_format "$AGE_KEY" "$AGE_KEY_RE" "Закрытый ключ age" "AGE-SECRET-KEY-1 и ещё 58 символов, всего 74"
+if [ "$(printf '%s\n' "$AGE_KEY" | age-keygen -y)" != "$(cat /etc/pelena-backup/age.pub)" ]; then
+  echo "Закрытый ключ age правильного вида, но не подходит к ключу шифрования этого сервера."
+  exit 1
+fi
+echo "Ключ age подходит."
+ask_secret CRYPT_PASS "Пароль файлов rclone (символы не появятся): "
+require_format "$CRYPT_PASS" "$HEX64_RE" "Пароль файлов" "64 символа: цифры и буквы a-f"
+ask_secret CRYPT_SALT "Соль файлов rclone (символы не появятся): "
+require_format "$CRYPT_SALT" "$HEX64_RE" "Соль файлов" "64 символа: цифры и буквы a-f"
 
 # Только раздел хранилища из настроек сервера плюс шифрование с введёнными значениями.
 sed -n '/^\[cloud\]/,/^$/p' "$CONF" > "$WD/rclone.conf"
@@ -52,9 +61,12 @@ done
 docker exec "$NAME" pg_isready -q -h 127.0.0.1 -U postgres
 docker exec "$NAME" createdb -h 127.0.0.1 -U postgres restore_check
 
-age -d -i <(printf '%s\n' "$AGE_KEY") "$WD/latest.age" \
+if ! age -d -i <(printf '%s\n' "$AGE_KEY") "$WD/latest.age" \
   | docker exec -i "$NAME" pg_restore -h 127.0.0.1 -U postgres -d restore_check \
-      --no-owner --no-privileges --exit-on-error
+      --no-owner --no-privileges --exit-on-error; then
+  echo "Копию не удалось расшифровать или восстановить. Рабочая база не менялась."
+  exit 1
+fi
 unset AGE_KEY
 echo "Дамп расшифрован и восстановлен"
 
@@ -72,10 +84,18 @@ fi
 
 echo "== файлы"
 for DIR in storage uploads; do
-  COUNT=$(R lsf -R "check:$DIR" --files-only | grep -c . || true)
-  echo "$DIR: в копии файлов $COUNT, на диске $(find "/mnt/data/$DIR" -type f | wc -l)"
+  COUNT=$(R lsf -R "check:$DIR" --files-only 2>/dev/null | grep -c . || true)
+  ONDISK=$(find "/mnt/data/$DIR" -type f | wc -l)
+  echo "$DIR: в копии файлов $COUNT, на диске $ONDISK"
+  if [ "$COUNT" -eq 0 ] && [ "$ONDISK" -gt 0 ]; then
+    echo "Файлы в копии не прочитаны: пароль или соль не подходят, либо копии файлов нет."
+    exit 1
+  fi
   if [ "$COUNT" -gt 0 ]; then
-    R cryptcheck "/mnt/data/$DIR" "check:$DIR" --one-way
+    if ! R cryptcheck "/mnt/data/$DIR" "check:$DIR" --one-way; then
+      echo "Файлы $DIR не совпали с копией: пароль или соль не подходят, либо файлы изменились."
+      exit 1
+    fi
     FIRST=$(R lsf -R "check:$DIR" --files-only | head -1)
     echo "Расшифрован файл, байт: $(R cat "check:$DIR/$FIRST" | wc -c)"
   fi
