@@ -1,5 +1,6 @@
 "use client";
 
+import { birthDateKey } from "@/features/casting/lib/casting-person-fields";
 import { useState } from "react";
 import {
   PHYSICAL_PARAM_LABELS,
@@ -104,7 +105,7 @@ export function PersonFormFields({
             type="date"
             defaultValue={
               person?.birthDate
-                ? String(person.birthDate).slice(0, 10)
+                ? birthDateKey(person.birthDate)
                 : ""
             }
           />

@@ -1,3 +1,8 @@
+/** Дата рождения для поля и показа: с сервера приходит Date, а в поле нужно ГГГГ-ММ-ДД. */
+export function birthDateKey(value: Date | string) {
+  return (value instanceof Date ? value.toISOString() : value).slice(0, 10);
+}
+
 /**
  * Кандидат кастинга в браузере (`pickFinanceFields`). Ставка и условия — фин. условия актёров
  * (`canFinanceRead("actors")`); телефон, почта и контакты агента — по праву просмотра кастинга.

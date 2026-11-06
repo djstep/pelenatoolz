@@ -23,7 +23,7 @@ import {
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { prisma } from "@/shared/db/prisma";
 import { impactLines } from "@/shared/lib/plural";
-import { clearEmptied, orCurrent } from "@/shared/lib/cleared-fields";
+import { changedFrom, clearEmptied, orCurrent } from "@/shared/lib/cleared-fields";
 import { pickFinanceFields } from "@/shared/lib/finance-fields";
 import { SCOUT_SNAPSHOT_INPUT_FIELDS } from "@/features/locations/lib/location-fields";
 import { AuditEntityType } from "@/shared/audit/entity-types";
@@ -349,8 +349,8 @@ export async function updateLocationScoutSnapshotAction(
     where: { id: locationId },
     data: {
       scoutSnapshot: next as unknown as Prisma.InputJsonValue,
-      address: input.address === null ? null : next.address ?? undefined,
-      notes: input.notes === null ? null : next.notes ?? undefined,
+      address: changedFrom(input.address, current.address) ? input.address : undefined,
+      notes: changedFrom(input.notes, current.notes) ? input.notes : undefined,
     },
   });
 

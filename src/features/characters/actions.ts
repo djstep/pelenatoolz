@@ -9,7 +9,7 @@ import { AuditEntityType } from "@/shared/audit/entity-types";
 import { auditMutation } from "@/shared/audit/with-audit";
 import { prisma } from "@/shared/db/prisma";
 import { impactLines } from "@/shared/lib/plural";
-import { clearEmptied, orCurrent } from "@/shared/lib/cleared-fields";
+import { changedFrom, clearEmptied, orCurrent } from "@/shared/lib/cleared-fields";
 import { pickFinanceFields } from "@/shared/lib/finance-fields";
 import { CAST_SNAPSHOT_INPUT_FIELDS } from "@/features/characters/lib/character-fields";
 
@@ -154,13 +154,14 @@ export async function updateCharacterCastSnapshotAction(
       const actor = await prisma.actor.findFirst({
         where: { projectId, characterId },
       });
-      if (actor && input.shiftRate !== undefined) {
+      const rateChanged = changedFrom(input.shiftRate, current.shiftRate);
+      const termsChanged = changedFrom(input.proposedTerms, current.proposedTerms);
+      if (actor && (rateChanged || termsChanged)) {
         await prisma.actor.update({
           where: { id: actor.id },
           data: {
-            shiftRate: input.shiftRate,
-            specialConditions:
-              input.proposedTerms === null ? null : next.proposedTerms ?? actor.specialConditions,
+            ...(rateChanged ? { shiftRate: input.shiftRate } : {}),
+            ...(termsChanged ? { specialConditions: input.proposedTerms } : {}),
           },
         });
       }

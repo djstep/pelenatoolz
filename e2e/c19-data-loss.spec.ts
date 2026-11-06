@@ -176,6 +176,29 @@ test.describe("ввод не теряется при ошибке сервера
     expect(person.notes).not.toBe(notes);
   });
 
+  test("кандидат кастинга: дата рождения видна в поле и не стирается при сохранении", async ({ page }) => {
+    const before = await db.castingPerson.findUniqueOrThrow({ where: { id: ctx.castingPersonId } });
+    await db.castingPerson.update({
+      where: { id: ctx.castingPersonId },
+      data: { birthDate: new Date("1990-03-03T00:00:00.000Z") },
+    });
+    try {
+      await page.goto(projectPath(ctx, `/preproduction/casting/${ctx.castingPersonId}`));
+      await page.waitForLoadState("networkidle");
+      await page.getByRole("button", { name: "Редактировать", exact: true }).click();
+      await expect(page.locator('input[name="birthDate"]')).toHaveValue("1990-03-03");
+      await page.getByRole("button", { name: "Сохранить", exact: true }).click();
+      await expect(page.getByText("Кандидат сохранён").first()).toBeVisible();
+      const saved = await db.castingPerson.findUniqueOrThrow({ where: { id: ctx.castingPersonId } });
+      expect(saved.birthDate?.toISOString().slice(0, 10)).toBe("1990-03-03");
+    } finally {
+      await db.castingPerson.update({
+        where: { id: ctx.castingPersonId },
+        data: { birthDate: before.birthDate },
+      });
+    }
+  });
+
   test("новый проект: ошибка сохраняет ввод, уход спрашивает", async ({ page }) => {
     const before = await db.project.count();
     await page.goto("/ru/projects/new");

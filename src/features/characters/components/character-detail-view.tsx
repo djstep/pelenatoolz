@@ -324,6 +324,7 @@ export function CharacterDetailView({
                     name="shiftRate"
                     type="number"
                     min={0}
+                    step="0.01"
                     defaultValue={snapshot.shiftRate ?? undefined}
                     disabled={!canWriteCast || !canFinanceWrite}
                   />
@@ -405,7 +406,7 @@ function CharacterPayrollSection({
   useActionToast(state);
   const { ref: feeFormRef, markClean: markFeeClean } = useFormGuard(
     true,
-    undefined,
+    String(actor.shiftRate),
     state,
   );
   useActionSuccess(state, markFeeClean);
@@ -425,6 +426,8 @@ function CharacterPayrollSection({
             <input type="hidden" name="agentPhone" value={actor.agentPhone ?? ""} />
             <input type="hidden" name="agentEmail" value={actor.agentEmail ?? ""} />
             <ActorPayrollBlock
+              // Снимок может изменить ставку актёра, а блок держит её в своём состоянии.
+              key={String(actor.shiftRate)}
               title="Гонорар и переработки"
               shiftRate={actor.shiftRate ? Number(actor.shiftRate) : 0}
               taxPercent={actor.taxPercent ? Number(actor.taxPercent) : 0}

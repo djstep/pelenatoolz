@@ -59,7 +59,7 @@ export function ShootDayForm({
   const [state, action, pending] = useSafeActionState(bound, initial);
   // После добавления поля возвращаются к началу: новый номер дня и статус по умолчанию.
   const [formKey, setFormKey] = useState(0);
-  const { ref: formRef } = useFormGuard(canWrite, undefined, state);
+  const { ref: formRef } = useFormGuard(canWrite, nextDayNumber, state);
   useActionSuccess(state, () => setFormKey((key) => key + 1));
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");

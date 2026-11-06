@@ -246,6 +246,7 @@ export function LocationDetailView({
                   name="cost"
                   type="number"
                   min={0}
+                  step="0.01"
                   defaultValue={scoutSnapshot.cost ?? undefined}
                   disabled={!canWrite || !canFinanceWrite}
                 />

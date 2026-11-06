@@ -234,6 +234,63 @@ describe("персонаж", () => {
   });
 });
 
+describe("персонаж: снимок и актёр расходятся", () => {
+  const bare = { lastName: "Иванов", riderNotes: "Райдер", shiftRate: null, proposedTerms: null };
+
+  it("в снимке ставки нет, у актёра есть: правка райдера актёра не трогает", async () => {
+    const { updateCharacterCastSnapshotAction } = await import("@/features/characters/actions");
+    rows.character = { id: ID, castSnapshot: bare };
+    rows.actor = { id: "actor", shiftRate: 5000, specialConditions: "Условия актёра" };
+    await updateCharacterCastSnapshotAction(
+      PROJECT,
+      ID,
+      {},
+      form({ riderNotes: "Новый райдер", shiftRate: "", proposedTerms: "", skills: "" }),
+    );
+    assert.equal((written("character").castSnapshot as { riderNotes: string }).riderNotes, "Новый райдер");
+    assert.equal(calls.filter((c) => c.model === "actor").length, 0);
+  });
+
+  it("новая ставка при пустых условиях: условия актёра остаются", async () => {
+    const { updateCharacterCastSnapshotAction } = await import("@/features/characters/actions");
+    rows.character = { id: ID, castSnapshot: bare };
+    rows.actor = { id: "actor", specialConditions: "Условия актёра" };
+    await updateCharacterCastSnapshotAction(
+      PROJECT,
+      ID,
+      {},
+      form({ riderNotes: "Райдер", shiftRate: "7000", proposedTerms: "", skills: "" }),
+    );
+    assert.deepEqual(written("actor"), { shiftRate: 7000 });
+  });
+
+  it("ставка у актёра изменена в гонораре: правка райдера её не переписывает", async () => {
+    const { updateCharacterCastSnapshotAction } = await import("@/features/characters/actions");
+    rows.character = { id: ID, castSnapshot: { ...bare, shiftRate: 1000, proposedTerms: "Условия" } };
+    rows.actor = { id: "actor", shiftRate: 5000, specialConditions: "Другие" };
+    await updateCharacterCastSnapshotAction(
+      PROJECT,
+      ID,
+      {},
+      form({ riderNotes: "Новый", shiftRate: "1000", proposedTerms: "Условия", skills: "" }),
+    );
+    assert.equal(calls.filter((c) => c.model === "actor").length, 0);
+  });
+
+  it("правка условий без ставки доходит до актёра", async () => {
+    const { updateCharacterCastSnapshotAction } = await import("@/features/characters/actions");
+    rows.character = { id: ID, castSnapshot: bare };
+    rows.actor = { id: "actor", specialConditions: "Старые" };
+    await updateCharacterCastSnapshotAction(
+      PROJECT,
+      ID,
+      {},
+      form({ riderNotes: "Райдер", shiftRate: "", proposedTerms: "Новые", skills: "" }),
+    );
+    assert.deepEqual(written("actor"), { specialConditions: "Новые" });
+  });
+});
+
 describe("локация", () => {
   const scoutSnapshot = {
     title: "Дом",
@@ -266,6 +323,35 @@ describe("локация", () => {
     const next = written("location").scoutSnapshot as Record<string, unknown>;
     assert.equal(next.cost, 500);
     assert.equal(next.address, null);
+  });
+
+  it("в снимке адреса нет, у локации есть: правка телефона их не трогает", async () => {
+    const { updateLocationScoutSnapshotAction } = await import("@/features/locations/actions");
+    rows.location = { id: ID, scoutSnapshot: { title: "Дом", address: null, notes: null } };
+    await updateLocationScoutSnapshotAction(
+      PROJECT,
+      ID,
+      {},
+      form({ ...emptySnapshot, contactPhone: "555" }),
+    );
+    const data = written("location");
+    assert.equal(data.address, undefined);
+    assert.equal(data.notes, undefined);
+  });
+
+  it("адрес локации изменён в карточке: правка телефона его не переписывает", async () => {
+    const { updateLocationScoutSnapshotAction } = await import("@/features/locations/actions");
+    rows.location = { id: ID, scoutSnapshot };
+    await updateLocationScoutSnapshotAction(
+      PROJECT,
+      ID,
+      {},
+      form({ address: "Адрес", cost: "500", contactName: "Пётр", contactPhone: "555", notes: "Заметки" }),
+    );
+    const data = written("location");
+    assert.equal(data.address, undefined);
+    assert.equal(data.notes, undefined);
+    assert.equal((data.scoutSnapshot as { contactPhone: string }).contactPhone, "555");
   });
 
   it("финансовые условия", async () => {

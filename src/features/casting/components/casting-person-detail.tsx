@@ -1,5 +1,6 @@
 "use client";
 
+import { birthDateKey } from "@/features/casting/lib/casting-person-fields";
 import { useState, useTransition, type ReactNode } from "react";
 import { useSafeActionState } from "@/shared/ui/forms/use-safe-action-state";
 import type { CastingCandidateStatus } from "@prisma/client";
@@ -193,7 +194,7 @@ export function CastingPersonDetail({
           <p className="text-[var(--muted-fg)]">Дата рождения</p>
           <p>
             {person.birthDate
-              ? String(person.birthDate).slice(0, 10)
+              ? birthDateKey(person.birthDate)
               : "—"}
           </p>
         </div>
