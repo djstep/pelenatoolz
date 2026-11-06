@@ -90,10 +90,15 @@ echo "Код на сервере: $(sudo -u pelena_admin git -C "$PROJECT" log -
 echo "Что применится к копии при запуске (образ migrate):"
 # Адрес подменяется внутри контейнера, поэтому в команде и журнале пароля нет.
 # shellcheck disable=SC2016
-docker compose run --rm -T migrate sh -c \
+STATUS=$(docker compose run --rm -T migrate sh -c \
   'U="${DATABASE_URL%/pelena}/pelena_restore"; DATABASE_URL="$U" DIRECT_URL="$U" npx prisma migrate status' \
   < /dev/null 2>&1 | sed 's/\x1b\[[0-9;]*m//g' \
-  | grep -E '^[0-9]{14}_|up to date|have not yet|migrations found' | sed 's/^/  /' || true
+  | grep -E '^[0-9]{14}_|up to date|have not yet|migrations found' || true)
+if [ -z "$STATUS" ]; then
+  echo "Список миграций получить не удалось. Без него продолжать нельзя."
+  exit 1
+fi
+printf '%s\n' "$STATUS" | sed 's/^/  /'
 echo
 echo "Если восстановление из-за плохой миграции и она есть в списке выше, откажитесь:"
 echo "сначала верните код на прошлую версию и пересоберите образ. README, раздел про восстановление."
@@ -119,7 +124,19 @@ STATE=swapped
 echo "Базы поменялись именами."
 
 docker compose run --rm -T migrate < /dev/null 2>&1 | sed 's/\x1b\[[0-9;]*m//g' | grep -v 'npm notice' | tail -3
+docker compose exec -T db psql -U pelena -d pelena -X -q -v ON_ERROR_STOP=1 -f - \
+  < /usr/local/lib/pelena-backup/db-roles.sql
 docker compose up -d app
+# Эта страница читает базу: ответ значит, что сайт вошёл в неё под своей ролью.
+HEALTHY=0
+for _ in $(seq 1 30); do
+  if curl -s -m 5 http://127.0.0.1:3000/ru/invite/none | grep -q 'Приглашение недействительно'; then
+    HEALTHY=1
+    break
+  fi
+  sleep 2
+done
+[ "$HEALTHY" = 1 ] || { echo "Сайт не отвечает или не может войти в базу."; exit 1; }
 STATE=done
 echo "Готово: сайт запущен на восстановленной базе, старая лежит как $OLD."
 echo "Проверьте сайт. Как удалить старую базу или откатиться, написано в README."

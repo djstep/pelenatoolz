@@ -19,6 +19,7 @@
 ## Настройка нового сервера без копий
 
 `rclone` ставится с `rclone.org`, версия из Ubuntu устарела. Сумму пакета сверить с `SHA256SUMS`.
+База должна быть уже поднята: роли, пароли и миграции, как в следующем разделе, без шага восстановления.
 
 ```bash
 sudo apt-get install -y age
@@ -56,8 +57,9 @@ sudo rclone --config /etc/pelena-backup/rclone.conf copy files:storage /mnt/data
 
 База и запуск, из папки проекта:
 
-Пароли ролей новая база должна получить из `.env.admin` и `.env.prod`: их значения подставляются вручную,
-потому что база создаётся заново.
+Пароли ролей новая база получает из `.env.admin` и `.env.prod`: при запросе вставляются те же значения.
+Ошибка в пароле `pelena_owner` проявится на `migrate`, в пароле `pelena_app` — при запуске сайта.
+`roles.sql` выполняется дважды: первый раз создаёт роли, второй закрепляет права на таблицы после миграции.
 
 ```bash
 docker compose up -d db
@@ -65,12 +67,22 @@ docker compose exec -T db psql -U pelena -d pelena -X -q -v ON_ERROR_STOP=1 -f -
 docker compose exec db psql -U pelena -d postgres -c '\password pelena_owner'
 docker compose exec db psql -U pelena -d postgres -c '\password pelena_app'
 docker compose run --rm migrate
+docker compose exec -T db psql -U pelena -d pelena -X -q -v ON_ERROR_STOP=1 -f - < ops/db/roles.sql
+docker compose up -d app
 sudo pelena-backup-restore
 sudo systemctl enable --now pelena-backup.timer pelena-backup-check.timer pelena-backup-weekly.timer
 sudo pelena-backup-mail
 ```
 
 Если умер только HDD, сервер и ключи на месте: нужен только шаг с файлами.
+
+## Список адресов регистрации
+
+`REGISTRATION_ALLOWLIST` в `.env.prod`: адреса через запятую, точку с запятой или пробел, регистр не важен.
+После правки: `docker compose up -d app`.
+
+Письма-подтверждения нет: кто первым зарегистрирует адрес из списка, тот и получит право создавать проекты.
+Поэтому владелец адреса регистрируется сразу, а новый адрес добавляется в список только перед его регистрацией.
 
 ## Защита от пустого диска
 

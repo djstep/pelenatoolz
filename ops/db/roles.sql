@@ -26,7 +26,8 @@ BEGIN
     SELECT c.relname, c.relkind
     FROM pg_class c
     JOIN pg_namespace n ON n.oid = c.relnamespace
-    LEFT JOIN pg_depend d ON d.objid = c.oid AND d.deptype = 'i' AND c.relkind = 'S'
+    -- Последовательности столбцов переходят к новому владельцу вместе с таблицей.
+    LEFT JOIN pg_depend d ON d.objid = c.oid AND d.deptype IN ('i', 'a') AND c.relkind = 'S'
     WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p', 'v', 'm', 'S') AND d.objid IS NULL
   LOOP
     EXECUTE format(
@@ -61,6 +62,7 @@ BEGIN
 
   EXECUTE format('REVOKE ALL ON DATABASE %I FROM PUBLIC', current_database());
   EXECUTE format('GRANT CONNECT ON DATABASE %I TO pelena_owner, pelena_app', current_database());
+  REVOKE CONNECT ON DATABASE postgres FROM PUBLIC;
 END
 $roles$;
 
@@ -76,11 +78,15 @@ ALTER DEFAULT PRIVILEGES FOR ROLE pelena_owner IN SCHEMA public
 ALTER DEFAULT PRIVILEGES FOR ROLE pelena_owner IN SCHEMA public
   GRANT USAGE, SELECT ON SEQUENCES TO pelena_app;
 
--- История миграций сайту не нужна.
-DO $history$
+-- История миграций сайту не нужна. Журнал только дополняется: взлом сайта не должен стирать следы.
+-- На пустой базе этих таблиц ещё нет, поэтому после первой миграции файл выполняется ещё раз.
+DO $limits$
 BEGIN
   IF to_regclass('public._prisma_migrations') IS NOT NULL THEN
     REVOKE ALL ON TABLE public._prisma_migrations FROM pelena_app;
   END IF;
+  IF to_regclass('public."AuditLog"') IS NOT NULL THEN
+    REVOKE UPDATE, DELETE, TRUNCATE ON TABLE public."AuditLog" FROM pelena_app;
+  END IF;
 END
-$history$;
+$limits$;
