@@ -1,7 +1,10 @@
 import { randomBytes } from "node:crypto";
 import { passwordProblem } from "@/features/auth/lib/password-rules";
 
+/** Старый прод в Neon. */
 const PROD_HOST_MARK = "ep-steep-sound";
+/** Прод на сервере: база в Docker, имя службы из docker-compose.prod.yml. */
+const PROD_DOCKER_HOST = "db";
 
 export const USAGE = "Запуск: npm run user:reset-password -- <почта> [--env-file <файл>] [--prod]";
 
@@ -55,9 +58,9 @@ export function databaseProblem(
   const present = urls.filter((url): url is string => Boolean(url));
   const databaseUrl = urls[0];
   if (!databaseUrl) return `В файле ${envFile} нет DATABASE_URL: скрипт работает только с базой из этого файла`;
-  const isProd = present.some((url) => url.includes(PROD_HOST_MARK));
+  const isProd = present.some((url) => url.includes(PROD_HOST_MARK) || databaseHost(url) === PROD_DOCKER_HOST);
   if (isProd && !prodFlag) {
-    return `База из ${envFile} — прод (${PROD_HOST_MARK}…). Чтобы сбросить пароль на проде, добавьте флаг --prod`;
+    return `База из ${envFile} — прод. Чтобы сбросить пароль на проде, добавьте флаг --prod`;
   }
   if (!isProd && prodFlag) {
     return `Указан --prod, но база из ${envFile} не прод. Проверьте файл и уберите флаг`;
