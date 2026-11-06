@@ -1,5 +1,5 @@
 #!/bin/bash
-# Ставит команды копирования и расписание. Таймер включается отдельно, после создания ключей.
+# Ставит команды копирования и расписание. Таймеры включаются отдельно, после создания ключей.
 #   sudo bash ops/backup/install.sh
 set -euo pipefail
 [ "$(id -u)" = 0 ] || { echo "Запустите через sudo"; exit 1; }
@@ -8,10 +8,13 @@ DIR=$(cd "$(dirname "$0")" && pwd)
 install -d -m 755 -o root -g root /usr/local/lib/pelena-backup
 install -m 644 -o root -g root "$DIR/secret-input.sh" /usr/local/lib/pelena-backup/secret-input.sh
 
-for F in pelena-backup pelena-backup-init pelena-backup-keys pelena-backup-restore-test pelena-lifecycle-30d; do
+for F in pelena-backup pelena-backup-check pelena-backup-init pelena-backup-keys pelena-backup-mail \
+  pelena-backup-restore-test pelena-lifecycle-30d pelena-notify; do
   install -m 700 -o root -g root "$DIR/$F" "/usr/local/sbin/$F"
 done
-install -m 644 -o root -g root "$DIR/pelena-backup.service" /etc/systemd/system/pelena-backup.service
-install -m 644 -o root -g root "$DIR/pelena-backup.timer" /etc/systemd/system/pelena-backup.timer
+for F in pelena-backup.service pelena-backup.timer pelena-backup-failed.service \
+  pelena-backup-check.service pelena-backup-check.timer; do
+  install -m 644 -o root -g root "$DIR/$F" "/etc/systemd/system/$F"
+done
 systemctl daemon-reload
-echo "Установлено. Включить расписание: sudo systemctl enable --now pelena-backup.timer"
+echo "Установлено. Включить: sudo systemctl enable --now pelena-backup.timer pelena-backup-check.timer"

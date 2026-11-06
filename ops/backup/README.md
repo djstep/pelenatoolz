@@ -20,7 +20,8 @@ sudo pelena-backup-keys
 sudo pelena-backup-init
 sudo systemctl start pelena-backup.service
 sudo pelena-backup-restore-test
-sudo systemctl enable --now pelena-backup.timer
+sudo systemctl enable --now pelena-backup.timer pelena-backup-check.timer
+sudo pelena-backup-mail
 ```
 
 На сервере, где копии уже есть, `pelena-backup-init` не запускать: новые ключи не прочитают старые копии.
@@ -33,6 +34,12 @@ systemctl list-timers pelena-backup.timer
 journalctl -u pelena-backup.service -n 30
 cat /mnt/data/backups/last-success
 ```
+
+## Уведомления
+
+Письмо через Яндекс: при сбое копии сразу и при проверке в 09:00, если успешной копии не было дольше 26 часов.
+`api.telegram.org` и `hc-ping.com` с сервера недоступны. Если сервер выключен целиком, письмо отправить некому.
+Настройки в `/etc/pelena-backup/mail.conf`. Новые команды со скрытым вводом используют `secret-input.sh`.
 
 ## Восстановление базы
 

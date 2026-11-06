@@ -4,6 +4,7 @@ After=docker.service network-online.target
 Wants=network-online.target
 Requires=docker.service
 RequiresMountsFor=/mnt/data
+OnFailure=pelena-backup-failed.service
 
 [Service]
 Type=oneshot

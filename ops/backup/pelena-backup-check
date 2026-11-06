@@ -1,0 +1,38 @@
+#!/bin/bash
+# Проверка копий.
+#   pelena-backup-check            письмо, если успешной копии не было дольше MAX_HOURS
+#   pelena-backup-check --failed   письмо о сбое, вызывается службой при ошибке копии
+set -euo pipefail
+STAMP=${PELENA_LAST_SUCCESS:-/mnt/data/backups/last-success}
+MAX_HOURS=26
+HOST=$(hostname)
+
+if [ "${1:-}" = "--failed" ]; then
+  {
+    echo "Копия на сервере $HOST не выполнена: $(date '+%d.%m.%Y %H:%M')."
+    echo
+    echo "Последние записи журнала:"
+    # Длинные строки похожи на ключи: в письмо они не идут.
+    journalctl -u pelena-backup.service -n 15 -o cat --no-pager 2>&1 \
+      | sed -E 's/[A-Za-z0-9+\/=_-]{32,}/<скрыто>/g' | cut -c1-200
+  } | /usr/local/sbin/pelena-notify "PELENA: копия не выполнена"
+  exit 0
+fi
+
+LAST=""
+if [ -s "$STAMP" ]; then
+  LAST=$(date -d "$(cat "$STAMP")" +%s 2>/dev/null || true)
+fi
+NOW=$(date +%s)
+if [ -z "$LAST" ]; then
+  AGE="неизвестно: отметки об успешной копии нет"
+elif [ $(( NOW - LAST )) -gt $(( MAX_HOURS * 3600 )) ]; then
+  AGE="$(( (NOW - LAST) / 3600 )) ч назад"
+else
+  echo "Копия свежая: $(( (NOW - LAST) / 3600 )) ч назад"
+  exit 0
+fi
+
+printf 'На сервере %s давно не было успешной копии.\nПоследняя: %s.\nПроверка: %s.\n' \
+  "$HOST" "$AGE" "$(date '+%d.%m.%Y %H:%M')" \
+  | /usr/local/sbin/pelena-notify "PELENA: давно не было копии"

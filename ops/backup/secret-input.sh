@@ -5,6 +5,8 @@
 AGE_KEY_RE='^AGE-SECRET-KEY-1[023456789ACDEFGHJKLMNPQRSTUVWXYZ]{58}$'
 HEX64_RE='^[0-9a-f]{64}$'
 S3_VALUE_RE='^[[:graph:]]{8,256}$'
+EMAIL_RE='^[[:alnum:]._%+-]+@[[:alnum:].-]+\.[[:alpha:]]{2,}$'
+MAIL_PASS_RE='^[[:graph:]]{8,128}$'
 
 # Из stdin в stdout: ESC-последовательности, управляющие символы, пробелы по краям.
 secret_clean() {

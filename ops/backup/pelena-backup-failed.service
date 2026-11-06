@@ -1,0 +1,6 @@
+[Unit]
+Description=PELENA: письмо о сбое копии
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/pelena-backup-check --failed
