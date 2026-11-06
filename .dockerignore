@@ -1,0 +1,38 @@
+# Секреты: Next.js кладёт найденные .env в итоговую сборку, поэтому они не должны попасть в образ.
+# На сервере настройки приходят из .env.prod через docker-compose.prod.yml.
+.env
+.env.*
+**/.env
+**/.env.*
+**/*.pem
+
+# Пересобирается внутри образа
+node_modules
+.next
+tsconfig.tsbuildinfo
+
+# Загруженные файлы живут на диске сервера, не в образе
+storage
+public/uploads
+
+# Для работы сайта не нужно
+.git
+.vercel
+.claude
+docs
+ops
+playwright-report
+test-results
+*.diff
+# Всё тестовое. В e2e/.auth лежат входы тестовых аккаунтов. Файлы, которые импортируют
+# исключённое, убираем вместе с ним: иначе проверка типов при сборке упадёт.
+e2e
+playwright.config.ts
+scripts/e2e-seed.ts
+**/*.test.ts
+**/*.test.tsx
+**/*.spec.ts
+**/*.spec.tsx
+src/features/import/normalize/test-docx.ts
+Dockerfile
+docker-compose*.yml

@@ -8,6 +8,7 @@ import {
   createInviteSchema,
   createProjectSchema,
   deleteProjectSchema,
+  invalidProjectMessage,
   updateMemberRoleSchema,
   updateProjectSchema,
 } from "@/features/projects/schemas";
@@ -40,6 +41,8 @@ import {
 } from "@/features/cloud/lib/project-drive-service";
 import { DEFAULT_APPROVAL_STATUSES } from "@/features/finance/lib/approval-statuses";
 import { DEFAULT_LEDGER_TYPES } from "@/features/contracts/lib/vat";
+import { PROJECT_CREATION_CLOSED_MESSAGE } from "@/features/auth/lib/registration-access";
+import { canCreateProjects } from "@/features/auth/lib/registration-gate";
 import { getDefaultProjectRoles } from "@/features/roles/default-roles";
 import { parsePermissionMatrix } from "@/features/roles/permissions-matrix";
 import {
@@ -124,6 +127,9 @@ export async function createProjectAction(
   formData: FormData,
 ): Promise<ActionState> {
   const user = await requireUser();
+  if (!(await canCreateProjects(user.id!))) {
+    return { error: PROJECT_CREATION_CLOSED_MESSAGE };
+  }
   const type = formData.get("type") as ProjectType;
 
   const parsed = createProjectSchema.safeParse({
@@ -152,10 +158,8 @@ export async function createProjectAction(
   });
 
   if (!parsed.success) {
-    return {
-      error: "Проверьте данные проекта",
-      fieldErrors: parsed.error.flatten().fieldErrors,
-    };
+    const fieldErrors = parsed.error.flatten().fieldErrors;
+    return { error: invalidProjectMessage(Object.keys(fieldErrors)), fieldErrors };
   }
 
   if (type === ProjectType.SERIES && !parsed.data.episodeCount) {

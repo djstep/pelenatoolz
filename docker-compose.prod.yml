@@ -1,0 +1,118 @@
+# Запуск сайта на сервере. docker-compose.yml — только для разработки на своём компьютере.
+#
+# Новый сервер: .env.prod и .env.admin из менеджера паролей, ссылка .env -> .env.admin, затем порядок
+# из ops/backup/README.md, раздел про перенос. Роли создаются раньше миграций: migrate идёт от них.
+# Обновление только командой sudo pelena-deploy: она сначала делает копию. Описание в ops/README.md.
+# Сброс пароля:
+#   docker compose run --rm migrate npm run user:reset-password -- <почта> --env-file .env.prod --prod
+# Том базы внешний: docker volume create pelena_pgdata. Команды down -v и volume prune не использовать.
+#
+# Роли базы: pelena — суперпользователь для копий и восстановления, pelena_owner — миграции,
+# pelena_app — сайт. Настройки разделены, чтобы сайт не видел пароли остальных ролей.
+#   .env.admin  COMPOSE_FILE, POSTGRES_PASSWORD, MIGRATE_DATABASE_URL. Compose читает его через
+#               ссылку .env -> .env.admin, в контейнеры целиком он не попадает.
+#   .env.prod   только сайт: DATABASE_URL, AUTH_SECRET, CLOUD_TOKEN_SECRET, APP_URL,
+#               REGISTRATION_ALLOWLIST, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,
+#               YANDEX_CLIENT_ID, YANDEX_CLIENT_SECRET.
+# Оба файла создаются на сервере, в git и в образ не попадают. Значения без символа $.
+# .env.prod должен принадлежать uid 1000: под ним работает migrate.
+# Пароли ролей меняются через ALTER ROLE вместе с адресами. Смена только в файле ломает вход в базу.
+#
+# Загрузки лежат на отдельном диске, поэтому обновление сайта их не затрагивает.
+# Обе папки на сервере должны принадлежать пользователю приложения:
+#   sudo chown -R 1001:1001 /mnt/data/storage /mnt/data/uploads
+name: pelena
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: 20m
+    max-file: "5"
+
+services:
+  db:
+    # С Postgres 18 данные лежат в папке с номером версии: смена на 19 создаст рядом пустую базу.
+    # Переход на новую основную версию — отдельная процедура.
+    image: postgres:18-alpine
+    restart: unless-stopped
+    logging: *logging
+    # Порт наружу не публикуется: база доступна только контейнерам этого проекта.
+    environment:
+      POSTGRES_USER: pelena
+      POSTGRES_DB: pelena
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?нет POSTGRES_PASSWORD в .env.admin}
+      # Настройки текста те же, что у Neon и у локальной базы.
+      POSTGRES_INITDB_ARGS: --encoding=UTF8 --locale=C --locale-provider=builtin --builtin-locale=C.UTF-8
+    command: ["postgres", "-c", "timezone=GMT", "-c", "shared_buffers=1GB", "-c", "effective_cache_size=3GB"]
+    shm_size: 256m
+    # Базе нужно время на корректную остановку.
+    stop_grace_period: 1m
+    volumes:
+      # Том Docker лежит на системном SSD. С Postgres 18 подключается родительская папка.
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      # По сети: при первом создании базы временный сервер отвечает только через сокет.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U pelena -d pelena"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  # Разовый запуск: docker compose run --rm migrate. При up не стартует.
+  migrate:
+    build:
+      context: .
+      target: migrator
+    profiles: ["tools"]
+    environment:
+      # Миграции идут от владельца схемы, а не от роли сайта.
+      DATABASE_URL: ${MIGRATE_DATABASE_URL:?нет MIGRATE_DATABASE_URL в .env.admin}
+      DIRECT_URL: ${MIGRATE_DATABASE_URL}
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      # Сброс пароля читает адрес базы только из файла, значения окружения он игнорирует.
+      - type: bind
+        source: ./.env.prod
+        target: /app/.env.prod
+        read_only: true
+
+  app:
+    build:
+      context: .
+      target: runner
+    restart: unless-stopped
+    logging: *logging
+    # Большое видео читается в память целиком. Предел не даёт сайту вытеснить базу.
+    mem_limit: 5g
+    env_file: .env.prod
+    environment:
+      # Иначе Node ждёт IPv4 всего 250 мс и уходит на недоступный IPv6:
+      # внешние сервисы с долгим соединением, например геокодер, не отвечают совсем.
+      NODE_OPTIONS: --no-network-family-autoselection --dns-result-order=ipv4first
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      # Снаружи сайт доступен только через nginx.
+      - "127.0.0.1:3000:3000"
+    # create_host_path: false — если диск не подключился, контейнер не запустится,
+    # а не начнёт молча работать с пустыми папками на системном диске.
+    volumes:
+      - type: bind
+        source: /mnt/data/storage
+        target: /app/storage
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /mnt/data/uploads
+        target: /app/public/uploads
+        bind:
+          create_host_path: false
+
+volumes:
+  # Внешний том: docker compose down -v его не удаляет, а без него база не запустится.
+  # Команды down -v и docker volume prune на сервере не использовать.
+  pgdata:
+    external: true
+    name: pelena_pgdata

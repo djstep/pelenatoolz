@@ -1,5 +1,6 @@
 import "./e2e/helpers/use-e2e-database";
 import { defineConfig, devices } from "@playwright/test";
+import { E2E_REGISTRATION_EMAILS, E2E_ROLES } from "./e2e/fixtures/data";
 
 /**
  * Приёмочные тесты (`e2e/`): база только из `E2E_DATABASE_URL` и `E2E_DIRECT_URL` в `.env.e2e`.
@@ -57,6 +58,10 @@ export default defineConfig({
       CLOUD_STUB_GOOGLE_URL: `${cloudStub}/google`,
       CLOUD_STUB_YANDEX_URL: `${cloudStub}/yandex`,
       DRIVE_EXPORT_DEADLINE_MS: "20000",
+      REGISTRATION_ALLOWLIST: [
+        ...Object.values(E2E_ROLES).map((role) => role.email),
+        ...Object.values(E2E_REGISTRATION_EMAILS),
+      ].join(","),
     },
   },
   use: {

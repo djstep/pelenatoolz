@@ -1,0 +1,10 @@
+[Unit]
+Description=PELENA: расписание проверки копий
+
+[Timer]
+# После ночной копии. Если сервер был выключен, проверка запустится после включения.
+OnCalendar=*-*-* 09:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

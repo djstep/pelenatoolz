@@ -1,0 +1,62 @@
+#!/bin/bash
+# Создаёт ключи шифрования копий. Показывает их один раз: на сервере остаётся только то,
+# что нужно для шифрования. Без подтверждения ничего не сохраняется.
+set -euo pipefail
+[ "$(id -u)" = 0 ] || { echo "Запустите так: sudo pelena-backup-init"; exit 1; }
+CONF=/etc/pelena-backup/rclone.conf
+PUB=/etc/pelena-backup/age.pub
+umask 077
+
+[ -s "$CONF" ] || { echo "Сначала введите ключ хранилища: sudo pelena-backup-keys"; exit 1; }
+[ ! -e "$PUB" ] || { echo "Ключи уже созданы. Новые создавать нельзя: старые копии перестанут читаться."; exit 1; }
+if rclone --config "$CONF" listremotes | grep -qx 'files:'; then
+  echo "Раздел files уже настроен, новый не создаю."
+  exit 1
+fi
+# Новые ключи рядом со старыми копиями сделали бы их путаницей: чем что читать.
+FOUND=$(rclone --config "$CONF" --log-level ERROR --stats 0 lsf -R --files-only cloud:pelena-backups/db | wc -l)
+FOUND=$(( FOUND + $(rclone --config "$CONF" --log-level ERROR --stats 0 lsf -R --files-only cloud:pelena-files/data | wc -l) ))
+if [ "$FOUND" -gt 0 ]; then
+  echo "В облаке уже есть копии. Верните старые ключи командой: sudo pelena-backup-adopt"
+  exit 1
+fi
+
+AGE_SECRET=$(age-keygen 2>/dev/null | grep '^AGE-SECRET-KEY-')
+AGE_PUBLIC=$(printf '%s\n' "$AGE_SECRET" | age-keygen -y)
+CRYPT_PASS=$(openssl rand -hex 32)
+CRYPT_SALT=$(openssl rand -hex 32)
+
+cat <<TEXT
+
+Сохраните в менеджере паролей три значения. На сервере закрытого ключа не будет,
+показать их снова нельзя, а без них копии не расшифровать.
+
+1. Закрытый ключ age (дампы базы):
+$AGE_SECRET
+
+2. Пароль файлов rclone:
+$CRYPT_PASS
+
+3. Соль файлов rclone:
+$CRYPT_SALT
+
+TEXT
+read -r -p "Все три значения сохранены? Введите yes: " OK
+[ "$OK" = yes ] || { echo "Отменено, ничего не сохранено."; exit 1; }
+
+printf '%s\n' "$AGE_PUBLIC" > "$PUB"
+chmod 644 "$PUB"
+{
+  echo
+  echo "[files]"
+  echo "type = crypt"
+  echo "remote = cloud:pelena-files/data"
+  echo "password = $(printf '%s' "$CRYPT_PASS" | rclone obscure -)"
+  echo "password2 = $(printf '%s' "$CRYPT_SALT" | rclone obscure -)"
+  echo "filename_encryption = standard"
+  echo "directory_name_encryption = true"
+} >> "$CONF"
+chmod 600 "$CONF"
+unset AGE_SECRET CRYPT_PASS CRYPT_SALT
+
+echo "Ключи созданы. Очистите экран командой clear и напишите в чат: ключи шифрования сохранены."

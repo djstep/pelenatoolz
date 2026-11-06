@@ -40,6 +40,7 @@ export function ProjectLocationFields({
   const [timezoneQuery, setTimezoneQuery] = useState(initialTimezone);
   const [cityOptions, setCityOptions] = useState<CitySearchResult[]>([]);
   const [cityLoading, setCityLoading] = useState(false);
+  const [citySearchFailed, setCitySearchFailed] = useState(false);
   const currencyTouched = useRef(false);
   const timezoneTouched = useRef(false);
 
@@ -48,6 +49,7 @@ export function ProjectLocationFields({
     if (trimmed.length < 2) {
       setCityOptions([]);
       setCityLoading(false);
+      setCitySearchFailed(false);
       return;
     }
 
@@ -61,13 +63,16 @@ export function ProjectLocationFields({
         );
         if (!response.ok) {
           setCityOptions([]);
+          setCitySearchFailed(true);
           return;
         }
         const json = (await response.json()) as { results?: CitySearchResult[] };
         setCityOptions(json.results ?? []);
+        setCitySearchFailed(false);
       } catch (error) {
         if ((error as Error).name !== "AbortError") {
           setCityOptions([]);
+          setCitySearchFailed(true);
         }
       } finally {
         setCityLoading(false);
@@ -138,6 +143,7 @@ export function ProjectLocationFields({
           disabled={disabled}
           loading={cityLoading}
           minChars={2}
+          emptyText={citySearchFailed ? "Поиск недоступен. Впишите город вручную." : undefined}
           options={cityAutocompleteOptions}
           onValueChange={(next) => {
             setCity(next);

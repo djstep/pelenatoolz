@@ -64,9 +64,9 @@ function guardDatabase() {
   console.log(`База: ${databaseHost(process.env.DATABASE_URL ?? "") ?? "?"}`);
 }
 
+/** Спрашиваем git, а не ищем строку: файл закрыт общим правилом `.env*`. */
 function gitignoreHasEnvFile() {
-  const gitignore = readFileSync(path.join(process.cwd(), ".gitignore"), "utf8");
-  return gitignore.split(/\r?\n/).some((line) => line.trim() === ".env.e2e");
+  return spawnSync("git", ["check-ignore", "-q", ".env.e2e"]).status === 0;
 }
 
 /**

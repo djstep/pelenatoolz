@@ -22,6 +22,7 @@
     "loginCta": "Log in",
     "registerCta": "Create account",
     "noAccount": "No account?",
+    "registrationClosedHint": "Registration is closed. It is available by project invitation or for addresses on the service owner's list. If you have an invitation, open its link.",
     "hasAccount": "Already have an account?",
     "forgotPasswordLink": "Forgot password?",
     "forgotPasswordTitle": "Reset password",
@@ -44,6 +45,7 @@
   "projects": {
     "title": "My projects",
     "empty": "No projects yet. Create the first one and invite your crew.",
+    "emptyInvited": "No projects yet. Projects you are invited to will appear here.",
     "create": "Create project",
     "name": "Title",
     "type": "Type",

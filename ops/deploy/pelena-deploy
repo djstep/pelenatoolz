@@ -1,0 +1,98 @@
+#!/bin/bash
+# Обновление рабочего сайта одной командой.
+#   sudo pelena-deploy            из ветки main
+#   sudo pelena-deploy <ветка>    из другой ветки
+# Порядок: свежая копия базы, код, образы, миграции, перезапуск, проверка ответа сайта.
+# Если копия не удалась, обновление не начинается и сайт не трогается.
+set -Eeuo pipefail
+[ "$(id -u)" = 0 ] || { echo "Запустите так: sudo pelena-deploy"; exit 1; }
+BRANCH=${1:-main}
+OWNER=pelena_admin
+PROJECT=/home/$OWNER/pelena
+STAMP=/mnt/data/backups/last-success
+BACKUPS=/mnt/data/backups/db
+SITE_CHECK=http://127.0.0.1:3000/ru/invite/none
+
+as_owner() { sudo -u "$OWNER" -H "$@"; }
+
+git check-ref-format --branch "$BRANCH" > /dev/null 2>&1 || { echo "Неверное имя ветки"; exit 1; }
+
+exec 8>/run/lock/pelena-deploy.lock
+flock -n 8 || { echo "Обновление уже выполняется"; exit 1; }
+
+cd "$PROJECT"
+[ -z "$(as_owner git status --porcelain)" ] || {
+  echo "В папке проекта есть локальные изменения. Обновление не начато."
+  exit 1
+}
+PREVIOUS=$(as_owner git rev-parse --short HEAD)
+CURRENT=$PREVIOUS
+SNAPSHOT=""
+echo "Сейчас на сервере: $PREVIOUS"
+
+failed() {
+  echo
+  echo "$1"
+  echo "Было: $PREVIOUS, стало: $CURRENT. Копия до обновления: $SNAPSHOT"
+  echo "Что делать: ops/README.md, раздел про откат."
+  exit 1
+}
+
+echo "1/6 Свежая копия базы и файлов"
+BEFORE=$(cat "$STAMP" 2>/dev/null || true)
+if ! systemctl start pelena-backup.service; then
+  echo "Копия не удалась. Обновление не начато, сайт не тронут."
+  echo "Причина: journalctl -u pelena-backup.service -n 30"
+  exit 1
+fi
+if [ "$(cat "$STAMP" 2>/dev/null || true)" = "$BEFORE" ]; then
+  echo "Отметка копии не обновилась. Обновление не начато, сайт не тронут."
+  exit 1
+fi
+SNAPSHOT=$(find "$BACKUPS" -type f -name '*.dump.age' -printf '%f\n' | sort | tail -1)
+echo "Копия: $SNAPSHOT"
+
+# До конца обновления ни копия, ни восстановление не трогают базу.
+exec 9>/run/lock/pelena-backup.lock
+flock -n 9 || { echo "Идёт копия или восстановление. Обновление не начато, сайт не тронут."; exit 1; }
+
+echo "2/6 Код из ветки $BRANCH"
+as_owner git fetch --quiet origin "$BRANCH"
+TARGET=$(as_owner git rev-parse FETCH_HEAD)
+if ! as_owner git cat-file -e "$TARGET:docker-compose.prod.yml" 2>/dev/null; then
+  echo "В ветке $BRANCH нет docker-compose.prod.yml: похоже, настройки сервера туда ещё не слиты."
+  echo "Обновление не начато, сайт не тронут."
+  exit 1
+fi
+if as_owner git merge-base --is-ancestor HEAD "$TARGET"; then
+  as_owner git checkout --quiet -B "$BRANCH" "$TARGET"
+elif as_owner git merge-base --is-ancestor "$TARGET" HEAD; then
+  echo "На сервере код новее ветки $BRANCH, код не меняю."
+else
+  echo "История на сервере и в $BRANCH разошлась. Обновление не начато, сайт не тронут."
+  exit 1
+fi
+CURRENT=$(as_owner git rev-parse --short HEAD)
+echo "Новый код: $CURRENT"
+bash ops/backup/install.sh > /dev/null || failed "Команды сервера не обновились. Сайт работает на прежней версии."
+
+echo "3/6 Сборка образов"
+docker compose --profile tools build app migrate || failed "Сборка не удалась. Сайт работает на прежней версии."
+
+echo "4/6 Миграции"
+docker compose run --rm -T migrate < /dev/null || failed "Миграции не прошли. Сайт работает на прежней версии, но схема могла измениться: смотрите вывод выше."
+
+echo "5/6 Перезапуск сайта"
+docker compose up -d app || failed "Сайт не запустился."
+
+echo "6/6 Проверка ответа сайта"
+for _ in $(seq 1 45); do
+  # Страница читает базу: ответ значит, что сайт работает и вошёл в неё под своей ролью.
+  ANSWER=$(curl -s -m 5 "$SITE_CHECK" || true)
+  if [[ "$ANSWER" == *"Приглашение недействительно"* ]]; then
+    echo "Готово: сайт обновлён с $PREVIOUS до $CURRENT. Копия до обновления: $SNAPSHOT"
+    exit 0
+  fi
+  sleep 2
+done
+failed "Сайт не отвечает после перезапуска."

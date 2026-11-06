@@ -1,0 +1,38 @@
+#!/bin/bash
+# Письмо владельцу. Тема — первый аргумент, текст — из stdin.
+# Пока почта не настроена, команда сообщает об этом и завершается успешно: сбой уведомления
+# не должен ломать копию. Файл настроек можно подменить через PELENA_MAIL_CONF.
+set -euo pipefail
+umask 077
+CONF=${PELENA_MAIL_CONF:-/etc/pelena-backup/mail.conf}
+SUBJECT=${1:?нет темы письма}
+BODY=$(cat)
+
+if [ ! -s "$CONF" ]; then
+  echo "Почта не настроена, письмо не отправлено: $SUBJECT"
+  exit 0
+fi
+# shellcheck source=/dev/null
+source "$CONF"
+
+MSG=$(mktemp /dev/shm/pelena-mail.XXXXXX)
+trap 'rm -f "$MSG"' EXIT
+{
+  printf 'From: PELENA <%s>\r\n' "$MAIL_FROM"
+  printf 'To: <%s>\r\n' "$MAIL_TO"
+  printf 'Subject: =?UTF-8?B?%s?=\r\n' "$(printf '%s' "$SUBJECT" | base64 -w0)"
+  printf 'Date: %s\r\n' "$(LC_ALL=C date -R)"
+  printf 'MIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\n'
+  printf 'Content-Transfer-Encoding: base64\r\n\r\n'
+  printf '%s\n' "$BODY" | base64 -w 76 | sed 's/$/\r/'
+} > "$MSG"
+
+ESC=${MAIL_PASS//\\/\\\\}; ESC=${ESC//\"/\\\"}
+if curl --silent --show-error --max-time 30 --url smtps://smtp.yandex.ru:465 --ssl-reqd \
+  --mail-from "$MAIL_FROM" --mail-rcpt "$MAIL_TO" --upload-file "$MSG" \
+  -K <(printf 'user = "%s:%s"\n' "$MAIL_FROM" "$ESC"); then
+  echo "Письмо отправлено: $SUBJECT"
+else
+  echo "Письмо не отправлено: $SUBJECT"
+  exit 1
+fi

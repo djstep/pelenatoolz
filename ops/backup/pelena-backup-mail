@@ -1,0 +1,38 @@
+#!/bin/bash
+# Настройка почты для уведомлений. Пароль приложения вводится скрыто, сохраняется только после
+# успешной отправки тестового письма, в файле root с правами 600.
+#   sudo pelena-backup-mail
+set -euo pipefail
+[ "$(id -u)" = 0 ] || { echo "Запустите так: sudo pelena-backup-mail"; exit 1; }
+CONF=/etc/pelena-backup/mail.conf
+umask 077
+# shellcheck source=/dev/null
+source /usr/local/lib/pelena-backup/secret-input.sh
+
+ask_line MAIL_FROM "Почта отправителя (ящик Яндекса): "
+require_format "$MAIL_FROM" "$EMAIL_RE" "Почта отправителя" "адрес вида name@yandex.ru"
+ask_line MAIL_TO "Почта получателя: "
+require_format "$MAIL_TO" "$EMAIL_RE" "Почта получателя" "адрес вида name@example.ru"
+ask_secret MAIL_PASS "Пароль приложения Яндекса (символы на экране не появятся): "
+require_format "$MAIL_PASS" "$MAIL_PASS_RE" "Пароль приложения" "от 8 символов без пробелов"
+
+TMP=$(mktemp /etc/pelena-backup/mail.XXXXXX)
+trap 'rm -f "$TMP"' EXIT
+{
+  printf 'MAIL_FROM=%q\n' "$MAIL_FROM"
+  printf 'MAIL_TO=%q\n' "$MAIL_TO"
+  printf 'MAIL_PASS=%q\n' "$MAIL_PASS"
+} > "$TMP"
+unset MAIL_PASS
+
+echo "Отправляю тестовое письмо."
+if printf 'Тест уведомлений PELENA: %s.\nЕсли письмо дошло, уведомления о копиях работают.\n' "$(date '+%d.%m.%Y %H:%M')" \
+  | PELENA_MAIL_CONF="$TMP" /usr/local/sbin/pelena-notify "PELENA: тест уведомлений"; then
+  mv "$TMP" "$CONF"
+  trap - EXIT
+  chmod 600 "$CONF"
+  echo "Настройки сохранены. Проверьте, пришло ли письмо, в том числе в папке «Спам»."
+else
+  echo "Письмо не ушло, настройки не сохранены. Проверьте адрес и пароль приложения и запустите ещё раз."
+  exit 1
+fi

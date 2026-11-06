@@ -141,8 +141,11 @@ export async function startCloudConnect(request: Request, provider: CloudProvide
   // Ошибки — возвратом на страницу, откуда начали, с плашкой (`?cloud_error=`), а не голым JSON.
   // Исключения: чужой сайт (выше) и чужой проект (ниже) — туда возвращать некуда.
   // Возврат — на тот же сайт, откуда пришёл запрос (Origin уже проверен выше).
+  // За nginx request.url содержит внутренний адрес контейнера, поэтому на сервере берём APP_URL.
+  const backOrigin =
+    process.env.NODE_ENV === "production" ? new URL(appOrigin()).origin : new URL(request.url).origin;
   const back = (path: string, code: CloudOAuthErrorCode) =>
-    NextResponse.redirect(withParam(path, "cloud_error", code, new URL(request.url).origin), 303);
+    NextResponse.redirect(withParam(path, "cloud_error", code, backOrigin), 303);
 
   let form: FormData;
   try {

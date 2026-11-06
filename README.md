@@ -12,7 +12,7 @@
 
 ## Быстрый старт
 
-1. Скопируйте `.env.example` → `.env` и задайте `DATABASE_URL`, `AUTH_SECRET`, `APP_URL`.
+1. Скопируйте `.env.example` → `.env` и задайте `DATABASE_URL`, `AUTH_SECRET`, `APP_URL`, `REGISTRATION_ALLOWLIST`. Без последнего регистрация открыта только по приглашению, а проект не создать никому. На Vercel переменная задаётся в настройках проекта.
 2. Поднимите Postgres (Docker Desktop):
 
 ```bash

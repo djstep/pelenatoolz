@@ -1,0 +1,12 @@
+[Unit]
+Description=PELENA: письмо о сбое копии
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=2h
+StartLimitBurst=4
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/pelena-backup-check --failed
+Restart=on-failure
+RestartSec=10min

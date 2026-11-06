@@ -14,6 +14,13 @@ export const E2E_ROLES = {
   crewonly: { key: "crewonly", email: "e2e-crewonly@pelena.test", name: "E2E Только команда" },
 } as const;
 
+/** Почты для проверки регистрации. Вместе с ролями попадают в REGISTRATION_ALLOWLIST сайта. */
+export const E2E_REGISTRATION_EMAILS = {
+  good: "e2e-tmp-good@pelena.test",
+  consent: "e2e-tmp-consent@pelena.test",
+  listed: "e2e-tmp-listed@pelena.test",
+} as const;
+
 export type E2ERoleKey = keyof typeof E2E_ROLES;
 
 export const E2E_ROLE_NAMES = {

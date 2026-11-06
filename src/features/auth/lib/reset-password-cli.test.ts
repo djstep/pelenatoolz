@@ -10,6 +10,7 @@ import {
 
 const DEV = "postgresql://user:secret@ep-floral-bread-1.neon.tech/neondb?sslmode=require";
 const PROD = "postgresql://user:secret@ep-steep-sound-1.neon.tech/neondb?sslmode=require";
+const SERVER_PROD = "postgresql://user:secret@db:5432/pelena";
 
 describe("parseResetPasswordArgs", () => {
   test("почта", () => {
@@ -76,6 +77,15 @@ describe("databaseProblem", () => {
 
   test("прод с флагом — можно", () => {
     assert.equal(databaseProblem([PROD, PROD], true), null);
+  });
+
+  test("прод на сервере: без флага отказ, с флагом можно", () => {
+    assert.match(databaseProblem([SERVER_PROD], false) ?? "", /--prod/);
+    assert.equal(databaseProblem([SERVER_PROD], true), null);
+  });
+
+  test("база с db в другом месте адреса не прод", () => {
+    assert.equal(databaseProblem(["postgresql://db:secret@dev.example:5432/db"], false), null);
   });
 
   test("флаг на базе, которая не прод, — отказ", () => {

@@ -1,0 +1,49 @@
+#!/bin/bash
+# Ввод ключа Object Storage. Секрет читается скрыто и хранится только в файле root с правами 600.
+set -euo pipefail
+[ "$(id -u)" = 0 ] || { echo "Запустите так: sudo pelena-backup-keys"; exit 1; }
+TENANT=c2022d9f-bbb1-42d4-9adb-97fdf8b45cbc
+CONF=/etc/pelena-backup/rclone.conf
+umask 077
+install -d -m 700 /etc/pelena-backup
+# shellcheck source=/dev/null
+source /usr/local/lib/pelena-backup/secret-input.sh
+
+ask_line KID "Key ID: "
+require_format "$KID" "$S3_VALUE_RE" "Key ID" "от 8 символов без пробелов"
+ask_secret KSEC "Key Secret (символы на экране не появятся): "
+require_format "$KSEC" "$S3_VALUE_RE" "Key Secret" "от 8 символов без пробелов"
+
+TMP=$(mktemp /etc/pelena-backup/rclone.XXXXXX)
+trap 'rm -f "$TMP"' EXIT
+cat > "$TMP" <<CONFIG
+[cloud]
+type = s3
+provider = Other
+access_key_id = ${TENANT}:${KID}
+secret_access_key = ${KSEC}
+region = ru-central-1
+endpoint = https://s3.cloud.ru
+force_path_style = true
+no_check_bucket = true
+
+CONFIG
+unset KSEC
+
+for B in pelena-backups pelena-files; do
+  if rclone --config "$TMP" lsf "cloud:$B" --max-depth 1 > /dev/null 2>&1; then
+    echo "Доступ к $B: есть"
+  else
+    echo "Доступа к $B нет. Ключ не сохранён. Проверьте Key ID и Key Secret и запустите ещё раз."
+    exit 1
+  fi
+done
+
+# Раздел шифрования файлов, если он уже есть, сохраняется.
+if [ -s "$CONF" ]; then
+  sed -n '/^\[files\]/,$p' "$CONF" >> "$TMP"
+fi
+mv "$TMP" "$CONF"
+trap - EXIT
+chmod 600 "$CONF"
+echo "Ключ сохранён."

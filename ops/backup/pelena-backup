@@ -1,0 +1,87 @@
+#!/bin/bash
+# Ежедневная копия: дамп базы шифруется age и уходит в pelena-backups,
+# загрузки уходят в pelena-files через шифрованный раздел rclone.
+# Закрытого ключа age на сервере нет: расшифровать дампы отсюда нельзя.
+set -Eeuo pipefail
+umask 077
+
+PROJECT=/home/pelena_admin/pelena
+CONF=/etc/pelena-backup/rclone.conf
+RECIPIENT=/etc/pelena-backup/age.pub
+DATA=/mnt/data
+LOCAL=$DATA/backups/db
+# Метка рабочего диска: на новом пустом диске её нет, и копия файлов не запустится.
+DISK_MARK=$DATA/.pelena-data-disk
+# Разовое разрешение на большое удаление, см. README.
+ALLOW_DELETE=/etc/pelena-backup/allow-mass-delete
+KEEP_DAYS=7
+MIN_DUMP_BYTES=10240
+
+R() { rclone --config "$CONF" --log-level NOTICE --stats 0 "$@"; }
+
+exec 9>/run/lock/pelena-backup.lock
+flock -n 9 || { echo "Копия уже выполняется"; exit 1; }
+
+mountpoint -q "$DATA" || { echo "Диск $DATA не подключён"; exit 1; }
+[ -s "$RECIPIENT" ] || { echo "Нет $RECIPIENT: сначала pelena-backup-init"; exit 1; }
+R listremotes | grep -qx 'files:' || { echo "Нет раздела files: сначала pelena-backup-init"; exit 1; }
+
+mkdir -p "$LOCAL"
+# Остаток после отключения питания: обычная очистка его не видит.
+find "$LOCAL" -type f -name '*.part' -mmin +60 -delete
+STAMP=$(date -u +%Y%m%d-%H%M%SZ)
+NAME="pelena-$STAMP.dump.age"
+TMP="$LOCAL/$NAME.part"
+trap 'rm -f "$TMP"' EXIT
+
+cd "$PROJECT"
+docker compose exec -T db pg_dump -U pelena -d pelena -Fc < /dev/null | age -R "$RECIPIENT" -o "$TMP"
+SIZE=$(stat -c %s "$TMP")
+[ "$SIZE" -ge "$MIN_DUMP_BYTES" ] || { echo "Дамп подозрительно мал: $SIZE байт"; exit 1; }
+mv "$TMP" "$LOCAL/$NAME"
+echo "Дамп: $NAME, $SIZE байт"
+
+R copyto "$LOCAL/$NAME" "cloud:pelena-backups/db/$NAME"
+echo "Дамп отправлен"
+
+find "$LOCAL" -type f -name '*.dump.age' -mtime +"$KEEP_DAYS" -print -delete
+
+# Разрешение действует два часа: забытое не должно сработать в какую-то из следующих ночей.
+if [ -e "$ALLOW_DELETE" ] && [ -z "$(find "$ALLOW_DELETE" -mmin -120)" ]; then
+  rm -f "$ALLOW_DELETE"
+  echo "Разрешение на большое удаление устарело и снято"
+fi
+
+# sync повторяет источник: пустая папка стёрла бы копию. Дамп к этому моменту уже в облаке.
+[ -f "$DISK_MARK" ] || {
+  echo "Нет метки $DISK_MARK: похоже, это новый диск. Файлы не отправлены, копии в облаке целы."
+  echo "Сначала восстановите файлы из копии, см. README."
+  exit 1
+}
+
+for DIR in storage uploads; do
+  HERE=$(find "$DATA/$DIR" -type f | wc -l)
+  THERE=$(R lsf -R --files-only "files:$DIR" | wc -l)
+  if [ -e "$ALLOW_DELETE" ]; then
+    LIMIT=$THERE
+    echo "$DIR: разрешено большое удаление: на диске $HERE, в копии $THERE"
+  else
+    LIMIT=$(( THERE / 10 + 5 ))
+    if [ "$THERE" -gt 0 ] && [ "$HERE" -eq 0 ]; then
+      echo "$DIR: папка пуста, а в копии файлов $THERE. Файлы не отправлены, копии целы."
+      echo "Если удаление верное, см. README, раздел про большое удаление."
+      exit 1
+    fi
+    if [ $(( THERE - HERE )) -gt "$LIMIT" ]; then
+      echo "$DIR: на диске $HERE файлов, в копии $THERE. Разница больше $LIMIT, файлы не отправлены."
+      echo "Если удаление верное, см. README, раздел про большое удаление."
+      exit 1
+    fi
+  fi
+  R sync "$DATA/$DIR" "files:$DIR" --max-delete "$LIMIT"
+  echo "Файлы $DIR отправлены"
+done
+
+rm -f "$ALLOW_DELETE"
+date -Is > "$DATA/backups/last-success"
+echo "Готово"

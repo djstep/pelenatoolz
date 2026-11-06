@@ -1,0 +1,69 @@
+#!/bin/bash
+# Новый сервер со старыми копиями: возвращает ключи шифрования из сохранённых значений.
+# Закрытый ключ age на сервер не записывается, из него получается только открытая часть.
+#   sudo pelena-backup-adopt
+set -euo pipefail
+[ "$(id -u)" = 0 ] || { echo "Запустите так: sudo pelena-backup-adopt"; exit 1; }
+CONF=/etc/pelena-backup/rclone.conf
+PUB=/etc/pelena-backup/age.pub
+umask 077
+# shellcheck source=/dev/null
+source /usr/local/lib/pelena-backup/secret-input.sh
+
+[ -s "$CONF" ] || { echo "Сначала введите ключ хранилища: sudo pelena-backup-keys"; exit 1; }
+[ ! -e "$PUB" ] || { echo "Ключи на этом сервере уже есть, ничего не изменено."; exit 1; }
+
+ask_secret AGE_KEY "Закрытый ключ age (символы не появятся): "
+require_format "$AGE_KEY" "$AGE_KEY_RE" "Закрытый ключ age" "AGE-SECRET-KEY-1 и ещё 58 символов, всего 74"
+ask_secret CRYPT_PASS "Пароль файлов rclone (символы не появятся): "
+require_format "$CRYPT_PASS" "$HEX64_RE" "Пароль файлов" "64 символа: цифры и буквы a-f"
+ask_secret CRYPT_SALT "Соль файлов rclone (символы не появятся): "
+require_format "$CRYPT_SALT" "$HEX64_RE" "Соль файлов" "64 символа: цифры и буквы a-f"
+
+TMP=$(mktemp /etc/pelena-backup/rclone.XXXXXX)
+trap 'rm -f "$TMP"' EXIT
+sed -n '/^\[cloud\]/,/^$/p' "$CONF" > "$TMP"
+{
+  echo
+  echo "[files]"
+  echo "type = crypt"
+  echo "remote = cloud:pelena-files/data"
+  echo "password = $(printf '%s' "$CRYPT_PASS" | rclone obscure -)"
+  echo "password2 = $(printf '%s' "$CRYPT_SALT" | rclone obscure -)"
+  echo "filename_encryption = standard"
+  echo "directory_name_encryption = true"
+} >> "$TMP"
+unset CRYPT_PASS CRYPT_SALT
+
+COUNT=$(rclone --config "$TMP" --log-level ERROR --stats 0 lsf -R --files-only files: 2>/dev/null | wc -l)
+STORED=$(rclone --config "$TMP" --log-level ERROR --stats 0 lsf -R --files-only cloud:pelena-files/data 2>/dev/null | wc -l)
+if [ "$STORED" -gt 0 ] && [ "$COUNT" -eq 0 ]; then
+  echo "Файлы в копии не читаются: пароль или соль не подходят. Ничего не сохранено."
+  exit 1
+fi
+
+# Опечатка в допустимых символах проходит проверку формата, но не контрольную сумму.
+if ! AGE_PUBLIC=$(printf '%s\n' "$AGE_KEY" | age-keygen -y 2>/dev/null); then
+  echo "Закрытый ключ age повреждён: контрольная сумма не сходится. Ничего не сохранено."
+  exit 1
+fi
+# Правильный по виду, но чужой ключ заметен только на настоящем дампе.
+LATEST=$(rclone --config "$TMP" --log-level ERROR --stats 0 lsf cloud:pelena-backups/db --files-only | sort | tail -1)
+if [ -n "$LATEST" ]; then
+  SAMPLE=$(mktemp /dev/shm/pelena-adopt.XXXXXX)
+  rclone --config "$TMP" --log-level ERROR --stats 0 copyto "cloud:pelena-backups/db/$LATEST" "$SAMPLE"
+  if ! age -d -i <(printf '%s\n' "$AGE_KEY") "$SAMPLE" > /dev/null 2>&1; then
+    rm -f "$SAMPLE"
+    echo "Закрытый ключ age не открывает последнюю копию. Ничего не сохранено."
+    exit 1
+  fi
+  rm -f "$SAMPLE"
+  echo "Последняя копия расшифрована."
+fi
+printf '%s\n' "$AGE_PUBLIC" > "$PUB"
+chmod 644 "$PUB"
+unset AGE_KEY
+mv "$TMP" "$CONF"
+trap - EXIT
+chmod 600 "$CONF"
+echo "Ключи возвращены. Файлов в копии: $COUNT. Новые ключи создавать не нужно."

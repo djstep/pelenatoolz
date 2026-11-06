@@ -1,3 +1,7 @@
+# Только для разработки на своём компьютере. Своё имя проекта и порт на 127.0.0.1: если на сервере
+# этот файл запустят по ошибке, он не заменит рабочую базу и не откроет порт наружу.
+name: film-prod-dev
+
 services:
   db:
     image: postgres:16-alpine
@@ -7,7 +11,7 @@ services:
       POSTGRES_PASSWORD: filmprod
       POSTGRES_DB: filmprod
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - filmprod_pg:/var/lib/postgresql/data
     healthcheck:
