@@ -1,0 +1,84 @@
+#!/bin/bash
+# Пробное восстановление последней копии из облака во временную базу без сети и без диска.
+# Рабочую базу и файлы не меняет. Ключи вводятся вручную: так проверяются именно те значения,
+# которые сохранены вне сервера.
+set -Eeuo pipefail
+[ "$(id -u)" = 0 ] || { echo "Запустите так: sudo pelena-backup-restore-test"; exit 1; }
+CONF=/etc/pelena-backup/rclone.conf
+PROJECT=/home/pelena_admin/pelena
+NAME=pelena-restore-test
+umask 077
+
+WD=$(mktemp -d /dev/shm/pelena-restore.XXXXXX)
+cleanup() { docker rm -f "$NAME" > /dev/null 2>&1 || true; rm -rf "$WD"; }
+trap cleanup EXIT
+
+read -r -s -p "Закрытый ключ age (символы не появятся): " AGE_KEY; echo
+read -r -s -p "Пароль файлов rclone: " CRYPT_PASS; echo
+read -r -s -p "Соль файлов rclone: " CRYPT_SALT; echo
+case "$AGE_KEY" in AGE-SECRET-KEY-*) ;; *) echo "Это не ключ age"; exit 1 ;; esac
+
+# Только раздел хранилища из настроек сервера плюс шифрование с введёнными значениями.
+sed -n '/^\[cloud\]/,/^$/p' "$CONF" > "$WD/rclone.conf"
+{
+  echo
+  echo "[check]"
+  echo "type = crypt"
+  echo "remote = cloud:pelena-files/data"
+  echo "password = $(printf '%s' "$CRYPT_PASS" | rclone obscure -)"
+  echo "password2 = $(printf '%s' "$CRYPT_SALT" | rclone obscure -)"
+  echo "filename_encryption = standard"
+  echo "directory_name_encryption = true"
+} >> "$WD/rclone.conf"
+unset CRYPT_PASS CRYPT_SALT
+R() { rclone --config "$WD/rclone.conf" --log-level ERROR --stats 0 "$@"; }
+
+echo "== база"
+LATEST=$(R lsf cloud:pelena-backups/db --files-only | sort | tail -1)
+[ -n "$LATEST" ] || { echo "В облаке нет копий"; exit 1; }
+echo "Копия: $LATEST"
+R copyto "cloud:pelena-backups/db/$LATEST" "$WD/latest.age"
+
+docker rm -f "$NAME" > /dev/null 2>&1 || true
+docker run -d --name "$NAME" --network none --memory 2g \
+  --tmpfs /var/lib/postgresql:rw,size=2g \
+  -e POSTGRES_HOST_AUTH_METHOD=trust \
+  -e POSTGRES_INITDB_ARGS='--encoding=UTF8 --locale=C --locale-provider=builtin --builtin-locale=C.UTF-8' \
+  postgres:18-alpine > /dev/null
+for _ in $(seq 1 60); do
+  docker exec "$NAME" pg_isready -q -h 127.0.0.1 -U postgres && break
+  sleep 1
+done
+docker exec "$NAME" pg_isready -q -h 127.0.0.1 -U postgres
+docker exec "$NAME" createdb -h 127.0.0.1 -U postgres restore_check
+
+age -d -i <(printf '%s\n' "$AGE_KEY") "$WD/latest.age" \
+  | docker exec -i "$NAME" pg_restore -h 127.0.0.1 -U postgres -d restore_check \
+      --no-owner --no-privileges --exit-on-error
+unset AGE_KEY
+echo "Дамп расшифрован и восстановлен"
+
+COUNTS="select table_name||'|'||(xpath('/row/c/text()', query_to_xml(format('select count(*) c from %I', table_name), false, true, '')))[1]::text from information_schema.tables where table_schema='public' and table_type='BASE TABLE' order by 1"
+docker exec "$NAME" psql -h 127.0.0.1 -U postgres -d restore_check -X -A -t -c "$COUNTS" > "$WD/restored.txt"
+(cd "$PROJECT" && docker compose exec -T db psql -U pelena -d pelena -X -A -t -c "$COUNTS" < /dev/null) > "$WD/prod.txt"
+ROWS=$(awk -F'|' '{s+=$2} END {print s+0}' "$WD/restored.txt")
+echo "Таблиц: $(grep -c . "$WD/restored.txt"), строк: $ROWS"
+if diff "$WD/prod.txt" "$WD/restored.txt" > "$WD/diff.txt"; then
+  echo "Совпадает с рабочей базой"
+else
+  echo "Отличия от рабочей базы (данные могли измениться после копии):"
+  head -20 "$WD/diff.txt"
+fi
+
+echo "== файлы"
+for DIR in storage uploads; do
+  COUNT=$(R lsf -R "check:$DIR" --files-only | grep -c . || true)
+  echo "$DIR: в копии файлов $COUNT, на диске $(find "/mnt/data/$DIR" -type f | wc -l)"
+  if [ "$COUNT" -gt 0 ]; then
+    R cryptcheck "/mnt/data/$DIR" "check:$DIR" --one-way
+    FIRST=$(R lsf -R "check:$DIR" --files-only | head -1)
+    echo "Расшифрован файл, байт: $(R cat "check:$DIR/$FIRST" | wc -c)"
+  fi
+done
+
+echo "Пробное восстановление прошло."

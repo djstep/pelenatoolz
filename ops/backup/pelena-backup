@@ -1,0 +1,51 @@
+#!/bin/bash
+# Ежедневная копия: дамп базы шифруется age и уходит в pelena-backups,
+# загрузки уходят в pelena-files через шифрованный раздел rclone.
+# Закрытого ключа age на сервере нет: расшифровать дампы отсюда нельзя.
+set -Eeuo pipefail
+umask 077
+
+PROJECT=/home/pelena_admin/pelena
+CONF=/etc/pelena-backup/rclone.conf
+RECIPIENT=/etc/pelena-backup/age.pub
+LOCAL=/mnt/data/backups/db
+KEEP_DAYS=7
+MIN_DUMP_BYTES=10240
+# Больше стольких удалений за раз — повод остановиться и разобраться.
+MAX_DELETE=500
+
+R() { rclone --config "$CONF" --log-level NOTICE --stats 0 "$@"; }
+
+exec 9>/run/lock/pelena-backup.lock
+flock -n 9 || { echo "Копия уже выполняется"; exit 1; }
+
+# Без диска источник выглядел бы пустым, и sync стёр бы копии файлов.
+mountpoint -q /mnt/data || { echo "Диск /mnt/data не подключён"; exit 1; }
+[ -s "$RECIPIENT" ] || { echo "Нет $RECIPIENT: сначала pelena-backup-init"; exit 1; }
+R listremotes | grep -qx 'files:' || { echo "Нет раздела files: сначала pelena-backup-init"; exit 1; }
+
+mkdir -p "$LOCAL"
+STAMP=$(date -u +%Y%m%d-%H%M%SZ)
+NAME="pelena-$STAMP.dump.age"
+TMP="$LOCAL/$NAME.part"
+trap 'rm -f "$TMP"' EXIT
+
+cd "$PROJECT"
+docker compose exec -T db pg_dump -U pelena -d pelena -Fc < /dev/null | age -R "$RECIPIENT" -o "$TMP"
+SIZE=$(stat -c %s "$TMP")
+[ "$SIZE" -ge "$MIN_DUMP_BYTES" ] || { echo "Дамп подозрительно мал: $SIZE байт"; exit 1; }
+mv "$TMP" "$LOCAL/$NAME"
+echo "Дамп: $NAME, $SIZE байт"
+
+R copyto "$LOCAL/$NAME" "cloud:pelena-backups/db/$NAME"
+echo "Дамп отправлен"
+
+find "$LOCAL" -type f -name '*.dump.age' -mtime +"$KEEP_DAYS" -print -delete
+
+for DIR in storage uploads; do
+  R sync "/mnt/data/$DIR" "files:$DIR" --max-delete "$MAX_DELETE"
+  echo "Файлы $DIR отправлены"
+done
+
+date -Is > /mnt/data/backups/last-success
+echo "Готово"

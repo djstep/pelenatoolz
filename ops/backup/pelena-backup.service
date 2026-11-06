@@ -1,0 +1,11 @@
+[Unit]
+Description=PELENA: ежедневная копия базы и файлов
+After=docker.service network-online.target
+Wants=network-online.target
+Requires=docker.service
+RequiresMountsFor=/mnt/data
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/pelena-backup
+Nice=10

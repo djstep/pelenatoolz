@@ -1,0 +1,11 @@
+[Unit]
+Description=PELENA: расписание ежедневной копии
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+RandomizedDelaySec=15min
+# Если сервер был выключен в это время, копия запустится после включения.
+Persistent=true
+
+[Install]
+WantedBy=timers.target
