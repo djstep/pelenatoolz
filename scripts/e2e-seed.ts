@@ -11,6 +11,7 @@
  */
 import "../e2e/helpers/use-e2e-database";
 import "dotenv/config";
+import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import path from "node:path";
@@ -885,6 +886,26 @@ async function ensureSeedCrewRoles(projectId: string, crewOnlyUserId: string) {
   }
 }
 
+/**
+ * Утверждённая версия вызывного дня 1: без неё файлы Диска зависели бы от утверждения в `c1-flows`.
+ * Снимок собирает настоящий код сайта, поэтому отдельным процессом: он отключает защиту `server-only`.
+ * Повторный запуск ничего не добавляет.
+ */
+async function ensureSeedApprovedCallSheet(projectId: string, producerId: string) {
+  const day = await prisma.shootDay.findFirstOrThrow({
+    where: { projectId, dayNumber: 1 },
+    select: { id: true, callSheet: { select: { approvedVersions: { select: { id: true }, take: 1 } } } },
+  });
+  if (day.callSheet?.approvedVersions.length) return;
+  const helper = path.join(process.cwd(), "e2e/helpers/seed-approved-call-sheet.ts");
+  const result = spawnSync(
+    process.execPath,
+    ["--import", "tsx", helper, projectId, day.id, producerId],
+    { stdio: "inherit" },
+  );
+  if (result.status !== 0) throw new Error("Сид остановлен: не удалось утвердить вызывной дня 1");
+}
+
 /** Договоры с людьми и команда для экрана /crew. Повторный запуск ничего не добавляет. */
 async function ensureSeedCrew(projectId: string, producerId: string) {
   const company = await prisma.company.findFirstOrThrow({
@@ -982,6 +1003,7 @@ async function main() {
       await ensureSeedCards(id, users.producer);
       await ensureSeedCrewRoles(id, users.crewonly);
       await ensureSeedCrew(id, users.producer);
+      await ensureSeedApprovedCallSheet(id, users.producer);
     }
     return;
   }
@@ -996,6 +1018,7 @@ async function main() {
   await ensureSeedBudget(projectId, users.producer);
   await ensureSeedCards(projectId, users.producer);
   await ensureSeedCrew(projectId, users.producer);
+  await ensureSeedApprovedCallSheet(projectId, users.producer);
 }
 
 main()
