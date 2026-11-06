@@ -13,6 +13,8 @@ import {
 } from "@/features/auth/lib/password-reset";
 import { LOGIN_BLOCKED_MESSAGE } from "@/features/auth/lib/login-limit";
 import { PERSONAL_DATA_POLICY_VERSION } from "@/features/auth/lib/personal-data-consent";
+import { REGISTRATION_CLOSED_MESSAGE } from "@/features/auth/lib/registration-access";
+import { canRegister } from "@/features/auth/lib/registration-gate";
 import { passwordProblem } from "@/features/auth/lib/password-rules";
 import { AuditEntityType } from "@/shared/audit/entity-types";
 import { auditMutation } from "@/shared/audit/with-audit";
@@ -51,6 +53,10 @@ export async function registerAction(
   }
 
   const email = parsed.data.email.toLowerCase();
+  // До проверки занятости: посторонний не должен узнавать, есть ли такой пользователь.
+  if (!(await canRegister(email, formData.get("callbackUrl")))) {
+    return { error: REGISTRATION_CLOSED_MESSAGE };
+  }
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) {
     return { error: "Пользователь с таким email уже зарегистрирован" };

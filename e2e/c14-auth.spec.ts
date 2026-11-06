@@ -18,6 +18,7 @@ import {
   PERSONAL_DATA_POLICY_VERSION,
 } from "../src/features/auth/lib/personal-data-consent";
 import { checkRateLimit, resetRateLimit } from "../src/shared/lib/rate-limit";
+import { E2E_REGISTRATION_EMAILS } from "./fixtures/data";
 import { e2eDb } from "./helpers/db";
 
 /**
@@ -99,6 +100,9 @@ async function expectLoggedIn(page: LoginPage) {
   const session = await page.request.get("/api/auth/session");
   expect((await session.json()).user).toBeTruthy();
 }
+
+// Адреса из списка постоянные: остаток прошлого упавшего прогона помешал бы регистрации.
+test.beforeAll(removeTmpUsers);
 
 test.afterAll(async () => {
   await removeTmpUsers();
@@ -455,7 +459,7 @@ test.describe("требования к паролю", () => {
   });
 
   test("подходящий пароль: аккаунт создан, вход выполнен", async ({ browser }) => {
-    const email = tmpEmail("good");
+    const email = E2E_REGISTRATION_EMAILS.good;
     const { context, page } = await openRegister(browser, email);
     await page.locator("#password").fill(PASSWORD);
     await expect(page.getByTestId("password-hint")).toContainText("подходит");
@@ -489,7 +493,7 @@ test.describe("требования к паролю", () => {
   });
 
   test("с галочкой: в базе дата и редакция политики, в журнале запись о регистрации", async ({ browser }) => {
-    const email = tmpEmail("consent");
+    const email = E2E_REGISTRATION_EMAILS.consent;
     const { context, page } = await openRegister(browser, email);
     await page.locator("#password").fill(PASSWORD);
     const started = Date.now();

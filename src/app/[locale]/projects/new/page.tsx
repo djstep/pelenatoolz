@@ -1,6 +1,9 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { AppHeader } from "@/features/auth/components/app-header";
+import { canCreateProjects } from "@/features/auth/lib/registration-gate";
+import { requireUser } from "@/features/auth/session";
 import { CreateProjectForm } from "@/features/projects/components/create-project-form";
 import { Card } from "@/shared/ui/card";
 
@@ -10,6 +13,8 @@ type Props = {
 
 export default async function NewProjectPage({ params }: Props) {
   const { locale } = await params;
+  const user = await requireUser();
+  if (!(await canCreateProjects(user.id!))) redirect(`/${locale}/projects`);
   const t = await getTranslations("projects");
   const tCommon = await getTranslations("common");
 

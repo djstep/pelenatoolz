@@ -3,6 +3,7 @@ import { getTranslations } from "next-intl/server";
 import { AppHeader } from "@/features/auth/components/app-header";
 import { listUserProjects } from "@/features/projects/queries";
 import { requireUser } from "@/features/auth/session";
+import { canCreateProjects } from "@/features/auth/lib/registration-gate";
 import {
   projectStatusLabels,
   projectTypeLabels,
@@ -23,6 +24,7 @@ export default async function ProjectsPage({ params, searchParams }: Props) {
   const showArchived = archived === "1";
   const user = await requireUser();
   const projects = await listUserProjects(user.id!, { includeArchived: showArchived });
+  const canCreate = await canCreateProjects(user.id!);
   const t = await getTranslations("projects");
 
   return (
@@ -46,7 +48,7 @@ export default async function ProjectsPage({ params, searchParams }: Props) {
                 {showArchived ? "Активные проекты" : "Архив"}
               </Button>
             </Link>
-            {!showArchived ? (
+            {!showArchived && canCreate ? (
               <Link href={`/${locale}/projects/new`}>
                 <Button>{t("create")}</Button>
               </Link>
@@ -57,9 +59,9 @@ export default async function ProjectsPage({ params, searchParams }: Props) {
         {projects.length === 0 ? (
           <Card>
             <p className="text-[var(--muted-fg)]">
-              {showArchived ? "Архивных проектов нет." : t("empty")}
+              {showArchived ? "Архивных проектов нет." : canCreate ? t("empty") : t("emptyInvited")}
             </p>
-            {!showArchived ? (
+            {!showArchived && canCreate ? (
               <div className="mt-4">
                 <Link href={`/${locale}/projects/new`}>
                   <Button>{t("create")}</Button>

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getTranslations } from "next-intl/server";
 import { PrivacyPolicyFooter } from "@/features/auth/components/privacy-policy-footer";
+import { hasActiveInvite } from "@/features/auth/lib/registration-gate";
 import { RegisterForm } from "@/features/auth/components/register-form";
 import { AppBrand } from "@/shared/ui/app-brand";
 import { Card } from "@/shared/ui/card";
@@ -15,6 +16,7 @@ export default async function RegisterPage({ params, searchParams }: Props) {
   const { callbackUrl } = await searchParams;
   const t = await getTranslations("auth");
   const tApp = await getTranslations("app");
+  const invited = await hasActiveInvite(callbackUrl);
 
   return (
     <main className="relative mx-auto flex min-h-screen w-full max-w-md flex-col justify-center px-4 py-12">
@@ -28,6 +30,11 @@ export default async function RegisterPage({ params, searchParams }: Props) {
         <h1 className="mb-6 font-display text-[27px] font-bold leading-tight">
           {t("registerTitle")}
         </h1>
+        {invited ? null : (
+          <p className="mb-4 text-sm text-[var(--muted-fg)]" data-testid="registration-closed">
+            {t("registrationClosedHint")}
+          </p>
+        )}
         <RegisterForm callbackUrl={callbackUrl} locale={locale} />
       </Card>
       <PrivacyPolicyFooter locale={locale} />
