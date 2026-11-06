@@ -1,24 +1,42 @@
 # Запуск сайта на сервере. docker-compose.yml — только для разработки на своём компьютере.
 #
-# Порядок на сервере, из папки проекта:
+# Первый запуск на сервере, из папки проекта:
+#   docker volume create pelena_pgdata
 #   docker compose up -d db
 #   docker compose run --rm migrate
 #   docker compose up -d app
+# Обновление после git pull. Без --build останутся старые образы: миграции не применятся,
+# а команда всё равно ответит успехом. Порядок важен: сначала база, потом сайт.
+#   docker compose run --rm --build migrate
+#   docker compose up -d --build app
 # Сброс пароля:
 #   docker compose run --rm migrate npm run user:reset-password -- <почта> --env-file .env.prod
 #
 # .env.prod создаётся на сервере, в git и в образ не попадает. Compose подхватывает его через
-# ссылку .env -> .env.prod, а строка COMPOSE_FILE в нём выбирает этот файл.
+# ссылку .env -> .env.prod, а строка COMPOSE_FILE в нём выбирает этот файл. Значения без символа $.
+# Набор: COMPOSE_FILE, POSTGRES_PASSWORD, DATABASE_URL, DIRECT_URL, AUTH_SECRET, CLOUD_TOKEN_SECRET,
+# APP_URL, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, YANDEX_CLIENT_ID, YANDEX_CLIENT_SECRET.
+# Файл должен принадлежать uid 1000: под ним работает migrate.
+# POSTGRES_PASSWORD действует только при создании базы. Смена пароля — ALTER ROLE вместе с адресами.
 #
 # Загрузки лежат на отдельном диске, поэтому обновление сайта их не затрагивает.
 # Обе папки на сервере должны принадлежать пользователю приложения:
 #   sudo chown -R 1001:1001 /mnt/data/storage /mnt/data/uploads
 name: pelena
 
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: 20m
+    max-file: "5"
+
 services:
   db:
+    # С Postgres 18 данные лежат в папке с номером версии: смена на 19 создаст рядом пустую базу.
+    # Переход на новую основную версию — отдельная процедура.
     image: postgres:18-alpine
     restart: unless-stopped
+    logging: *logging
     # Порт наружу не публикуется: база доступна только контейнерам этого проекта.
     environment:
       POSTGRES_USER: pelena
@@ -34,7 +52,8 @@ services:
       # Том Docker лежит на системном SSD. С Postgres 18 подключается родительская папка.
       - pgdata:/var/lib/postgresql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U pelena -d pelena"]
+      # По сети: при первом создании базы временный сервер отвечает только через сокет.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U pelena -d pelena"]
       interval: 5s
       timeout: 5s
       retries: 12
@@ -61,6 +80,9 @@ services:
       context: .
       target: runner
     restart: unless-stopped
+    logging: *logging
+    # Большое видео читается в память целиком. Предел не даёт сайту вытеснить базу.
+    mem_limit: 5g
     env_file: .env.prod
     depends_on:
       db:
@@ -83,4 +105,8 @@ services:
           create_host_path: false
 
 volumes:
+  # Внешний том: docker compose down -v его не удаляет, а без него база не запустится.
+  # Команды down -v и docker volume prune на сервере не использовать.
   pgdata:
+    external: true
+    name: pelena_pgdata
