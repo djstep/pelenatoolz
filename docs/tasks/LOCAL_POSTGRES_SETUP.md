@@ -10,18 +10,23 @@ Neon и сайт на Vercel это не затрагивает: меняютс�
 
 **PostgreSQL 18, Windows x86-64, обычный установщик EDB:** <https://www.postgresql.org/download/windows/>
 
-В Neon стоит 18.6. Подойдёт любая версия 18.x, главное, чтобы первая цифра была 18.
+В Neon стоит 18.6, на этом компьютере тоже 18.6. Подойдёт любая версия 18.x, главное, чтобы первая цифра была 18.
 
 | Настройка базы | В Neon | Локально |
 |---|---|---|
+| Версия | 18.6 | 18.6 |
 | Кодировка | UTF8 | UTF8 |
-| Порядок сортировки | `C.UTF-8` | `C.UTF-8` |
+| `LOCALE_PROVIDER` | `builtin` | `builtin` |
+| `BUILTIN_LOCALE` | `C.UTF-8` | `C.UTF-8` |
+| `LC_COLLATE`, `LC_CTYPE` | `C.UTF-8` | `C` |
 | Часовой пояс | GMT | GMT |
 | Расширения | только `plpgsql` | ничего ставить не надо |
 
+Единственное отличие от Neon — `LC_COLLATE` и `LC_CTYPE`. Сортировку и смену регистра при `LOCALE_PROVIDER 'builtin'` задаёт `BUILTIN_LOCALE`, а он совпадает. Полнотекстового поиска в проекте нет. После подключения Claude проверит это запросом на русском тексте.
+
 ## Шаг 1. Установка
 
-1. Запустите установщик, папку оставьте по умолчанию.
+1. Запустите установщик. Папка на этом компьютере: `H:\Apps\PostgreSQL`.
 2. Компоненты: нужны **PostgreSQL Server** и **Command Line Tools**. pgAdmin по желанию. Stack Builder не нужен.
 3. Придумайте пароль суперпользователя `postgres` и сохраните его.
 4. Порт оставьте **5432**. Если он занят и установщик предложил другой, запомните номер: он понадобится в шаге 3.
@@ -39,7 +44,7 @@ Get-Service postgresql*
 Откройте консоль Postgres, она попросит пароль `postgres`:
 
 ```powershell
-& "C:\Program Files\PostgreSQL\18\bin\psql.exe" -U postgres -h localhost
+& "H:\Apps\PostgreSQL\bin\psql.exe" -U postgres -h localhost
 ```
 
 Придумайте второй пароль, для пользователя `pelena`. Только латинские буквы и цифры: другие символы ломают адрес базы.
@@ -48,8 +53,8 @@ Get-Service postgresql*
 
 ```sql
 CREATE ROLE pelena LOGIN CREATEDB PASSWORD 'ПАРОЛЬ';
-CREATE DATABASE pelena_dev OWNER pelena ENCODING 'UTF8' TEMPLATE template0 LOCALE 'C' LOCALE_PROVIDER 'builtin' BUILTIN_LOCALE 'C.UTF-8';
-CREATE DATABASE pelena_e2e OWNER pelena ENCODING 'UTF8' TEMPLATE template0 LOCALE 'C' LOCALE_PROVIDER 'builtin' BUILTIN_LOCALE 'C.UTF-8';
+CREATE DATABASE pelena_dev OWNER pelena ENCODING 'UTF8' TEMPLATE template0 LOCALE_PROVIDER 'builtin' BUILTIN_LOCALE 'C.UTF-8' LC_COLLATE 'C' LC_CTYPE 'C';
+CREATE DATABASE pelena_e2e OWNER pelena ENCODING 'UTF8' TEMPLATE template0 LOCALE_PROVIDER 'builtin' BUILTIN_LOCALE 'C.UTF-8' LC_COLLATE 'C' LC_CTYPE 'C';
 ALTER DATABASE pelena_dev SET timezone TO 'GMT';
 ALTER DATABASE pelena_e2e SET timezone TO 'GMT';
 ```
@@ -58,7 +63,7 @@ ALTER DATABASE pelena_e2e SET timezone TO 'GMT';
 
 `CREATEDB` нужен пользователю для `prisma migrate dev`: эта команда создаёт временную базу для проверки миграций.
 
-Команды проверены только по документации: на этом компьютере Postgres ещё нет. Если какая-то вернёт ошибку, пришлите её текст, но не строку с паролем.
+На этом компьютере базы созданы с этими настройками. Если какая-то команда вернёт ошибку, пришлите её текст, но не строку с паролем.
 
 Имена `pelena_dev` и `pelena_e2e` менять нельзя: с другими проверки базы дадут отказ.
 
@@ -87,7 +92,7 @@ E2E_DIRECT_URL="postgresql://pelena:ПАРОЛЬ@localhost:5432/pelena_e2e"
 ## Шаг 4. Что сделает Claude
 
 1. `npm run db:whoami` — покажет только сервер и имя базы. Ожидается `localhost / pelena_dev` и `localhost / pelena_e2e`.
-2. Покажет `npm run db:status:e2e` и `npx prisma migrate status`: на пустой базе все 73 миграции будут не применены.
+2. Покажет `npm run db:status:e2e` и `npx prisma migrate status`: на пустой базе все 72 миграции будут не применены.
 3. `npm run db:migrate:e2e` и `npm run db:migrate`.
 4. `npm run e2e`, затем `npm run e2e:drive`, с замером времени.
 

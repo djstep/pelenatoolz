@@ -52,6 +52,8 @@ import {
 
 const ENV_FILE = path.join(process.cwd(), ".env.e2e");
 const ROLE_KEYS = Object.keys(E2E_ROLES) as E2ERoleKey[];
+const FOREIGN_OWNER_EMAIL = "e2e-foreign-owner@pelena.test";
+const FOREIGN_PROJECT_NAME = "E2E чужой проект";
 
 function guardDatabase() {
   const { DATABASE_URL, DIRECT_URL } = process.env;
@@ -905,6 +907,32 @@ async function ensureSeedApprovedCallSheet(projectId: string, producerId: string
   if (result.status !== 0) throw new Error("Сид остановлен: не удалось утвердить вызывной дня 1");
 }
 
+/**
+ * Чужой проект для `a2`: ни один тестовый пользователь в нём не состоит. Без него на новой базе
+ * проверка доступа молча пропускалась бы. Под его владельцем никто не входит: пароль случайный и
+ * нигде не хранится. Повторный запуск ничего не добавляет.
+ */
+async function ensureSeedForeignProject() {
+  const owner = await prisma.user.upsert({
+    where: { email: FOREIGN_OWNER_EMAIL },
+    create: {
+      email: FOREIGN_OWNER_EMAIL,
+      name: "E2E Владелец чужого проекта",
+      passwordHash: await bcrypt.hash(randomBytes(32).toString("hex"), 12),
+    },
+    update: {},
+    select: { id: true },
+  });
+  const exists = await prisma.project.findFirst({
+    where: { name: FOREIGN_PROJECT_NAME, ownerUserId: owner.id },
+    select: { id: true },
+  });
+  if (exists) return;
+  await prisma.project.create({
+    data: { name: FOREIGN_PROJECT_NAME, type: "FEATURE", createdById: owner.id, ownerUserId: owner.id },
+  });
+}
+
 /** Договоры с людьми и команда для экрана /crew. Повторный запуск ничего не добавляет. */
 async function ensureSeedCrew(projectId: string, producerId: string) {
   const company = await prisma.company.findFirstOrThrow({
@@ -989,6 +1017,7 @@ async function main() {
   const passwords = ensurePasswords();
   const users = await upsertUsers(passwords);
   console.log("Пользователи: e2e-producer, e2e-nofin, e2e-nocallsheet, e2e-crewonly — готовы");
+  await ensureSeedForeignProject();
 
   const existing = await prisma.project.findMany({
     where: { name: E2E_PROJECT_NAME, ownerUserId: users.producer },
