@@ -2,10 +2,7 @@
 #
 # Новый сервер: .env.prod и .env.admin из менеджера паролей, ссылка .env -> .env.admin, затем порядок
 # из ops/backup/README.md, раздел про перенос. Роли создаются раньше миграций: migrate идёт от них.
-# Обновление после git pull. Без --build останутся старые образы: миграции не применятся,
-# а команда всё равно ответит успехом. Порядок важен: сначала база, потом сайт.
-#   docker compose run --rm --build migrate
-#   docker compose up -d --build app
+# Обновление только командой sudo pelena-deploy: она сначала делает копию. Описание в ops/README.md.
 # Сброс пароля:
 #   docker compose run --rm migrate npm run user:reset-password -- <почта> --env-file .env.prod --prod
 # Том базы внешний: docker volume create pelena_pgdata. Команды down -v и volume prune не использовать.

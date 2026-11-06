@@ -61,10 +61,9 @@ site_answers() {
 }
 
 cd "$PROJECT"
-docker compose up -d app
-if ! site_answers; then
+if ! docker compose up -d app || ! site_answers; then
   install -m 600 -o "$OWNER" -g "$OWNER" "$WD/before" "$ENV_FILE"
-  docker compose up -d app
+  docker compose up -d app || true
   echo "Сайт не ответил с новыми настройками. Прежние ключи возвращены."
   exit 1
 fi
