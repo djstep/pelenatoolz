@@ -28,7 +28,7 @@ export const MEDEO_FONT_URL = `/api/fonts/${MEDEO_FONT_FILE_NAME}`;
 
 /** Путь к файлу шрифта в node_modules (от корня проекта). */
 export function medeoFontPath(rootDir: string = process.cwd()): string {
-  return path.join(rootDir, ...MEDEO_FONT_RELATIVE_PATH.split("/"));
+  return path.join(/*turbopackIgnore: true*/ rootDir, ...MEDEO_FONT_RELATIVE_PATH.split("/"));
 }
 
 let cachedFile: Buffer | null = null;
