@@ -1,0 +1,75 @@
+#!/bin/bash
+# Ключи OAuth для Google Диска и Яндекс Диска. Секреты вводятся скрыто и пишутся только в .env.prod.
+# Пустой ввод оставляет ключи этого сервиса как есть. При сбое файл настроек возвращается.
+#   sudo pelena-oauth
+set -euo pipefail
+[ "$(id -u)" = 0 ] || { echo "Запустите так: sudo pelena-oauth"; exit 1; }
+OWNER=pelena_admin
+PROJECT=/home/$OWNER/pelena
+ENV_FILE=$PROJECT/.env.prod
+SITE_CHECK=http://127.0.0.1:3000/ru/invite/none
+umask 077
+# shellcheck source=/dev/null
+source /usr/local/lib/pelena-backup/secret-input.sh
+
+GOOGLE_ID_RE='^[0-9]+-[a-z0-9]+\.apps\.googleusercontent\.com$'
+YANDEX_ID_RE='^[0-9a-f]{32}$'
+# Без пробела и $: иначе значение исказится при чтении файла настроек.
+OAUTH_SECRET_RE='^[!-#%-~]{8,256}$'
+
+[ -f "$ENV_FILE" ] || { echo "Нет $ENV_FILE"; exit 1; }
+WD=$(mktemp -d /dev/shm/pelena-oauth.XXXXXX)
+trap 'rm -rf "$WD"' EXIT
+: > "$WD/changes"
+
+ask_line GOOGLE_ID "GOOGLE_CLIENT_ID (пусто — не менять): "
+if [ -n "$GOOGLE_ID" ]; then
+  require_format "$GOOGLE_ID" "$GOOGLE_ID_RE" "GOOGLE_CLIENT_ID" "адрес вида 123-abc.apps.googleusercontent.com"
+  ask_secret GOOGLE_SECRET "GOOGLE_CLIENT_SECRET (символы не появятся): "
+  require_format "$GOOGLE_SECRET" "$OAUTH_SECRET_RE" "GOOGLE_CLIENT_SECRET" "от 8 символов без пробелов и знака доллара"
+  printf 'GOOGLE_CLIENT_ID=%s\nGOOGLE_CLIENT_SECRET=%s\n' "$GOOGLE_ID" "$GOOGLE_SECRET" >> "$WD/changes"
+fi
+
+ask_line YANDEX_ID "YANDEX_CLIENT_ID (пусто — не менять): "
+if [ -n "$YANDEX_ID" ]; then
+  require_format "$YANDEX_ID" "$YANDEX_ID_RE" "YANDEX_CLIENT_ID" "32 символа: цифры и буквы a-f"
+  ask_secret YANDEX_SECRET "YANDEX_CLIENT_SECRET (символы не появятся): "
+  require_format "$YANDEX_SECRET" "$OAUTH_SECRET_RE" "YANDEX_CLIENT_SECRET" "от 8 символов без пробелов и знака доллара"
+  printf 'YANDEX_CLIENT_ID=%s\nYANDEX_CLIENT_SECRET=%s\n' "$YANDEX_ID" "$YANDEX_SECRET" >> "$WD/changes"
+fi
+
+if [ ! -s "$WD/changes" ]; then
+  echo "Ничего не введено, настройки не изменились."
+  exit 0
+fi
+
+cp -p "$ENV_FILE" "$WD/before"
+NAMES=$(cut -d= -f1 "$WD/changes" | paste -sd'|')
+{
+  grep -vE "^($NAMES)=" "$ENV_FILE" || true
+  cat "$WD/changes"
+} > "$WD/next"
+install -m 600 -o "$OWNER" -g "$OWNER" "$WD/next" "$ENV_FILE"
+
+site_answers() {
+  for _ in $(seq 1 30); do
+    ANSWER=$(curl -s -m 5 "$SITE_CHECK" || true)
+    [[ "$ANSWER" != *"Приглашение недействительно"* ]] || return 0
+    sleep 2
+  done
+  return 1
+}
+
+cd "$PROJECT"
+docker compose up -d app
+if ! site_answers; then
+  install -m 600 -o "$OWNER" -g "$OWNER" "$WD/before" "$ENV_FILE"
+  docker compose up -d app
+  echo "Сайт не ответил с новыми настройками. Прежние ключи возвращены."
+  exit 1
+fi
+
+for KEY in GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET YANDEX_CLIENT_ID YANDEX_CLIENT_SECRET; do
+  echo "$KEY: длина $(grep "^$KEY=" "$ENV_FILE" | cut -d= -f2- | tr -d '\n' | wc -c)"
+done
+echo "Ключи сохранены, сайт перезапущен. Сохраните новый .env.prod в менеджере паролей."

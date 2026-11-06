@@ -48,6 +48,22 @@ sudo pelena-backup-restore <файл>.dump.age
 Перед этим верните код, иначе плохая миграция применится снова. Подробности в [backup/README.md](backup/README.md).
 Данные, внесённые после копии, останутся только в старой базе `pelena_before_restore`.
 
+## Ключи дисков
+
+```bash
+sudo pelena-oauth
+```
+
+Секреты вводятся скрыто и попадают только в `.env.prod`. Пустой ввод оставляет ключи сервиса как есть.
+Сайт перезапускается сам, при сбое прежние ключи возвращаются. После смены сохраните `.env.prod` в менеджере паролей.
+
+Адреса возврата в консолях Google и Яндекса:
+
+```text
+https://pelena.space/api/cloud/google/callback
+https://pelena.space/api/cloud/yandex/callback
+```
+
 ## Nginx и сертификат
 
 ```bash
