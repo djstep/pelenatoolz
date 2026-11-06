@@ -1,0 +1,70 @@
+#!/bin/bash
+# Одноразовый переход pelena-backups на хранение 30 дней. Запускать только после того, как
+# в панели блокировка по умолчанию поднята до 30 дней и проверена автоочистка на 1 дне.
+# Заменяет все правила бакета, поэтому правило для _test/ исчезает. pelena-files не трогает.
+# Временный ключ живёт только в памяти этого запуска. После успеха команда удаляет себя.
+#   sudo pelena-lifecycle-30d           применить
+#   sudo pelena-lifecycle-30d --check   только показать правила, без ключа
+set -euo pipefail
+[ "$(id -u)" = 0 ] || { echo "Запустите так: sudo pelena-lifecycle-30d"; exit 1; }
+TENANT=c2022d9f-bbb1-42d4-9adb-97fdf8b45cbc
+ENDPOINT=https://s3.cloud.ru
+BUCKET=pelena-backups
+WD=$(mktemp -d /dev/shm/pelena-lc.XXXXXX)
+trap 'rm -rf "$WD"' EXIT
+umask 077
+
+# Expiration на день больше блокировки: к этому сроку версия уже не защищена.
+cat > "$WD/rules.xml" <<'XML'
+<LifecycleConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><Rule><ID>db-expire-31d</ID><Filter><Prefix>db/</Prefix></Filter><Status>Enabled</Status><Expiration><Days>31</Days></Expiration></Rule><Rule><ID>noncurrent-1d</ID><Filter><Prefix></Prefix></Filter><Status>Enabled</Status><NoncurrentVersionExpiration><NoncurrentDays>1</NoncurrentDays></NoncurrentVersionExpiration></Rule></LifecycleConfiguration>
+XML
+
+show() {
+  python3 - "$1" <<'PY'
+import re,sys
+x=open(sys.argv[1],encoding="utf-8").read()
+rules=re.findall(r"<Rule>(.*?)</Rule>",x,re.S)
+print("  правил:",len(rules))
+for r in rules:
+    g=lambda n:(re.search(r"<%s>(.*?)</%s>"%(n,n),r,re.S) or [None,None])[1]
+    what=[]
+    e=g("Expiration")
+    if e and "<Days>" in e: what.append("Expiration %s дн."%re.search(r"<Days>(\d+)",e)[1])
+    n=g("NoncurrentDays")
+    if n: what.append("NoncurrentVersionExpiration %s дн."%n)
+    p=re.search(r"<Prefix>(.*?)</Prefix>",r); p=p[1] if p else ""
+    print("  - %s [%s] префикс: %s: %s"%(g("ID"),g("Status"),p or "весь бакет",", ".join(what)))
+PY
+}
+
+echo "$BUCKET:"; show "$WD/rules.xml"
+python3 -c "import sys,xml.dom.minidom as m;m.parse(sys.argv[1])" "$WD/rules.xml"
+[ "${1:-}" = "--check" ] && { echo "Проверка пройдена, ничего не отправлено."; exit 0; }
+
+read -r -p "Блокировка в панели уже 30 дней? Введите yes: " OK
+[ "$OK" = yes ] || { echo "Отменено, ничего не изменено."; exit 1; }
+read -r -p "Временный Key ID: " KID
+read -r -s -p "Временный Key Secret (символы на экране не появятся): " KSEC
+echo
+[ -n "$KID" ] && [ -n "$KSEC" ] || { echo "Пустое значение, ничего не изменено."; exit 1; }
+ESC=${KSEC//\\/\\\\}; ESC=${ESC//\"/\\\"}
+unset KSEC
+cfg() { printf 'user = "%s.%s:%s"\naws-sigv4 = "aws:amz:ru-central-1:s3"\nsilent\nmax-time = 30\n' "$TENANT" "$KID" "$ESC"; }
+
+MD5=$(openssl dgst -md5 -binary "$WD/rules.xml" | base64)
+C=$(curl -K <(cfg) -o "$WD/out" -w '%{http_code}' -X PUT -H "Content-MD5: $MD5" \
+  -H 'Content-Type: application/xml' --data-binary @"$WD/rules.xml" "$ENDPOINT/$BUCKET?lifecycle" || true)
+echo "Запись: HTTP $C"
+if [ "$C" != 200 ] && [ "$C" != 204 ]; then
+  cut -c1-250 "$WD/out"; echo
+  echo "Правила не изменены. Пришлите этот вывод в чат: ключа в нём нет."
+  exit 1
+fi
+
+C=$(curl -K <(cfg) -o "$WD/got" -w '%{http_code}' "$ENDPOINT/$BUCKET?lifecycle" || true)
+echo "Чтение: HTTP $C"
+unset ESC KID
+if [ "$C" != 200 ]; then cut -c1-250 "$WD/got"; echo; exit 1; fi
+show "$WD/got"
+rm -f "$0"
+echo "Готово. Команда удалена с сервера. Удалите временный сервисный аккаунт."

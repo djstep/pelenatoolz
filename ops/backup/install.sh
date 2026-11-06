@@ -5,7 +5,7 @@ set -euo pipefail
 [ "$(id -u)" = 0 ] || { echo "Запустите через sudo"; exit 1; }
 DIR=$(cd "$(dirname "$0")" && pwd)
 
-for F in pelena-backup pelena-backup-init pelena-backup-keys pelena-backup-restore-test; do
+for F in pelena-backup pelena-backup-init pelena-backup-keys pelena-backup-restore-test pelena-lifecycle-30d; do
   install -m 700 -o root -g root "$DIR/$F" "/usr/local/sbin/$F"
 done
 install -m 644 -o root -g root "$DIR/pelena-backup.service" /etc/systemd/system/pelena-backup.service
