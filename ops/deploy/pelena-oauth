@@ -15,7 +15,7 @@ source /usr/local/lib/pelena-backup/secret-input.sh
 GOOGLE_ID_RE='^[0-9]+-[a-z0-9]+\.apps\.googleusercontent\.com$'
 YANDEX_ID_RE='^[0-9a-f]{32}$'
 # Без пробела и $: иначе значение исказится при чтении файла настроек.
-OAUTH_SECRET_RE='^[!-#%-~]{8,256}$'
+OAUTH_SECRET_RE='^[^[:space:]$]{8,256}$'
 
 [ -f "$ENV_FILE" ] || { echo "Нет $ENV_FILE"; exit 1; }
 WD=$(mktemp -d /dev/shm/pelena-oauth.XXXXXX)
