@@ -1,6 +1,7 @@
 #!/bin/bash
-# Восстановление рабочей базы из копии. Старая база не удаляется: дамп разворачивается в новую,
-# и только после успеха базы меняются именами. Откат — обратная смена имён, см. README.
+# Восстановление рабочей базы из копии. Копия разворачивается в отдельную базу при работающем сайте,
+# затем команда показывает код и миграции и просит подтверждение. Только после него сайт
+# останавливается, а базы меняются именами. Старая база не удаляется.
 #   sudo pelena-backup-restore                последняя копия из облака
 #   sudo pelena-backup-restore <файл>.dump.age
 set -Eeuo pipefail
@@ -13,17 +14,43 @@ umask 077
 # shellcheck source=/dev/null
 source /usr/local/lib/pelena-backup/secret-input.sh
 
+# Та же блокировка, что у копии: ночной дамп не должен подключиться к базе во время замены.
+exec 9>/run/lock/pelena-backup.lock
+flock -n 9 || { echo "Сейчас идёт копия. Запустите позже."; exit 1; }
+
 WD=$(mktemp -d /dev/shm/pelena-restore.XXXXXX)
-trap 'rm -rf "$WD"' EXIT
 R() { rclone --config "$CONF" --log-level ERROR --stats 0 "$@"; }
 cd "$PROJECT"
 SQL() { docker compose exec -T db psql -U pelena -d postgres -X -A -t -v ON_ERROR_STOP=1 -c "$1" < /dev/null; }
+
+# none — ничего не тронуто; deployed — есть новая база, сайт работает;
+# stopped — сайт остановлен, база прежняя; swapped — база заменена, сайт ещё не запущен.
+STATE=none
+finish() {
+  rm -rf "$WD"
+  case "$STATE" in
+    deployed)
+      SQL "drop database if exists $NEW" > /dev/null 2>&1 || true
+      echo "Рабочая база и сайт не тронуты."
+      ;;
+    stopped)
+      docker compose up -d app > /dev/null 2>&1 || true
+      echo "Замена не состоялась. Рабочая база прежняя, сайт запущен снова."
+      echo "Развёрнутая копия осталась как $NEW, её удаление описано в README."
+      ;;
+    swapped)
+      echo "ВНИМАНИЕ: база заменена, но сайт не запущен: сбой миграции или запуска."
+      echo "Старая база лежит как $OLD. Откат описан в README."
+      ;;
+  esac
+}
+trap finish EXIT
 
 FILE=${1:-$(R lsf cloud:pelena-backups/db --files-only | sort | tail -1)}
 [ -n "$FILE" ] || { echo "В облаке нет копий"; exit 1; }
 echo "Копия: $FILE"
 if [ "$(SQL "select count(*) from pg_database where datname in ('$NEW','$OLD')")" != 0 ]; then
-  echo "Уже есть база $NEW или $OLD от прошлого восстановления. Сначала разберитесь с ней, см. README."
+  echo "Уже есть база $NEW или $OLD от прошлого восстановления. Что с ней делать, написано в README."
   exit 1
 fi
 
@@ -35,30 +62,61 @@ if [ "$(printf '%s\n' "$AGE_KEY" | age-keygen -y)" != "$(cat /etc/pelena-backup/
 fi
 
 R copyto "cloud:pelena-backups/db/$FILE" "$WD/backup.age"
-
-echo "Сайт будет остановлен, рабочая база заменится этой копией. Старая останется как $OLD."
-read -r -p "Введите слово ВОССТАНОВИТЬ: " OK < /dev/tty
-[ "$OK" = ВОССТАНОВИТЬ ] || { echo "Отменено, ничего не изменено."; exit 1; }
+# Новая база ложится на тот же SSD рядом с рабочей.
+NEED=$(( $(stat -c %s "$WD/backup.age") * 6 + 1073741824 ))
+FREE=$(( $(df --output=avail -B1 / | tail -1) ))
+if [ "$FREE" -lt "$NEED" ]; then
+  echo "Мало места на системном диске: свободно $(( FREE / 1048576 )) МБ, нужно около $(( NEED / 1048576 )) МБ."
+  exit 1
+fi
 
 docker compose exec -T db createdb -U pelena -T template0 -E UTF8 --locale=C \
   --locale-provider=builtin --builtin-locale=C.UTF-8 "$NEW" < /dev/null
+STATE=deployed
 if ! age -d -i <(printf '%s\n' "$AGE_KEY") "$WD/backup.age" \
   | docker compose exec -T db pg_restore -U pelena -d "$NEW" --no-owner --no-privileges \
       --single-transaction --exit-on-error; then
-  SQL "drop database if exists $NEW" > /dev/null
-  echo "Копию не удалось развернуть. Рабочая база и сайт не тронуты."
+  echo "Копию не удалось развернуть."
   exit 1
 fi
 unset AGE_KEY
-echo "Копия развёрнута в отдельной базе."
+echo "Копия развёрнута в отдельной базе, сайт пока работает."
 
+echo
+echo "Код на сервере: $(sudo -u pelena_admin git -C "$PROJECT" log -1 --format='%h %s' | cut -c1-80)"
+echo "Что применится к копии при запуске (образ migrate):"
+# Адрес подменяется внутри контейнера, поэтому в команде и журнале пароля нет.
+# shellcheck disable=SC2016
+docker compose run --rm -T migrate sh -c \
+  'U="${DATABASE_URL%/pelena}/pelena_restore"; DATABASE_URL="$U" DIRECT_URL="$U" npx prisma migrate status' \
+  < /dev/null 2>&1 | sed 's/\x1b\[[0-9;]*m//g' \
+  | grep -E '^[0-9]{14}_|up to date|have not yet|migrations found' | sed 's/^/  /' || true
+echo
+echo "Если восстановление из-за плохой миграции и она есть в списке выше, откажитесь:"
+echo "сначала верните код на прошлую версию и пересоберите образ. README, раздел про восстановление."
+echo
+echo "Дальше сайт будет остановлен, а рабочая база заменится копией. Старая останется как $OLD."
+read -r -p "Введите слово ВОССТАНОВИТЬ: " OK < /dev/tty
+[ "$OK" = ВОССТАНОВИТЬ ] || { echo "Отменено."; exit 1; }
+
+STATE=stopped
 docker compose stop app
-SQL "select pg_terminate_backend(pid) from pg_stat_activity where datname='pelena' and pid<>pg_backend_pid()" > /dev/null
-SQL "alter database pelena rename to $OLD"
-SQL "alter database $NEW rename to pelena"
+SWAPPED=0
+for _ in $(seq 1 15); do
+  SQL "select pg_terminate_backend(pid) from pg_stat_activity where datname='pelena' and pid<>pg_backend_pid()" > /dev/null
+  # Одна команда — одна транзакция: момента без базы pelena нет.
+  if SQL "alter database pelena rename to $OLD; alter database $NEW rename to pelena" > /dev/null 2>&1; then
+    SWAPPED=1
+    break
+  fi
+  sleep 1
+done
+[ "$SWAPPED" = 1 ] || { echo "К рабочей базе остаются подключения, замена не выполнена."; exit 1; }
+STATE=swapped
 echo "Базы поменялись именами."
 
-docker compose run --rm --build migrate
-docker compose up -d --build app
+docker compose run --rm -T migrate < /dev/null 2>&1 | sed 's/\x1b\[[0-9;]*m//g' | grep -v 'npm notice' | tail -3
+docker compose up -d app
+STATE=done
 echo "Готово: сайт запущен на восстановленной базе, старая лежит как $OLD."
 echo "Проверьте сайт. Как удалить старую базу или откатиться, написано в README."

@@ -32,7 +32,11 @@ if [ "${1:-}" = "--weekly" ]; then
   {
     echo "Еженедельная проверка уведомлений PELENA: письма доходят."
     echo "Сервер: $HOST."
-    echo "Последняя успешная копия: ${LAST:+$HOURS ч назад}${LAST:-неизвестно}."
+    if [ -n "$LAST" ]; then
+      echo "Последняя успешная копия: $HOURS ч назад."
+    else
+      echo "Последняя успешная копия: неизвестно."
+    fi
     echo "Копий на диске: $(find /mnt/data/backups/db -type f -name '*.dump.age' 2>/dev/null | wc -l)."
     echo "Свободно на диске копий: $(df -h --output=avail /mnt/data | tail -1 | tr -d ' ')."
     echo "Свободно на системном диске: $(df -h --output=avail / | tail -1 | tr -d ' ')."

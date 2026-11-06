@@ -35,19 +35,35 @@ sudo pelena-backup-mail
 ## Перенос на новый сервер или новый диск
 
 `pelena-backup-init` здесь не запускать: новые ключи не прочитают старые копии. Команда сама откажет.
-Метку диска ставить только после восстановления файлов, иначе ночная копия не остановится.
+Метку диска ставить только после восстановления файлов: пока её нет, ночная копия отправляет только дамп.
+
+Подготовить сервер: Docker, код проекта, диск на `/mnt/data` с папками `storage`, `uploads`, `backups`,
+`.env.prod` из менеджера паролей и ссылка `.env` на него, `docker volume create pelena_pgdata`,
+`age` и `rclone` как в разделе выше. Затем:
 
 ```bash
 sudo bash ops/backup/install.sh
 sudo pelena-backup-keys
 sudo pelena-backup-adopt
-sudo rclone --config /etc/pelena-backup/rclone.conf copy files:storage /mnt/data/storage
-sudo rclone --config /etc/pelena-backup/rclone.conf copy files:uploads /mnt/data/uploads
-sudo chown -R 1001:1001 /mnt/data/storage /mnt/data/uploads
-sudo touch /mnt/data/.pelena-data-disk
 ```
 
-Если умер только HDD, сервер и ключи на месте: шаги с `keys` и `adopt` не нужны.
+Файлы, команды выполнять именно так, одной строкой: метка ставится только при полном успехе.
+
+```bash
+sudo rclone --config /etc/pelena-backup/rclone.conf copy files:storage /mnt/data/storage && sudo rclone --config /etc/pelena-backup/rclone.conf copy files:uploads /mnt/data/uploads && sudo chown -R 1001:1001 /mnt/data/storage /mnt/data/uploads && sudo touch /mnt/data/.pelena-data-disk
+```
+
+База и запуск, из папки проекта:
+
+```bash
+docker compose up -d db
+docker compose run --rm migrate
+sudo pelena-backup-restore
+sudo systemctl enable --now pelena-backup.timer pelena-backup-check.timer pelena-backup-weekly.timer
+sudo pelena-backup-mail
+```
+
+Если умер только HDD, сервер и ключи на месте: нужен только шаг с файлами.
 
 ## Защита от пустого диска
 
@@ -61,7 +77,8 @@ sudo touch /etc/pelena-backup/allow-mass-delete
 sudo systemctl start pelena-backup.service
 ```
 
-После успешной копии разрешение снимается само.
+После успешной копии разрешение снимается само, неиспользованное устаревает через два часа.
+Защита не ловит мелкую потерю: до 10% и ещё 5 файлов за ночь проходят без письма.
 
 Удалённое из `pelena-files` остаётся старыми версиями 30 дней, но обычная команда `rclone copy` их не видит.
 
@@ -90,22 +107,39 @@ sudo cat /mnt/data/backups/last-success
 sudo pelena-backup-restore
 ```
 
-Команда разворачивает копию в новую базу и только после успеха меняет базы именами. Старая остаётся как
-`pelena_before_restore`. Если копия не развернулась, рабочая база и сайт не затронуты.
+Копия разворачивается в отдельную базу при работающем сайте. Затем команда показывает код на сервере и миграции,
+которые применятся, и просит ввести `ВОССТАНОВИТЬ`. Только после этого сайт останавливается, а базы меняются
+именами одной транзакцией. Старая остаётся как `pelena_before_restore`. Новые образы команда не собирает.
 
-Откат и удаление старой базы, из папки проекта:
+**Если причина восстановления — плохая миграция**, сначала верните код: иначе она применится к копии снова.
+На вопросе команды откажитесь, затем:
+
+```bash
+git checkout <коммит до миграции>
+docker compose build app migrate
+sudo pelena-backup-restore
+```
+
+Все команды ниже — из папки проекта.
+
+Откат на старую базу. После него запускается тот код, образы которого сейчас собраны:
 
 ```bash
 docker compose stop app
-docker compose exec -T db psql -U pelena -d postgres -c 'ALTER DATABASE pelena RENAME TO pelena_failed'
-docker compose exec -T db psql -U pelena -d postgres -c 'ALTER DATABASE pelena_before_restore RENAME TO pelena'
+docker compose exec -T db psql -U pelena -d postgres -c 'ALTER DATABASE pelena RENAME TO pelena_failed; ALTER DATABASE pelena_before_restore RENAME TO pelena'
 docker compose up -d app
 ```
 
-Когда восстановленная база проверена и старая не нужна:
+Если откат был, неудачная база остаётся как `pelena_failed`. Когда восстановленная база проверена и старая не нужна:
 
 ```bash
 docker compose exec -T db dropdb -U pelena pelena_before_restore
+```
+
+Если команда сообщила, что осталась база `pelena_restore`:
+
+```bash
+docker compose exec -T db dropdb -U pelena pelena_restore
 ```
 
 Проверка без изменения рабочей базы: `sudo pelena-backup-restore-test`.
