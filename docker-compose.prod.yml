@@ -89,6 +89,10 @@ services:
     # Большое видео читается в память целиком. Предел не даёт сайту вытеснить базу.
     mem_limit: 5g
     env_file: .env.prod
+    environment:
+      # Иначе Node ждёт IPv4 всего 250 мс и уходит на недоступный IPv6:
+      # внешние сервисы с долгим соединением, например геокодер, не отвечают совсем.
+      NODE_OPTIONS: --no-network-family-autoselection --dns-result-order=ipv4first
     depends_on:
       db:
         condition: service_healthy
