@@ -96,11 +96,21 @@ async function openExport(page: Page, item: "Excel" | "Печать", layoutBodi
   // Запросы после загрузки могут оборвать действие, отправленное сразу же.
   await page.waitForLoadState("networkidle");
   await page.getByRole("button", { name: "Экспорт", exact: true }).click();
-  // Окно один раз запрашивает раскладку: ждём ответ и читаем его до следующих шагов теста.
-  const layout = page.waitForResponse((res) => Boolean(res.request().headers()["next-action"]));
+  // Окно один раз запрашивает раскладку. Ответ читаем в обход браузера: браузер может
+  // выбросить тело ответа раньше, чем тест его прочтёт, и чтение падало случайным образом.
+  let answered = () => {};
+  const layout = new Promise<void>((resolve) => (answered = resolve));
+  const handler = async (route: Parameters<Parameters<Page["route"]>[1]>[0]) => {
+    if (!route.request().headers()["next-action"]) return route.fallback();
+    const response = await route.fetch();
+    layoutBodies?.push(await response.text());
+    await route.fulfill({ response });
+    answered();
+  };
+  await page.route("**/*", handler);
   await page.getByRole("menuitem", { name: item, exact: true }).click();
-  const body = await (await layout).text();
-  layoutBodies?.push(body);
+  await layout;
+  await page.unroute("**/*", handler);
   const dialog = page.getByRole("dialog");
   await expect(dialog.getByText("Загрузка раскладки…")).toHaveCount(0);
   return dialog;
