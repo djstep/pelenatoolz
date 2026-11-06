@@ -1,15 +1,70 @@
 # Запуск сайта на сервере. docker-compose.yml — только для разработки на своём компьютере.
 #
+# Порядок на сервере, из папки проекта:
+#   docker compose up -d db
+#   docker compose run --rm migrate
+#   docker compose up -d app
+# Сброс пароля:
+#   docker compose run --rm migrate npm run user:reset-password -- <почта> --env-file .env.prod
+#
+# .env.prod создаётся на сервере, в git и в образ не попадает. Compose подхватывает его через
+# ссылку .env -> .env.prod, а строка COMPOSE_FILE в нём выбирает этот файл.
+#
 # Загрузки лежат на отдельном диске, поэтому обновление сайта их не затрагивает.
 # Обе папки на сервере должны принадлежать пользователю приложения:
 #   sudo chown -R 1001:1001 /mnt/data/storage /mnt/data/uploads
-#
-# .env.prod создаётся на сервере, в git и в образ не попадает.
+name: pelena
+
 services:
+  db:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    # Порт наружу не публикуется: база доступна только контейнерам этого проекта.
+    environment:
+      POSTGRES_USER: pelena
+      POSTGRES_DB: pelena
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?нет POSTGRES_PASSWORD в .env.prod}
+      # Настройки текста те же, что у Neon и у локальной базы.
+      POSTGRES_INITDB_ARGS: --encoding=UTF8 --locale=C --locale-provider=builtin --builtin-locale=C.UTF-8
+    command: ["postgres", "-c", "timezone=GMT", "-c", "shared_buffers=1GB", "-c", "effective_cache_size=3GB"]
+    shm_size: 256m
+    # Базе нужно время на корректную остановку.
+    stop_grace_period: 1m
+    volumes:
+      # Том Docker лежит на системном SSD. С Postgres 18 подключается родительская папка.
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pelena -d pelena"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  # Разовый запуск: docker compose run --rm migrate. При up не стартует.
+  migrate:
+    build:
+      context: .
+      target: migrator
+    profiles: ["tools"]
+    env_file: .env.prod
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      # Сброс пароля читает адрес базы только из файла, значения окружения он игнорирует.
+      - type: bind
+        source: ./.env.prod
+        target: /app/.env.prod
+        read_only: true
+
   app:
-    build: .
+    build:
+      context: .
+      target: runner
     restart: unless-stopped
     env_file: .env.prod
+    depends_on:
+      db:
+        condition: service_healthy
     ports:
       # Снаружи сайт доступен только через nginx.
       - "127.0.0.1:3000:3000"
@@ -26,3 +81,6 @@ services:
         target: /app/public/uploads
         bind:
           create_host_path: false
+
+volumes:
+  pgdata:

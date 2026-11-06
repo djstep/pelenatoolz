@@ -3,10 +3,11 @@
 FROM node:22-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
-# postinstall запускает prisma generate, а схемы на этом шаге ещё нет. Генерация — в builder.
+# postinstall запускает prisma generate, а схемы на этом шаге ещё нет. Генерация — в prepared.
 RUN npm ci --ignore-scripts
 
-FROM node:22-alpine AS builder
+# Код, все пакеты и клиент Prisma. Общая основа для сборки сайта и для migrator.
+FROM node:22-alpine AS prepared
 # Prisma на Alpine нужен openssl.
 RUN apk add --no-cache openssl
 WORKDIR /app
@@ -14,7 +15,15 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npx prisma generate
+
+FROM prepared AS builder
 RUN npm run build
+
+# Разовые команды на сервере: миграции и сброс пароля. Prisma CLI есть только здесь,
+# поэтому образ не собирает сайт, а рабочий образ не содержит CLI.
+FROM prepared AS migrator
+USER node
+CMD ["npx", "prisma", "migrate", "deploy"]
 
 FROM node:22-alpine AS runner
 RUN apk add --no-cache openssl
@@ -24,11 +33,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 nextjs
 
 COPY --from=builder /app/public ./public
-COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/package.json ./package.json
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
-COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
