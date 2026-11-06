@@ -1,0 +1,28 @@
+# Запуск сайта на сервере. docker-compose.yml — только для разработки на своём компьютере.
+#
+# Загрузки лежат на отдельном диске, поэтому обновление сайта их не затрагивает.
+# Обе папки на сервере должны принадлежать пользователю приложения:
+#   sudo chown -R 1001:1001 /mnt/data/storage /mnt/data/uploads
+#
+# .env.prod создаётся на сервере, в git и в образ не попадает.
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    env_file: .env.prod
+    ports:
+      # Снаружи сайт доступен только через nginx.
+      - "127.0.0.1:3000:3000"
+    # create_host_path: false — если диск не подключился, контейнер не запустится,
+    # а не начнёт молча работать с пустыми папками на системном диске.
+    volumes:
+      - type: bind
+        source: /mnt/data/storage
+        target: /app/storage
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /mnt/data/uploads
+        target: /app/public/uploads
+        bind:
+          create_host_path: false
