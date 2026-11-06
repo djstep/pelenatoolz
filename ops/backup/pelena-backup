@@ -8,23 +8,27 @@ umask 077
 PROJECT=/home/pelena_admin/pelena
 CONF=/etc/pelena-backup/rclone.conf
 RECIPIENT=/etc/pelena-backup/age.pub
-LOCAL=/mnt/data/backups/db
+DATA=/mnt/data
+LOCAL=$DATA/backups/db
+# Метка рабочего диска: на новом пустом диске её нет, и копия файлов не запустится.
+DISK_MARK=$DATA/.pelena-data-disk
+# Разовое разрешение на большое удаление, см. README.
+ALLOW_DELETE=/etc/pelena-backup/allow-mass-delete
 KEEP_DAYS=7
 MIN_DUMP_BYTES=10240
-# Больше стольких удалений за раз — повод остановиться и разобраться.
-MAX_DELETE=500
 
 R() { rclone --config "$CONF" --log-level NOTICE --stats 0 "$@"; }
 
 exec 9>/run/lock/pelena-backup.lock
 flock -n 9 || { echo "Копия уже выполняется"; exit 1; }
 
-# Без диска источник выглядел бы пустым, и sync стёр бы копии файлов.
-mountpoint -q /mnt/data || { echo "Диск /mnt/data не подключён"; exit 1; }
+mountpoint -q "$DATA" || { echo "Диск $DATA не подключён"; exit 1; }
 [ -s "$RECIPIENT" ] || { echo "Нет $RECIPIENT: сначала pelena-backup-init"; exit 1; }
 R listremotes | grep -qx 'files:' || { echo "Нет раздела files: сначала pelena-backup-init"; exit 1; }
 
 mkdir -p "$LOCAL"
+# Остаток после отключения питания: обычная очистка его не видит.
+find "$LOCAL" -type f -name '*.part' -mmin +60 -delete
 STAMP=$(date -u +%Y%m%d-%H%M%SZ)
 NAME="pelena-$STAMP.dump.age"
 TMP="$LOCAL/$NAME.part"
@@ -42,10 +46,36 @@ echo "Дамп отправлен"
 
 find "$LOCAL" -type f -name '*.dump.age' -mtime +"$KEEP_DAYS" -print -delete
 
+# sync повторяет источник: пустая папка стёрла бы копию. Дамп к этому моменту уже в облаке.
+[ -f "$DISK_MARK" ] || {
+  echo "Нет метки $DISK_MARK: похоже, это новый диск. Файлы не отправлены, копии в облаке целы."
+  echo "Сначала восстановите файлы из копии, см. README."
+  exit 1
+}
+
 for DIR in storage uploads; do
-  R sync "/mnt/data/$DIR" "files:$DIR" --max-delete "$MAX_DELETE"
+  HERE=$(find "$DATA/$DIR" -type f | wc -l)
+  THERE=$(R lsf -R --files-only "files:$DIR" | wc -l)
+  if [ -e "$ALLOW_DELETE" ]; then
+    LIMIT=$THERE
+    echo "$DIR: разрешено большое удаление: на диске $HERE, в копии $THERE"
+  else
+    LIMIT=$(( THERE / 10 + 5 ))
+    if [ "$THERE" -gt 0 ] && [ "$HERE" -eq 0 ]; then
+      echo "$DIR: папка пуста, а в копии файлов $THERE. Файлы не отправлены, копии целы."
+      echo "Если удаление верное, см. README, раздел про большое удаление."
+      exit 1
+    fi
+    if [ $(( THERE - HERE )) -gt "$LIMIT" ]; then
+      echo "$DIR: на диске $HERE файлов, в копии $THERE. Разница больше $LIMIT, файлы не отправлены."
+      echo "Если удаление верное, см. README, раздел про большое удаление."
+      exit 1
+    fi
+  fi
+  R sync "$DATA/$DIR" "files:$DIR" --max-delete "$LIMIT"
   echo "Файлы $DIR отправлены"
 done
 
-date -Is > /mnt/data/backups/last-success
+rm -f "$ALLOW_DELETE"
+date -Is > "$DATA/backups/last-success"
 echo "Готово"

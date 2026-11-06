@@ -2,19 +2,21 @@
 # Проверка копий.
 #   pelena-backup-check            письмо, если успешной копии не было дольше MAX_HOURS
 #   pelena-backup-check --failed   письмо о сбое, вызывается службой при ошибке копии
+#   pelena-backup-check --weekly   письмо «всё работает»: его отсутствие значит, что сломана почта
 set -euo pipefail
 STAMP=${PELENA_LAST_SUCCESS:-/mnt/data/backups/last-success}
 MAX_HOURS=26
 HOST=$(hostname)
 
 if [ "${1:-}" = "--failed" ]; then
+  RUN=$(systemctl show pelena-backup.service -p InvocationID --value)
   {
     echo "Копия на сервере $HOST не выполнена: $(date '+%d.%m.%Y %H:%M')."
     echo
-    echo "Последние записи журнала:"
+    echo "Записи журнала этого запуска:"
     # Длинные строки похожи на ключи: в письмо они не идут.
-    journalctl -u pelena-backup.service -n 15 -o cat --no-pager 2>&1 \
-      | sed -E 's/[A-Za-z0-9+\/=_-]{32,}/<скрыто>/g' | cut -c1-200
+    journalctl "_SYSTEMD_INVOCATION_ID=$RUN" -o cat --no-pager 2>&1 | tail -15 \
+      | sed -E 's/[A-Za-z0-9+\/=_-]{32,}/<скрыто>/g'
   } | /usr/local/sbin/pelena-notify "PELENA: копия не выполнена"
   exit 0
 fi
@@ -24,12 +26,26 @@ if [ -s "$STAMP" ]; then
   LAST=$(date -d "$(cat "$STAMP")" +%s 2>/dev/null || true)
 fi
 NOW=$(date +%s)
+HOURS=$(( (NOW - ${LAST:-0}) / 3600 ))
+
+if [ "${1:-}" = "--weekly" ]; then
+  {
+    echo "Еженедельная проверка уведомлений PELENA: письма доходят."
+    echo "Сервер: $HOST."
+    echo "Последняя успешная копия: ${LAST:+$HOURS ч назад}${LAST:-неизвестно}."
+    echo "Копий на диске: $(find /mnt/data/backups/db -type f -name '*.dump.age' 2>/dev/null | wc -l)."
+    echo "Свободно на диске копий: $(df -h --output=avail /mnt/data | tail -1 | tr -d ' ')."
+    echo "Свободно на системном диске: $(df -h --output=avail / | tail -1 | tr -d ' ')."
+  } | /usr/local/sbin/pelena-notify "PELENA: копии, недельная сводка"
+  exit 0
+fi
+
 if [ -z "$LAST" ]; then
   AGE="неизвестно: отметки об успешной копии нет"
-elif [ $(( NOW - LAST )) -gt $(( MAX_HOURS * 3600 )) ]; then
-  AGE="$(( (NOW - LAST) / 3600 )) ч назад"
+elif [ "$HOURS" -ge "$MAX_HOURS" ]; then
+  AGE="$HOURS ч назад"
 else
-  echo "Копия свежая: $(( (NOW - LAST) / 3600 )) ч назад"
+  echo "Копия свежая: $HOURS ч назад"
   exit 0
 fi
 

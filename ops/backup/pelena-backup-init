@@ -13,6 +13,13 @@ if rclone --config "$CONF" listremotes | grep -qx 'files:'; then
   echo "Раздел files уже настроен, новый не создаю."
   exit 1
 fi
+# Новые ключи рядом со старыми копиями сделали бы их путаницей: чем что читать.
+FOUND=$(rclone --config "$CONF" --log-level ERROR --stats 0 lsf -R --files-only cloud:pelena-backups/db | wc -l)
+FOUND=$(( FOUND + $(rclone --config "$CONF" --log-level ERROR --stats 0 lsf -R --files-only cloud:pelena-files/data | wc -l) ))
+if [ "$FOUND" -gt 0 ]; then
+  echo "В облаке уже есть копии. Верните старые ключи командой: sudo pelena-backup-adopt"
+  exit 1
+fi
 
 AGE_SECRET=$(age-keygen 2>/dev/null | grep '^AGE-SECRET-KEY-')
 AGE_PUBLIC=$(printf '%s\n' "$AGE_SECRET" | age-keygen -y)

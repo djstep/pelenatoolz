@@ -68,5 +68,9 @@ echo "Чтение: HTTP $C"
 unset ESC KID
 if [ "$C" != 200 ]; then cut -c1-250 "$WD/got"; echo; exit 1; fi
 show "$WD/got"
+if ! grep -q 'db-expire-31d' "$WD/got" || ! grep -q 'noncurrent-1d' "$WD/got" || grep -q 'test-expire' "$WD/got"; then
+  echo "Правила в хранилище отличаются от ожидаемых. Команда оставлена, пришлите этот вывод в чат."
+  exit 1
+fi
 rm -f "$0"
 echo "Готово. Команда удалена с сервера. Удалите временный сервисный аккаунт."

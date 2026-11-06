@@ -1,0 +1,10 @@
+[Unit]
+Description=PELENA: расписание недельной сводки
+
+[Timer]
+# Сводка приходит всегда. Если её нет, значит, сломаны уведомления.
+OnCalendar=Mon *-*-* 10:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

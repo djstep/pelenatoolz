@@ -49,6 +49,7 @@ echo "Копия: $LATEST"
 R copyto "cloud:pelena-backups/db/$LATEST" "$WD/latest.age"
 
 docker rm -f "$NAME" > /dev/null 2>&1 || true
+# Память и размер выбраны под базу до 1,5 ГБ. Больше — поднять оба значения.
 docker run -d --name "$NAME" --network none --memory 2g \
   --tmpfs /var/lib/postgresql:rw,size=2g \
   -e POSTGRES_HOST_AUTH_METHOD=trust \
@@ -96,9 +97,14 @@ for DIR in storage uploads; do
       echo "Файлы $DIR не совпали с копией: пароль или соль не подходят, либо файлы изменились."
       exit 1
     fi
-    FIRST=$(R lsf -R "check:$DIR" --files-only | head -1)
+    FIRST=$(R lsf -R "check:$DIR" --files-only | sed -n 1p)
     echo "Расшифрован файл, байт: $(R cat "check:$DIR/$FIRST" | wc -c)"
+    FILES_CHECKED=1
   fi
 done
 
-echo "Пробное восстановление прошло."
+if [ "${FILES_CHECKED:-0}" = 1 ]; then
+  echo "Пробное восстановление прошло."
+else
+  echo "База восстановлена. Файлов в копии нет, поэтому пароль и соль файлов не проверены."
+fi

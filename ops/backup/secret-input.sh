@@ -10,7 +10,7 @@ MAIL_PASS_RE='^[[:graph:]]{8,128}$'
 
 # Из stdin в stdout: ESC-последовательности, управляющие символы, пробелы по краям.
 secret_clean() {
-  LC_ALL=C sed -E 's/\x1b\[[0-9;?]*[ -\/]*[@-~]//g; s/\x1b[@-_]?//g' \
+  LC_ALL=C sed -E 's/\x1b\[[0-9;?]*[ -\/]*[@-~]//g; s/\x1b//g' \
     | LC_ALL=C tr -d '\000-\010\012-\037\177' \
     | LC_ALL=C sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//'
 }
