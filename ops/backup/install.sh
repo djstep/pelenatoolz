@@ -18,5 +18,6 @@ for F in pelena-backup.service pelena-backup.timer pelena-backup-failed.service 
   pelena-backup-weekly.service pelena-backup-weekly.timer; do
   install -m 644 -o root -g root "$DIR/$F" "/etc/systemd/system/$F"
 done
+install -m 700 -o root -g root "$DIR/../deploy/pelena-deploy" /usr/local/sbin/pelena-deploy
 systemctl daemon-reload
 echo "Установлено. Включить: sudo systemctl enable --now pelena-backup.timer pelena-backup-check.timer pelena-backup-weekly.timer"
