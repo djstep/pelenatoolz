@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useId, useRef, useState, type ReactNode } from "react";
+import { useId, useRef, useState, type ReactNode } from "react";
+import { useSafeActionState } from "@/shared/ui/forms/use-safe-action-state";
 import {
   DndContext,
   PointerSensor,
@@ -81,7 +82,7 @@ export function CallSheetSectionsEditor({
   sections: SectionsEditorRow[];
 }) {
   const bound = saveCallSheetSectionsAction.bind(null, projectId);
-  const [state, action, pending] = useActionState(bound, initial);
+  const [state, action, pending] = useSafeActionState(bound, initial);
   useActionToast(state);
   const { ref, markClean } = useFormGuard<HTMLFormElement>(true, undefined, state);
   useActionSuccess(state, markClean);

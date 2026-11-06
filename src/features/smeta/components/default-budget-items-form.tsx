@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useState } from "react";
+import { useSafeActionState } from "@/shared/ui/forms/use-safe-action-state";
 import {
   saveDefaultBudgetItemsAction,
   type DefaultBudgetItemsState,
@@ -49,7 +50,7 @@ export function DefaultBudgetItemsForm({
   showMileage?: boolean;
 }) {
   const bound = saveDefaultBudgetItemsAction.bind(null, projectId, target, entityId);
-  const [state, action, pending] = useActionState(bound, initial);
+  const [state, action, pending] = useSafeActionState(bound, initial);
   useActionToast(state);
   const { ref, markClean } = useFormGuard(canEdit, entityId, state);
   useActionSuccess(state, markClean);

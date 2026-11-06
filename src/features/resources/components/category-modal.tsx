@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useSafeActionState } from "@/shared/ui/forms/use-safe-action-state";
 import {
   createResourceCategoryAction,
   updateResourceCategoryAction,
@@ -121,7 +121,7 @@ export function CategoryModal({
   const bound = isEdit
     ? updateResourceCategoryAction.bind(null, projectId, category!.id)
     : createResourceCategoryAction.bind(null, projectId);
-  const [state, action, pending] = useActionState(bound, initial);
+  const [state, action, pending] = useSafeActionState(bound, initial);
   useActionToast(state);
 
   useActionSuccess(state, onClose);

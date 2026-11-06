@@ -1,7 +1,7 @@
 import { prisma } from "@/shared/db/prisma";
 import { pickFinanceFields } from "@/shared/lib/finance-fields";
 import { RESOURCE_ITEM_FIELDS } from "@/features/resources/lib/item-fields";
-import { dec } from "@/shared/db/serialize-decimal";
+import { dec, serializeForClient } from "@/shared/db/serialize-decimal";
 
 export async function listResourceCategoriesForScenes(projectId: string) {
   return prisma.resourceCategory.findMany({
@@ -61,12 +61,12 @@ export async function getResourceCategory(
     },
   });
   if (!category) return null;
-  return {
+  return serializeForClient({
     ...category,
     items: category.items.map((item) =>
       pickFinanceFields(item, RESOURCE_ITEM_FIELDS, canFinanceRead),
     ),
-  };
+  });
 }
 
 export async function getResourceItem(
@@ -115,19 +115,21 @@ export async function getResourceItem(
     0,
   );
 
-  return pickFinanceFields(
-    {
-      ...item,
-      shiftRate: dec(item.shiftRate),
-      taxPercent: dec(item.taxPercent),
-      kmRate: dec(item.kmRate),
-      sceneCount: item.sceneLinks.length,
-      unshotSceneCount: unshotLinks.length,
-      planSeconds,
-      unshotSeconds,
-    },
-    RESOURCE_ITEM_FIELDS,
-    canFinanceRead,
+  return serializeForClient(
+    pickFinanceFields(
+      {
+        ...item,
+        shiftRate: dec(item.shiftRate),
+        taxPercent: dec(item.taxPercent),
+        kmRate: dec(item.kmRate),
+        sceneCount: item.sceneLinks.length,
+        unshotSceneCount: unshotLinks.length,
+        planSeconds,
+        unshotSeconds,
+      },
+      RESOURCE_ITEM_FIELDS,
+      canFinanceRead,
+    ),
   );
 }
 

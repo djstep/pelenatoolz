@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useState } from "react";
+import { useSafeActionState } from "@/shared/ui/forms/use-safe-action-state";
 import { LocationKind } from "@prisma/client";
 import {
   createLocationAction,
@@ -38,7 +39,7 @@ export function LocationModal({
   const bound = location
     ? updateLocationAction.bind(null, projectId, location.id)
     : createLocationAction.bind(null, projectId);
-  const [state, action, pending] = useActionState(bound, initial);
+  const [state, action, pending] = useSafeActionState(bound, initial);
   const [address, setAddress] = useState(location?.address ?? "");
   const [addressOptions] = useState<AddressOption[]>(() =>
     addresses.map((a) => ({ id: a, name: a })),

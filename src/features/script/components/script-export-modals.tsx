@@ -10,6 +10,7 @@ import {
   columnsReadyForExport,
   createExportColumnId,
 } from "@/features/exports/lib/column-utils";
+import { EXPORT_FAILED, EXPORT_LAYOUT_LOAD_FAILED } from "@/features/exports/lib/export-errors";
 import {
   EXPORT_LAYOUT_NOT_SAVED_HINT,
   type ExportColumn,
@@ -121,14 +122,18 @@ function RegularScriptExportModal({
         else onClose();
         return;
       }
-      const result = await exportSceneScriptAction(projectId, payload);
-      if ("error" in result && result.error) {
-        toast.error(result.error);
-        return;
-      }
-      if ("base64" in result && result.base64) {
-        downloadBase64(result.base64, result.fileName, result.mime);
-        onClose();
+      try {
+        const result = await exportSceneScriptAction(projectId, payload);
+        if ("error" in result && result.error) {
+          toast.error(result.error);
+          return;
+        }
+        if ("base64" in result && result.base64) {
+          downloadBase64(result.base64, result.fileName, result.mime);
+          onClose();
+        }
+      } catch {
+        toast.error(EXPORT_FAILED);
       }
     });
   }
@@ -266,18 +271,26 @@ function DirectorScriptExportModal({
     if (!open) return;
     let cancelled = false;
     setLoading(true);
-    void getExportLayoutAction(projectId, "directorsScript").then((result) => {
-      if (cancelled) return;
-      if (result.layout?.columns?.length) {
-        setColumns(result.layout.columns);
-      } else {
+    void getExportLayoutAction(projectId, "directorsScript")
+      .then((result) => {
+        if (cancelled) return;
+        if (result.layout?.columns?.length) {
+          setColumns(result.layout.columns);
+        } else {
+          setColumns(createDefaultDirectorColumns(resourceCategories));
+        }
+        setLoading(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
         setColumns(createDefaultDirectorColumns(resourceCategories));
-      }
-      setLoading(false);
-    });
+        setLoading(false);
+        toast.error(EXPORT_LAYOUT_LOAD_FAILED);
+      });
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, projectId, resourceCategories]);
 
   function run() {
@@ -313,14 +326,18 @@ function DirectorScriptExportModal({
         else onClose();
         return;
       }
-      const result = await exportScript();
-      if ("error" in result && result.error) {
-        toast.error(result.error);
-        return;
-      }
-      if ("base64" in result && result.base64) {
-        downloadBase64(result.base64, result.fileName, result.mime);
-        onClose();
+      try {
+        const result = await exportScript();
+        if ("error" in result && result.error) {
+          toast.error(result.error);
+          return;
+        }
+        if ("base64" in result && result.base64) {
+          downloadBase64(result.base64, result.fileName, result.mime);
+          onClose();
+        }
+      } catch {
+        toast.error(EXPORT_FAILED);
       }
     });
   }

@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useSafeActionState } from "@/shared/ui/forms/use-safe-action-state";
 import { useRouter } from "next/navigation";
 import {
   createContractAction,
@@ -97,7 +98,7 @@ export function ContractFormModal({
   const bound = isEdit
     ? updateContractAction.bind(null, projectId, defaults!.id!)
     : createContractAction.bind(null, projectId);
-  const [state, action, pending] = useActionState(bound, initial);
+  const [state, action, pending] = useSafeActionState(bound, initial);
   useActionToast(state);
 
   const [companyId, setCompanyId] = useState(defaults?.companyId ?? "");

@@ -208,6 +208,10 @@ test.describe("память разделов меню", () => {
 
   const KEY = "filmprod-nav-sections";
 
+  /** Меню записывает разделы, когда страница ожила: нажатие раньше этого пропало бы. */
+  const menuReady = (page: Page) =>
+    page.waitForFunction((key) => (localStorage.getItem(key) ?? "{}") !== "{}", KEY);
+
   for (const raw of ["null", "[1,2]", "5", '"строка"', "{битый", '{"reports":true,"старое":"да"}']) {
     test(`в хранилище ${raw}: меню работает`, async ({ page }) => {
       const failures: string[] = [];
@@ -225,6 +229,7 @@ test.describe("память разделов меню", () => {
     await page.goto(projectPath(ctx));
     const settings = page.getByRole("button", { name: "Настройки", exact: true });
     await expect(settings).toHaveAttribute("aria-expanded", "false");
+    await menuReady(page);
     await settings.click();
     await expect(settings).toHaveAttribute("aria-expanded", "true");
     await page.reload();
@@ -239,6 +244,7 @@ test.describe("память разделов меню", () => {
     await page.goto(CASTING);
     const section = page.getByRole("button", { name: "Препродакшн здесь" });
     await expect(section).toHaveAttribute("aria-expanded", "true");
+    await menuReady(page);
     await section.click();
     await expect(section).toHaveAttribute("aria-expanded", "false");
     await tab(page, "Пробы").click();

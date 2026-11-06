@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useSafeActionState } from "@/shared/ui/forms/use-safe-action-state";
 import { acceptInviteAction, type ActionState } from "@/features/projects/actions";
 import { Button } from "@/shared/ui/button";
 
@@ -14,7 +14,7 @@ export function AcceptInviteForm({
   token: string;
   label: string;
 }) {
-  const [state, action, pending] = useActionState(
+  const [state, action, pending] = useSafeActionState(
     async (): Promise<ActionState> => acceptInviteAction(token),
     initial,
   );

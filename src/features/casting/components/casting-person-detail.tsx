@@ -1,6 +1,8 @@
 "use client";
 
-import { useActionState, useState, useTransition, type ReactNode } from "react";
+import { birthDateKey } from "@/features/casting/lib/casting-person-fields";
+import { useState, useTransition, type ReactNode } from "react";
+import { useSafeActionState } from "@/shared/ui/forms/use-safe-action-state";
 import type { CastingCandidateStatus } from "@prisma/client";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -29,6 +31,7 @@ import { Label } from "@/shared/ui/label";
 import { Select } from "@/shared/ui/select";
 import { useActionSuccess } from "@/shared/ui/unsaved/use-action-success";
 import { useFormGuard } from "@/shared/ui/unsaved/use-form-guard";
+import { submitKeepingFields } from "@/shared/ui/forms/submit-keeping-fields";
 import { useUnsavedChanges } from "@/shared/ui/unsaved/unsaved-changes-provider";
 import { PersonFormFields } from "./casting-person-form-fields";
 
@@ -71,10 +74,10 @@ export function CastingPersonDetail({
   const confirmDelete = useConfirm();
 
   const bound = updateCastingPersonAction.bind(null, projectId, person.id);
-  const [state, action, formPending] = useActionState(bound, initial);
+  const [state, action, formPending] = useSafeActionState(bound, initial);
   useActionToast(state);
 
-  const { ref: formRef } = useFormGuard(editOpen);
+  const { ref: formRef } = useFormGuard(editOpen, undefined, state);
   const unsaved = useUnsavedChanges();
   // «Отмена» прячет форму — несохранённое в ней пропало бы.
   function cancelEdit() {
@@ -191,7 +194,7 @@ export function CastingPersonDetail({
           <p className="text-[var(--muted-fg)]">Дата рождения</p>
           <p>
             {person.birthDate
-              ? String(person.birthDate).slice(0, 10)
+              ? birthDateKey(person.birthDate)
               : "—"}
           </p>
         </div>
@@ -311,7 +314,7 @@ export function CastingPersonDetail({
       {editOpen ? (
         <div className="glass-card space-y-4 p-5">
           <h2 className="font-semibold">Редактирование</h2>
-          <form ref={formRef} action={action} className="space-y-4">
+          <form ref={formRef} onSubmit={submitKeepingFields(action)} className="space-y-4">
             <PersonFormFields projectId={projectId} person={person} finance={finance} />
             <div className="flex gap-3">
               <Button type="submit" disabled={formPending}>

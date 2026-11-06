@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { prisma } from "@/shared/db/prisma";
+import { clearEmptied } from "@/shared/lib/cleared-fields";
 import { AuditEntityType } from "@/shared/audit/entity-types";
 import { recordAudit } from "@/shared/audit/with-audit";
 
@@ -114,6 +115,7 @@ export async function updatePostTaskAction(
   if (!parsed.success) {
     return { error: "Проверьте данные задачи" };
   }
+  const { assignee, notes } = clearEmptied(parsed.data, formData, ["assignee", "notes"]);
 
   await prisma.postTask.updateMany({
     where: { id: taskId, projectId },
@@ -122,9 +124,9 @@ export async function updatePostTaskAction(
       status: parsed.data.status,
       title: parsed.data.title,
       episodeNumber: parsed.data.episodeNumber ?? null,
-      assignee: parsed.data.assignee,
+      assignee,
       dueDate: parsed.data.dueDate ? new Date(parsed.data.dueDate) : null,
-      notes: parsed.data.notes,
+      notes,
     },
   });
 

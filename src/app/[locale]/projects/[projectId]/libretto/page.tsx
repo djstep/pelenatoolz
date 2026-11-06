@@ -11,6 +11,7 @@ import {
   listLocations,
   listScenes,
 } from "@/features/script/queries";
+import { serializeForClient } from "@/shared/db/serialize-decimal";
 import { Card } from "@/shared/ui/card";
 
 type Props = {
@@ -70,7 +71,7 @@ export default async function LibrettoPage({ params }: Props) {
           shootOnFilm={ctx.project.shootOnFilm ?? false}
           timingMode={ctx.project.timingMode}
           pageToMinuteRatio={Number(ctx.project.pageToMinuteRatio)}
-          scenes={scenes}
+          scenes={serializeForClient(scenes)}
           locations={locationOptions}
           characters={characters}
           resourceCategories={sceneResourceCategories}

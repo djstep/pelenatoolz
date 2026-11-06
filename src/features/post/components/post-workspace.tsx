@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { useSafeActionState } from "@/shared/ui/forms/use-safe-action-state";
 import { PostStage, PostTaskStatus } from "@prisma/client";
 import {
   createPostTaskAction,
@@ -132,7 +133,7 @@ function TaskModal({
   const bound = task
     ? updatePostTaskAction.bind(null, projectId, task.id)
     : createPostTaskAction.bind(null, projectId);
-  const [state, action, pending] = useActionState(bound, initial);
+  const [state, action, pending] = useSafeActionState(bound, initial);
 
   useActionSuccess(state, onClose);
 

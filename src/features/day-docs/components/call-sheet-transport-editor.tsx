@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useRef, useState } from "react";
+import { useRef, useState } from "react";
+import { useSafeActionState } from "@/shared/ui/forms/use-safe-action-state";
 import {
   saveCallSheetTransportsAction,
   type TransportSaveState,
@@ -51,7 +52,7 @@ export function CallSheetTransportEditor({
   data: CallSheetTransportEditorData;
 }) {
   const bound = saveCallSheetTransportsAction.bind(null, projectId, dayId);
-  const [state, action, pending] = useActionState(useRevisionAction(bound), initial);
+  const [state, action, pending] = useSafeActionState(useRevisionAction(bound), initial);
   useActionToast(state);
   const { ref, markClean } = useFormGuard<HTMLFormElement>(true, undefined, state);
   useActionSuccess(state, markClean);

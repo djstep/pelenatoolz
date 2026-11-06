@@ -9,6 +9,7 @@ import { AuditEntityType } from "@/shared/audit/entity-types";
 import { auditMutation } from "@/shared/audit/with-audit";
 import { prisma } from "@/shared/db/prisma";
 import { impactLines } from "@/shared/lib/plural";
+import { changedFrom, clearEmptied, orCurrent } from "@/shared/lib/cleared-fields";
 import { pickFinanceFields } from "@/shared/lib/finance-fields";
 import { CAST_SNAPSHOT_INPUT_FIELDS } from "@/features/characters/lib/character-fields";
 
@@ -73,6 +74,7 @@ export async function updateCharacterRequirementsAction(
     roleRequirements: formData.get("roleRequirements") || undefined,
   });
   if (!parsed.success) return { error: "Проверьте данные" };
+  const fields = clearEmptied(parsed.data, formData, ["description", "roleRequirements"]);
 
   await auditMutation(
     ctx,
@@ -82,14 +84,14 @@ export async function updateCharacterRequirementsAction(
         data,
       });
     },
-    parsed.data,
+    fields,
     {
       projectId,
       entityType: AuditEntityType.character,
       action: "UPDATE",
       entityId: characterId,
       summary: "Обновлены требования персонажа",
-      changes: { fields: { description: parsed.data.description, roleRequirements: parsed.data.roleRequirements } },
+      changes: { fields: { description: fields.description, roleRequirements: fields.roleRequirements } },
     },
   );
 
@@ -123,21 +125,22 @@ export async function updateCharacterCastSnapshotAction(
   if (!parsed.success) return { error: "Проверьте данные" };
   // Ставка и фин. условия снимка — только с фин. правкой актёров, иначе присланное не пишется.
   const input = pickFinanceFields(
-    parsed.data,
+    clearEmptied(parsed.data, formData, ["riderNotes", "shiftRate", "proposedTerms", "skills"]),
     CAST_SNAPSHOT_INPUT_FIELDS,
     ctx.canFinanceWrite("actors"),
   );
 
   const current = character.castSnapshot as CharacterCastSnapshot;
-  const skills = input.skills
-    ? input.skills.split(/[,;]/).map((s) => s.trim()).filter(Boolean)
-    : current.skills;
+  const skills =
+    input.skills === undefined
+      ? current.skills
+      : (input.skills ?? "").split(/[,;]/).map((s) => s.trim()).filter(Boolean);
 
   const next: CharacterCastSnapshot = {
     ...current,
-    riderNotes: input.riderNotes ?? current.riderNotes,
-    shiftRate: input.shiftRate ?? current.shiftRate,
-    proposedTerms: input.proposedTerms ?? current.proposedTerms,
+    riderNotes: orCurrent(input.riderNotes, current.riderNotes),
+    shiftRate: orCurrent(input.shiftRate, current.shiftRate),
+    proposedTerms: orCurrent(input.proposedTerms, current.proposedTerms),
     skills,
   };
 
@@ -151,12 +154,14 @@ export async function updateCharacterCastSnapshotAction(
       const actor = await prisma.actor.findFirst({
         where: { projectId, characterId },
       });
-      if (actor && input.shiftRate != null) {
+      const rateChanged = changedFrom(input.shiftRate, current.shiftRate);
+      const termsChanged = changedFrom(input.proposedTerms, current.proposedTerms);
+      if (actor && (rateChanged || termsChanged)) {
         await prisma.actor.update({
           where: { id: actor.id },
           data: {
-            shiftRate: input.shiftRate,
-            specialConditions: next.proposedTerms ?? actor.specialConditions,
+            ...(rateChanged ? { shiftRate: input.shiftRate } : {}),
+            ...(termsChanged ? { specialConditions: input.proposedTerms } : {}),
           },
         });
       }
@@ -228,6 +233,12 @@ export async function updateCharacterRecordAction(
     costumeOffsetMin: formData.get("costumeOffsetMin") || undefined,
   });
   if (!parsed.success) return { error: "Проверьте данные" };
+  const fields = clearEmptied(parsed.data, formData, [
+    "description",
+    "roleRequirements",
+    "makeupOffsetMin",
+    "costumeOffsetMin",
+  ]);
 
   const updated = await auditMutation(
     ctx,
@@ -239,7 +250,7 @@ export async function updateCharacterRecordAction(
       if (count.count === 0) throw new Error("NOT_FOUND");
       return { name: data.name };
     },
-    parsed.data,
+    fields,
     {
       projectId,
       entityType: AuditEntityType.character,

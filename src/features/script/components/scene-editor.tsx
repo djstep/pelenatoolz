@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useActionState, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
+import { useSafeActionState } from "@/shared/ui/forms/use-safe-action-state";
 import type { ProjectType } from "@prisma/client";
 import {
   duplicateSceneAction,
@@ -22,6 +23,7 @@ import { Button } from "@/shared/ui/button";
 import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
 import { useActionSuccess } from "@/shared/ui/unsaved/use-action-success";
 import { useFormGuard } from "@/shared/ui/unsaved/use-form-guard";
+import { submitKeepingFields } from "@/shared/ui/forms/submit-keeping-fields";
 import { useOnChange } from "@/shared/hooks/use-on-change";
 
 const initial: ActionState = {};
@@ -64,7 +66,7 @@ export function SceneEditor({
 }) {
   const router = useRouter();
   const boundAction = updateSceneAction.bind(null, projectId, scene.id);
-  const [state, action, pending] = useActionState(boundAction, initial);
+  const [state, action, pending] = useSafeActionState(boundAction, initial);
   const [dupPending, startDup] = useTransition();
   const [dupError, setDupError] = useState<string | null>(null);
   const [cutPending, startCut] = useTransition();
@@ -238,11 +240,8 @@ export function SceneEditor({
           ref={formRef}
           key={formKey}
           id="scene-editor-form"
-          action={canWrite ? action : undefined}
           className="min-w-0 rounded-xl border border-[var(--border)] bg-[var(--panel-solid)] p-5"
-          onSubmit={(e) => {
-            if (!canWrite) e.preventDefault();
-          }}
+          onSubmit={canWrite ? submitKeepingFields(action) : (e) => e.preventDefault()}
         >
           <SceneFormFields
             projectId={projectId}

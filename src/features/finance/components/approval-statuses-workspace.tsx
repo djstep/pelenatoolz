@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useState } from "react";
+import { useSafeActionState } from "@/shared/ui/forms/use-safe-action-state";
 import {
   createApprovalStatusAction,
   deleteApprovalStatusAction,
@@ -86,7 +87,7 @@ function StatusModal({
   const bound = status
     ? updateApprovalStatusAction.bind(null, projectId, status.id)
     : createApprovalStatusAction.bind(null, projectId);
-  const [state, action, pending] = useActionState(bound, initial);
+  const [state, action, pending] = useSafeActionState(bound, initial);
   useActionToast(state);
   useActionSuccess(state, onClose);
 

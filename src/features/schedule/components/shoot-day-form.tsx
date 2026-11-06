@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
+import { useSafeActionState } from "@/shared/ui/forms/use-safe-action-state";
 import { ShootDayStatus } from "@prisma/client";
 import {
   createShootDayAction,
@@ -9,6 +10,9 @@ import {
 import { countCalendarDays, parseDateInput } from "@/features/schedule/lib/date-range";
 import { shootDayStatusLabels } from "@/shared/i18n/domain-labels";
 import { Button } from "@/shared/ui/button";
+import { submitKeepingFields } from "@/shared/ui/forms/submit-keeping-fields";
+import { useActionSuccess } from "@/shared/ui/unsaved/use-action-success";
+import { useFormGuard } from "@/shared/ui/unsaved/use-form-guard";
 import { HhMmInput } from "@/shared/ui/hh-mm-input";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
@@ -52,7 +56,11 @@ export function ShootDayForm({
   canWrite: boolean;
 }) {
   const bound = createShootDayAction.bind(null, projectId);
-  const [state, action, pending] = useActionState(bound, initial);
+  const [state, action, pending] = useSafeActionState(bound, initial);
+  // После добавления поля возвращаются к началу: новый номер дня и статус по умолчанию.
+  const [formKey, setFormKey] = useState(0);
+  const { ref: formRef } = useFormGuard(canWrite, nextDayNumber, state);
+  useActionSuccess(state, () => setFormKey((key) => key + 1));
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [callTime, setCallTime] = useState("");
@@ -70,7 +78,9 @@ export function ShootDayForm({
 
   return (
     <form
-      action={action}
+      key={formKey}
+      ref={formRef}
+      onSubmit={submitKeepingFields(action)}
       className="rounded-xl border border-[var(--border)] bg-[var(--panel-solid)] p-3"
     >
       <div className="flex flex-wrap items-end gap-x-3 gap-y-2">

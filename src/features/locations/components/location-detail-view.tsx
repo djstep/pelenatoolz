@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useState } from "react";
+import { useSafeActionState } from "@/shared/ui/forms/use-safe-action-state";
 import Link from "next/link";
 import {
   addLocationPhotoAction,
@@ -33,6 +34,7 @@ import { Label } from "@/shared/ui/label";
 import { Card } from "@/shared/ui/card";
 import { useActionSuccess } from "@/shared/ui/unsaved/use-action-success";
 import { useFormGuard } from "@/shared/ui/unsaved/use-form-guard";
+import { submitKeepingFields } from "@/shared/ui/forms/submit-keeping-fields";
 
 const initial: LocationActionState = {};
 
@@ -56,10 +58,10 @@ export function LocationDetailView({
   const [editOpen, setEditOpen] = useState(false);
   const confirmDelete = useConfirm();
   const boundPhoto = addLocationPhotoAction.bind(null, projectId, location.id);
-  const [photoState, photoAction, photoPending] = useActionState(boundPhoto, initial);
+  const [photoState, photoAction, photoPending] = useSafeActionState(boundPhoto, initial);
 
   const reqBound = updateLocationRequirementsAction.bind(null, projectId, location.id);
-  const [reqState, reqAction, reqPending] = useActionState(reqBound, initial);
+  const [reqState, reqAction, reqPending] = useSafeActionState(reqBound, initial);
   useActionToast(reqState);
   const { ref: reqFormRef, markClean: markReqClean } = useFormGuard(
     true,
@@ -69,17 +71,22 @@ export function LocationDetailView({
   useActionSuccess(reqState, markReqClean);
 
   const snapBound = updateLocationScoutSnapshotAction.bind(null, projectId, location.id);
-  const [snapState, snapAction, snapPending] = useActionState(snapBound, initial);
+  const [snapState, snapAction, snapPending] = useSafeActionState(snapBound, initial);
   useActionToast(snapState);
   const { ref: snapFormRef, markClean: markSnapClean } = useFormGuard(
     true,
     undefined,
     snapState,
   );
-  useActionSuccess(snapState, markSnapClean);
+  // Пересоздание показывает то, что в базе: пустое поле сервер может оставить без изменений.
+  const [snapKey, setSnapKey] = useState(0);
+  useActionSuccess(snapState, () => {
+    markSnapClean();
+    setSnapKey((key) => key + 1);
+  });
 
   const finBound = updateLocationFinancialAction.bind(null, projectId, location.id);
-  const [finState, finAction, finPending] = useActionState(finBound, initial);
+  const [finState, finAction, finPending] = useSafeActionState(finBound, initial);
   useActionToast(finState);
   const { ref: finFormRef, markClean: markFinClean } = useFormGuard(
     true,
@@ -161,7 +168,7 @@ export function LocationDetailView({
             Открыть скаут →
           </Link>
         </div>
-        <form ref={reqFormRef} action={reqAction} className="space-y-3">
+        <form ref={reqFormRef} onSubmit={submitKeepingFields(reqAction)} className="space-y-3">
           <div>
             <Label htmlFor="requirementNotes">Что нужно найти</Label>
             <textarea
@@ -221,7 +228,7 @@ export function LocationDetailView({
           <p className="text-xs text-[var(--muted-fg)]">
             Скопировано при утверждении. Изменения здесь не затрагивают карточку в Скауте.
           </p>
-          <form ref={snapFormRef} action={snapAction} className="grid gap-3 md:grid-cols-2">
+          <form key={snapKey} ref={snapFormRef} onSubmit={submitKeepingFields(snapAction)} className="grid gap-3 md:grid-cols-2">
             <div>
               <Label htmlFor="snapAddress">Адрес</Label>
               <Input
@@ -239,6 +246,7 @@ export function LocationDetailView({
                   name="cost"
                   type="number"
                   min={0}
+                  step="0.01"
                   defaultValue={scoutSnapshot.cost ?? undefined}
                   disabled={!canWrite || !canFinanceWrite}
                 />
@@ -309,7 +317,7 @@ export function LocationDetailView({
         <Card className="space-y-4 p-5">
           <h3 className="font-semibold">Финансовые условия</h3>
           {canFinanceWrite ? (
-            <form ref={finFormRef} action={finAction} className="space-y-4">
+            <form ref={finFormRef} onSubmit={submitKeepingFields(finAction)} className="space-y-4">
               <FinancialTermsBlock
                 shiftRate={location.shiftRate ? Number(location.shiftRate) : 0}
                 taxPercent={location.taxPercent ? Number(location.taxPercent) : 0}

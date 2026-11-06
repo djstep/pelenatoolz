@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useTransition } from "react";
+import { useState, useTransition } from "react";
+import { useSafeActionState } from "@/shared/ui/forms/use-safe-action-state";
 import Link from "next/link";
 import {
   updateCharacterCastSnapshotAction,
@@ -29,6 +30,7 @@ import { AvailabilityMiniPreview } from "@/features/actor-availability/component
 import { useActionToast, useToast } from "@/shared/ui/toast";
 import { useActionSuccess } from "@/shared/ui/unsaved/use-action-success";
 import { useFormGuard } from "@/shared/ui/unsaved/use-form-guard";
+import { submitKeepingFields } from "@/shared/ui/forms/submit-keeping-fields";
 import { CharacterScriptButton } from "@/features/screenplay/components/character-script-button";
 import { CastListExportButton } from "@/features/casting/components/cast-list-export-button";
 import { CastingCandidateComments } from "@/features/casting/components/casting-candidate-comments";
@@ -77,28 +79,37 @@ export function CharacterDetailView({
     projectId,
     character.id,
   );
-  const [reqState, reqAction, reqPending] = useActionState(reqBound, initial);
+  const [reqState, reqAction, reqPending] = useSafeActionState(reqBound, initial);
   useActionToast(reqState);
   const { ref: reqFormRef, markClean: markReqClean } = useFormGuard(
     true,
     undefined,
     reqState,
   );
-  useActionSuccess(reqState, markReqClean);
+  // Пересоздание показывает то, что в базе: пустое поле сервер может оставить без изменений.
+  const [reqKey, setReqKey] = useState(0);
+  useActionSuccess(reqState, () => {
+    markReqClean();
+    setReqKey((key) => key + 1);
+  });
 
   const snapBound = updateCharacterCastSnapshotAction.bind(
     null,
     projectId,
     character.id,
   );
-  const [snapState, snapAction, snapPending] = useActionState(snapBound, initial);
+  const [snapState, snapAction, snapPending] = useSafeActionState(snapBound, initial);
   useActionToast(snapState);
   const { ref: snapFormRef, markClean: markSnapClean } = useFormGuard(
     true,
     undefined,
     snapState,
   );
-  useActionSuccess(snapState, markSnapClean);
+  const [snapKey, setSnapKey] = useState(0);
+  useActionSuccess(snapState, () => {
+    markSnapClean();
+    setSnapKey((key) => key + 1);
+  });
 
   const actor = character.actors[0];
   const snapshot = character.snapshot;
@@ -161,7 +172,7 @@ export function CharacterDetailView({
 
       <section className="glass-card space-y-4 p-5">
         <h2 className="font-semibold">Требования к роли</h2>
-        <form ref={reqFormRef} action={reqAction} className="space-y-3">
+        <form key={reqKey} ref={reqFormRef} onSubmit={submitKeepingFields(reqAction)} className="space-y-3">
           <div>
             <Label htmlFor="description">Описание персонажа</Label>
             <textarea
@@ -268,7 +279,7 @@ export function CharacterDetailView({
             Данные скопированы при утверждении. Редактирование здесь не меняет карточку
             в Кастинге.
           </p>
-          <form ref={snapFormRef} action={snapAction} className="space-y-4">
+          <form key={snapKey} ref={snapFormRef} onSubmit={submitKeepingFields(snapAction)} className="space-y-4">
             <div className="grid gap-3 md:grid-cols-2 text-sm">
               <div>
                 <span className="text-[var(--muted-fg)]">ФИО</span>
@@ -313,6 +324,7 @@ export function CharacterDetailView({
                     name="shiftRate"
                     type="number"
                     min={0}
+                    step="0.01"
                     defaultValue={snapshot.shiftRate ?? undefined}
                     disabled={!canWriteCast || !canFinanceWrite}
                   />
@@ -390,11 +402,11 @@ function CharacterPayrollSection({
   canFinanceWrite: boolean;
 }) {
   const bound = updateActorAction.bind(null, projectId, actor.id);
-  const [state, action, pending] = useActionState(bound, actorInitial);
+  const [state, action, pending] = useSafeActionState(bound, actorInitial);
   useActionToast(state);
   const { ref: feeFormRef, markClean: markFeeClean } = useFormGuard(
     true,
-    undefined,
+    String(actor.shiftRate),
     state,
   );
   useActionSuccess(state, markFeeClean);
@@ -403,7 +415,7 @@ function CharacterPayrollSection({
     <div className="space-y-4 border-t border-[var(--border)] pt-4">
       {canFinanceRead ? (
         canFinanceWrite ? (
-          <form ref={feeFormRef} action={action}>
+          <form ref={feeFormRef} onSubmit={submitKeepingFields(action)}>
             <input type="hidden" name="lastName" value={actor.lastName} />
             <input type="hidden" name="firstName" value={actor.firstName ?? ""} />
             <input type="hidden" name="middleName" value={actor.middleName ?? ""} />
@@ -414,6 +426,8 @@ function CharacterPayrollSection({
             <input type="hidden" name="agentPhone" value={actor.agentPhone ?? ""} />
             <input type="hidden" name="agentEmail" value={actor.agentEmail ?? ""} />
             <ActorPayrollBlock
+              // Снимок может изменить ставку актёра, а блок держит её в своём состоянии.
+              key={String(actor.shiftRate)}
               title="Гонорар и переработки"
               shiftRate={actor.shiftRate ? Number(actor.shiftRate) : 0}
               taxPercent={actor.taxPercent ? Number(actor.taxPercent) : 0}

@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useState } from "react";
+import { useSafeActionState } from "@/shared/ui/forms/use-safe-action-state";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import {
@@ -25,7 +26,7 @@ export function RegisterForm({
 }) {
   const t = useTranslations("auth");
   const tNav = useTranslations("nav");
-  const [state, action, pending] = useActionState(registerAction, initial);
+  const [state, action, pending] = useSafeActionState(registerAction, initial);
   const [email, setEmail] = useState("");
 
   return (

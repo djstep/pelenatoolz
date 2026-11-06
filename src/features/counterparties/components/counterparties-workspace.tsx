@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { useSafeActionState } from "@/shared/ui/forms/use-safe-action-state";
 import Link from "next/link";
 import {
   createCompanyAction,
@@ -142,7 +143,7 @@ function CompanyModal({
   const bound = company
     ? updateCompanyAction.bind(null, projectId, company.id)
     : createCompanyAction.bind(null, projectId);
-  const [state, action, pending] = useActionState(bound, initial);
+  const [state, action, pending] = useSafeActionState(bound, initial);
   useActionToast(state);
   useActionSuccess(state, onClose);
 
@@ -189,7 +190,7 @@ function CounterpartyModal({
   const bound = counterparty
     ? updateCounterpartyAction.bind(null, projectId, counterparty.id)
     : createCounterpartyAction.bind(null, projectId);
-  const [state, action, pending] = useActionState(bound, initial);
+  const [state, action, pending] = useSafeActionState(bound, initial);
   useActionToast(state);
   useActionSuccess(state, onClose);
 

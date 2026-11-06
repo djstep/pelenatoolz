@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useState } from "react";
+import { useSafeActionState } from "@/shared/ui/forms/use-safe-action-state";
 import type { ProjectType, TimingMode } from "@prisma/client";
 import {
   createSceneAction,
@@ -52,7 +53,7 @@ export function SceneModal({
   scene?: SceneEditData | null;
 }) {
   const boundAction = createSceneAction.bind(null, projectId);
-  const [state, action, pending] = useActionState(boundAction, initial);
+  const [state, action, pending] = useSafeActionState(boundAction, initial);
 
   const [locations, setLocations] = useState(initialLocations);
   const [characters, setCharacters] = useState(initialCharacters);

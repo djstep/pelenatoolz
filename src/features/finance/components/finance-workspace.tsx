@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { useSafeActionState } from "@/shared/ui/forms/use-safe-action-state";
 import { CounterpartyType, FinanceOpCategory, FinanceOpType } from "@prisma/client";
 import {
   quickCreateCompanyAction,
@@ -269,7 +270,7 @@ function OpModal({
   const bound = op
     ? updateFinanceOpAction.bind(null, projectId, op.id)
     : createFinanceOpAction.bind(null, projectId);
-  const [state, action, pending] = useActionState(bound, initial);
+  const [state, action, pending] = useSafeActionState(bound, initial);
   useActionToast(state);
 
   useActionSuccess(state, onClose);

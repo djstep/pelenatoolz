@@ -11,6 +11,7 @@ import type { CrewRights } from "@/features/crew/lib/crew-rules";
 import { getExportLayoutAction, saveExportLayoutAction } from "@/features/exports/actions";
 import { ExportColumnBuilder } from "@/features/exports/components/export-column-builder";
 import { columnsReadyForExport, createExportColumnId } from "@/features/exports/lib/column-utils";
+import { EXPORT_FAILED, EXPORT_LAYOUT_LOAD_FAILED } from "@/features/exports/lib/export-errors";
 import type { ExportColumn } from "@/features/exports/types";
 import { printExport } from "@/shared/lib/print-window";
 import { Button } from "@/shared/ui/button";
@@ -55,13 +56,19 @@ function CrewExportModal({
 
   useEffect(() => {
     let cancelled = false;
-    void getExportLayoutAction(projectId, LAYOUT_KEY).then((result) => {
-      if (cancelled) return;
-      const saved = crewExportColumns(result.layout?.columns ?? [], rights);
-      if (saved.length > 0) setColumns(saved);
-      setLoading(false);
-      if (result.error) toast.error(result.error);
-    });
+    void getExportLayoutAction(projectId, LAYOUT_KEY)
+      .then((result) => {
+        if (cancelled) return;
+        const saved = crewExportColumns(result.layout?.columns ?? [], rights);
+        if (saved.length > 0) setColumns(saved);
+        setLoading(false);
+        if (result.error) toast.error(result.error);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setLoading(false);
+        toast.error(EXPORT_LAYOUT_LOAD_FAILED);
+      });
     return () => {
       cancelled = true;
     };
@@ -89,15 +96,19 @@ function CrewExportModal({
         onClose();
         return;
       }
-      const result = await exportCrew();
-      if ("error" in result) {
-        toast.error(result.error);
-        return;
-      }
-      if ("base64" in result) {
-        downloadBase64(result.base64, result.fileName, result.mime);
-        toast.success("Файл сохранён");
-        onClose();
+      try {
+        const result = await exportCrew();
+        if ("error" in result) {
+          toast.error(result.error);
+          return;
+        }
+        if ("base64" in result) {
+          downloadBase64(result.base64, result.fileName, result.mime);
+          toast.success("Файл сохранён");
+          onClose();
+        }
+      } catch {
+        toast.error(EXPORT_FAILED);
       }
     });
   }

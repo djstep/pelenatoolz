@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useState } from "react";
+import { useSafeActionState } from "@/shared/ui/forms/use-safe-action-state";
 import {
   createRoleAction,
   deleteRoleAction,
@@ -52,7 +53,7 @@ function RoleEditorModal({
   const bound = isEdit
     ? updateRoleAction.bind(null, projectId, role!.id)
     : createRoleAction.bind(null, projectId);
-  const [state, action, pending] = useActionState(bound, initial);
+  const [state, action, pending] = useSafeActionState(bound, initial);
   useActionToast(state);
   useActionSuccess(state, onClose);
   const matrix: PermissionMatrix = role

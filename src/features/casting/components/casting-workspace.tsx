@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useMemo, useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
+import { useSafeActionState } from "@/shared/ui/forms/use-safe-action-state";
 import type { CastingCandidateStatus } from "@prisma/client";
 import Link from "next/link";
 import {
@@ -60,7 +61,7 @@ function PersonModal({
   const bound = isEdit
     ? updateCastingPersonAction.bind(null, projectId, person!.id)
     : createCastingPersonAction.bind(null, projectId);
-  const [state, action, pending] = useActionState(bound, initial);
+  const [state, action, pending] = useSafeActionState(bound, initial);
   useActionToast(state);
 
   useActionSuccess(state, onClose);

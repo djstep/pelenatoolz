@@ -8,6 +8,7 @@ import {
 import { getAvailabilityMiniBundle } from "@/features/actor-availability/lib/serialize-bundle";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { DefaultBudgetItemsCard } from "@/features/smeta/components/default-budget-items-card";
+import { serializeForClient } from "@/shared/db/serialize-decimal";
 import { Card } from "@/shared/ui/card";
 
 type Props = {
@@ -38,7 +39,7 @@ export default async function CharacterDetailPage({ params }: Props) {
         <CharacterDetailView
           projectId={projectId}
           locale={locale}
-          character={character}
+          character={serializeForClient(character)}
           castListBundle={
             castBundle ? serializeCastListBundle(castBundle) : null
           }

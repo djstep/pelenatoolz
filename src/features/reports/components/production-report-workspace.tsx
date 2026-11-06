@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { useActionState, useState } from "react";
+import { useState } from "react";
+import { useSafeActionState } from "@/shared/ui/forms/use-safe-action-state";
 import { updateProductionDayMetricsAction } from "@/features/reports/actions";
 import { SceneFactModal } from "@/features/reports/components/scene-fact-modal";
 import { WorkRowsSection } from "@/features/reports/components/work-rows-section";
@@ -53,7 +54,7 @@ export function ProductionReportWorkspace({
   });
 
   const bound = updateProductionDayMetricsAction.bind(null, projectId, day.id);
-  const [state, formAction, pending] = useActionState(bound, {});
+  const [state, formAction, pending] = useSafeActionState(bound, {});
   useActionToast(state);
   // Предупреждение о несохранённых изменениях при уходе со страницы.
   const { ref: formRef, markClean: markFormClean } = useFormGuard(

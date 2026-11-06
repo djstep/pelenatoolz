@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
+import { useSafeActionState } from "@/shared/ui/forms/use-safe-action-state";
 import {
   archiveCrewMemberAction,
   createCrewMemberAction,
@@ -211,7 +212,7 @@ export function CrewMemberModal({
   const bound = member
     ? updateCrewMemberAction.bind(null, projectId, member.id)
     : createCrewMemberAction.bind(null, projectId);
-  const [state, action, pending] = useActionState(bound, initial);
+  const [state, action, pending] = useSafeActionState(bound, initial);
   const [archivePending, startArchive] = useTransition();
   useActionToast(state);
   useActionSuccess(state, onClose);

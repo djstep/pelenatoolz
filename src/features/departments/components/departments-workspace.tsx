@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useId, useOptimistic, useState, useTransition } from "react";
+import { useId, useOptimistic, useState, useTransition } from "react";
+import { useSafeActionState } from "@/shared/ui/forms/use-safe-action-state";
 import {
   DndContext,
   PointerSensor,
@@ -59,7 +60,7 @@ function DepartmentModal({
   const bound = isEdit
     ? updateDepartmentAction.bind(null, projectId, department!.id)
     : createDepartmentAction.bind(null, projectId);
-  const [state, action, pending] = useActionState(bound, initial);
+  const [state, action, pending] = useSafeActionState(bound, initial);
   useActionToast(state);
   useActionSuccess(state, onClose);
 

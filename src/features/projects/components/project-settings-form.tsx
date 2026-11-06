@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useState } from "react";
+import { useSafeActionState } from "@/shared/ui/forms/use-safe-action-state";
 import { ProjectStatus, ProjectType, TimingMode } from "@prisma/client";
 import {
   updateProjectAction,
@@ -25,6 +26,7 @@ import { cn } from "@/shared/lib/cn";
 import { useActionToast } from "@/shared/ui/toast";
 import { useActionSuccess } from "@/shared/ui/unsaved/use-action-success";
 import { useFormGuard } from "@/shared/ui/unsaved/use-form-guard";
+import { submitKeepingFields } from "@/shared/ui/forms/submit-keeping-fields";
 
 const initial: ActionState = {};
 
@@ -35,11 +37,16 @@ function formatDateInput(value: Date | null | undefined) {
 
 export function ProjectSettingsForm({ project }: { project: ProjectSettingsValues }) {
   const bound = updateProjectAction.bind(null, project.id);
-  const [state, action, pending] = useActionState(bound, initial);
+  const [state, action, pending] = useSafeActionState(bound, initial);
   useActionToast(state);
   // Предупреждение о несохранённых изменениях при уходе со страницы.
   const { ref: formRef, markClean } = useFormGuard(true, undefined, state);
-  useActionSuccess(state, markClean);
+  // Пересоздание показывает то, что в базе: пустое поле сервер может оставить без изменений.
+  const [formKey, setFormKey] = useState(0);
+  useActionSuccess(state, () => {
+    markClean();
+    setFormKey((key) => key + 1);
+  });
   const [projectType, setProjectType] = useState(project.type);
   const [timingMode, setTimingMode] = useState(project.timingMode);
   const [shootOnFilm, setShootOnFilm] = useState(project.shootOnFilm);
@@ -54,7 +61,7 @@ export function ProjectSettingsForm({ project }: { project: ProjectSettingsValue
   const isArchived = project.status === ProjectStatus.ARCHIVED;
 
   return (
-    <form ref={formRef} action={action} className="space-y-6">
+    <form key={formKey} ref={formRef} onSubmit={submitKeepingFields(action)} className="space-y-6">
       {isArchived ? (
         <div className="rounded-md border border-[var(--tone-warning-line)] bg-[var(--tone-warning-bg)] p-3 text-sm">
           Проект в архиве. Для редактирования сначала восстановите его.

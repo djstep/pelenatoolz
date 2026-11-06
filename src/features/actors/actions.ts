@@ -8,6 +8,7 @@ import {
 } from "@/features/memberships/assert-in-project";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { prisma } from "@/shared/db/prisma";
+import { clearEmptied } from "@/shared/lib/cleared-fields";
 import { AuditEntityType } from "@/shared/audit/entity-types";
 import { recordAudit } from "@/shared/audit/with-audit";
 import { z } from "zod";
@@ -81,6 +82,25 @@ function parseExtraPayments(formData: FormData, taxPct: number) {
   return parseExtraPaymentFormRows(formData, taxPct);
 }
 
+const ACTOR_CLEARABLE = [
+  "firstName",
+  "middleName",
+  "gender",
+  "phone1",
+  "phone2",
+  "email",
+  "agentName",
+  "agentPhone",
+  "agentEmail",
+  "tags",
+  "specialConditions",
+  "shiftRate",
+  "shiftHoursMin",
+  "unpaidOvertimeMin",
+  "taxPercent",
+  "pickupOffsetMin",
+] as const;
+
 function actorFormData(formData: FormData) {
   return {
     lastName: formData.get("lastName"),
@@ -150,7 +170,7 @@ export async function updateActorAction(
     // Копия условий кандидата при утверждении — фин. условие, в браузер без права не уходит.
     specialConditions,
     ...profile
-  } = parsed.data;
+  } = clearEmptied(parsed.data, formData, ACTOR_CLEARABLE);
 
   if (canFin) {
     const overtime = parseOvertimeRows(

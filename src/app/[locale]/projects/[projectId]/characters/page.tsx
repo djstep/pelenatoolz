@@ -1,6 +1,7 @@
 import { CharactersWorkspace } from "@/features/characters/components/characters-workspace";
 import { listCharactersWithCasting } from "@/features/characters/queries";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
+import { serializeForClient } from "@/shared/db/serialize-decimal";
 import { Card } from "@/shared/ui/card";
 
 type Props = {
@@ -30,7 +31,7 @@ export default async function CharactersPage({ params }: Props) {
           projectId={projectId}
           locale={locale}
           projectType={ctx.project.type}
-          characters={characters}
+          characters={serializeForClient(characters)}
           canWrite={ctx.can("script:write")}
         />
       </Card>
