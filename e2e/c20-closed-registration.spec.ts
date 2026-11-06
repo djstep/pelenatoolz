@@ -145,6 +145,37 @@ test.describe("закрытая регистрация", () => {
     await context.close();
   });
 
+  test("поиск города: без входа закрыт, сбой не выглядит как пустой результат", async ({ browser }) => {
+    const anonymous = await browser.newContext();
+    const refused = await anonymous.request.get("/api/geocoding/cities?q=Москва");
+    expect(refused.status()).toBe(401);
+    await anonymous.close();
+
+    const { context, page } = await newPage(browser);
+    await page.goto("/ru/login");
+    await page.locator("#email").fill(E2E_REGISTRATION_EMAILS.listed);
+    await page.locator("#password").fill(PASSWORD);
+    await page.locator('form button[type="submit"]').click();
+    await page.waitForURL(/\/projects/);
+    await page.goto("/ru/projects/new");
+
+    const city = page.locator("#city");
+    await page.route("**/api/geocoding/cities**", (route) =>
+      route.fulfill({ status: 200, json: { results: [] } }),
+    );
+    await city.fill("Нетакогогорода");
+    await expect(page.getByText("Ничего не найдено")).toBeVisible();
+
+    await page.unroute("**/api/geocoding/cities**");
+    await page.route("**/api/geocoding/cities**", (route) =>
+      route.fulfill({ status: 503, json: { error: "Поиск городов недоступен" } }),
+    );
+    await city.fill("Москва");
+    await expect(page.getByText("Поиск недоступен. Впишите город вручную.")).toBeVisible();
+    await expect(page.getByText("Ничего не найдено")).toHaveCount(0);
+    await context.close();
+  });
+
   test("приглашение: регистрация открыта, проекты создавать нельзя", async ({ browser }) => {
     const email = tmpEmail("invited");
     const { token, projectId } = await createInvite();

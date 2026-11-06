@@ -1,5 +1,8 @@
 import { currencyForCountry } from "@/features/projects/lib/country-currency";
 
+/** Сервис за рубежом и отвечает за 1–5 секунд. Дольше ждать незачем: город можно вписать вручную. */
+const SEARCH_TIMEOUT_MS = 8000;
+
 export type CitySearchResult = {
   id: number;
   name: string;
@@ -74,8 +77,10 @@ export async function searchCities(query: string, limit = 10): Promise<CitySearc
 
   const response = await fetch(url.toString(), {
     next: { revalidate: 86_400 },
+    signal: AbortSignal.timeout(SEARCH_TIMEOUT_MS),
   });
-  if (!response.ok) return [];
+  // Ошибка сервиса — не пустой результат: человек должен знать, что поиск не работал.
+  if (!response.ok) throw new Error(`Геокодер ответил ${response.status}`);
 
   const json = (await response.json()) as { results?: OpenMeteoResult[] };
   const results = (json.results ?? []).map(toCityResult);
