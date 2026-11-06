@@ -68,6 +68,37 @@ export const createProjectSchema = z.object({
 
 export const updateProjectSchema = createProjectSchema.partial();
 
+const PROJECT_FIELD_LABELS: Record<string, string> = {
+  name: "Название",
+  fullName: "Полное название",
+  description: "Описание",
+  type: "Тип проекта",
+  status: "Статус",
+  currency: "Валюта",
+  timezone: "Часовой пояс",
+  city: "Город",
+  startDate: "Дата начала",
+  endDate: "Дата завершения",
+  episodeCount: "Количество серий",
+  episodeRuntimeMin: "Хронометраж серии (до 10 часов)",
+  shootingDaysCount: "Количество съёмочных дней",
+  cameraUnits: "Количество групп",
+  cameraCount: "Количество камер",
+  timingMode: "Учёт хронометража",
+  pageToMinuteRatio: "Минут на страницу",
+  plannedDailyOutputMin: "Плановая выработка (до 24 часов)",
+  filmType: "Тип плёнки",
+  filmCoefficient: "Коэффициент плёнки",
+};
+
+/** Текст отказа называет поля: скрытые значения формы иначе не подсветить. */
+export function invalidProjectMessage(fields: string[]): string {
+  const labels = fields.map((field) => PROJECT_FIELD_LABELS[field] ?? field);
+  return labels.length > 0
+    ? `Проверьте данные проекта: ${labels.join(", ")}`
+    : "Проверьте данные проекта";
+}
+
 export const createInviteSchema = z.object({
   email: z
     .string()

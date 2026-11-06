@@ -8,6 +8,7 @@ import {
   createInviteSchema,
   createProjectSchema,
   deleteProjectSchema,
+  invalidProjectMessage,
   updateMemberRoleSchema,
   updateProjectSchema,
 } from "@/features/projects/schemas";
@@ -157,10 +158,8 @@ export async function createProjectAction(
   });
 
   if (!parsed.success) {
-    return {
-      error: "Проверьте данные проекта",
-      fieldErrors: parsed.error.flatten().fieldErrors,
-    };
+    const fieldErrors = parsed.error.flatten().fieldErrors;
+    return { error: invalidProjectMessage(Object.keys(fieldErrors)), fieldErrors };
   }
 
   if (type === ProjectType.SERIES && !parsed.data.episodeCount) {
