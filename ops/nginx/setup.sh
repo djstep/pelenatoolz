@@ -19,6 +19,7 @@ done
 echo "Оба имени указывают на сервер."
 
 export DEBIAN_FRONTEND=noninteractive
+apt-get update -qq > /dev/null
 apt-get install -y -qq --no-install-recommends nginx certbot > /dev/null
 rm -f /etc/nginx/sites-enabled/default
 install -d -m 755 /var/www/certbot
@@ -55,6 +56,9 @@ HOOK
 chmod 755 /etc/letsencrypt/renewal-hooks/deploy/reload-nginx
 
 echo "== Рабочая настройка"
+install -d -m 755 /etc/nginx/snippets
+install -m 644 "$DIR/pelena-ssl.conf" /etc/nginx/snippets/pelena-ssl.conf
+install -m 644 "$DIR/pelena-proxy.conf" /etc/nginx/snippets/pelena-proxy.conf
 install -m 644 "$DIR/pelena.conf" "$CONF"
 nginx -t -q
 systemctl enable --now nginx > /dev/null 2>&1

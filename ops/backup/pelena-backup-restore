@@ -130,7 +130,8 @@ docker compose up -d app
 # Эта страница читает базу: ответ значит, что сайт вошёл в неё под своей ролью.
 HEALTHY=0
 for _ in $(seq 1 30); do
-  if curl -s -m 5 http://127.0.0.1:3000/ru/invite/none | grep -q 'Приглашение недействительно'; then
+  ANSWER=$(curl -s -m 5 http://127.0.0.1:3000/ru/invite/none || true)
+  if [[ "$ANSWER" == *"Приглашение недействительно"* ]]; then
     HEALTHY=1
     break
   fi

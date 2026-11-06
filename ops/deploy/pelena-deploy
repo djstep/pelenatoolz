@@ -10,10 +10,12 @@ BRANCH=${1:-main}
 OWNER=pelena_admin
 PROJECT=/home/$OWNER/pelena
 STAMP=/mnt/data/backups/last-success
-ROLES=/usr/local/lib/pelena-backup/db-roles.sql
+BACKUPS=/mnt/data/backups/db
 SITE_CHECK=http://127.0.0.1:3000/ru/invite/none
 
 as_owner() { sudo -u "$OWNER" -H "$@"; }
+
+git check-ref-format --branch "$BRANCH" > /dev/null 2>&1 || { echo "Неверное имя ветки"; exit 1; }
 
 exec 8>/run/lock/pelena-deploy.lock
 flock -n 8 || { echo "Обновление уже выполняется"; exit 1; }
@@ -24,7 +26,17 @@ cd "$PROJECT"
   exit 1
 }
 PREVIOUS=$(as_owner git rev-parse --short HEAD)
+CURRENT=$PREVIOUS
+SNAPSHOT=""
 echo "Сейчас на сервере: $PREVIOUS"
+
+failed() {
+  echo
+  echo "$1"
+  echo "Было: $PREVIOUS, стало: $CURRENT. Копия до обновления: $SNAPSHOT"
+  echo "Что делать: ops/README.md, раздел про откат."
+  exit 1
+}
 
 echo "1/6 Свежая копия базы и файлов"
 BEFORE=$(cat "$STAMP" 2>/dev/null || true)
@@ -37,6 +49,12 @@ if [ "$(cat "$STAMP" 2>/dev/null || true)" = "$BEFORE" ]; then
   echo "Отметка копии не обновилась. Обновление не начато, сайт не тронут."
   exit 1
 fi
+SNAPSHOT=$(find "$BACKUPS" -type f -name '*.dump.age' -printf '%f\n' | sort | tail -1)
+echo "Копия: $SNAPSHOT"
+
+# До конца обновления ни копия, ни восстановление не трогают базу.
+exec 9>/run/lock/pelena-backup.lock
+flock -n 9 || { echo "Идёт копия или восстановление. Обновление не начато, сайт не тронут."; exit 1; }
 
 echo "2/6 Код из ветки $BRANCH"
 as_owner git fetch --quiet origin "$BRANCH"
@@ -56,23 +74,13 @@ else
 fi
 CURRENT=$(as_owner git rev-parse --short HEAD)
 echo "Новый код: $CURRENT"
-bash ops/backup/install.sh > /dev/null
-
-failed() {
-  echo
-  echo "$1"
-  echo "Было: $PREVIOUS, стало: $CURRENT. Свежая копия уже в облаке."
-  echo "Что делать: ops/README.md, раздел про откат."
-  exit 1
-}
+bash ops/backup/install.sh > /dev/null || failed "Команды сервера не обновились. Сайт работает на прежней версии."
 
 echo "3/6 Сборка образов"
 docker compose --profile tools build app migrate || failed "Сборка не удалась. Сайт работает на прежней версии."
 
 echo "4/6 Миграции"
-docker compose run --rm -T migrate < /dev/null || failed "Миграции не прошли. Сайт работает на прежней версии."
-docker compose exec -T db psql -U pelena -d pelena -X -q -v ON_ERROR_STOP=1 -f - < "$ROLES" \
-  || failed "Права базы не применились. Сайт работает на прежней версии."
+docker compose run --rm -T migrate < /dev/null || failed "Миграции не прошли. Сайт работает на прежней версии, но схема могла измениться: смотрите вывод выше."
 
 echo "5/6 Перезапуск сайта"
 docker compose up -d app || failed "Сайт не запустился."
@@ -80,8 +88,9 @@ docker compose up -d app || failed "Сайт не запустился."
 echo "6/6 Проверка ответа сайта"
 for _ in $(seq 1 45); do
   # Страница читает базу: ответ значит, что сайт работает и вошёл в неё под своей ролью.
-  if curl -s -m 5 "$SITE_CHECK" | grep -q 'Приглашение недействительно'; then
-    echo "Готово: сайт обновлён с $PREVIOUS до $CURRENT."
+  ANSWER=$(curl -s -m 5 "$SITE_CHECK" || true)
+  if [[ "$ANSWER" == *"Приглашение недействительно"* ]]; then
+    echo "Готово: сайт обновлён с $PREVIOUS до $CURRENT. Копия до обновления: $SNAPSHOT"
     exit 0
   fi
   sleep 2
