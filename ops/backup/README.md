@@ -8,8 +8,9 @@
 | То же в облаке | `pelena-backups/db`, Object Lock | Срок блокировки и правило очистки |
 | `storage`, `uploads`, шифрование `rclone crypt` | `pelena-files/data` | Удалённое хранится 30 дней как старые версии |
 
-Хранить у владельца в менеджере паролей: закрытый ключ `age`, пароль и соль файлов, а также весь `.env.prod`.
-Без `CLOUD_TOKEN_SECRET` из него подключённые диски после восстановления базы придётся подключать заново.
+Хранить у владельца в менеджере паролей: закрытый ключ `age`, пароль и соль файлов, а также весь `.env.prod`
+и `.env.admin`. Без `CLOUD_TOKEN_SECRET` из `.env.prod` подключённые диски после восстановления базы придётся
+подключать заново.
 
 Закрытого ключа `age` на сервере нет: взлом сервера не открывает старые дампы.
 Пароль и соль файлов на сервере есть: `rclone crypt` без них не работает, а `rclone obscure` не шифрует.
@@ -38,8 +39,8 @@ sudo pelena-backup-mail
 Метку диска ставить только после восстановления файлов: пока её нет, ночная копия отправляет только дамп.
 
 Подготовить сервер: Docker, код проекта, диск на `/mnt/data` с папками `storage`, `uploads`, `backups`,
-`.env.prod` из менеджера паролей и ссылка `.env` на него, `docker volume create pelena_pgdata`,
-`age` и `rclone` как в разделе выше. Затем:
+`.env.prod` и `.env.admin` из менеджера паролей и ссылка `.env` на `.env.admin`,
+`docker volume create pelena_pgdata`, `age` и `rclone` как в разделе выше. Затем:
 
 ```bash
 sudo bash ops/backup/install.sh
@@ -55,8 +56,14 @@ sudo rclone --config /etc/pelena-backup/rclone.conf copy files:storage /mnt/data
 
 База и запуск, из папки проекта:
 
+Пароли ролей новая база должна получить из `.env.admin` и `.env.prod`: их значения подставляются вручную,
+потому что база создаётся заново.
+
 ```bash
 docker compose up -d db
+docker compose exec -T db psql -U pelena -d pelena -X -q -v ON_ERROR_STOP=1 -f - < ops/db/roles.sql
+docker compose exec db psql -U pelena -d postgres -c '\password pelena_owner'
+docker compose exec db psql -U pelena -d postgres -c '\password pelena_app'
 docker compose run --rm migrate
 sudo pelena-backup-restore
 sudo systemctl enable --now pelena-backup.timer pelena-backup-check.timer pelena-backup-weekly.timer

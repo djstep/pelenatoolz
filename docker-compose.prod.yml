@@ -1,23 +1,25 @@
 # Запуск сайта на сервере. docker-compose.yml — только для разработки на своём компьютере.
 #
-# Первый запуск на сервере, из папки проекта:
-#   docker volume create pelena_pgdata
-#   docker compose up -d db
-#   docker compose run --rm migrate
-#   docker compose up -d app
+# Новый сервер: .env.prod и .env.admin из менеджера паролей, ссылка .env -> .env.admin, затем порядок
+# из ops/backup/README.md, раздел про перенос. Роли создаются раньше миграций: migrate идёт от них.
 # Обновление после git pull. Без --build останутся старые образы: миграции не применятся,
 # а команда всё равно ответит успехом. Порядок важен: сначала база, потом сайт.
 #   docker compose run --rm --build migrate
 #   docker compose up -d --build app
 # Сброс пароля:
-#   docker compose run --rm migrate npm run user:reset-password -- <почта> --env-file .env.prod
+#   docker compose run --rm migrate npm run user:reset-password -- <почта> --env-file .env.prod --prod
+# Том базы внешний: docker volume create pelena_pgdata. Команды down -v и volume prune не использовать.
 #
-# .env.prod создаётся на сервере, в git и в образ не попадает. Compose подхватывает его через
-# ссылку .env -> .env.prod, а строка COMPOSE_FILE в нём выбирает этот файл. Значения без символа $.
-# Набор: COMPOSE_FILE, POSTGRES_PASSWORD, DATABASE_URL, DIRECT_URL, AUTH_SECRET, CLOUD_TOKEN_SECRET,
-# APP_URL, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, YANDEX_CLIENT_ID, YANDEX_CLIENT_SECRET.
-# Файл должен принадлежать uid 1000: под ним работает migrate.
-# POSTGRES_PASSWORD действует только при создании базы. Смена пароля — ALTER ROLE вместе с адресами.
+# Роли базы: pelena — суперпользователь для копий и восстановления, pelena_owner — миграции,
+# pelena_app — сайт. Настройки разделены, чтобы сайт не видел пароли остальных ролей.
+#   .env.admin  COMPOSE_FILE, POSTGRES_PASSWORD, MIGRATE_DATABASE_URL. Compose читает его через
+#               ссылку .env -> .env.admin, в контейнеры целиком он не попадает.
+#   .env.prod   только сайт: DATABASE_URL, AUTH_SECRET, CLOUD_TOKEN_SECRET, APP_URL,
+#               REGISTRATION_ALLOWLIST, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,
+#               YANDEX_CLIENT_ID, YANDEX_CLIENT_SECRET.
+# Оба файла создаются на сервере, в git и в образ не попадают. Значения без символа $.
+# .env.prod должен принадлежать uid 1000: под ним работает migrate.
+# Пароли ролей меняются через ALTER ROLE вместе с адресами. Смена только в файле ломает вход в базу.
 #
 # Загрузки лежат на отдельном диске, поэтому обновление сайта их не затрагивает.
 # Обе папки на сервере должны принадлежать пользователю приложения:
@@ -41,7 +43,7 @@ services:
     environment:
       POSTGRES_USER: pelena
       POSTGRES_DB: pelena
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?нет POSTGRES_PASSWORD в .env.prod}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?нет POSTGRES_PASSWORD в .env.admin}
       # Настройки текста те же, что у Neon и у локальной базы.
       POSTGRES_INITDB_ARGS: --encoding=UTF8 --locale=C --locale-provider=builtin --builtin-locale=C.UTF-8
     command: ["postgres", "-c", "timezone=GMT", "-c", "shared_buffers=1GB", "-c", "effective_cache_size=3GB"]
@@ -64,7 +66,10 @@ services:
       context: .
       target: migrator
     profiles: ["tools"]
-    env_file: .env.prod
+    environment:
+      # Миграции идут от владельца схемы, а не от роли сайта.
+      DATABASE_URL: ${MIGRATE_DATABASE_URL:?нет MIGRATE_DATABASE_URL в .env.admin}
+      DIRECT_URL: ${MIGRATE_DATABASE_URL}
     depends_on:
       db:
         condition: service_healthy

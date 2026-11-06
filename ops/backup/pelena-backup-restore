@@ -80,6 +80,9 @@ if ! age -d -i <(printf '%s\n' "$AGE_KEY") "$WD/backup.age" \
   exit 1
 fi
 unset AGE_KEY
+# Дамп разворачивается без владельцев: роли и права ставятся заново на любой копии.
+docker compose exec -T db psql -U pelena -d "$NEW" -X -q -v ON_ERROR_STOP=1 -f - \
+  < /usr/local/lib/pelena-backup/db-roles.sql
 echo "Копия развёрнута в отдельной базе, сайт пока работает."
 
 echo

@@ -7,6 +7,7 @@ DIR=$(cd "$(dirname "$0")" && pwd)
 
 install -d -m 755 -o root -g root /usr/local/lib/pelena-backup
 install -m 644 -o root -g root "$DIR/secret-input.sh" /usr/local/lib/pelena-backup/secret-input.sh
+install -m 644 -o root -g root "$DIR/../db/roles.sql" /usr/local/lib/pelena-backup/db-roles.sql
 
 for F in pelena-backup pelena-backup-adopt pelena-backup-check pelena-backup-init pelena-backup-keys \
   pelena-backup-mail pelena-backup-restore pelena-backup-restore-test pelena-lifecycle-30d pelena-notify; do
