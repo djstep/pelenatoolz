@@ -3,6 +3,17 @@ import type { Permission } from "@/features/memberships/permissions";
 
 type Can = (permission: Permission) => boolean;
 
+/** Настоящий тип видео по расширению, если браузер его не прислал: `video/mov` Safari может не принять. */
+export function videoTypeOf(ext: string) {
+  const known: Record<string, string> = {
+    mov: "video/quicktime",
+    m4v: "video/x-m4v",
+    mkv: "video/x-matroska",
+    avi: "video/x-msvideo",
+  };
+  return known[ext] ?? `video/${ext}`;
+}
+
 /** Эти типы браузер открывает во вкладке и не выполняет. SVG здесь нет: в нём работают скрипты. */
 const VIEW_TYPES = new Set([
   "image/jpeg",

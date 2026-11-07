@@ -1,5 +1,6 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, open, stat, writeFile, type FileHandle } from "node:fs/promises";
 import path from "node:path";
+import type { ByteRange } from "@/features/files/lib/byte-range";
 
 /**
  * Project file storage. Uses local disk by default.
@@ -43,14 +44,59 @@ export async function putProjectObject(
   await writeFile(full, data);
 }
 
-export async function getProjectObject(
-  storageKey: string,
-): Promise<Buffer | null> {
+/** Размер файла на диске; нет файла — `null`. */
+export async function projectObjectSize(storageKey: string): Promise<number | null> {
   try {
-    return await readFile(localPath(storageKey));
+    const info = await stat(localPath(storageKey));
+    return info.isFile() ? info.size : null;
   } catch {
     return null;
   }
+}
+
+const STREAM_CHUNK_BYTES = 256 * 1024;
+
+/**
+ * Файл или его кусок потоком: большое видео не читается в память целиком.
+ * Файл открывается при первом чтении: на HEAD и при обрыве до отдачи Next тело не читает
+ * и не отменяет, поэтому открытый заранее файл остался бы открытым навсегда.
+ */
+export function projectObjectStream(storageKey: string, range?: ByteRange): ReadableStream<Uint8Array> {
+  const full = localPath(storageKey);
+  const stop = range ? range.end + 1 : Number.POSITIVE_INFINITY;
+  let position = range?.start ?? 0;
+  let file: FileHandle | null = null;
+
+  const closeFile = async () => {
+    const opened = file;
+    file = null;
+    await opened?.close();
+  };
+
+  return new ReadableStream<Uint8Array>(
+    {
+      async pull(controller) {
+        try {
+          file ??= await open(full, "r");
+          const length = Math.min(STREAM_CHUNK_BYTES, stop - position);
+          const chunk = Buffer.allocUnsafe(length);
+          const { bytesRead } = length > 0 ? await file.read(chunk, 0, length, position) : { bytesRead: 0 };
+          if (bytesRead === 0) {
+            await closeFile();
+            controller.close();
+            return;
+          }
+          position += bytesRead;
+          controller.enqueue(chunk.subarray(0, bytesRead));
+        } catch (error) {
+          await closeFile();
+          throw error;
+        }
+      },
+      cancel: closeFile,
+    },
+    { highWaterMark: 0 },
+  );
 }
 
 export async function deleteProjectObject(storageKey: string): Promise<void> {

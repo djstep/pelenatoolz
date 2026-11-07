@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { videoTypeOf } from "@/features/files/lib/file-access";
 import { scheduleVideoProcessing } from "@/features/files/lib/process-video";
 import {
   buildStorageKey,
@@ -63,7 +64,7 @@ export async function POST(
         status: "UPLOADING",
         storageKey: "pending",
         originalName: file.name.slice(0, 255),
-        mimeType: file.type || `video/${ext}`,
+        mimeType: file.type || videoTypeOf(ext),
         sizeBytes: file.size,
         createdById: ctx.user.id,
       },
@@ -71,7 +72,7 @@ export async function POST(
 
     const storageKey = buildStorageKey(projectId, row.id, ext);
     const buffer = Buffer.from(await file.arrayBuffer());
-    await putProjectObject(storageKey, buffer, file.type || `video/${ext}`);
+    await putProjectObject(storageKey, buffer, file.type || videoTypeOf(ext));
 
     const url = mediaApiUrl(projectId, row.id);
     const updated = await prisma.projectFile.update({
