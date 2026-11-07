@@ -773,6 +773,8 @@ model ProjectFile {
   /// Публичный/прокси URL для воспроизведения (заполняется когда READY)
   url          String?
   thumbnailUrl String?
+  /// Файл договора или акта: виден только с правом на договоры. Не сбрасывается при откреплении.
+  contractsOnly Boolean          @default(false)
   createdById  String?
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt

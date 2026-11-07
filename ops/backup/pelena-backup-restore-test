@@ -84,7 +84,7 @@ else
 fi
 
 echo "== файлы"
-for DIR in storage uploads; do
+for DIR in storage; do
   COUNT=$(R lsf -R "check:$DIR" --files-only 2>/dev/null | grep -c . || true)
   ONDISK=$(find "/mnt/data/$DIR" -type f | wc -l)
   echo "$DIR: в копии файлов $COUNT, на диске $ONDISK"

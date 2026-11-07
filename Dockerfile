@@ -37,9 +37,9 @@ COPY --from=builder /app/package.json ./package.json
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
-# Сюда сайт пишет загрузки, а работает он не от root. На сервере обе папки подключаются
+# Сюда сайт пишет загрузки, а работает он не от root. На сервере папка подключается
 # с диска (docker-compose.prod.yml), иначе файлы пропадут при обновлении сайта.
-RUN mkdir -p storage public/uploads && chown -R nextjs:nodejs storage public/uploads
+RUN mkdir -p storage && chown -R nextjs:nodejs storage
 
 USER nextjs
 EXPOSE 3000

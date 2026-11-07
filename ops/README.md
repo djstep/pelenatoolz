@@ -48,6 +48,36 @@ sudo pelena-backup-restore <файл>.dump.age
 Перед этим верните код, иначе плохая миграция применится снова. Подробности в [backup/README.md](backup/README.md).
 Данные, внесённые после копии, останутся только в старой базе `pelena_before_restore`.
 
+## Перенос картинок в `storage/uploads`
+
+Разовый шаг при первом обновлении, где `/uploads/` отдаёт сайт. Команды выполняются из папки проекта.
+Порядок важен: команда обновления идёт первой, потому что её копия ещё обходит старую папку. Если сайт уже
+создал новую папку, `cp -an` дополняет её и ничего не перезаписывает, а простой `mv` положил бы всё во
+вложенную папку.
+
+```bash
+sudo pelena-deploy
+sudo mkdir -p /mnt/data/storage/uploads
+sudo cp -an /mnt/data/uploads/. /mnt/data/storage/uploads/
+sudo chown -R 1001:1001 /mnt/data/storage
+sudo find /mnt/data/uploads -type f | wc -l
+sudo find /mnt/data/storage/uploads -type f | wc -l
+sudo bash ops/nginx/setup.sh
+sudo systemctl start pelena-backup.service
+sudo pelena-backup-restore-test
+```
+
+Запрос к картинке без входа должен дать 401. Пока не выполнен `setup.sh`, старый nginx отдаёт старые картинки
+без входа, а новые не находит. Папка `/mnt/data/uploads` и `files:uploads` в облаке больше не обновляются,
+удалять их только после решения владельца.
+
+При откате на версию до этого шага верните картинки и запустите `setup.sh` уже на прежнем коде:
+
+```bash
+sudo cp -an /mnt/data/storage/uploads/. /mnt/data/uploads/
+sudo bash ops/nginx/setup.sh
+```
+
 ## Ключи дисков
 
 ```bash
@@ -75,8 +105,7 @@ sudo bash ops/nginx/setup.sh
 
 - `https://pelena.space` — основной адрес.
 - `www` и `http` — постоянный редирект на него.
-- `/uploads/` отдаёт сам nginx: Next.js не видит файлы, появившиеся после запуска. Файлы открываются по прямой
-  ссылке без входа: имя случайное, списка нет.
+- Картинки `/uploads/` отдаёт сайт и только активным участникам проекта. Лежат в `/mnt/data/storage/uploads`.
 - Большие тела запросов принимаются только на адресах загрузки файлов, вход там проверяется раньше чтения тела.
 - Частота POST ограничена для одного адреса: 10 в секунду с запасом 40. Сверх этого ответ 429.
 - Сертификат продлевается сам (`certbot.timer`), nginx после этого перечитывает его.

@@ -59,7 +59,23 @@ fi
   exit 1
 }
 
-for DIR in storage uploads; do
+# Останавливает копию, если на диске пропало много файлов: имя, на диске, в копии.
+refuse_loss() {
+  local NAME=$1 ON_DISK=$2 IN_COPY=$3
+  local MAX_GONE=$(( IN_COPY / 10 + 5 ))
+  if [ "$IN_COPY" -gt 0 ] && [ "$ON_DISK" -eq 0 ]; then
+    echo "$NAME: папка пуста, а в копии файлов $IN_COPY. Файлы не отправлены, копии целы."
+    echo "Если удаление верное, см. README, раздел про большое удаление."
+    exit 1
+  fi
+  if [ $(( IN_COPY - ON_DISK )) -gt "$MAX_GONE" ]; then
+    echo "$NAME: на диске $ON_DISK файлов, в копии $IN_COPY. Разница больше $MAX_GONE, файлы не отправлены."
+    echo "Если удаление верное, см. README, раздел про большое удаление."
+    exit 1
+  fi
+}
+
+for DIR in storage; do
   HERE=$(find "$DATA/$DIR" -type f | wc -l)
   THERE=$(R lsf -R --files-only "files:$DIR" | wc -l)
   if [ -e "$ALLOW_DELETE" ]; then
@@ -67,16 +83,11 @@ for DIR in storage uploads; do
     echo "$DIR: разрешено большое удаление: на диске $HERE, в копии $THERE"
   else
     LIMIT=$(( THERE / 10 + 5 ))
-    if [ "$THERE" -gt 0 ] && [ "$HERE" -eq 0 ]; then
-      echo "$DIR: папка пуста, а в копии файлов $THERE. Файлы не отправлены, копии целы."
-      echo "Если удаление верное, см. README, раздел про большое удаление."
-      exit 1
-    fi
-    if [ $(( THERE - HERE )) -gt "$LIMIT" ]; then
-      echo "$DIR: на диске $HERE файлов, в копии $THERE. Разница больше $LIMIT, файлы не отправлены."
-      echo "Если удаление верное, см. README, раздел про большое удаление."
-      exit 1
-    fi
+    refuse_loss "$DIR" "$HERE" "$THERE"
+    # Картинки считаются отдельно: в общем числе файлов их пропажа незаметна.
+    UPLOADS_HERE=$( (find "$DATA/$DIR/uploads" -type f 2> /dev/null || true) | wc -l)
+    UPLOADS_THERE=$( (R lsf -R --files-only "files:$DIR/uploads" 2> /dev/null || true) | wc -l)
+    refuse_loss "$DIR/uploads" "$UPLOADS_HERE" "$UPLOADS_THERE"
   fi
   R sync "$DATA/$DIR" "files:$DIR" --max-delete "$LIMIT"
   echo "Файлы $DIR отправлены"

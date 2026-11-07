@@ -49,6 +49,7 @@ type UploadedFile = {
   mimeType: string;
   sizeBytes: number;
   url: string | null;
+  contractsOnly: boolean;
   createdAt: string;
 };
 
@@ -65,6 +66,7 @@ export function FilesWorkspace({
   files,
   uploadedFiles,
   canWrite,
+  canWriteContracts,
 }: {
   locale: string;
   projectId: string;
@@ -72,6 +74,7 @@ export function FilesWorkspace({
   files: FileLink[];
   uploadedFiles: UploadedFile[];
   canWrite: boolean;
+  canWriteContracts: boolean;
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -263,7 +266,7 @@ export function FilesWorkspace({
                       {formatFileSize(file.sizeBytes)}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      {canWrite ? (
+                      {canWrite && (!file.contractsOnly || canWriteContracts) ? (
                         <Button
                           type="button"
                           variant="ghost"

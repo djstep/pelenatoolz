@@ -19,8 +19,8 @@
 # Пароли ролей меняются через ALTER ROLE вместе с адресами. Смена только в файле ломает вход в базу.
 #
 # Загрузки лежат на отдельном диске, поэтому обновление сайта их не затрагивает.
-# Обе папки на сервере должны принадлежать пользователю приложения:
-#   sudo chown -R 1001:1001 /mnt/data/storage /mnt/data/uploads
+# Папка на сервере должна принадлежать пользователю приложения:
+#   sudo chown -R 1001:1001 /mnt/data/storage
 name: pelena
 
 x-logging: &logging
@@ -102,11 +102,6 @@ services:
       - type: bind
         source: /mnt/data/storage
         target: /app/storage
-        bind:
-          create_host_path: false
-      - type: bind
-        source: /mnt/data/uploads
-        target: /app/public/uploads
         bind:
           create_host_path: false
 

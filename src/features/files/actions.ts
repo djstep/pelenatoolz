@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { canDeleteProjectFile } from "@/features/files/lib/file-access";
 import {
   deleteProjectObject,
 } from "@/features/files/lib/storage";
@@ -15,14 +16,15 @@ export async function deleteProjectUploadedFileAction(
   fileId: string,
 ) {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:write") && !ctx.can("project:write")) {
-    return { error: "Недостаточно прав" };
-  }
 
   const file = await prisma.projectFile.findFirst({
     where: { id: fileId, projectId },
   });
   if (!file) return { error: "Файл не найден" };
+
+  if (!canDeleteProjectFile(ctx.can, file.contractsOnly)) {
+    return { error: "Недостаточно прав" };
+  }
 
   // Don't delete if still linked to auditions — clear link first or block
   const linked = await prisma.audition.count({
@@ -43,7 +45,8 @@ export async function deleteProjectUploadedFileAction(
     entityType: AuditEntityType.projectFile,
     entityId: fileId,
     action: "DELETE",
-    summary: `Удалён файл «${file.originalName}»`,
+    // Журнал читают и без права на договоры, поэтому имя скана в него не пишется.
+    summary: file.contractsOnly ? "Удалён файл договора" : `Удалён файл «${file.originalName}»`,
   });
 
   revalidatePath(`/ru/projects/${projectId}/files`);
