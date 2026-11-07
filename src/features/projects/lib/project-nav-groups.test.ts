@@ -141,6 +141,31 @@ describe("Словарь сценария в меню проекта", () => {
   });
 });
 
+describe("Типы событий в меню проекта", () => {
+  const settingsHrefs = (granted: string[]) =>
+    nav
+      .filterNavGroups(nav.projectNavGroups, access(granted))
+      .find((group) => group.id === "settings")
+      ?.items.map((item) => item.href) ?? [];
+
+  test("пункт виден только с правом правки календаря", () => {
+    assert.ok(settingsHrefs(["calendar:write"]).includes("/settings/event-types"));
+    assert.equal(settingsHrefs(["calendar:read"]).includes("/settings/event-types"), false);
+  });
+
+  test("на странице типов активен этот пункт, а не «Настройки проекта»", () => {
+    const groups = nav.filterNavGroups(
+      nav.projectNavGroups,
+      access(["calendar:write", "project:read", "project:write"]),
+    );
+    const path = `${BASE}/settings/event-types`;
+    assert.equal(
+      findActiveNavHref(groups.flatMap((group) => group.items), BASE, path),
+      "/settings/event-types",
+    );
+  });
+});
+
 describe("Операции в меню проекта", () => {
   const groups = () => nav.filterNavGroups(nav.projectNavGroups, access(["finance:read"]));
 

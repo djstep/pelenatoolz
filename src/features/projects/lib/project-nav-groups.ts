@@ -223,6 +223,11 @@ export const projectNavGroups: NavGroupDef[] = [
         visible: (a) => a.isProducer || a.can("members:manage"),
       },
       {
+        href: "/settings/event-types",
+        label: "Типы событий",
+        visible: anyOf("calendar:write"),
+      },
+      {
         href: "/screenplay/dictionary",
         label: "Словарь сценария",
         visible: anyOf("script:read"),

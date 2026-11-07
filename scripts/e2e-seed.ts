@@ -34,6 +34,7 @@ import {
   buildPermissionsDocument,
   type PermissionMatrix,
 } from "../src/features/roles/permissions-matrix";
+import { defaultPrepEventTypeRows } from "../src/features/prep-calendar/lib/default-event-types";
 import { e2eDatabaseEnvProblem, resolveE2EDatabaseEnv } from "../src/shared/db/e2e-database-guard";
 import { prisma } from "../src/shared/db/prisma";
 import { databaseHost, seedDatabaseProblem } from "../src/shared/db/seed-database-guard";
@@ -112,6 +113,8 @@ function noFinanceMatrix(): PermissionMatrix {
   m.finance = empty.finance;
   m.smeta_all = empty.smeta_all;
   m.callsheet_approve = empty.callsheet_approve;
+  // Как у всех, кроме продюсера: календарь только смотрят.
+  m.calendar = { ...empty.calendar, access: true, read: true };
   m.members = { ...empty.members, access: true, read: true };
   m.project_settings = { ...empty.project_settings, access: true, read: true };
   return m;
@@ -888,6 +891,7 @@ async function ensureSeedCrewRoles(projectId: string, crewOnlyUserId: string) {
           ...(row.permissions as Prisma.JsonObject),
           crew: full.crew,
           crew_contacts: full.crew_contacts,
+          calendar: full.calendar,
         } as Prisma.InputJsonValue,
       },
     });
@@ -937,6 +941,14 @@ async function ensureSeedForeignProject() {
   if (exists) return;
   await prisma.project.create({
     data: { name: FOREIGN_PROJECT_NAME, type: "FEATURE", createdById: owner.id, ownerUserId: owner.id },
+  });
+}
+
+/** Начальные типы событий календаря: миграция выдаёт их только проектам, что уже есть. */
+async function ensureSeedEventTypes(projectId: string) {
+  await prisma.prepEventType.createMany({
+    data: defaultPrepEventTypeRows(projectId),
+    skipDuplicates: true,
   });
 }
 
@@ -1038,6 +1050,7 @@ async function main() {
       await ensureSeedCards(id, users.producer);
       await ensureSeedCrewRoles(id, users.crewonly);
       await ensureSeedCrew(id, users.producer);
+      await ensureSeedEventTypes(id);
       await ensureSeedApprovedCallSheet(id, users.producer);
     }
     return;
@@ -1053,6 +1066,7 @@ async function main() {
   await ensureSeedBudget(projectId, users.producer);
   await ensureSeedCards(projectId, users.producer);
   await ensureSeedCrew(projectId, users.producer);
+  await ensureSeedEventTypes(projectId);
   await ensureSeedApprovedCallSheet(projectId, users.producer);
 }
 

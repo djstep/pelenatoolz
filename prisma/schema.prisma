@@ -232,21 +232,21 @@ enum AuditAction {
 }
 
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  name         String
-  passwordHash String
+  id                         String    @id @default(cuid())
+  email                      String    @unique
+  name                       String
+  passwordHash               String
   /// Растёт при смене и сбросе пароля: выданные раньше сессии перестают действовать.
-  sessionVersion Int @default(0)
+  sessionVersion             Int       @default(0)
   /// Когда и какую редакцию политики принял при регистрации. У зарегистрированных раньше пусто: их не спрашивали.
-  personalDataConsentAt DateTime?
+  personalDataConsentAt      DateTime?
   personalDataConsentVersion String?
-  phone        String?
+  phone                      String?
   /// Почта для Google (доступы к Диску); может отличаться от почты входа.
-  googleEmail  String?
-  avatarUrl    String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  googleEmail                String?
+  avatarUrl                  String?
+  createdAt                  DateTime  @default(now())
+  updatedAt                  DateTime  @updatedAt
 
   memberships               ProjectMembership[]
   createdProjects           Project[]                  @relation("ProjectCreator")
@@ -269,6 +269,7 @@ model User {
   approvedCallSheets        CallSheet[]                @relation("CallSheetApprover")
   approvedCallSheetVersions CallSheetApprovedVersion[] @relation("CallSheetVersionApprover")
   createdCrewMembers        CrewMember[]               @relation("CrewMemberCreator")
+  createdPrepEvents         PrepEvent[]                @relation("PrepEventCreator")
   driveFolderGrants         DriveFolderGrant[]
   driveExports              DriveExport[]              @relation("DriveExportUploader")
 }
@@ -357,6 +358,8 @@ model Project {
   projectDrive               ProjectDrive?
   driveFolders               DriveFolder[]
   driveExports               DriveExport[]
+  prepEventTypes             PrepEventType[]
+  prepEvents                 PrepEvent[]
 
   @@index([createdById])
   @@index([ownerUserId])
@@ -424,6 +427,7 @@ model Department {
   callSheetCrewCalls         CallSheetCrewCall[]
   driveFolders               DriveFolder[]
   crewMembers                CrewMember[]
+  prepEventLinks             PrepEventDepartment[]
 
   @@unique([projectId, name])
   @@unique([projectId, codePrefix])
@@ -462,10 +466,11 @@ model CrewMember {
   createdAt    DateTime         @default(now())
   updatedAt    DateTime         @updatedAt
 
-  project       Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  department    Department?          @relation(fields: [departmentId], references: [id], onDelete: SetNull)
-  createdBy     User                 @relation("CrewMemberCreator", fields: [createdById], references: [id])
-  contractLinks CrewMemberContract[]
+  project        Project                @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  department     Department?            @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  createdBy      User                   @relation("CrewMemberCreator", fields: [createdById], references: [id])
+  contractLinks  CrewMemberContract[]
+  prepEventLinks PrepEventParticipant[]
 
   @@index([projectId, archivedAt])
   @@index([projectId, departmentId, sortOrder])
@@ -614,6 +619,7 @@ model Location {
   workRows            ProductionReportWorkRow[]
   overtimeRates       LocationOvertimeRate[]
   dictionaryRules     ScriptDictionaryRule[]
+  prepEvents          PrepEvent[]
 
   @@index([projectId])
 }
@@ -716,6 +722,7 @@ model CastingPerson {
   candidates       CastingCandidate[]
   availabilityRows ActorAvailabilityRow[]
   auditionLinks    AuditionActor[]
+  prepEventLinks   PrepEventParticipant[]
 
   @@index([projectId])
 }
@@ -762,22 +769,22 @@ model CastingCandidateComment {
 
 /// Файл проекта (видео проб и др.). storageKey — локальный путь или ключ R2.
 model ProjectFile {
-  id           String            @id @default(cuid())
-  projectId    String
-  kind         ProjectFileKind
-  status       ProjectFileStatus @default(UPLOADING)
-  storageKey   String
-  originalName String
-  mimeType     String
-  sizeBytes    Int
+  id            String            @id @default(cuid())
+  projectId     String
+  kind          ProjectFileKind
+  status        ProjectFileStatus @default(UPLOADING)
+  storageKey    String
+  originalName  String
+  mimeType      String
+  sizeBytes     Int
   /// Публичный/прокси URL для воспроизведения (заполняется когда READY)
-  url          String?
-  thumbnailUrl String?
+  url           String?
+  thumbnailUrl  String?
   /// Файл договора или акта: виден только с правом на договоры. Не сбрасывается при откреплении.
-  contractsOnly Boolean          @default(false)
-  createdById  String?
-  createdAt    DateTime          @default(now())
-  updatedAt    DateTime          @updatedAt
+  contractsOnly Boolean           @default(false)
+  createdById   String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
 
   project          Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
   createdBy        User?             @relation("FileUploader", fields: [createdById], references: [id], onDelete: SetNull)
@@ -1693,6 +1700,7 @@ model Actor {
   shootDayCalls      ShootDayActorCall[]
   availabilityRows   ActorAvailabilityRow[]
   workRows           ProductionReportWorkRow[]
+  prepEventLinks     PrepEventParticipant[]
 
   @@index([projectId])
 }
@@ -2517,24 +2525,24 @@ model PasswordResetToken {
 }
 
 model CloudConnection {
-  id           String        @id @default(cuid())
-  userId       String
-  provider     CloudProvider
-  accountEmail String?
-  accountLabel String?
-  accessToken  String
-  refreshToken String?
-  expiresAt    DateTime?
+  id               String        @id @default(cuid())
+  userId           String
+  provider         CloudProvider
+  accountEmail     String?
+  accountLabel     String?
+  accessToken      String
+  refreshToken     String?
+  expiresAt        DateTime?
   /// Выданные права из ответа OAuth (через пробел). Пусто или без drive.file / disk.app_folder — «переподключите».
   scopes           String?
   /// Id аккаунта у провайдера (Google `sub`, Яндекс `id`): видно, что переподключили другой аккаунт.
   accountSubject   String?
   /// Доступ отозван у провайдера (invalid_grant, 401) или старый токен отозван при переподключении.
   needsReconnectAt DateTime?
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
 
-  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user         User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   fileLinks    CloudFileLink[]
   driveFolders DriveFolder[]
 
@@ -2543,7 +2551,7 @@ model CloudConnection {
 }
 
 model CloudFileLink {
-  id           String        @id @default(cuid())
+  id           String         @id @default(cuid())
   projectId    String
   connectionId String?
   /// Пусто — ссылка на другой сайт («Вставить ссылку» принимает любой https-адрес).
@@ -2555,7 +2563,7 @@ model CloudFileLink {
   sizeBytes    BigInt?
   webUrl       String?
   notes        String?
-  createdAt    DateTime      @default(now())
+  createdAt    DateTime       @default(now())
 
   project    Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
   connection CloudConnection? @relation(fields: [connectionId], references: [id], onDelete: SetNull)
@@ -2720,4 +2728,92 @@ model RateLimitCounter {
   blockedUntil DateTime?
 
   @@index([windowStart])
+}
+
+/// Тип события календаря препродакшена: справочник проекта.
+/// Тип с событиями не удаляется, только скрывается: скрытый не предлагается в новых событиях.
+model PrepEventType {
+  id        String   @id @default(cuid())
+  projectId String
+  name      String
+  /// Ключ цвета из PREP_EVENT_COLORS. Сами цвета — переменные темы --event-*.
+  color     String
+  isHidden  Boolean  @default(false)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  events  PrepEvent[]
+
+  @@unique([projectId, name])
+  @@index([projectId, sortOrder])
+}
+
+/// Событие календаря препродакшена. Два вида, поля не смешиваются (CHECK в миграции):
+/// весь день — startDate и endDate, дата без времени, последний день входит в событие;
+/// со временем — startAt и endAt, момент времени, показывается по поясу проекта.
+model PrepEvent {
+  id           String    @id @default(cuid())
+  projectId    String
+  title        String
+  typeId       String
+  allDay       Boolean   @default(false)
+  startDate    DateTime? @db.Date
+  endDate      DateTime? @db.Date
+  startAt      DateTime? @db.Timestamptz(3)
+  endAt        DateTime? @db.Timestamptz(3)
+  locationText String?
+  locationId   String?
+  note         String?
+  createdById  String
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  project      Project                @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  // NoAction, а не Restrict: при удалении проекта события и типы уходят одним запросом.
+  type         PrepEventType          @relation(fields: [typeId], references: [id], onDelete: NoAction)
+  location     Location?              @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  createdBy    User                   @relation("PrepEventCreator", fields: [createdById], references: [id])
+  participants PrepEventParticipant[]
+  departments  PrepEventDepartment[]
+
+  @@index([projectId, startDate])
+  @@index([projectId, startAt])
+  @@index([typeId])
+  @@index([locationId])
+  @@index([createdById])
+}
+
+/// Участник события: ровно один из трёх (CHECK в миграции). Кандидат кастинга — пока он не
+/// стал актёром: связи актёра с кандидатом в базе нет, строка остаётся кандидатом.
+model PrepEventParticipant {
+  id              String  @id @default(cuid())
+  eventId         String
+  crewMemberId    String?
+  actorId         String?
+  castingPersonId String?
+
+  event         PrepEvent      @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  crewMember    CrewMember?    @relation(fields: [crewMemberId], references: [id], onDelete: Cascade)
+  actor         Actor?         @relation(fields: [actorId], references: [id], onDelete: Cascade)
+  castingPerson CastingPerson? @relation(fields: [castingPersonId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, crewMemberId])
+  @@unique([eventId, actorId])
+  @@unique([eventId, castingPersonId])
+  @@index([crewMemberId])
+  @@index([actorId])
+  @@index([castingPersonId])
+}
+
+model PrepEventDepartment {
+  eventId      String
+  departmentId String
+
+  event      PrepEvent  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  department Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+
+  @@id([eventId, departmentId])
+  @@index([departmentId])
 }

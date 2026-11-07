@@ -5,6 +5,7 @@ export const PERMISSION_SECTIONS = [
   { id: "callsheet_approve", label: "Вызывные — утверждение" },
   { id: "crew", label: "Команда" },
   { id: "crew_contacts", label: "Команда: контакты" },
+  { id: "calendar", label: "Календарь препродакшена" },
   { id: "post_edit_timing", label: "Хронометраж монтажа" },
   { id: "actors", label: "Актёры" },
   { id: "characters", label: "Персонажи" },
@@ -71,6 +72,8 @@ const RESTRICTED_SECTION_FLAGS: Partial<
   crew: ["access", "read", "update"],
   // Телефон и почта команды — одно право, без просмотра и правки (их даёт «Команда»).
   crew_contacts: ["access"],
+  // Календарь: просмотр и редактирование; удаление события — та же правка.
+  calendar: ["access", "read", "update"],
 };
 
 export function isSectionFlagAllowed(
@@ -166,11 +169,12 @@ export function buildFullMatrix(): PermissionMatrix {
   ) as PermissionMatrix;
 }
 
-/** Новая своя роль: всё выключено, кроме просмотра команды (ФИО и должность без контактов). */
+/** Новая своя роль: всё выключено, кроме просмотра команды (без контактов) и календаря. */
 export function buildNewRoleMatrix(): PermissionMatrix {
   return {
     ...buildEmptyMatrix(),
     crew: { ...emptySectionPermissions(), access: true, read: true },
+    calendar: { ...emptySectionPermissions(), access: true, read: true },
   };
 }
 
