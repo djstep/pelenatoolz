@@ -23,7 +23,7 @@ import {
   ruleText,
   visibleOptions,
 } from "@/features/import/review/question-text";
-import { previewTimings } from "@/features/import/review/timing";
+import { reviewTimings } from "@/features/import/review/timing";
 import {
   formatFileSize,
   type ScriptImportState,
@@ -131,15 +131,22 @@ export function ScriptReview({
     [data, answers],
   );
   const timings = useMemo(
-    () => previewTimings(result, data.timing.mode, data.timing.pageToMinuteRatio),
-    [result, data.timing],
+    () =>
+      reviewTimings(
+        result,
+        data.timing.mode,
+        data.timing.pageToMinuteRatio,
+        data.existing.scenes ?? [],
+      ),
+    [result, data.timing, data.existing.scenes],
   );
-  /** Хронометраж совпавшей сцены с новым текстом — как его запишет «Импортировать». */
+  /** Хронометраж совпавшей сцены — как его запишет «Импортировать». */
   const timingNote = (index: number) => {
     const match = result.sceneMatches[index];
-    if (!match?.existingId || match.pending || !match.contentChanged) return null;
-    if (data.timing.mode === "MANUAL") return "текст изменился; хронометраж ручной — не меняется";
+    if (!match?.existingId || match.pending) return null;
     const update = result.timingUpdates.find((u) => u.sceneIndex === index);
+    if (!update && !match.contentChanged) return null;
+    if (!update && data.timing.mode === "MANUAL") return "текст изменился; хронометраж ручной — не меняется";
     if (!update) return "текст изменился; хронометраж в либретто остаётся";
     return update.mode === "fill"
       ? `хронометраж будет записан: ${formatSecondsMmSs(update.seconds)}`

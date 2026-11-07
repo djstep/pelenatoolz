@@ -7,7 +7,7 @@ import {
   readDocxParagraphs,
   type DocxParagraph,
 } from "@/features/import/normalize/docx-paragraphs";
-import { parseHeading } from "@/features/import/normalize/heading";
+import { isNumberOnly, parseHeading } from "@/features/import/normalize/heading";
 import {
   normalizeScript,
   PERSISTENT_QUESTION_TYPES,
@@ -709,6 +709,55 @@ describe("символы и латиница (собранные файлы)", (
   });
 });
 
+describe("хронометраж в шапке", () => {
+  test("время уходит из текста шапки, режим распознан", () => {
+    const result = normalizeDocx(
+      p("1. НАТ. ЗАГОРОДНЫЙ ДОМ — РАССВЕТ (00:15)") +
+        p("Текст.") +
+        p("2. ИНТ. ДОМ. КУХНЯ — УТРО (ПОЗЖЕ) (02:05)") +
+        p("Текст."),
+    );
+    assert.equal(result.scenes[0]!.heading, "1. НАТ. ЗАГОРОДНЫЙ ДОМ — РАССВЕТ");
+    assert.equal(result.scenes[0]!.dayNight, "DAWN");
+    assert.equal(result.scenes[0]!.fileSeconds, 15);
+    assert.equal(result.scenes[1]!.heading, "2. ИНТ. ДОМ. КУХНЯ — УТРО (ПОЗЖЕ)");
+    assert.equal(result.scenes[1]!.fileSeconds, 125);
+    assert.deepEqual(
+      result.questions.filter((q) => q.type === QUESTION_TYPES.timeMissing),
+      [],
+    );
+  });
+
+  test("режим, выбранный вручную, попадает в шапку один раз", () => {
+    const body = p("1. ИНТ. ДОМ (00:30)") + p("Текст.");
+    const [question] = normalizeDocx(body).questions.filter((q) => q.type === QUESTION_TYPES.timeMissing);
+    assert.ok(question, "нет вопроса о режиме");
+    const result = normalizeDocx(body, { [question.code]: "РАССВЕТ" });
+    assert.equal(result.scenes[0]!.heading, "1. ИНТ. ДОМ — РАССВЕТ");
+  });
+
+  test("строка стала примечанием — время остаётся в её тексте", () => {
+    const body = p("1. ИНТ. ТИТР — ДЕНЬ (00:30)") + p("Текст.");
+    const [question] = normalizeDocx(body).questions.filter((q) => q.type === QUESTION_TYPES.notScene);
+    assert.ok(question, "нет вопроса «сцена или примечание»");
+    const result = normalizeDocx(body, { [question.code]: "note" });
+    assert.equal(result.scenes.length, 0);
+    assert.ok(result.blocks.some((b) => b.type === "NOTE" && b.text === "ИНТ. ТИТР — ДЕНЬ (00:30)"));
+  });
+
+  test("строка только со временем не считается шапкой из номера", () => {
+    assert.equal(isNumberOnly(parseHeading("37. (00:15)")), false);
+    assert.equal(isNumberOnly(parseHeading("(00:15)")), false);
+    assert.equal(isNumberOnly(parseHeading("37.")), true);
+  });
+
+  test("шапка без скобок — как раньше", () => {
+    const result = normalizeDocx(p("1. ИНТ. ДОМ — ДЕНЬ") + p("Текст."));
+    assert.equal(result.scenes[0]!.heading, "1. ИНТ. ДОМ — ДЕНЬ");
+    assert.equal(result.scenes[0]!.fileSeconds, null);
+  });
+});
+
 describe("шапки: варианты записи", () => {
   const cases: [string, Partial<ReturnType<typeof parseHeading>>][] = [
     ["Сц. 1 инт. кухня — день", { number: "1", intExt: "INT", place: "КУХНЯ", time: "ДЕНЬ" }],
@@ -722,7 +771,30 @@ describe("шапки: варианты записи", () => {
     ["9. ИНТ-НАТ. МАШИНА — ДЕНЬ", { intExt: "INT_EXT" }],
     ["10 ИНТ.КУХНЯ — ДЕНЬ", { number: "10", intExtToken: "ИНТ.", place: "КУХНЯ" }],
     ["11. ИНТ. КВ. ИВАНА — ДЕНЬ", { place: "КВ. ИВАНА" }],
-    ["12. ИНТ. ДОМ — СУМЕРКИ", { time: "СУМЕРКИ" }],
+    ["12. ИНТ. ДОМ — СУМЕРКИ", { time: "СУМЕРКИ", fileSeconds: null }],
+    [
+      "НАТ. ЗАГОРОДНЫЙ ДОМ — РАССВЕТ (00:15)",
+      { place: "ЗАГОРОДНЫЙ ДОМ", time: "РАССВЕТ", tail: "РАССВЕТ", fileSeconds: 15 },
+    ],
+    [
+      "ИНТ. ДОМ. КУХНЯ — УТРО (ПОЗЖЕ) (02:05)",
+      { place: "ДОМ. КУХНЯ", time: "УТРО", note: "ПОЗЖЕ", parenNote: "(ПОЗЖЕ)", fileSeconds: 125 },
+    ],
+    [
+      "ИНТ. ДОМ. ДЕТСКАЯ / КОРИДОР — ДЕНЬ (01:40)",
+      {
+        place: "ДОМ. ДЕТСКАЯ / КОРИДОР",
+        time: "ДЕНЬ",
+        fileSeconds: 100,
+        locations: [
+          { object: "ДОМ", sub: "ДЕТСКАЯ", separate: false },
+          { object: "ДОМ", sub: "КОРИДОР", separate: false },
+        ],
+      },
+    ],
+    ["ИНТ. ДОМ — ДЕНЬ (00:15) (ПОЗЖЕ)", { time: "ДЕНЬ", note: "ПОЗЖЕ", fileSeconds: 15 }],
+    ["ИНТ. ДОМ — НОЧЬ (1:02:05)", { time: "НОЧЬ", fileSeconds: 3725 }],
+    ["ИНТ. ДОМ (00:30)", { place: "ДОМ", time: null, fileSeconds: 30 }],
   ];
   for (const [text, expected] of cases) {
     test(text, () => {
