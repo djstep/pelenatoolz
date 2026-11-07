@@ -23,53 +23,59 @@ describe("чтение файла проекта", () => {
 });
 
 describe("ответ с файлом проекта", () => {
-  test("обычная картинка открывается на странице", () => {
-    for (const type of ["image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp"]) {
-      assert.match(projectFileHeaders(type, "a.png")["Content-Disposition"], /^inline/, type);
+  test("картинки, PDF, видео и аудио открываются во вкладке", () => {
+    for (const type of [
+      "image/jpeg",
+      "image/jpg",
+      "image/png",
+      "image/gif",
+      "image/webp",
+      "application/pdf",
+      "video/mp4",
+      "video/quicktime",
+      "video/x-matroska",
+      "audio/mpeg",
+    ]) {
+      const headers = projectFileHeaders(type, "a");
+      assert.match(headers["Content-Disposition"], /^inline/, type);
+      assert.equal(headers["Content-Type"], type);
     }
   });
 
-  test("всё остальное скачивается", () => {
+  test("всё остальное скачивается как двоичный файл", () => {
     for (const type of [
       "text/html",
       "TEXT/HTML",
       "image/svg+xml",
       "IMAGE/PNG",
       "image/png, text/html",
-      "application/pdf",
-      "video/mp4",
       "application/xhtml+xml",
       "text/xml",
-      "",
-    ]) {
-      assert.match(projectFileHeaders(type, "a")["Content-Disposition"], /^attachment/, type);
-    }
-  });
-
-  test("тип браузера сохраняется только у картинок, видео и аудио", () => {
-    for (const type of ["image/png", "video/mp4", "video/quicktime", "audio/mpeg"]) {
-      assert.equal(projectFileHeaders(type, "a")["Content-Type"], type);
-    }
-    for (const type of [
       "text/javascript",
       "application/javascript",
-      "text/html",
-      "image/svg+xml",
-      "application/pdf",
+      "video/x+xml",
+      "audio/x+xml",
       "video/mp4, text/html",
       "VIDEO/MP4",
+      "application/pdf; x=1",
       "",
     ]) {
-      assert.equal(projectFileHeaders(type, "a")["Content-Type"], "application/octet-stream", type);
+      const headers = projectFileHeaders(type, "a");
+      assert.match(headers["Content-Disposition"], /^attachment/, type);
+      assert.equal(headers["Content-Type"], "application/octet-stream", type);
     }
   });
 
   test("защитные заголовки есть всегда", () => {
-    for (const type of ["image/png", "text/html"]) {
+    for (const type of ["image/png", "application/pdf", "text/html"]) {
       const headers = projectFileHeaders(type, "a");
       assert.equal(headers["X-Content-Type-Options"], "nosniff");
       assert.match(headers["Content-Security-Policy"], /sandbox/);
     }
+    const player = projectFileHeaders("video/mp4", "a");
+    assert.equal(player["X-Content-Type-Options"], "nosniff");
+    assert.equal(player["Content-Security-Policy"], "default-src 'none'; media-src 'self'; sandbox allow-same-origin");
+    assert.ok(!player["Content-Security-Policy"].includes("allow-scripts"));
   });
 
   test("кириллица и кавычки в имени не ломают заголовок", () => {
