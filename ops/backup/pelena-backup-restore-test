@@ -86,14 +86,14 @@ fi
 echo "== файлы"
 for DIR in storage; do
   COUNT=$(R lsf -R "check:$DIR" --files-only 2>/dev/null | grep -c . || true)
-  ONDISK=$(find "/mnt/data/$DIR" -type f | wc -l)
+  ONDISK=$(find "/mnt/data/$DIR" -type f -not -name '*.uploading' | wc -l)
   echo "$DIR: в копии файлов $COUNT, на диске $ONDISK"
   if [ "$COUNT" -eq 0 ] && [ "$ONDISK" -gt 0 ]; then
     echo "Файлы в копии не прочитаны: пароль или соль не подходят, либо копии файлов нет."
     exit 1
   fi
   if [ "$COUNT" -gt 0 ]; then
-    if ! R cryptcheck "/mnt/data/$DIR" "check:$DIR" --one-way; then
+    if ! R cryptcheck "/mnt/data/$DIR" "check:$DIR" --one-way --exclude '*.uploading'; then
       echo "Файлы $DIR не совпали с копией: пароль или соль не подходят, либо файлы изменились."
       exit 1
     fi

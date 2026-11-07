@@ -1,5 +1,9 @@
-import { mkdir, open, stat, writeFile, type FileHandle } from "node:fs/promises";
+import { createWriteStream } from "node:fs";
+import { mkdir, open, rename, stat, unlink, type FileHandle } from "node:fs/promises";
 import path from "node:path";
+import { Readable, Transform } from "node:stream";
+import { pipeline } from "node:stream/promises";
+import type { ReadableStream as NodeReadableStream } from "node:stream/web";
 import type { ByteRange } from "@/features/files/lib/byte-range";
 
 /**
@@ -27,11 +31,19 @@ function localPath(storageKey: string) {
   return path.join(process.cwd(), "storage", storageKey);
 }
 
-export async function putProjectObject(
+export class UploadTooLargeError extends Error {}
+
+/**
+ * Пишет поток на диск, не держа файл в памяти: несколько больших проб не вытеснят базу.
+ * Сначала во временный файл: оборванная загрузка не оставит половину файла под рабочим именем.
+ * Такое расширение у загрузки быть не может: `safeExt` принимает не больше 8 символов. Копии его пропускают.
+ * Больше `maxBytes` — отказ, размер считается по факту, а не по заголовку.
+ */
+export async function putProjectStream(
   storageKey: string,
-  data: Buffer,
-  _mimeType: string,
-): Promise<void> {
+  body: ReadableStream<Uint8Array>,
+  maxBytes: number,
+): Promise<number> {
   if (isR2Configured()) {
     // R2 wiring: install @aws-sdk/client-s3 and putObject here.
     // Until credentials are configured we fall through to local.
@@ -40,8 +52,24 @@ export async function putProjectObject(
     );
   }
   const full = localPath(storageKey);
+  const partial = `${full}.uploading`;
   await mkdir(path.dirname(full), { recursive: true });
-  await writeFile(full, data);
+
+  let written = 0;
+  const limit = new Transform({
+    transform(chunk: Buffer, _encoding, done) {
+      written += chunk.length;
+      done(written > maxBytes ? new UploadTooLargeError() : null, chunk);
+    },
+  });
+  try {
+    await pipeline(Readable.fromWeb(body as NodeReadableStream), limit, createWriteStream(partial));
+    await rename(partial, full);
+    return written;
+  } catch (error) {
+    await unlink(partial).catch(() => undefined);
+    throw error;
+  }
 }
 
 /** Размер файла на диске; нет файла — `null`. */

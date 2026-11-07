@@ -1,15 +1,11 @@
 import { NextResponse } from "next/server";
 import type { ProjectFileKind } from "@prisma/client";
 import { videoTypeOf } from "@/features/files/lib/file-access";
-import {
-  buildStorageKey,
-  mediaApiUrl,
-  putProjectObject,
-} from "@/features/files/lib/storage";
+import { receiveUpload } from "@/features/files/lib/receive-upload";
+import { buildStorageKey, mediaApiUrl } from "@/features/files/lib/storage";
+import { readUploadHead } from "@/features/files/lib/upload-request";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { prisma } from "@/shared/db/prisma";
-
-const MAX_BYTES = 512 * 1024 * 1024; // 512 MB
 
 const VIDEO_EXT = new Set(["mp4", "webm", "mov", "m4v", "avi", "mkv"]);
 const IMAGE_EXT = new Set([
@@ -23,15 +19,15 @@ const IMAGE_EXT = new Set([
   "heic",
 ]);
 
-function detectKind(file: File): ProjectFileKind {
-  const ext = (file.name.split(".").pop() ?? "").toLowerCase();
-  if (file.type.startsWith("image/") || IMAGE_EXT.has(ext)) return "IMAGE";
-  if (file.type.startsWith("video/") || VIDEO_EXT.has(ext)) return "VIDEO";
+function detectKind(name: string, type: string): ProjectFileKind {
+  const ext = (name.split(".").pop() ?? "").toLowerCase();
+  if (type.startsWith("image/") || IMAGE_EXT.has(ext)) return "IMAGE";
+  if (type.startsWith("video/") || VIDEO_EXT.has(ext)) return "VIDEO";
   return "OTHER";
 }
 
-function safeExt(file: File, kind: ProjectFileKind): string {
-  const raw = (file.name.split(".").pop() ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
+function safeExt(name: string, kind: ProjectFileKind): string {
+  const raw = (name.split(".").pop() ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
   if (raw && raw.length <= 8) return raw;
   if (kind === "IMAGE") return "jpg";
   if (kind === "VIDEO") return "mp4";
@@ -56,30 +52,18 @@ export async function POST(
       return NextResponse.json({ error: "Недостаточно прав" }, { status: 403 });
     }
 
-    const form = await request.formData();
-    // Файл договора закрыт с момента загрузки: сбой привязки не оставит его общим.
-    const contractsOnly = form.get("scope") === "contract";
-    if (contractsOnly && !ctx.can("contracts:write")) {
+    const head = readUploadHead(request.headers);
+    if ("error" in head) {
+      return NextResponse.json({ error: head.error }, { status: head.status });
+    }
+    if (head.contractsOnly && !ctx.can("contracts:write")) {
       return NextResponse.json({ error: "Недостаточно прав" }, { status: 403 });
     }
-    const file = form.get("file");
-    if (!(file instanceof File)) {
-      return NextResponse.json({ error: "Файл не выбран" }, { status: 400 });
-    }
-    if (file.size <= 0) {
-      return NextResponse.json({ error: "Пустой файл" }, { status: 400 });
-    }
-    if (file.size > MAX_BYTES) {
-      return NextResponse.json(
-        { error: "Максимум 512 МБ на файл" },
-        { status: 400 },
-      );
-    }
 
-    const kind = detectKind(file);
-    const ext = safeExt(file, kind);
+    const kind = detectKind(head.name, head.type);
+    const ext = safeExt(head.name, kind);
     const mimeType =
-      file.type ||
+      head.type ||
       (kind === "IMAGE"
         ? `image/${ext}`
         : kind === "VIDEO"
@@ -92,45 +76,39 @@ export async function POST(
         kind,
         status: "UPLOADING",
         storageKey: "pending",
-        originalName: file.name.slice(0, 255),
+        originalName: head.name,
         mimeType,
-        sizeBytes: file.size,
-        contractsOnly,
+        sizeBytes: head.declaredBytes ?? 0,
+        contractsOnly: head.contractsOnly,
         createdById: ctx.user.id,
       },
     });
 
-    try {
-      const storageKey = buildStorageKey(projectId, row.id, ext);
-      const buffer = Buffer.from(await file.arrayBuffer());
-      await putProjectObject(storageKey, buffer, mimeType);
-
-      const url = mediaApiUrl(projectId, row.id);
-      const updated = await prisma.projectFile.update({
-        where: { id: row.id },
-        data: {
-          storageKey,
-          url,
-          status: "READY",
-        },
-      });
-
-      return NextResponse.json({
-        id: updated.id,
-        url: updated.url,
-        status: updated.status,
-        kind: updated.kind,
-        originalName: updated.originalName,
-        sizeBytes: updated.sizeBytes,
-        mimeType: updated.mimeType,
-      });
-    } catch (err) {
-      await prisma.projectFile.update({
-        where: { id: row.id },
-        data: { status: "FAILED" },
-      });
-      throw err;
+    const storageKey = buildStorageKey(projectId, row.id, ext);
+    const received = await receiveUpload(row.id, storageKey, request.body);
+    if ("error" in received) {
+      return NextResponse.json({ error: received.error }, { status: received.status });
     }
+
+    const updated = await prisma.projectFile.update({
+      where: { id: row.id },
+      data: {
+        storageKey,
+        url: mediaApiUrl(projectId, row.id),
+        sizeBytes: received.sizeBytes,
+        status: "READY",
+      },
+    });
+
+    return NextResponse.json({
+      id: updated.id,
+      url: updated.url,
+      status: updated.status,
+      kind: updated.kind,
+      originalName: updated.originalName,
+      sizeBytes: updated.sizeBytes,
+      mimeType: updated.mimeType,
+    });
   } catch (err) {
     console.error("[file-upload]", err);
     return NextResponse.json({ error: "Ошибка загрузки" }, { status: 500 });

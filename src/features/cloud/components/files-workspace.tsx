@@ -18,6 +18,7 @@ import {
   formatFileSize,
 } from "@/features/cloud/lib/types";
 import { deleteProjectUploadedFileAction } from "@/features/files/actions";
+import { uploadProjectFile } from "@/features/files/lib/upload-client";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
@@ -119,12 +120,7 @@ export function FilesWorkspace({
       let ok = 0;
       let fail = 0;
       for (const file of Array.from(fileList)) {
-        const body = new FormData();
-        body.append("file", file);
-        const res = await fetch(`/api/projects/${projectId}/uploads/file`, {
-          method: "POST",
-          body,
-        });
+        const res = await uploadProjectFile(projectId, "file", file);
         const data = (await res.json().catch(() => ({}))) as {
           error?: string;
           originalName?: string;

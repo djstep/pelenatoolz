@@ -27,6 +27,7 @@ import {
   quickCreateCounterpartyAction,
 } from "@/features/counterparties/actions";
 import { formatDateShort } from "@/shared/i18n/format-date";
+import { uploadProjectFile } from "@/features/files/lib/upload-client";
 import { Button } from "@/shared/ui/button";
 import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
 import { submitKeepingFields } from "@/shared/ui/forms/submit-keeping-fields";
@@ -194,13 +195,7 @@ export function CertificateFormModal({
         void (async () => {
           setUploading(true);
           try {
-            const fd = new FormData();
-            fd.append("file", pendingFile);
-            fd.append("scope", "contract");
-            const res = await fetch(`/api/projects/${projectId}/uploads/file`, {
-              method: "POST",
-              body: fd,
-            });
+            const res = await uploadProjectFile(projectId, "file", pendingFile, "contract");
             const data = (await res.json()) as { id?: string };
             if (data.id) {
               const attached = await attachCertificateFileAction(

@@ -21,6 +21,7 @@ import {
 import type { ContractFinanceAccess } from "@/features/contracts/lib/finance-access";
 import { formatDateShort } from "@/shared/i18n/format-date";
 import { Badge, statusBadgeStyle } from "@/shared/ui/badge";
+import { uploadProjectFile } from "@/features/files/lib/upload-client";
 import { Button } from "@/shared/ui/button";
 import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
 import { Input } from "@/shared/ui/input";
@@ -97,13 +98,7 @@ export function ContractDetailView({
   async function onUpload(file: File, role: ContractFileRole) {
     setUploading(true);
     try {
-      const fd = new FormData();
-      fd.append("file", file);
-      fd.append("scope", "contract");
-      const res = await fetch(`/api/projects/${projectId}/uploads/file`, {
-        method: "POST",
-        body: fd,
-      });
+      const res = await uploadProjectFile(projectId, "file", file, "contract");
       const data = (await res.json()) as { id?: string; error?: string };
       if (!res.ok || !data.id) throw new Error(data.error ?? "Ошибка загрузки");
       const attached = await attachContractFileAction(projectId, contract.id, data.id, role);

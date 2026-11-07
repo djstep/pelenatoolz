@@ -36,6 +36,7 @@ COPY --from=builder /app/public ./public
 COPY --from=builder /app/package.json ./package.json
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY scripts/server-timeouts.cjs ./server-timeouts.cjs
 
 # Сюда сайт пишет загрузки, а работает он не от root. На сервере папка подключается
 # с диска (docker-compose.prod.yml), иначе файлы пропадут при обновлении сайта.
@@ -45,4 +46,4 @@ USER nextjs
 EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
-CMD ["node", "server.js"]
+CMD ["node", "--require", "./server-timeouts.cjs", "server.js"]
