@@ -34,6 +34,9 @@ yarn-error.log*
 .env*
 !.env.example
 
+# настройки запуска на своём компьютере
+.claude/launch.json
+
 # vercel
 .vercel
 
