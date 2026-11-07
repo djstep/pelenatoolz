@@ -1,7 +1,7 @@
 import type { ScriptBlockType } from "@prisma/client";
 import type { ScreenplayBlock } from "@/features/screenplay/lib/block-types";
 import { scriptContentToBlocks } from "@/features/screenplay/lib/block-serialization";
-import { buildSlugline, parseSlugline } from "@/features/screenplay/lib/slugline";
+import { buildSlugline, keepHeadingTime, parseSlugline } from "@/features/screenplay/lib/slugline";
 import {
   ensureCurrentScriptVersion,
   getCurrentScriptVersion,
@@ -127,7 +127,7 @@ export async function syncSluglineFromScene(projectId: string, sceneId: string) 
   if (block) {
     await prisma.scriptBlock.update({
       where: { id: block.id, projectId },
-      data: { content: slugline },
+      data: { content: keepHeadingTime(slugline, block.content) },
     });
   }
 }

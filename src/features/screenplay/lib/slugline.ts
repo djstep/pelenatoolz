@@ -57,11 +57,14 @@ function mapDayNight(raw: string): DayNight | undefined {
   return DAY_NIGHT_MAP[key];
 }
 
+/** Хронометраж в конце шапки, можно перед пометкой в скобках: «(00:15)», «(00:15) (ПОЗЖЕ)». */
+const FILE_TIME_RE = /\s*\(\s*(?:\d{1,2}:)?\d{1,3}:[0-5]\d\s*\)(?=(?:\s*\([^()]*\))?\s*$)/u;
+
 function splitLocationAndMode(rest: string): {
   location: string;
   dayNight?: DayNight;
 } {
-  const cleaned = rest.replace(/\s+/g, " ").trim();
+  const cleaned = rest.replace(/\s+/g, " ").trim().replace(FILE_TIME_RE, "").trim();
   const dash = cleaned.match(/^(.+?)\s*[–—−-]\s*([^–—−-]+)$/u);
   if (dash) {
     const location = dash[1]!.trim();
@@ -133,6 +136,12 @@ export function buildSlugline(input: {
   const dn = input.dayNight ? dayNightToSlug(input.dayNight) : null;
   const head = [`${num}.`, ie, loc].filter(Boolean).join(" ");
   return dn ? `${head} – ${dn}` : head;
+}
+
+/** Шапка собрана из полей сцены: времени в них нет, поэтому оно берётся из прежнего текста. */
+export function keepHeadingTime(rebuilt: string, previous: string) {
+  const mark = previous.match(FILE_TIME_RE)?.[0].trim();
+  return mark ? `${rebuilt} ${mark}` : rebuilt;
 }
 
 export function intExtLabel(value?: IntExt | null) {

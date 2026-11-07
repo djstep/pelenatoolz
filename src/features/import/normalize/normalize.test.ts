@@ -710,17 +710,18 @@ describe("символы и латиница (собранные файлы)", (
 });
 
 describe("хронометраж в шапке", () => {
-  test("время уходит из текста шапки, режим распознан", () => {
+  test("время остаётся в тексте шапки, режим распознан, место без хвоста", () => {
     const result = normalizeDocx(
       p("1. НАТ. ЗАГОРОДНЫЙ ДОМ — РАССВЕТ (00:15)") +
         p("Текст.") +
         p("2. ИНТ. ДОМ. КУХНЯ — УТРО (ПОЗЖЕ) (02:05)") +
         p("Текст."),
     );
-    assert.equal(result.scenes[0]!.heading, "1. НАТ. ЗАГОРОДНЫЙ ДОМ — РАССВЕТ");
+    assert.equal(result.scenes[0]!.heading, "1. НАТ. ЗАГОРОДНЫЙ ДОМ — РАССВЕТ (00:15)");
     assert.equal(result.scenes[0]!.dayNight, "DAWN");
     assert.equal(result.scenes[0]!.fileSeconds, 15);
-    assert.equal(result.scenes[1]!.heading, "2. ИНТ. ДОМ. КУХНЯ — УТРО (ПОЗЖЕ)");
+    assert.equal(result.locations.some((l) => l.object === "ЗАГОРОДНЫЙ ДОМ"), true);
+    assert.equal(result.scenes[1]!.heading, "2. ИНТ. ДОМ. КУХНЯ — УТРО (ПОЗЖЕ) (02:05)");
     assert.equal(result.scenes[1]!.fileSeconds, 125);
     assert.deepEqual(
       result.questions.filter((q) => q.type === QUESTION_TYPES.timeMissing),
@@ -728,12 +729,17 @@ describe("хронометраж в шапке", () => {
     );
   });
 
+  test("порядок скобок как в файле", () => {
+    const result = normalizeDocx(p("1. ИНТ. ДОМ — ДЕНЬ (00:15) (ПОЗЖЕ)") + p("Текст."));
+    assert.equal(result.scenes[0]!.heading, "1. ИНТ. ДОМ — ДЕНЬ (00:15) (ПОЗЖЕ)");
+  });
+
   test("режим, выбранный вручную, попадает в шапку один раз", () => {
     const body = p("1. ИНТ. ДОМ (00:30)") + p("Текст.");
     const [question] = normalizeDocx(body).questions.filter((q) => q.type === QUESTION_TYPES.timeMissing);
     assert.ok(question, "нет вопроса о режиме");
     const result = normalizeDocx(body, { [question.code]: "РАССВЕТ" });
-    assert.equal(result.scenes[0]!.heading, "1. ИНТ. ДОМ — РАССВЕТ");
+    assert.equal(result.scenes[0]!.heading, "1. ИНТ. ДОМ — РАССВЕТ (00:30)");
   });
 
   test("строка стала примечанием — время остаётся в её тексте", () => {

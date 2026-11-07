@@ -11,6 +11,7 @@ import { requireProjectContext } from "@/features/projects/lib/project-context";
 import type { ScreenplayBlock } from "@/features/screenplay/lib/block-types";
 import {
   buildScreenplayDocx,
+  buildScreenplayFountain,
   buildScreenplayPrintHtml,
 } from "@/features/screenplay/lib/export-screenplay";
 import {
@@ -264,22 +265,9 @@ export async function exportScreenplayFountainAction(
   if (!version) return { error: "Версия не найдена" };
 
   const blocks = await loadExportBlocks(projectId, versionId);
-  const lines: string[] = [];
-  for (const block of blocks) {
-    if (block.type === "BONEYARD" || block.type === "NOTE" || block.type === "FOLDER") {
-      continue;
-    }
-    const text = block.content.trim();
-    if (!text) continue;
-    if (block.type === "SLUGLINE") lines.push(text.toUpperCase(), "");
-    else if (block.type === "CHARACTER") lines.push(text.toUpperCase());
-    else if (block.type === "PARENTHETICAL") lines.push(`(${text.replace(/^\(|\)$/g, "")})`);
-    else if (block.type === "TRANSITION") lines.push(`${text.toUpperCase()}\n`);
-    else lines.push(text);
-  }
 
   return {
-    content: `${lines.join("\n")}\n`,
+    content: buildScreenplayFountain(blocks),
     fileName: `screenplay-v${version.versionNumber}.fountain`,
   };
 }
