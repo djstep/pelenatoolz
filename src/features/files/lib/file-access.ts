@@ -3,23 +3,36 @@ import type { Permission } from "@/features/memberships/permissions";
 
 type Can = (permission: Permission) => boolean;
 
-/** Только эти типы браузер открывает на странице. SVG здесь нет: в нём работают скрипты. */
-const INLINE_TYPES = new Set(["image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp"]);
+/** Эти типы браузер открывает во вкладке и не выполняет. SVG здесь нет: в нём работают скрипты. */
+const VIEW_TYPES = new Set([
+  "image/jpeg",
+  "image/jpg",
+  "image/png",
+  "image/gif",
+  "image/webp",
+  "application/pdf",
+]);
+/** Без `+`: тип вида `video/x+xml` браузер открыл бы как XML-страницу со скриптами. */
+const PLAYER_TYPE = /^(video|audio)\/[a-z0-9.-]+$/;
+
+const SANDBOX_CSP = "default-src 'none'; sandbox";
+/** Видео во вкладке играет только с `allow-same-origin` (проверено в Chromium). Скрипты всё равно закрыты. */
+const PLAYER_CSP = "default-src 'none'; media-src 'self'; sandbox allow-same-origin";
 
 /**
- * Тип файла присылает браузер загрузившего, поэтому ему не доверяем: всё, что не обычная картинка,
- * скачивается, а не выполняется на адресе сайта. Тег `<video>` на `attachment` не смотрит.
+ * Тип файла присылает браузер загрузившего, поэтому ему не доверяем: всё, кроме белого списка,
+ * скачивается как двоичный файл. Иначе HTML выполнился бы на адресе сайта, а файл с типом
+ * text/javascript можно было бы подключить тегом `<script>`.
  */
 export function projectFileHeaders(mimeType: string, originalName: string) {
-  const playable = INLINE_TYPES.has(mimeType) || /^(video|audio)\/[a-z0-9.+-]+$/.test(mimeType);
+  const player = PLAYER_TYPE.test(mimeType);
+  const inline = player || VIEW_TYPES.has(mimeType);
+  const disposition = attachmentDisposition(originalName);
   return {
-    // Иначе загруженный файл с типом text/javascript можно подключить тегом `<script>`.
-    "Content-Type": playable ? mimeType : "application/octet-stream",
-    "Content-Disposition": INLINE_TYPES.has(mimeType)
-      ? `inline; filename="${encodeURIComponent(originalName)}"`
-      : attachmentDisposition(originalName),
+    "Content-Type": inline ? mimeType : "application/octet-stream",
+    "Content-Disposition": inline ? disposition.replace(/^attachment/, "inline") : disposition,
     "X-Content-Type-Options": "nosniff",
-    "Content-Security-Policy": "default-src 'none'; sandbox",
+    "Content-Security-Policy": player ? PLAYER_CSP : SANDBOX_CSP,
   };
 }
 

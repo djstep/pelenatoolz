@@ -275,6 +275,97 @@ test.describe("загруженный код не выполняется на с
   });
 });
 
+test.describe("просмотр в браузере", () => {
+  const PDF = Buffer.from("%PDF-1.4\n%%EOF\n");
+  const names = ["e2e-просмотр.pdf", "e2e-просмотр.webm", "e2e-просмотр-звук.webm", "e2e-проба.webm"];
+
+  /** Настоящее короткое видео: сам браузер записывает его с холста. */
+  async function recordVideo(page: Page) {
+    const base64 = await page.evaluate(async () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = 64;
+      canvas.height = 64;
+      const context = canvas.getContext("2d")!;
+      const recorder = new MediaRecorder(canvas.captureStream(10), { mimeType: "video/webm" });
+      const chunks: Blob[] = [];
+      recorder.ondataavailable = (event) => chunks.push(event.data);
+      const stopped = new Promise((resolve) => (recorder.onstop = resolve));
+      recorder.start(100);
+      for (let i = 0; i < 12; i++) {
+        context.fillStyle = i % 2 ? "red" : "blue";
+        context.fillRect(0, 0, 64, 64);
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+      recorder.stop();
+      await stopped;
+      const bytes = new Uint8Array(await new Blob(chunks).arrayBuffer());
+      return btoa(Array.from(bytes, (byte) => String.fromCharCode(byte)).join(""));
+    });
+    return Buffer.from(base64, "base64");
+  }
+
+  async function upload(page: Page, route: string, name: string, mimeType: string, buffer: Buffer) {
+    const res = await page.request.post(`/api/projects/${ctx.projectId}/uploads/${route}`, {
+      headers: { origin: ORIGIN },
+      multipart: { file: { name, mimeType, buffer } },
+    });
+    expect(res.status()).toBe(200);
+    return (await res.json()) as { id: string; url: string };
+  }
+
+  async function expectPlays(page: Page) {
+    const video = page.locator("video");
+    await expect.poll(() => video.evaluate((v: HTMLVideoElement) => v.readyState)).toBeGreaterThanOrEqual(2);
+    expect(await video.evaluate((v: HTMLVideoElement) => v.videoWidth)).toBe(64);
+    await video.evaluate((v: HTMLVideoElement) => {
+      v.muted = true;
+      return v.play();
+    });
+    await expect.poll(() => video.evaluate((v: HTMLVideoElement) => v.currentTime)).toBeGreaterThan(0);
+  }
+
+  test.afterAll(async () => {
+    await db.projectFile.deleteMany({ where: { projectId: ctx.projectId, originalName: { in: names } } });
+  });
+
+  test("PDF, видео и аудио открываются во вкладке", async ({ browser }) => {
+    const producer = await pageAs(browser, "producer");
+    await producer.goto(projectPath(ctx));
+    const webm = await recordVideo(producer);
+
+    const pdf = await producer.request.get((await upload(producer, "file", names[0], "application/pdf", PDF)).url);
+    expect(pdf.headers()["content-disposition"]).toMatch(/^inline/);
+    expect(pdf.headers()["content-type"]).toBe("application/pdf");
+    expect(pdf.headers()["content-security-policy"]).toContain("sandbox");
+    expect(pdf.headers()["x-content-type-options"]).toBe("nosniff");
+
+    const audio = await producer.request.get((await upload(producer, "file", names[2], "audio/webm", webm)).url);
+    expect(audio.headers()["content-disposition"]).toMatch(/^inline/);
+    expect(audio.headers()["content-type"]).toBe("audio/webm");
+    expect(audio.headers()["x-content-type-options"]).toBe("nosniff");
+    expect(audio.headers()["content-security-policy"]).toContain("sandbox");
+
+    const video = await upload(producer, "file", names[1], "video/webm", webm);
+    const videoHeaders = (await producer.request.get(video.url)).headers();
+    expect(videoHeaders["content-security-policy"]).toContain("sandbox");
+    expect(videoHeaders["content-security-policy"]).not.toContain("allow-scripts");
+    const tab = await pageAs(browser, "producer");
+    await tab.goto(video.url);
+    await expectPlays(tab);
+  });
+
+  test("проба играет в плеере", async ({ browser }) => {
+    const producer = await pageAs(browser, "producer");
+    await producer.goto(projectPath(ctx));
+    const file = await upload(producer, "video", names[3], "video/webm", await recordVideo(producer));
+    await db.audition.update({ where: { id: ctx.auditionId! }, data: { videoFileId: file.id } });
+
+    await producer.goto(projectPath(ctx, `/preproduction/auditions/${ctx.auditionId}`));
+    await producer.getByRole("button", { name: /Смотреть/ }).click();
+    await expectPlays(producer);
+  });
+});
+
 test.describe("картинки /uploads/", () => {
   let foreignProjectId = "";
 
