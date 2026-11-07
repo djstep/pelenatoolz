@@ -144,7 +144,7 @@ export function planImport(
       planSeconds: isNew
         ? timing.mode !== "MANUAL"
           ? (timings.scenes[scene.index]?.seconds ?? null)
-          : null
+          : scene.fileSeconds
         : (update?.seconds ?? null),
       planMode: update?.mode ?? null,
       sortOrder: 0,

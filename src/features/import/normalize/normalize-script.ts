@@ -16,6 +16,7 @@ import {
 import type { DictionaryRule } from "@/features/import/normalize/dictionary";
 import {
   formatHeading,
+  headingNoteText,
   isNumberOnly,
   parseHeading,
   TIME_WORDS,
@@ -221,6 +222,8 @@ export type NormalizedScene = {
   /** Ближайшее значение либретто. */
   dayNight: DayNight | null;
   note: string | null;
+  /** Хронометраж из шапки файла, секунды. */
+  fileSeconds: number | null;
   locations: SceneLocation[];
   /** Ключи персонажей: говорящие и из строки «Персонажи». */
   characters: string[];
@@ -477,9 +480,10 @@ export function normalizeScript(
       }
       const key = compareKey(formatHeading(heading, null, heading.tail));
       if (!heading.intExt || heading.serviceObject) {
+        const noteText = headingNoteText(heading);
         const answer = book.ask({
           type: QUESTION_TYPES.notScene,
-          subject: key,
+          subject: compareKey(noteText),
           group: "scenes",
           options: ["scene", "note"],
           suggested: "scene",
@@ -489,7 +493,7 @@ export function normalizeScript(
         });
         if (answer === "note") {
           // Не сцена — примечание на своём месте; дальше блоки идут как шли.
-          blocks.push({ ...block, type: "NOTE", text: formatHeading(heading, null, heading.tail) });
+          blocks.push({ ...block, type: "NOTE", text: noteText });
           continue;
         }
       }
@@ -645,7 +649,9 @@ export function normalizeScript(
  * Хронометраж совпавших сцен, у которых поменялся текст (решение 6а-3, шаг 7). Признака
  * «задан руками» у сцены нет, поэтому прежнее значение молча не перезаписывается:
  * пусто — записать новое; другое — вопрос «оставить / пересчитать» (по умолчанию «оставить»);
- * то же — ничего. Режим «вручную» и сцены без изменений текста не трогаются.
+ * то же — ничего. Сцены без изменений текста не трогаются.
+ * Время из шапки файла: заполняет пустой план и в режиме «вручную», уже заполненный там не меняется.
+ * В режиме «из файла» другое время в шапке — тот же вопрос, даже если текст сцены прежний.
  */
 function matchedTimings(
   script: Pick<NormalizedScript, "blocks" | "scenes">,
@@ -655,14 +661,22 @@ function matchedTimings(
   timing: NormalizeContext["timing"],
   book: QuestionBook,
 ): TimingUpdate[] {
-  if (!timing || timing.mode === "MANUAL" || matches.length === 0) return [];
+  if (!timing || matches.length === 0) return [];
   const estimates = previewTimings(script, timing.mode, timing.pageToMinuteRatio).scenes;
   const byId = new Map(existingScenes.map((s) => [s.id, s]));
   const updates: TimingUpdate[] = [];
   for (const scene of script.scenes) {
     const match = matches[scene.index];
-    if (!match?.existingId || match.pending || !match.contentChanged) continue;
+    if (!match?.existingId || match.pending) continue;
     const before = byId.get(match.existingId)?.planSeconds ?? null;
+    if (timing.mode === "MANUAL") {
+      if (before == null && scene.fileSeconds != null) {
+        updates.push({ sceneIndex: scene.index, seconds: scene.fileSeconds, mode: "fill" });
+      }
+      continue;
+    }
+    const fromFile = timing.mode === "IMPORTED" && scene.fileSeconds != null;
+    if (!match.contentChanged && !fromFile) continue;
     const seconds = estimates[scene.index]?.seconds ?? 0;
     if (before == null) {
       updates.push({ sceneIndex: scene.index, seconds, mode: "fill" });
@@ -931,6 +945,7 @@ function toScene(s: SceneDraft): NormalizedScene {
     time: s.time,
     dayNight: s.time ? (TIME_WORDS[s.time] ?? null) : null,
     note: s.heading.note,
+    fileSeconds: s.heading.fileSeconds,
     locations: s.locations,
     characters: sceneCharacters(s),
     castLine: s.castLine,

@@ -60,6 +60,20 @@ export function extractImportedTimingSeconds(script?: string | null) {
   return minutes * 60 + seconds;
 }
 
+/**
+ * Метки (ММ:СС) старых шапок: итог сценария — сумма сцен, а не первая из них.
+ * Только шапки: «(12:30)» в ремарке бывает часами на стене, а не хронометражем.
+ */
+function sumHeadingTimingSeconds(blocks: ScreenplayBlock[]) {
+  const headings = blocks
+    .filter((block) => block.type === "SLUGLINE")
+    .map((block) => blockPlainText(block.content, block.contentHtml))
+    .join("\n");
+  const markers = [...headings.matchAll(/\((\d{1,2}):(\d{2})\)/g)];
+  if (markers.length === 0) return null;
+  return markers.reduce((sum, m) => sum + Number(m[1]) * 60 + Number(m[2]), 0);
+}
+
 function calcByWords(blocks: ScreenplayBlock[]) {
   const text = timingText(blocks);
   const words = text.split(/\s+/).filter(Boolean).length;
@@ -97,8 +111,7 @@ export function estimateScreenplayTiming(
     if (fromScenes > 0) {
       return { seconds: fromScenes, label: formatSecondsMmSs(fromScenes), pages: 0 };
     }
-    const text = timingText(blocks);
-    const imported = extractImportedTimingSeconds(text);
+    const imported = sumHeadingTimingSeconds(blocks);
     if (imported != null) {
       return { seconds: imported, label: formatSecondsMmSs(imported), pages: 0 };
     }
@@ -155,7 +168,7 @@ export function timingModeHint(
     case "IMPORTED":
       return "Из импортированного файла";
     case "MANUAL":
-      return "Ручной ввод по сценам";
+      return "Вводится в карточке сцены в либретто: «Хронометраж сцены» → «План»";
     default:
       return "По словам (~2 слова/сек)";
   }

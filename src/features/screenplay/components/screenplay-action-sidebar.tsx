@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+import { useParams } from "next/navigation";
 import type { TimingMode } from "@prisma/client";
 import { timingModeOptionLabels } from "@/shared/i18n/domain-labels";
 import { Button } from "@/shared/ui/button";
@@ -51,6 +53,7 @@ export function ScreenplayActionSidebar({
   onExportDocx,
   onExportPdf,
 }: Props) {
+  const { locale, projectId } = useParams<{ locale: string; projectId: string }>();
   return (
     <aside className="screenplay-action-sidebar">
       <div className="screenplay-action-sidebar-inner space-y-4">
@@ -65,6 +68,14 @@ export function ScreenplayActionSidebar({
           <div className="text-[var(--muted-fg)]">Хронометраж</div>
           <div className="mt-1 text-lg font-medium tabular-nums">{timingLabel}</div>
           <div className="mt-0.5 text-[var(--muted-fg)]">{timingHint}</div>
+          {timingMode === "MANUAL" ? (
+            <Link
+              href={`/${locale}/projects/${projectId}/libretto`}
+              className="mt-1 inline-block text-[var(--accent)] hover:underline"
+            >
+              Открыть либретто
+            </Link>
+          ) : null}
           {pageCount != null && pageCount > 0 ? (
             <div className="mt-1 text-[var(--muted-fg)]">
               ~{pageCount} стр.

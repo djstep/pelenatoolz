@@ -61,8 +61,15 @@ export type ParsedHeading = {
   noteInsteadOfTime: boolean;
   /** Пометка в скобках после режима: «(ПОЗЖЕ)». */
   parenNote: string | null;
+  /** Хронометраж в конце шапки: «(02:05)» → 125. В текст шапки сцены не возвращается. */
+  fileSeconds: number | null;
+  /** Та же метка как в файле: нужна, если строка окажется примечанием, а не сценой. */
+  fileTimeText: string | null;
   serviceObject: boolean;
 };
+
+/** «(ММ:СС)» или «(Ч:ММ:СС)» в самом конце шапки. */
+const FILE_TIME_RE = /\s*\(\s*(?:(\d{1,2}):)?(\d{1,3}):([0-5]\d)\s*\)$/u;
 
 const NUMBER_RE = /^(?:(?:СЦЕНА|СЦ|SCENE|SC)\.?\s*)?(\d+)([A-ZА-ЯЁ])?(?=[\s.)]|$)[.)]?\s*/u;
 const INT_EXT_TOKEN = "(?:ИНТЕРЬЕР|ИНТ|НАТУРА|НАТ|INT|EXT)";
@@ -167,6 +174,18 @@ export function parseHeading(
   }
   rest = rest.trim();
 
+  // Время снимается до разбора хвоста: иначе «РАССВЕТ (00:15)» не распознаётся как режим.
+  let fileSeconds: number | null = null;
+  let fileTimeText: string | null = null;
+  const takeFileTime = () => {
+    const found = rest.match(FILE_TIME_RE);
+    if (!found) return;
+    fileSeconds = Number(found[1] ?? 0) * 3600 + Number(found[2]) * 60 + Number(found[3]);
+    fileTimeText = found[0].trim();
+    rest = rest.slice(0, found.index).trim();
+  };
+  takeFileTime();
+
   let parenNote: string | null = null;
   let note: string | null = null;
   const paren = rest.match(/\s*\(([^()]*)\)$/u);
@@ -174,6 +193,8 @@ export function parseHeading(
     note = noteOf(paren[1]!)!.text;
     parenNote = `(${cleanSpaces(paren[1]!)})`;
     rest = rest.slice(0, paren.index).trim();
+    // Обратный порядок: «(00:15) (ПОЗЖЕ)».
+    takeFileTime();
   }
 
   let time: string | null = null;
@@ -220,6 +241,8 @@ export function parseHeading(
     note,
     noteInsteadOfTime,
     parenNote,
+    fileSeconds,
+    fileTimeText,
     serviceObject: SERVICE_OBJECTS.some((word) => compareKey(word) === firstObject),
   };
 }
@@ -227,7 +250,11 @@ export function parseHeading(
 /** Шапка из одного номера («37.») — не сцена. */
 export function isNumberOnly(heading: ParsedHeading) {
   return (
-    !heading.intExtToken && !heading.place && !heading.tail && !heading.parenNote
+    !heading.intExtToken &&
+    !heading.place &&
+    !heading.tail &&
+    !heading.parenNote &&
+    heading.fileSeconds == null
   );
 }
 
@@ -241,4 +268,9 @@ export function formatHeading(
     .filter(Boolean)
     .join(" ");
   return [head, tail ? `— ${tail}` : null, heading.parenNote].filter(Boolean).join(" ");
+}
+
+/** Текст строки, которая оказалась примечанием: время из неё не уходит в план сцены и остаётся здесь. */
+export function headingNoteText(heading: ParsedHeading) {
+  return [formatHeading(heading, null, heading.tail), heading.fileTimeText].filter(Boolean).join(" ");
 }

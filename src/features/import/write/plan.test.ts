@@ -13,6 +13,7 @@ import {
 } from "@/features/import/normalize/normalize-script";
 import { contentHash, headingKey, type ExistingScene } from "@/features/import/normalize/scene-match";
 import { buildDocx, p } from "@/features/import/normalize/test-docx";
+import { previewTimings, reviewTimings } from "@/features/import/review/timing";
 import { blockingQuestions, planImport, splitSceneNumber } from "@/features/import/write/plan";
 
 // Сопоставление с прошлой версией и план записи (шаг 6). Новые ожидания, не из
@@ -466,6 +467,109 @@ describe("план записи", () => {
     assert.ok(plan.locations.length > 0);
     // Только текст, без разметки; титульной у ddct нет.
     assert.ok(plan.blocks.every((b) => !/<[a-z]/i.test(b.content)));
+  });
+});
+
+describe("хронометраж из шапки файла", () => {
+  const body =
+    p("1. НАТ. ЗАГОРОДНЫЙ ДОМ — РАССВЕТ (00:15)") +
+    p("Ремарка с часами (12:30) на стене.") +
+    p("2. ИНТ. ДОМ. КУХНЯ — УТРО (ПОЗЖЕ) (02:05)") +
+    p("Два.") +
+    p("3. ИНТ. ДОМ. ДЕТСКАЯ / КОРИДОР — ДЕНЬ (01:40)") +
+    p("Три.");
+  const typing = classifyParagraphs(readDocxParagraphs(buildDocx({ body })));
+  const IMPORTED = { mode: "IMPORTED" as const, pageToMinuteRatio: 1 };
+  const MANUAL = { mode: "MANUAL" as const, pageToMinuteRatio: 1 };
+  const empty: ExistingRecords = { characters: [], locations: [], scenes: [] };
+  const project = (planSeconds: number | null): ExistingRecords => ({
+    characters: [],
+    locations: [],
+    scenes: [
+      scene({
+        id: "a",
+        number: "1",
+        heading: "НАТ. ЗАГОРОДНЫЙ ДОМ — РАССВЕТ",
+        contentHash: contentHash("Ремарка с часами (12:30) на стене."),
+        planSeconds,
+      }),
+    ],
+  });
+
+  for (const timing of [IMPORTED, MANUAL]) {
+    test(`${timing.mode}: новые сцены получают время из шапки`, () => {
+      const result = normalizeScript(typing, {}, { existing: empty, timing });
+      const plan = planImport(result, {}, empty, timing);
+      assert.deepEqual(plan.scenes.map((s) => s.planSeconds), [15, 125, 100]);
+      assert.equal(previewTimings(result, timing.mode, 1).total.label, "4:00");
+    });
+  }
+
+  test("другие режимы считают как раньше", () => {
+    const result = normalizeScript(typing, {}, { existing: empty, timing: TIMING });
+    const plan = planImport(result, {}, empty, TIMING);
+    assert.notDeepEqual(plan.scenes.map((s) => s.planSeconds), [15, 125, 100]);
+  });
+
+  test("«вручную»: пустой план заполняется, введённое руками не меняется и без вопроса", () => {
+    const filled = normalizeScript(typing, {}, { existing: project(null), timing: MANUAL });
+    assert.deepEqual(filled.timingUpdates.filter((u) => u.sceneIndex === 0), [
+      { sceneIndex: 0, seconds: 15, mode: "fill" },
+    ]);
+
+    const existing = project(99);
+    const kept = normalizeScript(typing, {}, { existing, timing: MANUAL });
+    assert.deepEqual(codesOf(kept, QUESTION_TYPES.timing), []);
+    assert.deepEqual(kept.timingUpdates.filter((u) => u.sceneIndex === 0), []);
+    const scenePlan = planImport(kept, {}, existing, MANUAL).scenes[0]!;
+    assert.equal(scenePlan.planMode, null);
+    assert.equal(scenePlan.planSeconds, null);
+  });
+
+  test("синхронизация с либретто и повторное обновление не затирают план", () => {
+    for (const timing of [MANUAL, IMPORTED]) {
+      const result = normalizeScript(typing, {}, { existing: project(99), timing, sync: true });
+      assert.deepEqual(result.timingUpdates.filter((u) => u.sceneIndex === 0), [], timing.mode);
+    }
+  });
+
+  test("экран проверки показывает то, что останется в либретто", () => {
+    const existing = project(99);
+    const result = normalizeScript(typing, {}, { existing, timing: MANUAL });
+    const timings = reviewTimings(result, "MANUAL", 1, existing.scenes!);
+    assert.equal(timings.scenes[0]!.seconds, 99);
+    assert.equal(timings.total.seconds, 99 + 125 + 100);
+
+    const filled = project(null);
+    const fresh = normalizeScript(typing, {}, { existing: filled, timing: MANUAL });
+    assert.equal(reviewTimings(fresh, "MANUAL", 1, filled.scenes!).scenes[0]!.seconds, 15);
+  });
+
+  test("«из файла»: другое время не затирает план без явного ответа", () => {
+    const existing = project(99);
+    const result = normalizeScript(typing, {}, { existing, timing: IMPORTED });
+    const [question] = result.questions.filter((q) => q.type === QUESTION_TYPES.timing);
+    assert.ok(question, "нет вопроса о хронометраже");
+    assert.equal(question.suggested, "keep");
+    assert.deepEqual(result.timingUpdates.filter((u) => u.sceneIndex === 0), []);
+    assert.equal(planImport(result, {}, existing, IMPORTED).scenes[0]!.planMode, null);
+
+    const answers = { [question.code]: "recalc" };
+    const set = normalizeScript(typing, answers, { existing, timing: IMPORTED });
+    assert.deepEqual(set.timingUpdates.filter((u) => u.sceneIndex === 0), [
+      { sceneIndex: 0, seconds: 15, mode: "set" },
+    ]);
+  });
+
+  test("«из файла»: то же время — ни вопроса, ни записи; пустой план заполняется без изменения текста", () => {
+    const same = normalizeScript(typing, {}, { existing: project(15), timing: IMPORTED });
+    assert.deepEqual(codesOf(same, QUESTION_TYPES.timing), []);
+    assert.deepEqual(same.timingUpdates.filter((u) => u.sceneIndex === 0), []);
+
+    const empty = normalizeScript(typing, {}, { existing: project(null), timing: IMPORTED });
+    assert.deepEqual(empty.timingUpdates.filter((u) => u.sceneIndex === 0), [
+      { sceneIndex: 0, seconds: 15, mode: "fill" },
+    ]);
   });
 });
 
