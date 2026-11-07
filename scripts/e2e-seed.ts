@@ -18,6 +18,7 @@ import path from "node:path";
 import bcrypt from "bcryptjs";
 import { parse } from "dotenv";
 import { MembershipStatus, Prisma } from "@prisma/client";
+import { PERSONAL_DATA_POLICY_VERSION } from "../src/features/auth/lib/personal-data-consent";
 import { DEFAULT_LEDGER_TYPES } from "../src/features/contracts/lib/vat";
 import { ensureSectionsIn } from "../src/features/call-sheets/lib/sections";
 import { DEFAULT_APPROVAL_STATUSES } from "../src/features/finance/lib/approval-statuses";
@@ -134,6 +135,12 @@ function crewOnlyMatrix(): PermissionMatrix {
   return m;
 }
 
+/** Политика принята: иначе каждый вход тестового пользователя вёл бы на страницу согласия. */
+const consent = {
+  personalDataConsentAt: new Date(),
+  personalDataConsentVersion: PERSONAL_DATA_POLICY_VERSION,
+};
+
 async function upsertUsers(passwords: Record<E2ERoleKey, string>) {
   const ids = {} as Record<E2ERoleKey, string>;
   for (const role of ROLE_KEYS) {
@@ -141,8 +148,8 @@ async function upsertUsers(passwords: Record<E2ERoleKey, string>) {
     const passwordHash = await bcrypt.hash(passwords[role], 12);
     const user = await prisma.user.upsert({
       where: { email },
-      create: { email, name, passwordHash },
-      update: { name, passwordHash },
+      create: { email, name, passwordHash, ...consent },
+      update: { name, passwordHash, ...consent },
       select: { id: true },
     });
     ids[role] = user.id;

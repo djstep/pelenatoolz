@@ -54,7 +54,7 @@ const IP_B = "203.0.113.20";
 async function createTmpUser(label: string) {
   const email = tmpEmail(label);
   await db.user.create({
-    data: { email, name: "Тест Волна", passwordHash: await bcrypt.hash(PASSWORD, 4) },
+    data: { email, name: "Тест Волна", personalDataConsentVersion: PERSONAL_DATA_POLICY_VERSION, passwordHash: await bcrypt.hash(PASSWORD, 4) },
   });
   return email;
 }
@@ -515,13 +515,12 @@ test.describe("требования к паролю", () => {
 });
 
 test.describe("политика обработки персональных данных", () => {
-  test("открывается без входа, текст-заглушка с пометкой", async ({ browser }) => {
+  test("открывается без входа", async ({ browser }) => {
     const context = await browser.newContext();
     const page = await context.newPage();
     await page.goto("/ru/privacy");
     await expect(page).toHaveURL(/\/privacy/);
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Политика обработки персональных данных");
-    await expect(page.getByTestId("privacy-stub")).toContainText("Нужен текст юриста");
+    await expect(page.getByTestId("privacy-policy")).toContainText("Редакция от 07.11.2026");
     await context.close();
   });
 
@@ -535,7 +534,7 @@ test.describe("политика обработки персональных да
         page.getByTestId("privacy-footer-link").click(),
       ]);
       await expect(policy).toHaveURL(/\/ru\/privacy/);
-      await expect(policy.getByTestId("privacy-stub")).toBeVisible();
+      await expect(policy.getByTestId("privacy-policy")).toBeVisible();
       await context.close();
     });
   }

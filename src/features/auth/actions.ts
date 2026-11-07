@@ -12,10 +12,14 @@ import {
   sendPasswordResetEmail,
 } from "@/features/auth/lib/password-reset";
 import { LOGIN_BLOCKED_MESSAGE } from "@/features/auth/lib/login-limit";
-import { PERSONAL_DATA_POLICY_VERSION } from "@/features/auth/lib/personal-data-consent";
+import {
+  needsPersonalDataConsent,
+  PERSONAL_DATA_POLICY_VERSION,
+} from "@/features/auth/lib/personal-data-consent";
 import { REGISTRATION_CLOSED_MESSAGE } from "@/features/auth/lib/registration-access";
 import { canRegister } from "@/features/auth/lib/registration-gate";
 import { passwordProblem } from "@/features/auth/lib/password-rules";
+import { requireUser } from "@/features/auth/session";
 import { AuditEntityType } from "@/shared/audit/entity-types";
 import { auditMutation } from "@/shared/audit/with-audit";
 import { prisma } from "@/shared/db/prisma";
@@ -146,6 +150,45 @@ export async function loginAction(
 
 export async function logoutAction() {
   await signOut({ redirectTo: "/ru/login" });
+}
+
+/** Принятие текущей редакции политики при входе. Повторное нажатие запись не дублирует. */
+export async function acceptPersonalDataPolicyAction(formData: FormData) {
+  const user = await requireUser();
+  const userId = user.id!;
+  const locale = formData.get("locale") === "en" ? "en" : "ru";
+  if (formData.get("personalDataConsent") !== "on") redirect(`/${locale}/consent`);
+
+  await prisma.$transaction(async (tx) => {
+    const current = await tx.user.findUnique({
+      where: { id: userId },
+      select: { personalDataConsentVersion: true },
+    });
+    if (!needsPersonalDataConsent(current?.personalDataConsentVersion)) return;
+    await auditMutation(
+      { user: { id: userId } },
+      () =>
+        tx.user.update({
+          where: { id: userId },
+          data: {
+            personalDataConsentAt: new Date(),
+            personalDataConsentVersion: PERSONAL_DATA_POLICY_VERSION,
+          },
+        }),
+      null,
+      {
+        projectId: null,
+        entityType: AuditEntityType.userProfile,
+        entityId: userId,
+        action: "UPDATE",
+        summary: "Принята редакция политики обработки персональных данных",
+        changes: { personalDataConsentVersion: PERSONAL_DATA_POLICY_VERSION },
+      },
+      { db: tx },
+    );
+  });
+
+  redirect(`/${locale}/projects`);
 }
 
 /**

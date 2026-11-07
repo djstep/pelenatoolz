@@ -1,8 +1,13 @@
 /**
- * Редакция политики обработки персональных данных, которую принимает человек при регистрации.
- * Сохраняется в `User.personalDataConsentVersion`. Сейчас это заглушка: когда появится текст
- * юриста, значение нужно заменить, чтобы было видно, кто какую редакцию принял.
+ * Редакция политики обработки персональных данных, которую принимает пользователь: дата публикации.
+ * Сохраняется в `User.personalDataConsentVersion`. При новой редакции значение меняется, и каждый
+ * пользователь один раз принимает её при следующем входе.
  */
-export const PERSONAL_DATA_POLICY_VERSION = "draft-2026-11-04";
+export const PERSONAL_DATA_POLICY_VERSION = "2026-11-07";
 
 export const PERSONAL_DATA_CONSENT_REQUIRED = "Нужно согласие на обработку персональных данных";
+
+/** Принята не эта редакция или не принята никакая: нужно согласие. */
+export function needsPersonalDataConsent(acceptedVersion: string | null | undefined) {
+  return acceptedVersion !== PERSONAL_DATA_POLICY_VERSION;
+}
