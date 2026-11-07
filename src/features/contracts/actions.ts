@@ -423,11 +423,14 @@ export async function attachContractFileAction(
   });
   if (!file) return { error: "Файл не найден" };
 
-  await prisma.contractFile.upsert({
-    where: { contractId_fileId: { contractId, fileId } },
-    create: { contractId, fileId, role },
-    update: { role },
-  });
+  await prisma.$transaction([
+    prisma.contractFile.upsert({
+      where: { contractId_fileId: { contractId, fileId } },
+      create: { contractId, fileId, role },
+      update: { role },
+    }),
+    prisma.projectFile.update({ where: { id: fileId }, data: { contractsOnly: true } }),
+  ]);
 
   revalidateContracts(projectId, contractId);
   return { success: "Файл прикреплён" };
@@ -743,13 +746,16 @@ export async function attachCertificateFileAction(
   });
   if (!file) return { error: "Файл не найден" };
 
-  await prisma.certificateFile.upsert({
-    where: {
-      certificateId_fileId: { certificateId, fileId },
-    },
-    create: { certificateId, fileId, role },
-    update: { role },
-  });
+  await prisma.$transaction([
+    prisma.certificateFile.upsert({
+      where: {
+        certificateId_fileId: { certificateId, fileId },
+      },
+      create: { certificateId, fileId, role },
+      update: { role },
+    }),
+    prisma.projectFile.update({ where: { id: fileId }, data: { contractsOnly: true } }),
+  ]);
 
   revalidateCertificates(projectId, {
     certificateId,

@@ -6,6 +6,7 @@ import https from "node:https";
 import net, { type LookupFunction } from "node:net";
 import path from "node:path";
 import { toOwnUploadPath } from "@/shared/lib/own-upload-url";
+import { uploadsRoot } from "@/shared/lib/upload-storage";
 
 /**
  * Фото для выгрузки в Word: сервер сам получает картинку по адресу из базы или из окна выгрузки.
@@ -175,7 +176,7 @@ export function loadExportImages(
     resolveHost,
     isBlockedIp,
     allowedPorts: ALLOWED_PORTS,
-    uploadsRoot: path.join(process.cwd(), "public", "uploads"),
+    uploadsRoot: uploadsRoot(),
   });
 }
 

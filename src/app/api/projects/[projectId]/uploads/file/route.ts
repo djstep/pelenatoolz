@@ -56,6 +56,11 @@ export async function POST(
     }
 
     const form = await request.formData();
+    // Файл договора закрыт с момента загрузки: сбой привязки не оставит его общим.
+    const contractsOnly = form.get("scope") === "contract";
+    if (contractsOnly && !ctx.can("contracts:write")) {
+      return NextResponse.json({ error: "Недостаточно прав" }, { status: 403 });
+    }
     const file = form.get("file");
     if (!(file instanceof File)) {
       return NextResponse.json({ error: "Файл не выбран" }, { status: 400 });
@@ -89,6 +94,7 @@ export async function POST(
         originalName: file.name.slice(0, 255),
         mimeType,
         sizeBytes: file.size,
+        contractsOnly,
         createdById: ctx.user.id,
       },
     });

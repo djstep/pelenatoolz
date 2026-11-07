@@ -196,18 +196,20 @@ export function CertificateFormModal({
           try {
             const fd = new FormData();
             fd.append("file", pendingFile);
+            fd.append("scope", "contract");
             const res = await fetch(`/api/projects/${projectId}/uploads/file`, {
               method: "POST",
               body: fd,
             });
             const data = (await res.json()) as { id?: string };
             if (data.id) {
-              await attachCertificateFileAction(
+              const attached = await attachCertificateFileAction(
                 projectId,
                 certId,
                 data.id,
                 "SCAN",
               );
+              if (attached.error) toast.error(attached.error);
             }
           } finally {
             setUploading(false);

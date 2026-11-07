@@ -6,7 +6,7 @@
 |---|---|---|
 | Дамп базы, шифрование `age` | `/mnt/data/backups/db` | 7 дней |
 | То же в облаке | `pelena-backups/db`, Object Lock | Срок блокировки и правило очистки |
-| `storage`, `uploads`, шифрование `rclone crypt` | `pelena-files/data` | Удалённое хранится 30 дней как старые версии |
+| `storage` с картинками в `storage/uploads`, шифрование `rclone crypt` | `pelena-files/data` | Удалённое хранится 30 дней как старые версии |
 
 Хранить у владельца в менеджере паролей: закрытый ключ `age`, пароль и соль файлов, а также весь `.env.prod`
 и `.env.admin`. Без `CLOUD_TOKEN_SECRET` из `.env.prod` подключённые диски после восстановления базы придётся
@@ -39,7 +39,7 @@ sudo pelena-backup-mail
 `pelena-backup-init` здесь не запускать: новые ключи не прочитают старые копии. Команда сама откажет.
 Метку диска ставить только после восстановления файлов: пока её нет, ночная копия отправляет только дамп.
 
-Подготовить сервер: Docker, код проекта, диск на `/mnt/data` с папками `storage`, `uploads`, `backups`,
+Подготовить сервер: Docker, код проекта, диск на `/mnt/data` с папками `storage`, `backups`,
 `.env.prod` и `.env.admin` из менеджера паролей и ссылка `.env` на `.env.admin`,
 `docker volume create pelena_pgdata`, `age` и `rclone` как в разделе выше. Затем:
 
@@ -52,7 +52,7 @@ sudo pelena-backup-adopt
 Файлы, команды выполнять именно так, одной строкой: метка ставится только при полном успехе.
 
 ```bash
-sudo rclone --config /etc/pelena-backup/rclone.conf copy files:storage /mnt/data/storage && sudo rclone --config /etc/pelena-backup/rclone.conf copy files:uploads /mnt/data/uploads && sudo chown -R 1001:1001 /mnt/data/storage /mnt/data/uploads && sudo touch /mnt/data/.pelena-data-disk
+sudo rclone --config /etc/pelena-backup/rclone.conf copy files:storage /mnt/data/storage && sudo chown -R 1001:1001 /mnt/data/storage && sudo touch /mnt/data/.pelena-data-disk
 ```
 
 База и запуск, из папки проекта:

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { canReadProjectFile, projectFileHeaders } from "@/features/files/lib/file-access";
 import { getProjectObject } from "@/features/files/lib/storage";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { prisma } from "@/shared/db/prisma";
@@ -13,15 +14,15 @@ export async function GET(
 
   try {
     const ctx = await requireProjectContext(projectId);
-    if (!ctx.can("cast:read") && !ctx.can("project:read") && !ctx.can("script:read")) {
-      return NextResponse.json({ error: "Недостаточно прав" }, { status: 403 });
-    }
-
     const file = await prisma.projectFile.findFirst({
       where: { id: fileId, projectId },
     });
     if (!file) {
       return NextResponse.json({ error: "Файл не найден" }, { status: 404 });
+    }
+
+    if (!canReadProjectFile(ctx.can, file.contractsOnly)) {
+      return NextResponse.json({ error: "Недостаточно прав" }, { status: 403 });
     }
 
     const data = await getProjectObject(file.storageKey);
@@ -31,10 +32,9 @@ export async function GET(
 
     return new NextResponse(new Uint8Array(data), {
       headers: {
-        "Content-Type": file.mimeType,
+        ...projectFileHeaders(file.mimeType, file.originalName),
         "Content-Length": String(data.byteLength),
         "Cache-Control": "private, max-age=3600",
-        "Content-Disposition": `inline; filename="${encodeURIComponent(file.originalName)}"`,
       },
     });
   } catch {

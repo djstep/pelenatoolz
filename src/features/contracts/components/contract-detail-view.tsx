@@ -26,6 +26,7 @@ import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Select } from "@/shared/ui/select";
+import { toast } from "@/shared/ui/toast";
 
 type ContractDetail = NonNullable<
   Awaited<ReturnType<typeof import("@/features/contracts/queries").getContract>>
@@ -98,13 +99,15 @@ export function ContractDetailView({
     try {
       const fd = new FormData();
       fd.append("file", file);
+      fd.append("scope", "contract");
       const res = await fetch(`/api/projects/${projectId}/uploads/file`, {
         method: "POST",
         body: fd,
       });
       const data = (await res.json()) as { id?: string; error?: string };
       if (!res.ok || !data.id) throw new Error(data.error ?? "Ошибка загрузки");
-      await attachContractFileAction(projectId, contract.id, data.id, role);
+      const attached = await attachContractFileAction(projectId, contract.id, data.id, role);
+      if (attached.error) toast.error(attached.error);
       router.refresh();
     } finally {
       setUploading(false);

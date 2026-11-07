@@ -3,6 +3,7 @@ import path from "node:path";
 import { nanoid } from "nanoid";
 import { NextResponse } from "next/server";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
+import { uploadsRoot } from "@/shared/lib/upload-storage";
 
 const ALLOWED_EXT = new Set(["jpg", "jpeg", "png", "webp", "gif"]);
 const MAX_BYTES = 8 * 1024 * 1024;
@@ -38,7 +39,7 @@ export async function POST(
     const rawExt = file.name.split(".").pop()?.toLowerCase() ?? "jpg";
     const ext = ALLOWED_EXT.has(rawExt) ? rawExt : "jpg";
     const fileName = `${nanoid()}.${ext}`;
-    const dir = path.join(process.cwd(), "public", "uploads", projectId);
+    const dir = path.join(uploadsRoot(), projectId);
     await mkdir(dir, { recursive: true });
     const buffer = Buffer.from(await file.arrayBuffer());
     await writeFile(path.join(dir, fileName), buffer);

@@ -25,7 +25,7 @@ export default async function ProjectFilesPage({ params, searchParams }: Props) 
   const [connections, cloudFiles, uploadedFiles] = await Promise.all([
     listUserCloudConnections(ctx.user.id!),
     listProjectCloudFiles(projectId),
-    listProjectUploadedFiles(projectId),
+    listProjectUploadedFiles(projectId, ctx.can("contracts:read")),
   ]);
   const notice = cloudOAuthNotice(query, connections);
 
@@ -48,6 +48,7 @@ export default async function ProjectFilesPage({ params, searchParams }: Props) 
         createdAt: file.createdAt.toISOString(),
       }))}
       canWrite={canWrite}
+      canWriteContracts={ctx.can("contracts:write")}
     />
     </>
   );
