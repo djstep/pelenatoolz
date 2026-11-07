@@ -16,7 +16,7 @@ import {
 import type { DictionaryRule } from "@/features/import/normalize/dictionary";
 import {
   formatHeading,
-  headingNoteText,
+  headingText,
   isNumberOnly,
   parseHeading,
   TIME_WORDS,
@@ -480,7 +480,7 @@ export function normalizeScript(
       }
       const key = compareKey(formatHeading(heading, null, heading.tail));
       if (!heading.intExt || heading.serviceObject) {
-        const noteText = headingNoteText(heading);
+        const noteText = headingText(heading, null, heading.tail);
         const answer = book.ask({
           type: QUESTION_TYPES.notScene,
           subject: compareKey(noteText),
@@ -591,7 +591,7 @@ export function normalizeScript(
   if (!sync) checkCastLines(scenes, book);
 
   for (const draft of scenes) {
-    draft.block.text = formatHeading(draft.heading, draft.number, draft.tail);
+    draft.block.text = headingText(draft.heading, draft.number, draft.tail);
   }
 
   const result = scenes.map(toScene);

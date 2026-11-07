@@ -108,6 +108,24 @@ export async function buildScreenplayDocx(blocks: ExportBlock[]) {
   return Packer.toBuffer(doc);
 }
 
+/** Текст в формате Fountain. */
+export function buildScreenplayFountain(blocks: ExportBlock[]) {
+  const lines: string[] = [];
+  for (const block of blocks) {
+    if (block.type === "BONEYARD" || block.type === "NOTE" || block.type === "FOLDER") {
+      continue;
+    }
+    const text = block.content.trim();
+    if (!text) continue;
+    if (block.type === "SLUGLINE") lines.push(text.toUpperCase(), "");
+    else if (block.type === "CHARACTER") lines.push(text.toUpperCase());
+    else if (block.type === "PARENTHETICAL") lines.push(`(${text.replace(/^\(|\)$/g, "")})`);
+    else if (block.type === "TRANSITION") lines.push(`${text.toUpperCase()}\n`);
+    else lines.push(text);
+  }
+  return `${lines.join("\n")}\n`;
+}
+
 export function buildScreenplayPrintHtml(
   blocks: ExportBlock[],
   title: string,

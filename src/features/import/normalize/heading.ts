@@ -61,10 +61,12 @@ export type ParsedHeading = {
   noteInsteadOfTime: boolean;
   /** Пометка в скобках после режима: «(ПОЗЖЕ)». */
   parenNote: string | null;
-  /** Хронометраж в конце шапки: «(02:05)» → 125. В текст шапки сцены не возвращается. */
+  /** Хронометраж в конце шапки: «(02:05)» → 125. Текст шапки его сохраняет, разбор и ключи нет. */
   fileSeconds: number | null;
-  /** Та же метка как в файле: нужна, если строка окажется примечанием, а не сценой. */
+  /** Та же метка как в файле. */
   fileTimeText: string | null;
+  /** В файле время стояло перед пометкой: «(00:15) (ПОЗЖЕ)». */
+  fileTimeBeforeNote: boolean;
   serviceObject: boolean;
 };
 
@@ -177,12 +179,14 @@ export function parseHeading(
   // Время снимается до разбора хвоста: иначе «РАССВЕТ (00:15)» не распознаётся как режим.
   let fileSeconds: number | null = null;
   let fileTimeText: string | null = null;
+  let fileTimeBeforeNote = false;
   const takeFileTime = () => {
     const found = rest.match(FILE_TIME_RE);
-    if (!found) return;
+    if (!found) return false;
     fileSeconds = Number(found[1] ?? 0) * 3600 + Number(found[2]) * 60 + Number(found[3]);
     fileTimeText = found[0].trim();
     rest = rest.slice(0, found.index).trim();
+    return true;
   };
   takeFileTime();
 
@@ -194,7 +198,7 @@ export function parseHeading(
     parenNote = `(${cleanSpaces(paren[1]!)})`;
     rest = rest.slice(0, paren.index).trim();
     // Обратный порядок: «(00:15) (ПОЗЖЕ)».
-    takeFileTime();
+    fileTimeBeforeNote = takeFileTime();
   }
 
   let time: string | null = null;
@@ -243,6 +247,7 @@ export function parseHeading(
     parenNote,
     fileSeconds,
     fileTimeText,
+    fileTimeBeforeNote,
     serviceObject: SERVICE_OBJECTS.some((word) => compareKey(word) === firstObject),
   };
 }
@@ -270,7 +275,11 @@ export function formatHeading(
   return [head, tail ? `— ${tail}` : null, heading.parenNote].filter(Boolean).join(" ");
 }
 
-/** Текст строки, которая оказалась примечанием: время из неё не уходит в план сцены и остаётся здесь. */
-export function headingNoteText(heading: ParsedHeading) {
-  return [formatHeading(heading, null, heading.tail), heading.fileTimeText].filter(Boolean).join(" ");
+/** Текст шапки как в файле: `formatHeading` и метка времени. Для ключей сравнения метка не нужна. */
+export function headingText(heading: ParsedHeading, number: string | null, tail: string | null) {
+  const base = formatHeading({ ...heading, parenNote: null }, number, tail);
+  const marks = heading.fileTimeBeforeNote
+    ? [heading.fileTimeText, heading.parenNote]
+    : [heading.parenNote, heading.fileTimeText];
+  return [base, ...marks].filter(Boolean).join(" ");
 }

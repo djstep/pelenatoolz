@@ -526,6 +526,38 @@ describe("хронометраж из шапки файла", () => {
     assert.equal(scenePlan.planSeconds, null);
   });
 
+  test("повторный импорт: сцена та же, время в шапке одно, план не затирается", () => {
+    // В проекте уже лежит шапка со временем, в файле то же время или другое.
+    for (const fileTime of ["(00:15)", "(00:40)"]) {
+      const again = classifyParagraphs(
+        readDocxParagraphs(
+          buildDocx({
+            body: p(`1. НАТ. ЗАГОРОДНЫЙ ДОМ — РАССВЕТ ${fileTime}`) + p("Ремарка с часами (12:30) на стене."),
+          }),
+        ),
+      );
+      const existing: ExistingRecords = {
+        characters: [],
+        locations: [],
+        scenes: [
+          scene({
+            id: "a",
+            number: "1",
+            heading: "НАТ. ЗАГОРОДНЫЙ ДОМ — РАССВЕТ (00:15)",
+            contentHash: contentHash("Ремарка с часами (12:30) на стене."),
+            planSeconds: 99,
+          }),
+        ],
+      };
+      const result = normalizeScript(again, {}, { existing, timing: MANUAL });
+      assert.equal(result.sceneMatches[0]!.existingId, "a", fileTime);
+      assert.deepEqual(result.timingUpdates, [], fileTime);
+      assert.equal(planImport(result, {}, existing, MANUAL).scenes[0]!.planSeconds, null, fileTime);
+      const heading = result.blocks.find((b) => b.type === "SLUGLINE")!.text;
+      assert.equal(heading, `1. НАТ. ЗАГОРОДНЫЙ ДОМ — РАССВЕТ ${fileTime}`);
+    }
+  });
+
   test("синхронизация с либретто и повторное обновление не затирают план", () => {
     for (const timing of [MANUAL, IMPORTED]) {
       const result = normalizeScript(typing, {}, { existing: project(99), timing, sync: true });
