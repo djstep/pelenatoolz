@@ -89,6 +89,7 @@ export function AuditionPlayerModal({
               key={videoUrl}
               src={videoUrl}
               controls
+              playsInline
               className="h-full w-full"
               preload="metadata"
             />

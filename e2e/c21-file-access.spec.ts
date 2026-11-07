@@ -142,6 +142,8 @@ test.describe("файлы договоров и актов", () => {
 
     expect((await crewonly.request.get(contractFile.url)).status()).toBe(403);
     expect((await crewonly.request.get(actFile.url)).status()).toBe(403);
+    const part = await crewonly.request.get(contractFile.url, { headers: { range: "bytes=0-1" } });
+    expect(part.status()).toBe(403);
 
     await crewonly.goto(FILES_PATH);
     await expect(crewonly.getByRole("row", { name: openName })).toBeVisible();
@@ -277,7 +279,14 @@ test.describe("загруженный код не выполняется на с
 
 test.describe("просмотр в браузере", () => {
   const PDF = Buffer.from("%PDF-1.4\n%%EOF\n");
-  const names = ["e2e-просмотр.pdf", "e2e-просмотр.webm", "e2e-просмотр-звук.webm", "e2e-проба.webm"];
+  const names = [
+    "e2e-просмотр.pdf",
+    "e2e-просмотр.webm",
+    "e2e-просмотр-звук.webm",
+    "e2e-проба.webm",
+    "e2e-части.webm",
+    "e2e-перемотка.webm",
+  ];
 
   /** Настоящее короткое видео: сам браузер записывает его с холста. */
   async function recordVideo(page: Page) {
@@ -354,15 +363,94 @@ test.describe("просмотр в браузере", () => {
     await expectPlays(tab);
   });
 
+  async function openAudition(page: Page, videoFileId: string) {
+    await db.audition.update({ where: { id: ctx.auditionId! }, data: { videoFileId } });
+    await page.goto(projectPath(ctx, `/preproduction/auditions/${ctx.auditionId}`));
+    await page.getByRole("button", { name: /Смотреть/ }).click();
+  }
+
   test("проба играет в плеере", async ({ browser }) => {
     const producer = await pageAs(browser, "producer");
     await producer.goto(projectPath(ctx));
     const file = await upload(producer, "video", names[3], "video/webm", await recordVideo(producer));
-    await db.audition.update({ where: { id: ctx.auditionId! }, data: { videoFileId: file.id } });
-
-    await producer.goto(projectPath(ctx, `/preproduction/auditions/${ctx.auditionId}`));
-    await producer.getByRole("button", { name: /Смотреть/ }).click();
+    await openAudition(producer, file.id);
     await expectPlays(producer);
+  });
+
+  test("видео отдаётся частями", async ({ browser }) => {
+    const producer = await pageAs(browser, "producer");
+    await producer.goto(projectPath(ctx));
+    const webm = await recordVideo(producer);
+    const size = webm.length;
+    const { url } = await upload(producer, "video", names[4], "video/webm", webm);
+    const get = (range?: string) => producer.request.get(url, range ? { headers: { range } } : {});
+
+    const whole = await get();
+    expect(whole.status()).toBe(200);
+    expect(whole.headers()["accept-ranges"]).toBe("bytes");
+    expect(Buffer.compare(await whole.body(), webm)).toBe(0);
+
+    // Первый запрос Safari и iPhone: без ответа 206 видео там не запускается.
+    for (const [range, start, end] of [
+      ["bytes=0-1", 0, 1],
+      ["bytes=10-19", 10, 19],
+      [`bytes=${size - 5}-`, size - 5, size - 1],
+      ["bytes=-5", size - 5, size - 1],
+      [`bytes=3-${size + 100}`, 3, size - 1],
+    ] as const) {
+      const part = await get(range);
+      expect(part.status(), range).toBe(206);
+      expect(part.headers()["content-range"], range).toBe(`bytes ${start}-${end}/${size}`);
+      expect(part.headers()["content-length"], range).toBe(String(end - start + 1));
+      expect(part.headers()["accept-ranges"], range).toBe("bytes");
+      expect(part.headers()["x-content-type-options"], range).toBe("nosniff");
+      expect(part.headers()["content-security-policy"], range).toContain("sandbox");
+      expect(Buffer.compare(await part.body(), webm.subarray(start, end + 1)), range).toBe(0);
+    }
+
+    const head = await producer.request.head(url);
+    expect(head.status()).toBe(200);
+    expect(head.headers()["content-length"]).toBe(String(size));
+    expect(head.headers()["accept-ranges"]).toBe("bytes");
+    expect((await head.body()).length).toBe(0);
+
+    const beyond = await get(`bytes=${size}-`);
+    expect(beyond.status()).toBe(416);
+    expect(beyond.headers()["content-range"]).toBe(`bytes */${size}`);
+
+    // Несколько кусков сразу не поддерживаем: стандарт разрешает отдать файл целиком.
+    expect((await get("bytes=0-1,3-4")).status()).toBe(200);
+  });
+
+  test("проба перематывается в плеере", async ({ browser }) => {
+    const producer = await pageAs(browser, "producer");
+    await producer.goto(projectPath(ctx));
+    const file = await upload(producer, "video", names[5], "video/webm", await recordVideo(producer));
+
+    const statuses: number[] = [];
+    producer.on("response", (res) => {
+      if (res.url().endsWith(file.url)) statuses.push(res.status());
+    });
+    await openAudition(producer, file.id);
+    await expectPlays(producer);
+    expect(statuses).toContain(206);
+
+    const seeked = await producer.locator("video").evaluate(async (v: HTMLVideoElement) => {
+      const seek = (time: number) =>
+        new Promise<void>((resolve) => {
+          v.addEventListener("seeked", () => resolve(), { once: true });
+          v.currentTime = time;
+        });
+      v.pause();
+      // У записи с холста длительность неизвестна: браузер узнаёт её, дойдя до конца файла.
+      await seek(1e6);
+      const end = v.currentTime;
+      await seek(end / 2);
+      return { end, middle: v.currentTime, ready: v.readyState };
+    });
+    expect(seeked.end).toBeGreaterThan(0);
+    expect(seeked.middle).toBeCloseTo(seeked.end / 2, 0);
+    expect(seeked.ready).toBeGreaterThanOrEqual(2);
   });
 });
 

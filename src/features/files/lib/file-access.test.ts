@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import type { Permission } from "@/features/memberships/permissions";
-import { canDeleteProjectFile, canReadProjectFile, projectFileHeaders } from "./file-access";
+import { canDeleteProjectFile, canReadProjectFile, projectFileHeaders, videoTypeOf } from "./file-access";
 
 const can =
   (...allowed: Permission[]) =>
@@ -84,6 +84,12 @@ describe("ответ с файлом проекта", () => {
     assert.ok(!/[\r\n]/.test(value));
     assert.equal(value.split('"').length, 3);
   });
+});
+
+test("тип видео по расширению", () => {
+  assert.equal(videoTypeOf("mov"), "video/quicktime");
+  assert.equal(videoTypeOf("mp4"), "video/mp4");
+  assert.equal(videoTypeOf("webm"), "video/webm");
 });
 
 describe("удаление файла проекта", () => {

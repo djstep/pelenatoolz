@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { ProjectFileKind } from "@prisma/client";
+import { videoTypeOf } from "@/features/files/lib/file-access";
 import {
   buildStorageKey,
   mediaApiUrl,
@@ -82,7 +83,7 @@ export async function POST(
       (kind === "IMAGE"
         ? `image/${ext}`
         : kind === "VIDEO"
-          ? `video/${ext}`
+          ? videoTypeOf(ext)
           : "application/octet-stream");
 
     const row = await prisma.projectFile.create({
