@@ -1,11 +1,9 @@
 import { NextResponse } from "next/server";
 import { videoTypeOf } from "@/features/files/lib/file-access";
 import { scheduleVideoProcessing } from "@/features/files/lib/process-video";
-import {
-  buildStorageKey,
-  mediaApiUrl,
-  putProjectObject,
-} from "@/features/files/lib/storage";
+import { receiveUpload } from "@/features/files/lib/receive-upload";
+import { buildStorageKey, mediaApiUrl } from "@/features/files/lib/storage";
+import { readUploadHead } from "@/features/files/lib/upload-request";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { prisma } from "@/shared/db/prisma";
 
@@ -17,7 +15,6 @@ const VIDEO_EXT = new Set([
   "avi",
   "mkv",
 ]);
-const MAX_BYTES = 512 * 1024 * 1024; // 512 MB
 
 export async function POST(
   request: Request,
@@ -31,31 +28,19 @@ export async function POST(
       return NextResponse.json({ error: "Недостаточно прав" }, { status: 403 });
     }
 
-    const form = await request.formData();
-    const file = form.get("file");
-    if (!(file instanceof File)) {
-      return NextResponse.json({ error: "Файл не выбран" }, { status: 400 });
+    const head = readUploadHead(request.headers);
+    if ("error" in head) {
+      return NextResponse.json({ error: head.error }, { status: head.status });
     }
 
-    const isVideo =
-      file.type.startsWith("video/") ||
-      VIDEO_EXT.has(
-        (file.name.split(".").pop() ?? "").toLowerCase(),
-      );
-    if (!isVideo) {
+    const rawExt = (head.name.split(".").pop() ?? "mp4").toLowerCase();
+    if (!head.type.startsWith("video/") && !VIDEO_EXT.has(rawExt)) {
       return NextResponse.json(
         { error: "Допустимы только видеофайлы" },
         { status: 400 },
       );
     }
-    if (file.size > MAX_BYTES) {
-      return NextResponse.json(
-        { error: "Максимум 512 МБ на файл" },
-        { status: 400 },
-      );
-    }
 
-    const rawExt = (file.name.split(".").pop() ?? "mp4").toLowerCase();
     const ext = VIDEO_EXT.has(rawExt) ? rawExt : "mp4";
     const row = await prisma.projectFile.create({
       data: {
@@ -63,16 +48,18 @@ export async function POST(
         kind: "VIDEO",
         status: "UPLOADING",
         storageKey: "pending",
-        originalName: file.name.slice(0, 255),
-        mimeType: file.type || videoTypeOf(ext),
-        sizeBytes: file.size,
+        originalName: head.name,
+        mimeType: head.type || videoTypeOf(ext),
+        sizeBytes: head.declaredBytes ?? 0,
         createdById: ctx.user.id,
       },
     });
 
     const storageKey = buildStorageKey(projectId, row.id, ext);
-    const buffer = Buffer.from(await file.arrayBuffer());
-    await putProjectObject(storageKey, buffer, file.type || videoTypeOf(ext));
+    const received = await receiveUpload(row.id, storageKey, request.body);
+    if ("error" in received) {
+      return NextResponse.json({ error: received.error }, { status: received.status });
+    }
 
     const url = mediaApiUrl(projectId, row.id);
     const updated = await prisma.projectFile.update({
@@ -80,6 +67,7 @@ export async function POST(
       data: {
         storageKey,
         url,
+        sizeBytes: received.sizeBytes,
         status: "PROCESSING",
       },
     });

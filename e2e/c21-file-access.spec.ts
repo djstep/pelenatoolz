@@ -29,13 +29,20 @@ async function pageAs(browser: Browser, role: E2ERoleKey) {
   return context.newPage();
 }
 
+/** Файл уходит телом запроса: так загружает сайт. */
+function rawHeaders(name: string, mimeType: string, scope?: "contract") {
+  return {
+    origin: ORIGIN,
+    "content-type": mimeType,
+    "x-file-name": encodeURIComponent(name),
+    ...(scope ? { "x-upload-scope": scope } : {}),
+  };
+}
+
 function postFile(page: Page, name: string, scope?: "contract") {
   return page.request.post(`/api/projects/${ctx.projectId}/uploads/file`, {
-    headers: { origin: ORIGIN },
-    multipart: {
-      file: { name, mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4 e2e") },
-      ...(scope ? { scope } : {}),
-    },
+    headers: rawHeaders(name, "application/pdf", scope),
+    data: Buffer.from("%PDF-1.4 e2e"),
   });
 }
 
@@ -213,8 +220,8 @@ test.describe("загруженный код не выполняется на с
 
   async function upload(page: Page, name: string, mimeType: string, body: string | Buffer) {
     const res = await page.request.post(`/api/projects/${ctx.projectId}/uploads/file`, {
-      headers: { origin: ORIGIN },
-      multipart: { file: { name, mimeType, buffer: Buffer.from(body) } },
+      headers: rawHeaders(name, mimeType),
+      data: Buffer.from(body),
     });
     expect(res.status()).toBe(200);
     return ((await res.json()) as { url: string }).url;
@@ -286,6 +293,7 @@ test.describe("просмотр в браузере", () => {
     "e2e-проба.webm",
     "e2e-части.webm",
     "e2e-перемотка.webm",
+    "e2e-большой файл №1.mp4",
   ];
 
   /** Настоящее короткое видео: сам браузер записывает его с холста. */
@@ -315,8 +323,8 @@ test.describe("просмотр в браузере", () => {
 
   async function upload(page: Page, route: string, name: string, mimeType: string, buffer: Buffer) {
     const res = await page.request.post(`/api/projects/${ctx.projectId}/uploads/${route}`, {
-      headers: { origin: ORIGIN },
-      multipart: { file: { name, mimeType, buffer } },
+      headers: rawHeaders(name, mimeType),
+      data: buffer,
     });
     expect(res.status()).toBe(200);
     return (await res.json()) as { id: string; url: string };
@@ -375,6 +383,44 @@ test.describe("просмотр в браузере", () => {
     const file = await upload(producer, "video", names[3], "video/webm", await recordVideo(producer));
     await openAudition(producer, file.id);
     await expectPlays(producer);
+  });
+
+  test("файл загружается телом запроса", async ({ browser }) => {
+    const producer = await pageAs(browser, "producer");
+    const route = `/api/projects/${ctx.projectId}/uploads/video`;
+
+    // Вкладка, открытая до обновления сайта, получает понятный отказ, а не испорченный файл.
+    const old = await producer.request.post(route, {
+      headers: { origin: ORIGIN },
+      multipart: { file: { name: "старая.mp4", mimeType: "video/mp4", buffer: PDF } },
+    });
+    expect(old.status()).toBe(415);
+
+    const empty = await producer.request.post(route, { headers: rawHeaders("пусто.mp4", "video/mp4") });
+    expect(empty.status()).toBe(400);
+
+    const nameless = await producer.request.post(route, {
+      headers: { origin: ORIGIN, "content-type": "video/mp4" },
+      data: PDF,
+    });
+    expect(nameless.status()).toBe(400);
+
+    const notVideo = await producer.request.post(route, { headers: rawHeaders("текст.txt", "text/plain"), data: PDF });
+    expect(notVideo.status()).toBe(400);
+
+    expect(await db.projectFile.count({ where: { projectId: ctx.projectId, originalName: { in: ["пусто.mp4"] } } })).toBe(0);
+  });
+
+  test("настоящий файл с кириллицей в имени сохраняется без искажений", async ({ browser }) => {
+    const producer = await pageAs(browser, "producer");
+    const body = Buffer.alloc(3 * 1024 * 1024, 7);
+    const file = await upload(producer, "video", names[6], "video/mp4", body);
+    const row = await db.projectFile.findUniqueOrThrow({ where: { id: file.id } });
+    expect(row.originalName).toBe(names[6]);
+    expect(row.sizeBytes).toBe(body.length);
+    expect(row.storageKey).not.toBe("pending");
+    const served = await producer.request.get(file.url);
+    expect(Buffer.compare(await served.body(), body)).toBe(0);
   });
 
   test("видео отдаётся частями", async ({ browser }) => {

@@ -59,6 +59,9 @@ fi
   exit 1
 }
 
+# Остаток загрузки, оборванной перезапуском сайта. Идущая загрузка обновляет время файла.
+find "$DATA/storage" -type f -name '*.uploading' -mmin +1440 -delete
+
 # Останавливает копию, если на диске пропало много файлов: имя, на диске, в копии.
 refuse_loss() {
   local NAME=$1 ON_DISK=$2 IN_COPY=$3
@@ -76,7 +79,7 @@ refuse_loss() {
 }
 
 for DIR in storage; do
-  HERE=$(find "$DATA/$DIR" -type f | wc -l)
+  HERE=$(find "$DATA/$DIR" -type f -not -name '*.uploading' | wc -l)
   THERE=$(R lsf -R --files-only "files:$DIR" | wc -l)
   if [ -e "$ALLOW_DELETE" ]; then
     LIMIT=$THERE
@@ -85,11 +88,12 @@ for DIR in storage; do
     LIMIT=$(( THERE / 10 + 5 ))
     refuse_loss "$DIR" "$HERE" "$THERE"
     # Картинки считаются отдельно: в общем числе файлов их пропажа незаметна.
-    UPLOADS_HERE=$( (find "$DATA/$DIR/uploads" -type f 2> /dev/null || true) | wc -l)
+    UPLOADS_HERE=$( (find "$DATA/$DIR/uploads" -type f -not -name '*.uploading' 2> /dev/null || true) | wc -l)
     UPLOADS_THERE=$( (R lsf -R --files-only "files:$DIR/uploads" 2> /dev/null || true) | wc -l)
     refuse_loss "$DIR/uploads" "$UPLOADS_HERE" "$UPLOADS_THERE"
   fi
-  R sync "$DATA/$DIR" "files:$DIR" --max-delete "$LIMIT"
+  # Идущая загрузка растёт на глазах: rclone счёл бы это ошибкой, а в копии лежала бы половина файла.
+  R sync "$DATA/$DIR" "files:$DIR" --max-delete "$LIMIT" --exclude '*.uploading'
   echo "Файлы $DIR отправлены"
 done
 

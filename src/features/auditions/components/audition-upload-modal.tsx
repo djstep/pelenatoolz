@@ -5,6 +5,7 @@ import {
   createAuditionsBatchAction,
   type CreateAuditionPayload,
 } from "@/features/auditions/actions";
+import { uploadProjectFile } from "@/features/files/lib/upload-client";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
@@ -72,12 +73,7 @@ function emptyEntry(presets?: {
 }
 
 async function uploadVideo(projectId: string, file: File) {
-  const body = new FormData();
-  body.append("file", file);
-  const res = await fetch(`/api/projects/${projectId}/uploads/video`, {
-    method: "POST",
-    body,
-  });
+  const res = await uploadProjectFile(projectId, "video", file);
   const data = (await res.json()) as {
     id?: string;
     error?: string;
