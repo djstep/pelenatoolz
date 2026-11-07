@@ -43,7 +43,7 @@ const createSchema = z.object({
     .refine((v) => v == null || /^https?:\/\//i.test(v), {
       message: "Ссылка должна начинаться с http:// или https://",
     }),
-  date: z.string().min(1),
+  date: z.string().min(1, "укажите дату съёмки пробы"),
   time: optionalText,
   sceneId: optionalId,
   isSelfTape: z.boolean().optional().default(false),
@@ -53,7 +53,7 @@ const createSchema = z.object({
       const t = (v ?? "").trim();
       return t.length ? t.slice(0, 5000) : null;
     }),
-  actors: z.array(actorSchema).min(1),
+  actors: z.array(actorSchema).default([]),
 });
 
 export type CreateAuditionPayload = z.infer<typeof createSchema>;

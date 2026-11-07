@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import {
   createAuditionsBatchAction,
   type CreateAuditionPayload,
 } from "@/features/auditions/actions";
+import { auditionDraftProblem } from "@/features/auditions/lib/audition-draft";
 import { uploadProjectFile } from "@/features/files/lib/upload-client";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
@@ -106,18 +107,7 @@ export function AuditionUploadModal({
     emptyEntry({ personId: presetPersonId, characterId: presetCharacterId }),
   ]);
   const [saving, setSaving] = useState(false);
-
-  const canSave = useMemo(
-    () =>
-      entries.every(
-        (e) =>
-          (e.videoFileId || e.externalUrl.trim()) &&
-          e.date &&
-          e.actors.some((a) => a.personId) &&
-          e.uploadStatus !== "uploading",
-      ),
-    [entries],
-  );
+  const [showProblems, setShowProblems] = useState(false);
 
   function updateEntry(key: string, patch: Partial<DraftEntry>) {
     setEntries((prev) =>
@@ -193,6 +183,12 @@ export function AuditionUploadModal({
   }
 
   async function handleSave() {
+    const problem = entries.map(auditionDraftProblem).find(Boolean);
+    if (problem) {
+      setShowProblems(true);
+      toast.error(problem);
+      return;
+    }
     setSaving(true);
     try {
       const payloads: CreateAuditionPayload[] = entries.map((e) => ({
@@ -248,7 +244,7 @@ export function AuditionUploadModal({
           <Button
             type="button"
             onClick={() => void handleSave()}
-            disabled={!canSave || saving}
+            disabled={saving}
           >
             {saving ? "Сохранение…" : "Сохранить"}
           </Button>
@@ -266,8 +262,7 @@ export function AuditionUploadModal({
             onChange={(e) => void handleFilesPicked(e.target.files)}
           />
           <p className="mt-1 text-xs text-[var(--muted-fg)]">
-            Можно выбрать несколько файлов. Кодирование идёт в фоне — форму
-            можно закрыть после сохранения.
+            Можно выбрать несколько файлов, до 512 МБ каждый.
           </p>
         </div>
 
@@ -288,16 +283,28 @@ export function AuditionUploadModal({
                   Файл {index + 1}
                   {entry.file ? `: ${entry.file.name}` : ""}
                 </p>
-                <span className="text-xs text-[var(--muted-fg)]">
+                <span
+                  className={
+                    entry.uploadStatus === "error"
+                      ? "text-sm font-medium text-[var(--danger)]"
+                      : "text-xs text-[var(--muted-fg)]"
+                  }
+                >
                   {entry.uploadStatus === "uploading"
                     ? "Загрузка…"
                     : entry.uploadStatus === "done"
-                      ? "Загружено (обработка в фоне)"
+                      ? "Загружено"
                       : entry.uploadStatus === "error"
                         ? entry.uploadError
                         : "Без файла — укажите ссылку"}
                 </span>
               </div>
+
+              {showProblems && auditionDraftProblem(entry) ? (
+                <p className="text-sm text-[var(--danger)]" data-testid="audition-problem">
+                  {auditionDraftProblem(entry)}
+                </p>
+              ) : null}
 
               <div className="grid gap-3 sm:grid-cols-2">
                 <div>
@@ -375,7 +382,7 @@ export function AuditionUploadModal({
 
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <Label>Актёры / персонажи</Label>
+                  <Label>Актёры / персонажи (необязательно)</Label>
                   <Button
                     type="button"
                     variant="ghost"
