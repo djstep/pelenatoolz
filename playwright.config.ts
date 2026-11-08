@@ -18,6 +18,9 @@ import { E2E_REGISTRATION_EMAILS, E2E_ROLES } from "./e2e/fixtures/data";
  */
 const LOCAL_HOSTS = ["localhost", "127.0.0.1"];
 
+// Как на сервере. Браузер остаётся в поясе Москвы (`timezoneId`): так работают люди.
+process.env.TZ = "UTC";
+
 // До чтения в спеках и в рабочих процессах Playwright: они загружают этот же файл.
 process.env.E2E_BASE_URL ??= "http://localhost:3100";
 const siteUrl = new URL(process.env.E2E_BASE_URL);
@@ -50,6 +53,7 @@ export default defineConfig({
     reuseExistingServer: false,
     timeout: 180_000,
     env: {
+      TZ: "UTC",
       DATABASE_URL: process.env.DATABASE_URL as string,
       DIRECT_URL: process.env.DIRECT_URL as string,
       APP_URL: siteUrl.origin,

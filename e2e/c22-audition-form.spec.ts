@@ -12,6 +12,7 @@ const db = e2eDb();
 const AUDITIONS = projectPath(ctx, "/preproduction/auditions");
 const FILE_NAME = "e2e-проба-из-формы.mp4";
 const LINK = "https://example.com/e2e-проба-ссылкой";
+const DATE_LINK = "https://example.com/e2e-проба-с-датой";
 
 test.use({ storageState: storageStatePath("producer") });
 test.describe.configure({ mode: "serial" });
@@ -27,7 +28,7 @@ test.afterAll(async () => {
   await db.audition.deleteMany({
     where: {
       projectId: ctx.projectId,
-      OR: [{ externalUrl: LINK }, { videoFile: { originalName: FILE_NAME } }],
+      OR: [{ externalUrl: { in: [LINK, DATE_LINK] } }, { videoFile: { originalName: FILE_NAME } }],
     },
   });
   await db.projectFile.deleteMany({ where: { projectId: ctx.projectId, originalName: FILE_NAME } });
@@ -63,6 +64,24 @@ test("проба со ссылкой без файла сохраняется", 
     select: { videoFileId: true },
   });
   expect(saved.videoFileId).toBeNull();
+});
+
+test("дата записи пробы сохраняется как введена, без сдвига на день", async ({ page }) => {
+  const form = await openForm(page);
+  await form.locator('button[aria-haspopup="dialog"]').first().click();
+  const previous = page.getByRole("button", { name: "Предыдущий месяц" });
+  const october = page.getByText("Октябрь 2026", { exact: true });
+  while (!(await october.isVisible())) await previous.click();
+  await page.getByRole("button", { name: "31", exact: true }).click();
+  await form.getByPlaceholder("https://…").fill(DATE_LINK);
+  await form.getByRole("button", { name: "Сохранить" }).click();
+  await expect(form).toBeHidden();
+
+  const saved = await db.audition.findFirstOrThrow({
+    where: { projectId: ctx.projectId, externalUrl: DATE_LINK },
+    select: { date: true },
+  });
+  expect(saved.date.toISOString()).toBe("2026-10-31T00:00:00.000Z");
 });
 
 test("без файла и ссылки — отказ с понятным текстом", async ({ page }) => {
