@@ -11,8 +11,10 @@ import { CalendarWeekView } from "@/features/prep-calendar/components/calendar-w
 import { EventModal } from "@/features/prep-calendar/components/event-modal";
 import type {
   CalendarEvent,
+  CalendarItem,
   CalendarOptions,
   NewEventPreset,
+  PulledSources,
 } from "@/features/prep-calendar/lib/calendar-types";
 import {
   CALENDAR_VIEW_LABELS,
@@ -24,6 +26,7 @@ import {
 } from "@/features/prep-calendar/lib/calendar-view";
 import { formatDateRange } from "@/shared/i18n/format-date";
 import { Button } from "@/shared/ui/button";
+import { Checkbox } from "@/shared/ui/checkbox";
 import { SegmentLinks } from "@/shared/ui/segment-control";
 
 const PHONE_QUERY = "(max-width: 767px)";
@@ -53,7 +56,9 @@ export function CalendarWorkspace({
   today,
   range,
   timezone,
-  events,
+  items,
+  sources,
+  query,
   options,
 }: {
   projectId: string;
@@ -65,7 +70,11 @@ export function CalendarWorkspace({
   today: string;
   range: DateRange;
   timezone: string;
-  events: CalendarEvent[];
+  /** Свои события и подтянутые записи вместе. */
+  items: CalendarItem[];
+  sources: PulledSources;
+  /** Параметры адреса кроме вида и даты: переходы их сохраняют. */
+  query: Record<string, string>;
   /** Варианты для окна события; нет права правки — null. */
   options: CalendarOptions | null;
 }) {
@@ -76,11 +85,25 @@ export function CalendarWorkspace({
   // Сетка месяца на телефоне нечитаема: без явного вида в адресе открываем список.
   useEffect(() => {
     if (!viewFromAddress && window.matchMedia(PHONE_QUERY).matches) {
-      router.replace(calendarHref(basePath, "list", date));
+      router.replace(calendarHref(basePath, "list", date, query));
     }
-  }, [basePath, date, router, viewFromAddress]);
+  }, [basePath, date, query, router, viewFromAddress]);
 
   const openEvent = (event: CalendarEvent) => setTarget({ event });
+
+  /** Переключатель источника: выключенный хранится в адресе как «0». */
+  const toggleSource = (key: keyof PulledSources, shown: boolean) => {
+    const next = { ...query };
+    if (shown) delete next[key];
+    else next[key] = "0";
+    router.push(calendarHref(basePath, view, date, next));
+  };
+  const toggles = (
+    [
+      ["auditions", "Пробы"],
+      ["kpp", "Подготовительные дни КПП"],
+    ] as const
+  ).filter(([key]) => sources[key] !== null);
   const create = (preset: NewEventPreset) => setTarget({ preset });
 
   return (
@@ -88,28 +111,28 @@ export function CalendarWorkspace({
       <div className="flex flex-wrap items-center gap-2">
         <SegmentLinks
           label="Вид календаря"
-          activeHref={calendarHref(basePath, view, date)}
+          activeHref={calendarHref(basePath, view, date, query)}
           items={CALENDAR_VIEWS.map((item) => ({
-            href: calendarHref(basePath, item, date),
+            href: calendarHref(basePath, item, date, query),
             label: CALENDAR_VIEW_LABELS[item],
           }))}
         />
         <div className="flex items-center gap-1">
           <Link
-            href={calendarHref(basePath, view, stepDate(view, date, -1))}
+            href={calendarHref(basePath, view, stepDate(view, date, -1), query)}
             aria-label="Назад"
             className="glass-btn-secondary inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--border)]"
           >
             <ChevronLeft size={16} aria-hidden />
           </Link>
           <Link
-            href={calendarHref(basePath, view, today)}
+            href={calendarHref(basePath, view, today, query)}
             className="glass-btn-secondary inline-flex h-9 items-center rounded-lg border border-[var(--border)] px-3 text-sm font-semibold"
           >
             Сегодня
           </Link>
           <Link
-            href={calendarHref(basePath, view, stepDate(view, date, 1))}
+            href={calendarHref(basePath, view, stepDate(view, date, 1), query)}
             aria-label="Вперёд"
             className="glass-btn-secondary inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--border)]"
           >
@@ -130,13 +153,28 @@ export function CalendarWorkspace({
         ) : null}
       </div>
 
+      {toggles.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+          <span className="text-xs font-semibold text-[var(--muted-fg)]">Показывать:</span>
+          {toggles.map(([key, label]) => (
+            <Checkbox
+              key={key}
+              label={label}
+              checked={sources[key] === true}
+              onChange={(change) => toggleSource(key, change.target.checked)}
+            />
+          ))}
+        </div>
+      ) : null}
+
       {view === "month" ? (
         <CalendarMonthView
           basePath={basePath}
           range={range}
           month={date.slice(0, 7)}
+          query={query}
           today={today}
-          events={events}
+          items={items}
           canWrite={canWrite}
           onOpen={openEvent}
           onCreate={create}
@@ -145,7 +183,7 @@ export function CalendarWorkspace({
         <CalendarWeekView
           range={range}
           today={today}
-          events={events}
+          items={items}
           canWrite={canWrite}
           onOpen={openEvent}
           onCreate={create}
@@ -154,14 +192,17 @@ export function CalendarWorkspace({
         <CalendarListView
           range={range}
           today={today}
-          events={events}
+          items={items}
           canWrite={canWrite}
           onOpen={openEvent}
           onCreate={create}
         />
       )}
 
-      <p className="text-xs text-[var(--muted-fg)]">Время по поясу проекта: {timezone}</p>
+      <p className="text-xs text-[var(--muted-fg)]">
+        Время по поясу проекта: {timezone}. Пунктирная рамка — запись из кастинга или КПП: она
+        только для чтения, щелчок открывает источник.
+      </p>
 
       {target ? (
         <EventModal

@@ -10,6 +10,8 @@ import {
   listCalendarEvents,
   listCalendarOptions,
 } from "@/features/prep-calendar/queries";
+import { listPulledItems } from "@/features/prep-calendar/pulled-queries";
+import type { PulledSources } from "@/features/prep-calendar/lib/calendar-types";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { Card } from "@/shared/ui/card";
 
@@ -34,9 +36,25 @@ export default async function PrepCalendarPage({ params, searchParams }: Props) 
   const date = parseCalendarDate(query.date, today);
   const range = visibleRange(view, date);
   const rights = calendarRights(ctx.can);
+  // Источник без права не запрашивается и переключателя не получает.
+  const sources: PulledSources = {
+    auditions: rights.canReadCast ? query.auditions !== "0" : null,
+    kpp: rights.canReadSchedule ? query.kpp !== "0" : null,
+  };
+  const extra: Record<string, string> = {};
+  if (sources.auditions === false) extra.auditions = "0";
+  if (sources.kpp === false) extra.kpp = "0";
+  const projectPath = `/${locale}/projects/${ctx.project.id}`;
 
-  const [events, options] = await Promise.all([
+  const [events, pulled, options] = await Promise.all([
     listCalendarEvents(ctx.project.id, timezone, range, rights),
+    listPulledItems(
+      ctx.project.id,
+      timezone,
+      range,
+      { auditions: sources.auditions === true, kpp: sources.kpp === true },
+      projectPath,
+    ),
     rights.canWrite ? listCalendarOptions(ctx.project.id, rights) : null,
   ]);
 
@@ -53,14 +71,16 @@ export default async function PrepCalendarPage({ params, searchParams }: Props) 
       <Card>
         <CalendarWorkspace
           projectId={ctx.project.id}
-          basePath={`/${locale}/projects/${ctx.project.id}/preproduction/calendar`}
+          basePath={`${projectPath}/preproduction/calendar`}
           view={view}
           viewFromAddress={addressView !== null}
           date={date}
           today={today}
           range={range}
           timezone={timezone}
-          events={events}
+          items={[...events, ...pulled]}
+          sources={sources}
+          query={extra}
           options={options}
         />
       </Card>

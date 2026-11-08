@@ -2,10 +2,13 @@
 
 import { useEffect, useRef } from "react";
 import { parseDateKey } from "@/features/actor-availability/lib/status";
+import Link from "next/link";
 import {
-  EventChip,
-  eventAccessibleLabel,
   eventPlaceLabel,
+  ItemChip,
+  itemAccessibleLabel,
+  itemKindLabel,
+  PULLED_CLASS,
 } from "@/features/prep-calendar/components/event-chip";
 import {
   eventsByDay,
@@ -16,8 +19,10 @@ import {
 } from "@/features/prep-calendar/lib/calendar-layout";
 import type {
   CalendarEvent,
+  CalendarItem,
   NewEventPreset,
 } from "@/features/prep-calendar/lib/calendar-types";
+import { isPulled } from "@/features/prep-calendar/lib/calendar-types";
 import { eachDayKey, type DateRange } from "@/features/prep-calendar/lib/calendar-view";
 import { prepEventColorStyle } from "@/features/prep-calendar/lib/event-colors";
 import { formatCalendarColumnHeader } from "@/shared/i18n/format-date";
@@ -33,14 +38,14 @@ const DEFAULT_SCROLL_HOUR = 8;
 const toPx = (minutes: number) => (minutes / 60) * HOUR_PX;
 
 function TimedBlock({
-  event,
+  item,
   startMin,
   endMin,
   column,
   columns,
   onOpen,
 }: {
-  event: CalendarEvent;
+  item: CalendarItem;
   startMin: number;
   endMin: number;
   column: number;
@@ -51,28 +56,52 @@ function TimedBlock({
     toPx(Math.min(endMin, MINUTES_IN_DAY) - startMin),
     toPx(MIN_BLOCK_MINUTES),
   );
-  const place = eventPlaceLabel(event);
+  const box = {
+    top: toPx(startMin),
+    height: Math.min(height, DAY_PX - toPx(startMin)),
+    left: `${(column / columns) * 100}%`,
+    width: `calc(${100 / columns}% - 2px)`,
+  };
+  const blockClass =
+    "absolute overflow-hidden rounded-[5px] px-1.5 py-0.5 text-left text-xs leading-[15px]";
+  const lines = (
+    <>
+      <span className="block truncate font-semibold">{item.title}</span>
+      <span className={cn("block truncate", isPulled(item) && "text-[var(--muted-fg)]")}>
+        {itemKindLabel(item)}
+      </span>
+      {!isPulled(item) && eventPlaceLabel(item) ? (
+        <span className="block truncate">{eventPlaceLabel(item)}</span>
+      ) : null}
+    </>
+  );
+  if (isPulled(item)) {
+    return (
+      <Link
+        href={item.href}
+        title={itemAccessibleLabel(item)}
+        aria-label={itemAccessibleLabel(item)}
+        className={cn(blockClass, PULLED_CLASS)}
+        style={box}
+        onClick={(click) => click.stopPropagation()}
+      >
+        {lines}
+      </Link>
+    );
+  }
   return (
     <button
       type="button"
-      title={eventAccessibleLabel(event)}
-      aria-label={eventAccessibleLabel(event)}
-      className="absolute overflow-hidden rounded-[5px] border px-1.5 py-0.5 text-left text-xs leading-[15px]"
-      style={{
-        ...prepEventColorStyle(event.type.color),
-        top: toPx(startMin),
-        height: Math.min(height, DAY_PX - toPx(startMin)),
-        left: `${(column / columns) * 100}%`,
-        width: `calc(${100 / columns}% - 2px)`,
-      }}
+      title={itemAccessibleLabel(item)}
+      aria-label={itemAccessibleLabel(item)}
+      className={cn(blockClass, "border")}
+      style={{ ...prepEventColorStyle(item.type.color), ...box }}
       onClick={(click) => {
         click.stopPropagation();
-        onOpen(event);
+        onOpen(item);
       }}
     >
-      <span className="block truncate font-semibold">{event.title}</span>
-      <span className="block truncate">{event.type.name}</span>
-      {place ? <span className="block truncate">{place}</span> : null}
+      {lines}
     </button>
   );
 }
@@ -80,27 +109,27 @@ function TimedBlock({
 export function CalendarWeekView({
   range,
   today,
-  events,
+  items,
   canWrite,
   onOpen,
   onCreate,
 }: {
   range: DateRange;
   today: string;
-  events: CalendarEvent[];
+  items: CalendarItem[];
   canWrite: boolean;
   onOpen: (event: CalendarEvent) => void;
   onCreate: (preset: NewEventPreset) => void;
 }) {
   const days = eachDayKey(range);
-  const allDay = eventsByDay(events.filter((event) => event.allDay), days);
-  const timed = eventsByDay(events.filter((event) => !event.allDay), days);
+  const allDay = eventsByDay(items.filter((item) => item.allDay), days);
+  const timed = eventsByDay(items.filter((item) => !item.allDay), days);
   const scrollRef = useRef<HTMLDivElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
 
   const placedByDay = days.map((day) =>
     placeInColumns(
-      (timed.get(day) ?? []).map((event) => ({ item: event, ...segmentForDay(event, day) })),
+      (timed.get(day) ?? []).map((item) => ({ item, ...segmentForDay(item, day) })),
     ),
   );
   const earliest = Math.min(
@@ -158,8 +187,8 @@ export function CalendarWeekView({
                 if (canWrite) onCreate({ dateKey: day, allDay: true });
               }}
             >
-              {(allDay.get(day) ?? []).map((event) => (
-                <EventChip key={event.id} event={event} onOpen={onOpen} />
+              {(allDay.get(day) ?? []).map((item) => (
+                <ItemChip key={item.id} item={item} onOpen={onOpen} />
               ))}
             </div>
           ))}
@@ -203,7 +232,7 @@ export function CalendarWeekView({
               {placedByDay[index]!.map((entry) => (
                 <TimedBlock
                   key={entry.item.id}
-                  event={entry.item}
+                  item={entry.item}
                   startMin={entry.startMin}
                   endMin={entry.endMin}
                   column={entry.column}

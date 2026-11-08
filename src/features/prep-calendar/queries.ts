@@ -50,6 +50,8 @@ export type CalendarRights = {
   canReadCrew: boolean;
   /** Выбор объекта из «Локаций». */
   canReadLocations: boolean;
+  /** Подготовительные дни из КПП. */
+  canReadSchedule: boolean;
 };
 
 export function calendarRights(can: (permission: Permission) => boolean): CalendarRights {
@@ -58,6 +60,7 @@ export function calendarRights(can: (permission: Permission) => boolean): Calend
     canReadCast: can("cast:read"),
     canReadCrew: can("crew:read"),
     canReadLocations: can("script:read"),
+    canReadSchedule: can("schedule:read"),
   };
 }
 

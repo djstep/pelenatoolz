@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { EventChip } from "@/features/prep-calendar/components/event-chip";
+import { ItemChip } from "@/features/prep-calendar/components/event-chip";
 import { compareInDay, eventsByDay } from "@/features/prep-calendar/lib/calendar-layout";
 import type {
   CalendarEvent,
+  CalendarItem,
   NewEventPreset,
 } from "@/features/prep-calendar/lib/calendar-types";
 import { calendarHref, eachDayKey, type DateRange } from "@/features/prep-calendar/lib/calendar-view";
@@ -19,7 +20,8 @@ export function CalendarMonthView({
   range,
   month,
   today,
-  events,
+  items,
+  query,
   canWrite,
   onOpen,
   onCreate,
@@ -29,14 +31,16 @@ export function CalendarMonthView({
   /** «ГГГГ-ММ» показанного месяца: дни соседних приглушены. */
   month: string;
   today: string;
-  events: CalendarEvent[];
+  items: CalendarItem[];
+  /** Остальные параметры адреса: переход на неделю их сохраняет. */
+  query: Record<string, string>;
   canWrite: boolean;
   onOpen: (event: CalendarEvent) => void;
   onCreate: (preset: NewEventPreset) => void;
 }) {
   const router = useRouter();
   const days = eachDayKey(range);
-  const byDay = eventsByDay(events, days);
+  const byDay = eventsByDay(items, days);
 
   return (
     <div className="overflow-hidden rounded-xl border border-[var(--border)]">
@@ -52,7 +56,7 @@ export function CalendarMonthView({
           const list = [...(byDay.get(day) ?? [])].sort(compareInDay);
           const shown = list.slice(0, MAX_IN_CELL);
           const hidden = list.length - shown.length;
-          const weekHref = calendarHref(basePath, "week", day);
+          const weekHref = calendarHref(basePath, "week", day, query);
           const dayNumber = Number(day.slice(8));
           return (
             <div
@@ -100,8 +104,8 @@ export function CalendarMonthView({
                   </button>
                 ) : null}
               </div>
-              {shown.map((event) => (
-                <EventChip key={event.id} event={event} onOpen={onOpen} />
+              {shown.map((item) => (
+                <ItemChip key={item.id} item={item} onOpen={onOpen} />
               ))}
               {hidden > 0 ? (
                 <Link

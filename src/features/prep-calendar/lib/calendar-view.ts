@@ -83,7 +83,15 @@ export function eachDayKey({ from, to }: DateRange): string[] {
   return days;
 }
 
-/** Адрес экрана: вид и дата хранятся в нём, чтобы ссылкой можно было поделиться. */
-export function calendarHref(basePath: string, view: CalendarView, date: string): string {
-  return `${basePath}?${new URLSearchParams({ view, date })}`;
+/**
+ * Адрес экрана: вид, дата и переключатели хранятся в нём, чтобы ссылкой можно было поделиться.
+ * `extra` — остальные параметры адреса (источники, фильтры), без вида и даты.
+ */
+export function calendarHref(
+  basePath: string,
+  view: CalendarView,
+  date: string,
+  extra: Record<string, string> = {},
+): string {
+  return `${basePath}?${new URLSearchParams({ view, date, ...extra })}`;
 }

@@ -1,33 +1,38 @@
 "use client";
 
 import { parseDateKey } from "@/features/actor-availability/lib/status";
+import Link from "next/link";
+import type { ReactNode } from "react";
 import {
-  eventAccessibleLabel,
   eventPlaceLabel,
   eventWhenLabel,
   EventTypeBadge,
+  itemAccessibleLabel,
+  PulledBadge,
 } from "@/features/prep-calendar/components/event-chip";
 import { compareInDay, eventsByDay } from "@/features/prep-calendar/lib/calendar-layout";
 import type {
   CalendarEvent,
+  CalendarItem,
   NewEventPreset,
 } from "@/features/prep-calendar/lib/calendar-types";
+import { isPulled } from "@/features/prep-calendar/lib/calendar-types";
 import { eachDayKey, type DateRange } from "@/features/prep-calendar/lib/calendar-view";
 import { formatDateLong, formatDateRange, formatDateShort } from "@/shared/i18n/format-date";
 import { countOf } from "@/shared/lib/plural";
 import { Button } from "@/shared/ui/button";
 
 type Row =
-  | { kind: "day"; day: string; events: CalendarEvent[] }
+  | { kind: "day"; day: string; items: CalendarItem[] }
   | { kind: "empty"; from: string; to: string };
 
 /** Дни с событиями идут строками, идущие подряд пустые дни сворачиваются в одну. */
-function buildRows(days: string[], byDay: Map<string, CalendarEvent[]>): Row[] {
+function buildRows(days: string[], byDay: Map<string, CalendarItem[]>): Row[] {
   const rows: Row[] = [];
   for (const day of days) {
-    const events = byDay.get(day) ?? [];
+    const items = byDay.get(day) ?? [];
     const last = rows[rows.length - 1];
-    if (events.length > 0) rows.push({ kind: "day", day, events: [...events].sort(compareInDay) });
+    if (items.length > 0) rows.push({ kind: "day", day, items: [...items].sort(compareInDay) });
     else if (last?.kind === "empty") last.to = day;
     else rows.push({ kind: "empty", from: day, to: day });
   }
@@ -46,7 +51,9 @@ function dayTitle(day: string): string {
   return text[0]!.toLocaleUpperCase("ru") + text.slice(1);
 }
 
-function peopleLine(event: CalendarEvent): string | null {
+function peopleLine(item: CalendarItem): string | null {
+  if (isPulled(item)) return item.people.length > 0 ? item.people.join(", ") : null;
+  const event = item;
   const names = event.participants.map((person) => person.label);
   if (event.hiddenCandidates > 0) {
     names.push(`+${countOf(event.hiddenCandidates, ["кандидат", "кандидата", "кандидатов"])}`);
@@ -54,29 +61,56 @@ function peopleLine(event: CalendarEvent): string | null {
   return names.length > 0 ? names.join(", ") : null;
 }
 
+const ROW_CLASS =
+  "flex w-full flex-wrap items-baseline gap-x-3 gap-y-0.5 px-3 py-2 text-left hover:bg-[var(--glass-table-hover)] sm:flex-nowrap";
+
+/** Своё событие открывает окно, подтянутая запись — ссылка на источник. */
+function ListRow({
+  item,
+  onOpen,
+  children,
+}: {
+  item: CalendarItem;
+  onOpen: (event: CalendarEvent) => void;
+  children: ReactNode;
+}) {
+  if (isPulled(item)) {
+    return (
+      <Link href={item.href} aria-label={itemAccessibleLabel(item)} className={ROW_CLASS}>
+        {children}
+      </Link>
+    );
+  }
+  return (
+    <button
+      type="button"
+      aria-label={itemAccessibleLabel(item)}
+      className={ROW_CLASS}
+      onClick={() => onOpen(item)}
+    >
+      {children}
+    </button>
+  );
+}
+
 function ListEvent({
   event,
   onOpen,
 }: {
-  event: CalendarEvent;
+  event: CalendarItem;
   onOpen: (event: CalendarEvent) => void;
 }) {
-  const place = eventPlaceLabel(event);
+  const place = isPulled(event) ? event.note : eventPlaceLabel(event);
   const people = peopleLine(event);
   return (
     <li>
-      <button
-        type="button"
-        aria-label={eventAccessibleLabel(event)}
-        className="flex w-full flex-wrap items-baseline gap-x-3 gap-y-0.5 px-3 py-2 text-left hover:bg-[var(--glass-table-hover)] sm:flex-nowrap"
-        onClick={() => onOpen(event)}
-      >
+      <ListRow item={event} onOpen={onOpen}>
         <span className="w-full shrink-0 text-sm tabular-nums text-[var(--fg-2)] sm:w-44">
           {eventWhenLabel(event)}
         </span>
         <span className="min-w-0 flex-1">
           <span className="flex flex-wrap items-center gap-2">
-            <EventTypeBadge type={event.type} />
+            {isPulled(event) ? <PulledBadge item={event} /> : <EventTypeBadge type={event.type} />}
             <span className="min-w-0 break-words text-sm font-semibold">{event.title}</span>
           </span>
           {place ? (
@@ -86,7 +120,7 @@ function ListEvent({
             <span className="mt-0.5 block text-xs text-[var(--muted-fg)]">{people}</span>
           ) : null}
         </span>
-      </button>
+      </ListRow>
     </li>
   );
 }
@@ -94,20 +128,20 @@ function ListEvent({
 export function CalendarListView({
   range,
   today,
-  events,
+  items,
   canWrite,
   onOpen,
   onCreate,
 }: {
   range: DateRange;
   today: string;
-  events: CalendarEvent[];
+  items: CalendarItem[];
   canWrite: boolean;
   onOpen: (event: CalendarEvent) => void;
   onCreate: (preset: NewEventPreset) => void;
 }) {
   const days = eachDayKey(range);
-  const rows = buildRows(days, eventsByDay(events, days));
+  const rows = buildRows(days, eventsByDay(items, days));
 
   return (
     <div className="overflow-hidden rounded-xl border border-[var(--border)]">
@@ -119,7 +153,7 @@ export function CalendarListView({
               {row.day === today ? " · сегодня" : ""}
             </h3>
             <ul className="divide-y divide-[var(--border)]">
-              {row.events.map((event) => (
+              {row.items.map((event) => (
                 <ListEvent key={event.id} event={event} onOpen={onOpen} />
               ))}
             </ul>

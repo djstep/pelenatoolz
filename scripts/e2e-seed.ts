@@ -138,6 +138,15 @@ function crewOnlyMatrix(): PermissionMatrix {
   return m;
 }
 
+/** Без кастинга: ни актёров, ни персонажей. Остальное как у «только команды», в том числе без вызывных. */
+function noCastMatrix(): PermissionMatrix {
+  const m = crewOnlyMatrix();
+  const empty = buildEmptyMatrix();
+  m.actors = empty.actors;
+  m.characters = empty.characters;
+  return m;
+}
+
 /** Политика принята: иначе каждый вход тестового пользователя вёл бы на страницу согласия. */
 const consent = {
   personalDataConsentAt: new Date(),
@@ -944,6 +953,22 @@ async function ensureSeedForeignProject() {
   });
 }
 
+/** Роль без кастинга и её участник. Повторный запуск обновляет права роли. */
+async function ensureSeedNoCastRole(projectId: string, userId: string) {
+  const permissions = buildPermissionsDocument(noCastMatrix(), {}) as Prisma.InputJsonValue;
+  const role = await prisma.projectRoleDefinition.upsert({
+    where: { projectId_name: { projectId, name: E2E_ROLE_NAMES.nocast } },
+    create: { projectId, name: E2E_ROLE_NAMES.nocast, note: "Приёмочные тесты", permissions },
+    update: { permissions },
+    select: { id: true },
+  });
+  await prisma.projectMembership.upsert({
+    where: { projectId_userId: { projectId, userId } },
+    create: { projectId, userId, roleId: role.id, status: MembershipStatus.ACTIVE },
+    update: {},
+  });
+}
+
 /** Начальные типы событий календаря: миграция выдаёт их только проектам, что уже есть. */
 async function ensureSeedEventTypes(projectId: string) {
   await prisma.prepEventType.createMany({
@@ -1035,7 +1060,7 @@ async function main() {
   const reset = process.argv.includes("--reset");
   const passwords = ensurePasswords();
   const users = await upsertUsers(passwords);
-  console.log("Пользователи: e2e-producer, e2e-nofin, e2e-nocallsheet, e2e-crewonly — готовы");
+  console.log(`Пользователи: ${ROLE_KEYS.map((role) => E2E_ROLES[role].email.split("@")[0]).join(", ")} — готовы`);
   await ensureSeedForeignProject();
 
   const existing = await prisma.project.findMany({
@@ -1049,6 +1074,7 @@ async function main() {
       await ensureSeedBudget(id, users.producer);
       await ensureSeedCards(id, users.producer);
       await ensureSeedCrewRoles(id, users.crewonly);
+      await ensureSeedNoCastRole(id, users.nocast);
       await ensureSeedCrew(id, users.producer);
       await ensureSeedEventTypes(id);
       await ensureSeedApprovedCallSheet(id, users.producer);
@@ -1066,6 +1092,7 @@ async function main() {
   await ensureSeedBudget(projectId, users.producer);
   await ensureSeedCards(projectId, users.producer);
   await ensureSeedCrew(projectId, users.producer);
+  await ensureSeedNoCastRole(projectId, users.nocast);
   await ensureSeedEventTypes(projectId);
   await ensureSeedApprovedCallSheet(projectId, users.producer);
 }
