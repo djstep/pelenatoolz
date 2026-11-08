@@ -59,6 +59,8 @@ export const AuditEntityType = {
   /** Человек команды. Телефон и почта в журнал не пишутся: его читают и без этого права. */
   crewMember: "crew_member",
   prepEventType: "prep_event_type",
+  /** Событие календаря. Имена кандидатов в журнал не пишутся: его читают и без права на кастинг. */
+  prepEvent: "prep_event",
   budget: "budget",
   budgetVersion: "budget_version",
   smetaExport: "smeta_export",
@@ -130,6 +132,7 @@ export const auditEntityLabels: Record<string, string> = {
   [AuditEntityType.department]: "Цех",
   [AuditEntityType.crewMember]: "Команда",
   [AuditEntityType.prepEventType]: "Тип события календаря",
+  [AuditEntityType.prepEvent]: "Календарь препродакшена",
   [AuditEntityType.budget]: "Смета цеха",
   [AuditEntityType.budgetVersion]: "Версия сметы",
   [AuditEntityType.smetaExport]: "Выгрузка смет",

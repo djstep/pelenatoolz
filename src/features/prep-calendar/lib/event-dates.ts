@@ -8,7 +8,7 @@ export type PrepEventRange =
 const DATE_KEY = /^\d{4}-\d{2}-\d{2}$/;
 
 /** Настоящая дата «ГГГГ-ММ-ДД»: 2026-02-30 не проходит. */
-function isDateKey(value: string): boolean {
+export function isDateKey(value: string): boolean {
   if (!DATE_KEY.test(value)) return false;
   return toDateKey(parseDateKey(value)) === value;
 }

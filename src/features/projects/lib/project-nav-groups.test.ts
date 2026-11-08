@@ -410,11 +410,17 @@ describe("Календарь препродакшена", () => {
     assert.equal(items[1]!.soon, undefined);
   });
 
-  test("флаг выключен: пункта нет ни у кого, в браузер адрес не уходит", () => {
-    const producer: NavAccess = { ...access([]), can: () => true, isProducer: true };
-    const json = JSON.stringify(nav.filterNavGroups(nav.projectNavGroups, producer));
-    assert.ok(!json.includes("/preproduction/calendar"));
-    assert.ok(!json.includes("Календарь"));
+  test("пункт виден с просмотром календаря, без него адрес не уходит в браузер", () => {
+    const shown = JSON.stringify(nav.filterNavGroups(nav.projectNavGroups, access(["calendar:read"])));
+    assert.ok(shown.includes("/preproduction/calendar"));
+    const hidden = JSON.stringify(nav.filterNavGroups(nav.projectNavGroups, access(["cast:read"])));
+    assert.ok(!hidden.includes("/preproduction/calendar"));
+  });
+
+  test("без кастинга группа «Препродакшн» остаётся ради календаря", () => {
+    const groups = nav.filterNavGroups(nav.projectNavGroups, access(["calendar:read"]));
+    const pre = groups.find((group) => group.id === "preproduction")!;
+    assert.deepEqual(pre.items.map((item) => item.href), ["/preproduction/calendar"]);
   });
 });
 

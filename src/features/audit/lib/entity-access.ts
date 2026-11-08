@@ -89,6 +89,7 @@ const AUDIT_ENTITY_VISIBILITY: Record<AuditEntityTypeValue, AuditVisibility> = {
   [AuditEntityType.department]: (v) => v.isProducer || v.can("members:manage"),
   [AuditEntityType.crewMember]: anyOf("crew:read"),
   [AuditEntityType.prepEventType]: anyOf("calendar:read"),
+  [AuditEntityType.prepEvent]: anyOf("calendar:read"),
   [AuditEntityType.budget]: smetaAll,
   [AuditEntityType.budgetVersion]: smetaAll,
   [AuditEntityType.budgetLine]: smetaAll,

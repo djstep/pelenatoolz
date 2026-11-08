@@ -55,12 +55,6 @@ type NavGroupDef = Omit<NavGroup, "items"> & {
   visible?: NavVisibility;
 };
 
-/**
- * Календарь препродакшена: место в меню занято, страницы пока нет. Пункт выключен для всех и не
- * уходит в браузер; волна 9 включает его вместе со страницей и настоящими правами.
- */
-const PREPRODUCTION_CALENDAR_ENABLED: boolean = false;
-
 /** Виден, если есть любое из прав (раздел, к которому ведут несколько прав). */
 function anyOf(...permissions: Permission[]): NavVisibility {
   return (access) => permissions.some((p) => access.can(p));
@@ -94,7 +88,7 @@ export const projectNavGroups: NavGroupDef[] = [
       {
         href: "/preproduction/calendar",
         label: "Календарь препродакшена",
-        visible: () => PREPRODUCTION_CALENDAR_ENABLED,
+        visible: anyOf("calendar:read"),
       },
     ],
   },
