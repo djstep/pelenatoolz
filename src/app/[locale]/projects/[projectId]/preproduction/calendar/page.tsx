@@ -1,4 +1,13 @@
+import {
+  allowedFilters,
+  loadCalendarItems,
+  pulledSourcesFromQuery,
+} from "@/features/prep-calendar/calendar-items";
 import { CalendarWorkspace } from "@/features/prep-calendar/components/calendar-workspace";
+import {
+  filtersToQuery,
+  parseCalendarFilters,
+} from "@/features/prep-calendar/lib/calendar-filters";
 import {
   parseCalendarDate,
   parseCalendarView,
@@ -7,11 +16,9 @@ import {
 import { todayDateKey } from "@/features/prep-calendar/lib/zoned-time";
 import {
   calendarRights,
-  listCalendarEvents,
+  listCalendarFilterOptions,
   listCalendarOptions,
 } from "@/features/prep-calendar/queries";
-import { listPulledItems } from "@/features/prep-calendar/pulled-queries";
-import type { PulledSources } from "@/features/prep-calendar/lib/calendar-types";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { Card } from "@/shared/ui/card";
 
@@ -37,24 +44,24 @@ export default async function PrepCalendarPage({ params, searchParams }: Props) 
   const range = visibleRange(view, date);
   const rights = calendarRights(ctx.can);
   // Источник без права не запрашивается и переключателя не получает.
-  const sources: PulledSources = {
-    auditions: rights.canReadCast ? query.auditions !== "0" : null,
-    kpp: rights.canReadSchedule ? query.kpp !== "0" : null,
-  };
-  const extra: Record<string, string> = {};
+  const sources = pulledSourcesFromQuery(rights, query);
+  const filters = allowedFilters(rights, parseCalendarFilters(query));
+  const extra: Record<string, string> = filtersToQuery(filters);
   if (sources.auditions === false) extra.auditions = "0";
   if (sources.kpp === false) extra.kpp = "0";
   const projectPath = `/${locale}/projects/${ctx.project.id}`;
 
-  const [events, pulled, options] = await Promise.all([
-    listCalendarEvents(ctx.project.id, timezone, range, rights),
-    listPulledItems(
-      ctx.project.id,
+  const [items, filterOptions, options] = await Promise.all([
+    loadCalendarItems({
+      projectId: ctx.project.id,
       timezone,
       range,
-      { auditions: sources.auditions === true, kpp: sources.kpp === true },
+      can: ctx.can,
+      filters,
+      sources,
       projectPath,
-    ),
+    }),
+    listCalendarFilterOptions(ctx.project.id, rights),
     rights.canWrite ? listCalendarOptions(ctx.project.id, rights) : null,
   ]);
 
@@ -78,8 +85,10 @@ export default async function PrepCalendarPage({ params, searchParams }: Props) 
           today={today}
           range={range}
           timezone={timezone}
-          items={[...events, ...pulled]}
+          items={items}
           sources={sources}
+          filters={filters}
+          filterOptions={filterOptions}
           query={extra}
           options={options}
         />

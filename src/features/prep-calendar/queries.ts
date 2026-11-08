@@ -7,6 +7,7 @@ import type {
   CalendarOptions,
   CalendarParticipant,
 } from "@/features/prep-calendar/lib/calendar-types";
+import type { CalendarFilters } from "@/features/prep-calendar/lib/calendar-filters";
 import { addDaysToKey, type DateRange } from "@/features/prep-calendar/lib/calendar-view";
 import { zonedDateTime, zonedTimeToUtc } from "@/features/prep-calendar/lib/zoned-time";
 import { fullNameFromParts } from "@/features/preproduction/lib/snapshots";
@@ -113,11 +114,23 @@ export async function listCalendarEvents(
   timezone: string,
   range: DateRange,
   rights: CalendarRights,
+  filters: CalendarFilters,
 ): Promise<CalendarEvent[]> {
   const { fromAt, toAt } = rangeInstants(range, timezone);
+  const person = filters.person;
+  const personWhere = !person
+    ? {}
+    : person.kind === "crew"
+      ? { crewMemberId: person.id }
+      : person.kind === "actor"
+        ? { actorId: person.id }
+        : { castingPersonId: person.id };
   const rows = await prisma.prepEvent.findMany({
     where: {
       projectId,
+      ...(filters.typeId ? { typeId: filters.typeId } : {}),
+      ...(filters.departmentId ? { departments: { some: { departmentId: filters.departmentId } } } : {}),
+      ...(person ? { participants: { some: personWhere } } : {}),
       OR: [
         {
           allDay: true,
@@ -246,4 +259,80 @@ export async function listCalendarOptions(
       null,
     departments,
   };
+}
+
+export type CalendarFilterOptions = {
+  types: { id: string; name: string }[];
+  departments: { id: string; name: string }[];
+  /** Люди, которые есть хоть в одном событии проекта. Кандидаты — только с правом на кастинг. */
+  people: { value: string; label: string }[];
+};
+
+/** Варианты фильтров. Имена — те же, что видны в событиях: без контактов. */
+export async function listCalendarFilterOptions(
+  projectId: string,
+  rights: CalendarRights,
+): Promise<CalendarFilterOptions> {
+  const [types, departments, links] = await Promise.all([
+    prisma.prepEventType.findMany({
+      where: { projectId },
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+      select: { id: true, name: true },
+    }),
+    prisma.department.findMany({
+      where: { projectId },
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+      select: { id: true, name: true },
+    }),
+    prisma.prepEventParticipant.findMany({
+      where: {
+        event: { projectId },
+        ...(rights.canReadCast ? {} : { castingPersonId: null }),
+      },
+      distinct: ["crewMemberId", "actorId", "castingPersonId"],
+      select: {
+        crewMember: { select: { id: true, ...nameSelect } },
+        actor: { select: { id: true, ...nameSelect } },
+        castingPerson: { select: { id: true, ...nameSelect } },
+      },
+    }),
+  ]);
+
+  const people = new Map<string, string>();
+  for (const link of links) {
+    if (link.crewMember) people.set(`crew:${link.crewMember.id}`, fullNameFromParts(link.crewMember));
+    else if (link.actor) people.set(`actor:${link.actor.id}`, `${fullNameFromParts(link.actor)} (актёр)`);
+    else if (link.castingPerson && rights.canReadCast) {
+      people.set(`candidate:${link.castingPerson.id}`, `${fullNameFromParts(link.castingPerson)} (кандидат)`);
+    }
+  }
+  return {
+    types,
+    departments,
+    people: [...people]
+      .map(([value, label]) => ({ value, label }))
+      .sort((a, b) => a.label.localeCompare(b.label, "ru")),
+  };
+}
+
+/**
+ * Фильтр по человеку для проб: id людей кастинга. Кандидат — он сам, актёр — утверждённый на
+ * его роль, человек команды на пробах не бывает. Без фильтра — null.
+ */
+export async function auditionPersonIds(
+  projectId: string,
+  person: CalendarFilters["person"],
+): Promise<string[] | null> {
+  if (!person) return null;
+  if (person.kind === "candidate") return [person.id];
+  if (person.kind === "crew") return [];
+  const actor = await prisma.actor.findFirst({
+    where: { id: person.id, projectId },
+    select: {
+      character: {
+        select: { castingCandidates: { where: { status: "APPROVED" }, select: { personId: true } } },
+      },
+    },
+  });
+  return actor?.character?.castingCandidates.map((c) => c.personId) ?? [];
 }

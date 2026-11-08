@@ -47,6 +47,8 @@ export const prepEventInputSchema = z
     actorIds: idList,
     castingPersonIds: idList,
     departmentIds: idList,
+    /** Пересечения показаны и человек нажал «Сохранить всё равно». */
+    confirmOverlaps: z.boolean().optional(),
   })
   .refine((data) => data.allDay || (data.startTime && data.endTime), {
     message: "Укажите время начала и окончания",

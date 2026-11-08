@@ -155,7 +155,8 @@ test.describe("продюсер", () => {
 
     await page.goto(at("view=list&date=2026-12-01"));
     await expect(page.getByText("14:30–16:00")).toBeVisible();
-    await expect(page.getByText(MANUAL)).toBeVisible();
+    // В скрытом списке фильтра «Человек» то же имя: ищем только в списке событий.
+    await expect(page.locator("section").getByText(MANUAL)).toBeVisible();
     // Многодневное событие стоит в каждом своём дне.
     await expect(page.getByText("3 дек. 2026 г. – 5 дек. 2026 г.")).toHaveCount(3);
   });

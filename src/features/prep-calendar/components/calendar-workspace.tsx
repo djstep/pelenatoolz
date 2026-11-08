@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { parseDateKey } from "@/features/actor-availability/lib/status";
+import { CalendarExportMenu } from "@/features/prep-calendar/components/calendar-export-menu";
+import { CalendarFiltersBar } from "@/features/prep-calendar/components/calendar-filters-bar";
 import { CalendarListView } from "@/features/prep-calendar/components/calendar-list-view";
 import { CalendarMonthView } from "@/features/prep-calendar/components/calendar-month-view";
 import { CalendarWeekView } from "@/features/prep-calendar/components/calendar-week-view";
@@ -24,9 +26,10 @@ import {
   type CalendarView,
   type DateRange,
 } from "@/features/prep-calendar/lib/calendar-view";
+import type { CalendarFilters } from "@/features/prep-calendar/lib/calendar-filters";
+import type { CalendarFilterOptions } from "@/features/prep-calendar/queries";
 import { formatDateRange } from "@/shared/i18n/format-date";
 import { Button } from "@/shared/ui/button";
-import { Checkbox } from "@/shared/ui/checkbox";
 import { SegmentLinks } from "@/shared/ui/segment-control";
 
 const PHONE_QUERY = "(max-width: 767px)";
@@ -58,6 +61,8 @@ export function CalendarWorkspace({
   timezone,
   items,
   sources,
+  filters,
+  filterOptions,
   query,
   options,
 }: {
@@ -73,6 +78,8 @@ export function CalendarWorkspace({
   /** Свои события и подтянутые записи вместе. */
   items: CalendarItem[];
   sources: PulledSources;
+  filters: CalendarFilters;
+  filterOptions: CalendarFilterOptions;
   /** Параметры адреса кроме вида и даты: переходы их сохраняют. */
   query: Record<string, string>;
   /** Варианты для окна события; нет права правки — null. */
@@ -91,19 +98,6 @@ export function CalendarWorkspace({
 
   const openEvent = (event: CalendarEvent) => setTarget({ event });
 
-  /** Переключатель источника: выключенный хранится в адресе как «0». */
-  const toggleSource = (key: keyof PulledSources, shown: boolean) => {
-    const next = { ...query };
-    if (shown) delete next[key];
-    else next[key] = "0";
-    router.push(calendarHref(basePath, view, date, next));
-  };
-  const toggles = (
-    [
-      ["auditions", "Пробы"],
-      ["kpp", "Подготовительные дни КПП"],
-    ] as const
-  ).filter(([key]) => sources[key] !== null);
   const create = (preset: NewEventPreset) => setTarget({ preset });
 
   return (
@@ -142,30 +136,30 @@ export function CalendarWorkspace({
         <h3 className="text-[15px] font-bold" data-testid="calendar-period">
           {periodTitle(view, date, range)}
         </h3>
-        {canWrite ? (
-          <Button
-            type="button"
-            className="ml-auto"
-            onClick={() => create({ dateKey: date, allDay: false })}
-          >
-            + Событие
-          </Button>
-        ) : null}
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          <CalendarExportMenu
+            projectId={projectId}
+            range={range}
+            weekRange={view === "week" ? range : null}
+            query={query}
+            canSaveLayout={canWrite}
+          />
+          {canWrite ? (
+            <Button type="button" onClick={() => create({ dateKey: date, allDay: false })}>
+              + Событие
+            </Button>
+          ) : null}
+        </div>
       </div>
 
-      {toggles.length > 0 ? (
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-          <span className="text-xs font-semibold text-[var(--muted-fg)]">Показывать:</span>
-          {toggles.map(([key, label]) => (
-            <Checkbox
-              key={key}
-              label={label}
-              checked={sources[key] === true}
-              onChange={(change) => toggleSource(key, change.target.checked)}
-            />
-          ))}
-        </div>
-      ) : null}
+      <CalendarFiltersBar
+        basePath={basePath}
+        view={view}
+        date={date}
+        filters={filters}
+        options={filterOptions}
+        sources={sources}
+      />
 
       {view === "month" ? (
         <CalendarMonthView

@@ -16,6 +16,8 @@ import { prisma } from "@/shared/db/prisma";
 export type PulledRequest = {
   auditions: boolean;
   kpp: boolean;
+  /** Фильтр по человеку: id людей кастинга. null — без фильтра, пустой список — ничего. */
+  personIds: string[] | null;
 };
 
 const nameSelect = { lastName: true, firstName: true, middleName: true } as const;
@@ -34,9 +36,18 @@ function timed(dateKey: string, rawTime: string | null) {
 }
 
 /** План проб: слоты планировщика кастинга. Своей страницы у слота нет — ведём на «Пробы». */
-async function auditionPlan(projectId: string, range: DateRange, projectPath: string): Promise<PulledItem[]> {
+async function auditionPlan(
+  projectId: string,
+  range: DateRange,
+  projectPath: string,
+  personIds: string[] | null,
+): Promise<PulledItem[]> {
   const rows = await prisma.auditionSchedule.findMany({
-    where: { projectId, date: { gte: parseDateKey(range.from), lte: parseDateKey(range.to) } },
+    where: {
+      projectId,
+      date: { gte: parseDateKey(range.from), lte: parseDateKey(range.to) },
+      ...(personIds ? { candidates: { some: { candidate: { personId: { in: personIds } } } } } : {}),
+    },
     orderBy: [{ date: "asc" }, { time: "asc" }],
     select: {
       id: true,
@@ -69,11 +80,17 @@ async function auditionPlan(projectId: string, range: DateRange, projectPath: st
 }
 
 /** Записи проб с датой. Самопробы не показываем: это не встреча в определённое время. */
-async function auditionTapes(projectId: string, range: DateRange, projectPath: string): Promise<PulledItem[]> {
+async function auditionTapes(
+  projectId: string,
+  range: DateRange,
+  projectPath: string,
+  personIds: string[] | null,
+): Promise<PulledItem[]> {
   const rows = await prisma.audition.findMany({
     where: {
       projectId,
       isSelfTape: false,
+      ...(personIds ? { actors: { some: { personId: { in: personIds } } } } : {}),
       date: { gte: parseDateKey(range.from), lte: parseDateKey(range.to) },
     },
     orderBy: [{ date: "asc" }, { time: "asc" }],
@@ -158,9 +175,10 @@ export async function listPulledItems(
   projectPath: string,
 ): Promise<PulledItem[]> {
   const [plan, tapes, kpp] = await Promise.all([
-    request.auditions ? auditionPlan(projectId, range, projectPath) : [],
-    request.auditions ? auditionTapes(projectId, range, projectPath) : [],
-    request.kpp ? kppPrepDays(projectId, timezone, range, projectPath) : [],
+    request.auditions ? auditionPlan(projectId, range, projectPath, request.personIds) : [],
+    request.auditions ? auditionTapes(projectId, range, projectPath, request.personIds) : [],
+    // У дня КПП нет людей: при фильтре по человеку его не показываем.
+    request.kpp && !request.personIds ? kppPrepDays(projectId, timezone, range, projectPath) : [],
   ]);
   return [...plan, ...tapes, ...kpp];
 }

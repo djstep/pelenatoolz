@@ -1,6 +1,7 @@
 "use client";
 
-import { useTransition, useState, type FormEvent } from "react";
+import { useEffect, useRef, useTransition, useState, type FormEvent } from "react";
+import type { CalendarConflict } from "@/features/prep-calendar/conflicts";
 import { deletePrepEventAction, savePrepEventAction } from "@/features/prep-calendar/event-actions";
 import {
   eventPlaceLabel,
@@ -82,6 +83,8 @@ function EventForm({
   const event = "event" in target ? target.event : null;
   const [values, setValues] = useState(() => initialValues(target, options));
   const [problem, setProblem] = useState<string | null>(null);
+  const [conflicts, setConflicts] = useState<CalendarConflict[] | null>(null);
+  const conflictsRef = useRef<HTMLDivElement>(null);
   const [pending, startTransition] = useTransition();
   const confirmDelete = useConfirm();
 
@@ -92,9 +95,19 @@ function EventForm({
   const types = options.types.filter((type) => !type.isHidden || type.id === event?.type.id);
   const locationName = event?.locationName ?? null;
 
+  // Предупреждение внизу длинной формы: показываем его, а не оставляем за краем окна.
+  useEffect(() => {
+    if (conflicts) conflictsRef.current?.scrollIntoView({ block: "nearest" });
+  }, [conflicts]);
+
   function submit(formEvent: FormEvent) {
     formEvent.preventDefault();
+    save(false);
+  }
+
+  function save(confirmOverlaps: boolean) {
     setProblem(null);
+    setConflicts(null);
     const byKind = (kind: CalendarParticipant["kind"]) =>
       values.participants.filter((person) => person.kind === kind).map((person) => person.id);
     startTransition(async () => {
@@ -113,7 +126,12 @@ function EventForm({
         actorIds: byKind("actor"),
         castingPersonIds: byKind("candidate"),
         departmentIds: values.departmentIds,
+        confirmOverlaps,
       });
+      if (result.conflicts) {
+        setConflicts(result.conflicts);
+        return;
+      }
       if (result.error) {
         setProblem(result.error);
         toast.error(result.error);
@@ -311,7 +329,43 @@ function EventForm({
         </p>
       ) : null}
 
-      <div className="flex flex-wrap items-center gap-3">
+      {conflicts ? (
+        <div
+          ref={conflictsRef}
+          role="alert"
+          className="space-y-2 rounded-lg border border-[var(--tone-warning-line)] bg-[var(--tone-warning-bg)] p-3"
+        >
+          <p className="text-sm font-semibold text-[var(--tone-warning)]">
+            Участники заняты в это время
+          </p>
+          <ul className="space-y-1 text-sm" data-testid="event-conflicts">
+            {conflicts.map((conflict) => (
+              <li key={conflict.key}>
+                <span className="font-semibold">{conflict.title}</span>
+                {conflict.source === "event" ? null : (
+                  <span className="text-[var(--muted-fg)]"> · из кастинга</span>
+                )}
+                <span className="text-[var(--fg-2)]"> — {conflict.when}</span>
+                {conflict.people.length > 0 ? (
+                  <span className="block text-xs text-[var(--muted-fg)]">
+                    {conflict.people.join(", ")}
+                  </span>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+          <div className="flex flex-wrap gap-2 pt-1">
+            <Button type="button" disabled={pending} onClick={() => save(true)}>
+              {pending ? "…" : "Сохранить всё равно"}
+            </Button>
+            <Button type="button" variant="secondary" onClick={() => setConflicts(null)}>
+              Вернуться
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
+      <div className={conflicts ? "hidden" : "flex flex-wrap items-center gap-3"}>
         <Button type="submit" disabled={pending}>
           {pending ? "…" : "Сохранить"}
         </Button>

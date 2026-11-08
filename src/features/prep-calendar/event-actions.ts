@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { findPrepEventConflicts, type CalendarConflict } from "@/features/prep-calendar/conflicts";
 import { toDateKey } from "@/features/actor-availability/lib/status";
 import {
   assertInProject,
@@ -19,7 +20,13 @@ import { AuditEntityType } from "@/shared/audit/entity-types";
 import { auditMutation } from "@/shared/audit/with-audit";
 import { prisma } from "@/shared/db/prisma";
 
-export type PrepEventActionResult = { error?: string; success?: string; eventId?: string };
+export type PrepEventActionResult = {
+  error?: string;
+  success?: string;
+  eventId?: string;
+  /** Не сохранено: участники заняты в это время. Повтор с `confirmOverlaps` сохранит. */
+  conflicts?: CalendarConflict[];
+};
 
 const NO_RIGHTS = "Недостаточно прав";
 const NOT_FOUND = "Событие не найдено — обновите страницу";
@@ -180,6 +187,21 @@ export async function savePrepEventAction(
     ...candidateIds.map((castingPersonId) => ({ castingPersonId })),
   ];
   const departments = data.departmentIds.map((departmentId) => ({ departmentId }));
+
+  // Предупреждение, а не запрет: после «Сохранить всё равно» проверка не повторяется.
+  if (!data.confirmOverlaps && participants.length > 0) {
+    const conflicts = await findPrepEventConflicts({
+      projectId,
+      timezone,
+      eventId: existing?.id ?? null,
+      range,
+      crewIds,
+      actorIds,
+      candidateIds,
+      canReadCast: rights.canReadCast,
+    });
+    if (conflicts.length > 0) return { conflicts };
+  }
 
   const summaryOf = (row: {
     title: string;

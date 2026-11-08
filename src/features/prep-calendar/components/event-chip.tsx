@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { parseDateKey } from "@/features/actor-availability/lib/status";
 import {
   isPulled,
   PULLED_LABELS,
@@ -8,24 +7,10 @@ import {
   type PulledItem,
 } from "@/features/prep-calendar/lib/calendar-types";
 import { prepEventColorStyle } from "@/features/prep-calendar/lib/event-colors";
-import { formatDateShort } from "@/shared/i18n/format-date";
+import { eventWhenLabel } from "@/features/prep-calendar/lib/calendar-format";
 import { cn } from "@/shared/lib/cn";
 
-function dayLabel(key: string): string {
-  return formatDateShort(parseDateKey(key), { utc: true });
-}
-
-type Span = Pick<CalendarItem, "allDay" | "startKey" | "endKey" | "startTime" | "endTime">;
-
-/** «10:00–11:00», «весь день», у многодневного — с датами. */
-export function eventWhenLabel(item: Span): string {
-  if (item.allDay) {
-    if (item.startKey === item.endKey) return "Весь день";
-    return `${dayLabel(item.startKey)} – ${dayLabel(item.endKey)}`;
-  }
-  if (item.startKey === item.endKey) return `${item.startTime}–${item.endTime}`;
-  return `${dayLabel(item.startKey)}, ${item.startTime} – ${dayLabel(item.endKey)}, ${item.endTime}`;
-}
+export { eventWhenLabel } from "@/features/prep-calendar/lib/calendar-format";
 
 /** Название места: объект из «Локаций» и уточнение текстом. */
 export function eventPlaceLabel(event: CalendarEvent): string | null {

@@ -108,7 +108,9 @@ test.afterAll(async () => {
 });
 
 /** Галочка спрятана внутри подписи: щёлкаем по подписи, как человек. */
-const toggle = (page: Page, label: string) => page.getByText(label, { exact: true }).click();
+// Только в рабочей части: в боковом меню есть вкладка «Пробы» с тем же словом.
+const toggle = (page: Page, label: string) =>
+  page.getByRole("main").locator("label").filter({ hasText: new RegExp(`^${label}$`) }).click();
 
 const pulledLink = (page: Page, text: RegExp) => page.getByRole("link", { name: text });
 
@@ -147,8 +149,10 @@ test.describe("продюсер", () => {
 
     // Переход на другую неделю переключатель не сбрасывает.
     await page.getByRole("link", { name: "Вперёд" }).click();
-    await expect(page).toHaveURL(/auditions=0/);
+    await expect(page).toHaveURL(/date=2026-12-14.*auditions=0|auditions=0.*date=2026-12-14/);
+    await expect(page.getByTestId("calendar-period")).toHaveText("14–20 дек. 2026 г.");
     await page.getByRole("link", { name: "Назад" }).click();
+    await expect(page.getByTestId("calendar-period")).toHaveText("7–13 дек. 2026 г.");
 
     await toggle(page, "Подготовительные дни КПП");
     await expect(page).toHaveURL(/kpp=0/);

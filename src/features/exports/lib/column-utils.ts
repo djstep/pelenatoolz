@@ -49,6 +49,7 @@ const EXPORT_LAYOUT_PERMISSIONS: Record<
   kppFull: { read: "schedule:read", write: "schedule:write" },
   kppShort: { read: "schedule:read", write: "schedule:write" },
   crew: { read: "crew:read", write: "crew:write" },
+  prepCalendar: { read: "calendar:read", write: "calendar:write" },
 };
 
 /**
