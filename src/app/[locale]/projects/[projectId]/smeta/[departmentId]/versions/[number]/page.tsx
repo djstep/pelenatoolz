@@ -4,6 +4,7 @@ import { getDepartmentVersion } from "@/features/smeta/approval-queries";
 import { BudgetDriveExport } from "@/features/smeta/components/budget-drive-export";
 import { BudgetExcelExportButton } from "@/features/smeta/components/budget-excel-export-button";
 import { getBudgetDriveButton } from "@/features/smeta/drive-queries";
+import { BudgetItemsVersionView } from "@/features/smeta/components/budget-items-version-view";
 import { BudgetVersionView } from "@/features/smeta/components/budget-version-view";
 import { formatRub } from "@/features/smeta/lib/money";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
@@ -47,23 +48,27 @@ export default async function BudgetVersionPage({ params }: Props) {
           <h2 className="font-display text-[27px] font-bold leading-tight">
             Смета — {department.name} · версия {version.number}
           </h2>
-          <div className="flex flex-wrap items-center gap-2">
-            <BudgetExcelExportButton
-              projectId={projectId}
-              departmentId={department.id}
-              version={version.number}
-            />
-            <BudgetDriveExport
-              projectId={projectId}
-              departmentId={department.id}
-              button={driveButton}
-              version={version.number}
-            />
-          </div>
+          {/* Выгрузка версии по статьям — шаг 8 волны; пока — только старые версии. */}
+          {version.format === "SHEET" ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <BudgetExcelExportButton
+                projectId={projectId}
+                departmentId={department.id}
+                version={version.number}
+              />
+              <BudgetDriveExport
+                projectId={projectId}
+                departmentId={department.id}
+                button={driveButton}
+                version={version.number}
+              />
+            </div>
+          ) : null}
         </div>
         <p className="text-sm text-[var(--muted-fg)]">
           Утверждена {formatDateTimeShort(version.approvedAt)}, {version.approvedByName}
-          {version.approvedByHead ? " (утвердил глава цеха)" : ""}. Статей: {version.itemCount},
+          {version.approvedByHead ? " (утвердил глава цеха)" : ""}.{" "}
+          {version.format === "ITEMS" ? "Строк" : "Статей"}: {version.itemCount},
           итого {formatRub(version.total)}. Только чтение — версию нельзя изменить.
         </p>
         {version.submitComment ? (
@@ -73,15 +78,19 @@ export default async function BudgetVersionPage({ params }: Props) {
           </p>
         ) : null}
       </div>
-      <BudgetVersionView
-        projectId={projectId}
-        department={department}
-        sheetBook={version.sheetBook}
-        lines={version.lines}
-        total={version.total}
-        title={`Версия ${version.number} — ${department.name}`}
-        versionsHref={versionsHref}
-      />
+      {version.format === "ITEMS" ? (
+        <BudgetItemsVersionView snapshot={version.snapshot} />
+      ) : (
+        <BudgetVersionView
+          projectId={projectId}
+          department={department}
+          sheetBook={version.sheetBook}
+          lines={version.lines}
+          total={version.total}
+          title={`Версия ${version.number} — ${department.name}`}
+          versionsHref={versionsHref}
+        />
+      )}
     </div>
   );
 }

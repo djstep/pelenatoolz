@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { listDepartmentVersions } from "@/features/smeta/approval-queries";
+import { BudgetVersionsCompareForm } from "@/features/smeta/components/budget-versions-compare-form";
 import { formatRub } from "@/features/smeta/lib/money";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { canReadDepartmentSmeta } from "@/features/smeta/lib/smeta-access";
@@ -32,6 +33,12 @@ export default async function BudgetVersionsPage({ params }: Props) {
         ← Смета цеха
       </Link>
       <h2 className="font-display text-[27px] font-bold leading-tight">Версии сметы — {department.name}</h2>
+      {versions.length >= 2 ? (
+        <BudgetVersionsCompareForm
+          versions={versions.map((v) => v.number)}
+          compareHref={`${departmentHref}/versions/compare`}
+        />
+      ) : null}
       <Card>
         {versions.length === 0 ? (
           <p className="text-sm text-[var(--muted-fg)]">
@@ -45,7 +52,7 @@ export default async function BudgetVersionsPage({ params }: Props) {
                   <th className="px-3 py-2 font-medium">Версия</th>
                   <th className="px-3 py-2 font-medium">Утверждена</th>
                   <th className="px-3 py-2 font-medium">Кто утвердил</th>
-                  <th className="px-3 py-2 text-right font-medium">Статей</th>
+                  <th className="px-3 py-2 text-right font-medium">Строк</th>
                   <th className="px-3 py-2 text-right font-medium">Итого</th>
                   <th className="px-3 py-2 font-medium">Комментарий главы</th>
                 </tr>

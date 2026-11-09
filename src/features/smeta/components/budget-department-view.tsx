@@ -8,10 +8,15 @@ import { BudgetDriveExport } from "@/features/smeta/components/budget-drive-expo
 import { BudgetExcelExportButton } from "@/features/smeta/components/budget-excel-export-button";
 import { BudgetItemsReference } from "@/features/smeta/components/budget-items-reference";
 import { BudgetItemsTable, type DirtyRows } from "@/features/smeta/components/budget-items-table";
-import { SmetaApprovalBanner, SmetaApprovalControls } from "@/features/smeta/components/smeta-approval-controls";
+import {
+  SmetaApprovalBanner,
+  SmetaApprovalControls,
+  SmetaVariableChangesBanner,
+} from "@/features/smeta/components/smeta-approval-controls";
 import type { BudgetDriveButton } from "@/features/smeta/drive-queries";
 import type { DepartmentItemsTree, ItemsDictionaries } from "@/features/smeta/items-queries";
 import type { BudgetClient } from "@/features/smeta/queries";
+import type { VariableChange } from "@/features/smeta/lib/items-snapshot";
 import { cn } from "@/shared/lib/cn";
 
 const SmetaSpreadsheetEditor = dynamic(
@@ -50,7 +55,16 @@ export function BudgetDepartmentView({
   hrefs: { list: string; items: string; drafts: string; settings: string | null };
   canWrite: boolean;
   revision: number;
-  approval?: { info: BudgetApprovalInfo; canApprove: boolean; reviewHref: string; versionsHref: string };
+  approval?: {
+    info: BudgetApprovalInfo;
+    /** Переменные, изменившиеся после утверждения (пометка над сметой). */
+    variableChanges: VariableChange[];
+    /** Пояс проекта: даты в плашке одинаковы на сервере и в браузере. */
+    timeZone: string;
+    canApprove: boolean;
+    reviewHref: string;
+    versionsHref: string;
+  };
   driveButton: BudgetDriveButton | null;
   items: { tree: DepartmentItemsTree; dictionaries: ItemsDictionaries } | null;
   drafts: { book: BudgetClient; unsavedSheetKeys: string[] } | null;
@@ -117,7 +131,11 @@ export function BudgetDepartmentView({
 
       {approval ? (
         <div className="overflow-hidden rounded-xl border border-[var(--border)] empty:hidden">
-          <SmetaApprovalBanner info={approval.info} />
+          <SmetaApprovalBanner info={approval.info} timeZone={approval.timeZone} />
+          <SmetaVariableChangesBanner
+            changes={approval.variableChanges}
+            versionNumber={approval.info.lastVersion?.number ?? null}
+          />
         </div>
       ) : null}
 

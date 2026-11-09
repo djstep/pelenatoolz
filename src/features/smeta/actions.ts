@@ -324,28 +324,13 @@ export async function submitBudgetAction(
   if (!parsed.success) return { error: "Некорректные данные" };
   const comment = parsed.data.comment?.trim() || null;
 
-  const result = await submitBudget({
+  const result = await submitBudget(ctx, {
     projectId,
     departmentId,
-    userId: ctx.user.id!,
     revision: parsed.data.revision,
     comment,
   });
   if (!result.ok) return { error: result.error };
-
-  await recordAudit(ctx, {
-    projectId,
-    entityType: AuditEntityType.budget,
-    entityId: result.budgetId,
-    action: "UPDATE",
-    summary: `Смета цеха «${await departmentName(projectId, departmentId)}» отправлена на утверждение`,
-    changes: {
-      revision: parsed.data.revision,
-      comment,
-      itemCount: result.itemCount,
-      total: result.total,
-    },
-  });
   revalidateSmeta(projectId, departmentId);
   return { success: "Смета отправлена на утверждение" };
 }
@@ -367,8 +352,9 @@ async function requireApprover(projectId: string, departmentId: unknown) {
 }
 
 /**
- * Утвердить смету (продюсер): неизменяемая версия из той ревизии, которую он видел.
- * Продюсер, который сам глава цеха, тоже может — в версии и аудите это отмечается.
+ * Утвердить смету (продюсер): неизменяемая версия из того снимка, который он видел на экране
+ * сравнения (отпечаток). Продюсер, который сам глава цеха, тоже может — в версии и журнале
+ * это отмечается.
  */
 export async function approveBudgetAction(
   projectId: string,
@@ -379,33 +365,17 @@ export async function approveBudgetAction(
   if (!access.ok) return { error: access.error };
   const { ctx } = access;
 
-  const parsed = z.object({ revision: z.number().int().min(0) }).safeParse(payload);
+  const parsed = z.object({ fingerprint: z.string().regex(/^[0-9a-f]{64}$/) }).safeParse(payload);
   if (!parsed.success) return { error: "Некорректные данные" };
 
   const approvedByHead = canEditDepartmentSmeta(ctx, departmentId);
-  const result = await approveBudget({
+  const result = await approveBudget(ctx, {
     projectId,
     departmentId,
-    userId: ctx.user.id!,
-    revision: parsed.data.revision,
+    fingerprint: parsed.data.fingerprint,
     approvedByHead,
   });
   if (!result.ok) return { error: result.error };
-
-  await recordAudit(ctx, {
-    projectId,
-    entityType: AuditEntityType.budgetVersion,
-    entityId: result.versionId,
-    action: "CREATE",
-    summary: `Смета цеха «${await departmentName(projectId, departmentId)}»: утверждена версия ${result.number}${approvedByHead ? " (утвердил глава цеха)" : ""}`,
-    changes: {
-      number: result.number,
-      revision: parsed.data.revision,
-      total: result.total,
-      itemCount: result.itemCount,
-      approvedByHead,
-    },
-  });
   revalidateSmeta(projectId, departmentId);
   return { success: `Утверждена версия ${result.number}`, number: result.number };
 }
@@ -425,17 +395,8 @@ export async function returnBudgetAction(
   const comment = parsed.data.comment.trim();
   if (!comment) return { error: "Напишите, что исправить" };
 
-  const result = await returnBudget({ projectId, departmentId, userId: ctx.user.id!, comment });
+  const result = await returnBudget(ctx, { projectId, departmentId, comment });
   if (!result.ok) return { error: result.error };
-
-  await recordAudit(ctx, {
-    projectId,
-    entityType: AuditEntityType.budget,
-    entityId: result.budgetId,
-    action: "UPDATE",
-    summary: `Смета цеха «${await departmentName(projectId, departmentId)}» возвращена главе`,
-    changes: { comment },
-  });
   revalidateSmeta(projectId, departmentId);
   return { success: "Смета возвращена главе" };
 }

@@ -43,9 +43,11 @@ export function formatDateLong(value: DateInput): string {
 }
 
 /** Дата и время с годом: «03 мар. 2026 г., 14:30» */
-export function formatDateTimeShort(value: DateInput): string {
+/** «10 нояб. 2026 г., 01:24». С поясом проекта — одинаково на сервере и в браузере. */
+export function formatDateTimeShort(value: DateInput, timeZone?: string | null): string {
   const d = toDate(value);
   return d.toLocaleString("ru-RU", {
+    ...(timeZone ? { timeZone } : {}),
     day: "2-digit",
     month: "short",
     year: "numeric",

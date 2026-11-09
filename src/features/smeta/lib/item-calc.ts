@@ -15,7 +15,7 @@ type Decimal = Prisma.Decimal;
 
 /** Наибольшая сумма строки: столбцы денег в базе — Decimal(18, 2). */
 export const MAX_LINE_MONEY = new D("9999999999999999.99");
-type DecimalLike = Prisma.Decimal | number | string;
+export type DecimalLike = Prisma.Decimal | number | string;
 
 /** Множитель строки: переменная проекта или своё число. Пустой слот — null. */
 export type ItemMultiplier = { variableId: string } | { value: DecimalLike };

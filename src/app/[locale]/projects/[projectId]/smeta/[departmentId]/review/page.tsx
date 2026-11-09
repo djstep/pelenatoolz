@@ -3,7 +3,9 @@ import { notFound } from "next/navigation";
 import { getBudgetReview } from "@/features/smeta/approval-queries";
 import { BudgetDiffTable } from "@/features/smeta/components/budget-diff-table";
 import { BudgetReviewActions } from "@/features/smeta/components/budget-review-actions";
+import { SmetaVariableChangesBanner } from "@/features/smeta/components/smeta-approval-controls";
 import { SmetaStatusBadge } from "@/features/smeta/components/smeta-status-badge";
+import { countOf } from "@/shared/lib/plural";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import {
   canApproveSmeta,
@@ -31,11 +33,12 @@ export default async function BudgetReviewPage({ params }: Props) {
   const review = await getBudgetReview(projectId, department.id);
   if (!review) notFound();
 
-  const { info, diff, nextNumber, sheetDiffers } = review;
+  const { info, diff, nextNumber, fingerprint, incomplete, lineCount, variableChanges } = review;
   const departmentHref = `/${locale}/projects/${projectId}/smeta/${department.id}`;
   const changedAfterSubmit = info.changedAfterSubmitAt !== null;
   const canApprove = canApproveSmeta(ctx);
-  const canApproveNow = canApprove && info.status === "SUBMITTED";
+  // Строки без суммы и пустая смета не утверждаются — сервер тоже откажет.
+  const canApproveNow = canApprove && info.status === "SUBMITTED" && incomplete === 0 && lineCount > 0;
   const canReturn = canApprove && (info.status === "SUBMITTED" || changedAfterSubmit);
   const beforeLabel = info.lastVersion
     ? `утверждённой версии ${info.lastVersion.number}`
@@ -55,6 +58,12 @@ export default async function BudgetReviewPage({ params }: Props) {
         />
       </div>
 
+      {variableChanges.length > 0 ? (
+        <div className="overflow-hidden rounded-xl border border-[var(--border)]">
+          <SmetaVariableChangesBanner changes={variableChanges} versionNumber={info.lastVersion?.number ?? null} />
+        </div>
+      ) : null}
+
       <Card className="space-y-3 text-sm">
         <p>
           {info.lastVersion ? (
@@ -69,7 +78,7 @@ export default async function BudgetReviewPage({ params }: Props) {
           ) : (
             <>
               Утверждённых версий нет: план цеха пуст, все траты пока идут как «без плана».
-              Ниже — все статьи черновика; утверждение создаст версию 1.
+              Ниже — все строки черновика; утверждение создаст версию 1.
             </>
           )}
         </p>
@@ -104,25 +113,19 @@ export default async function BudgetReviewPage({ params }: Props) {
           </p>
         ) : null}
 
-        {sheetDiffers.length > 0 ? (
-          <div className="rounded-md bg-[var(--row-warning)] px-3 py-2">
-            <p className="font-medium">
-              В листе есть суммы, не совпадающие с расчётом ({sheetDiffers.length}). В план и в
-              версию пойдёт расчёт по Кол-ву, Ставке, Дням и Налогу %:
-            </p>
-            <ul className="mt-1 list-disc space-y-0.5 pl-5">
-              {sheetDiffers.map((check, index) => (
-                <li key={`${check.row}-${index}`}>{check.message}</li>
-              ))}
-            </ul>
-          </div>
+        {incomplete > 0 ? (
+          <p className="rounded-md bg-[var(--row-warning)] px-3 py-2" data-review-incomplete>
+            В черновике {countOf(incomplete, ["строка", "строки", "строк"])} без суммы (не задана
+            переменная или нет кол-ва и ставки). Утвердить нельзя, пока глава их не заполнит или не
+            уберёт в архив.
+          </p>
         ) : null}
 
         {canApproveNow || canReturn ? (
           <BudgetReviewActions
             projectId={projectId}
             departmentId={department.id}
-            revision={info.revision}
+            fingerprint={fingerprint}
             nextNumber={nextNumber}
             canApproveNow={canApproveNow}
             canReturn={canReturn}

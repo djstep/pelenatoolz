@@ -4,7 +4,7 @@ import { CreateDepartmentBudgetButton } from "@/features/smeta/components/create
 import { BudgetDepartmentView } from "@/features/smeta/components/budget-department-view";
 import { getDepartmentDraftsBook } from "@/features/smeta/queries";
 import { getDepartmentItemsTree, getItemsDictionaries } from "@/features/smeta/items-queries";
-import { getBudgetApprovalInfo } from "@/features/smeta/approval-queries";
+import { getBudgetApprovalInfo, getVariableChangesSinceApproval } from "@/features/smeta/approval-queries";
 import { getBudgetDriveButton } from "@/features/smeta/drive-queries";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import {
@@ -74,8 +74,9 @@ export default async function DepartmentSmetaPage({ params, searchParams }: Prop
   }
 
   const tab = tabParam === "drafts" ? "drafts" : "items";
-  const [approvalInfo, driveButton, tree, dictionaries, drafts] = await Promise.all([
+  const [approvalInfo, variableChanges, driveButton, tree, dictionaries, drafts] = await Promise.all([
     getBudgetApprovalInfo(projectId, department.id),
+    getVariableChangesSinceApproval(projectId, department.id),
     getBudgetDriveButton(ctx, department.id),
     tab === "items" ? getDepartmentItemsTree(projectId, department.id) : Promise.resolve(null),
     tab === "items" ? getItemsDictionaries(projectId, budget.id) : Promise.resolve(null),
@@ -99,6 +100,8 @@ export default async function DepartmentSmetaPage({ params, searchParams }: Prop
         approvalInfo
           ? {
               info: approvalInfo,
+              variableChanges,
+              timeZone: ctx.project.timezone,
               canApprove: canApproveSmeta(ctx),
               reviewHref: `${departmentHref}/review`,
               versionsHref: `${departmentHref}/versions`,

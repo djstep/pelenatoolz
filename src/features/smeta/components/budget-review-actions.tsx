@@ -9,13 +9,14 @@ import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
 import { useToast } from "@/shared/ui/toast";
 
 /**
- * «Утвердить» и «Вернуть» для продюсера на экране сравнения. Утверждение передаёт ревизию,
- * которую продюсер видит на экране: если глава успел сохранить — сервер откажет.
+ * «Утвердить» и «Вернуть» для продюсера на экране сравнения. Утверждение передаёт отпечаток
+ * черновика, который продюсер видит на экране: если строки или переменные успели измениться —
+ * сервер откажет.
  */
 export function BudgetReviewActions({
   projectId,
   departmentId,
-  revision,
+  fingerprint,
   nextNumber,
   canApproveNow,
   canReturn,
@@ -23,7 +24,7 @@ export function BudgetReviewActions({
 }: {
   projectId: string;
   departmentId: string;
-  revision: number;
+  fingerprint: string;
   nextNumber: number;
   canApproveNow: boolean;
   canReturn: boolean;
@@ -49,7 +50,7 @@ export function BudgetReviewActions({
               confirmLabel: "Утвердить",
               tone: "primary",
               action: async () => {
-                const result = await approveBudgetAction(projectId, departmentId, { revision });
+                const result = await approveBudgetAction(projectId, departmentId, { fingerprint });
                 if (result.error) return result.error;
                 toast.success(result.success ?? "Утверждено");
                 router.push(`${versionsHref}/${result.number}`);
@@ -70,7 +71,7 @@ export function BudgetReviewActions({
         open={returnOpen}
         onClose={() => setReturnOpen(false)}
         title="Вернуть смету главе"
-        description="Глава увидит комментарий над листом сметы и в списке смет."
+        description="Глава увидит комментарий над сметой и в списке смет."
         label="Что исправить *"
         required
         submitLabel="Вернуть"

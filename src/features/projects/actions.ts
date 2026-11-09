@@ -45,6 +45,7 @@ import { PROJECT_CREATION_CLOSED_MESSAGE } from "@/features/auth/lib/registratio
 import { canCreateProjects } from "@/features/auth/lib/registration-gate";
 import { defaultPrepEventTypeRows } from "@/features/prep-calendar/lib/default-event-types";
 import { createBudgetDefaults } from "@/features/smeta/lib/budget-defaults";
+import { recalcItemsAfterVariables, revalidateSmetaPages } from "@/features/smeta/items-recalc";
 import { getDefaultProjectRoles } from "@/features/roles/default-roles";
 import { parsePermissionMatrix } from "@/features/roles/permissions-matrix";
 import {
@@ -311,26 +312,37 @@ export async function updateProjectAction(
   }
 
   const type = parsed.data.type;
-  await prisma.project.update({
-    where: { id: projectId },
-    data: {
-      ...data,
-      startDate: clearableDate(data.startDate),
-      endDate: clearableDate(data.endDate),
-      episodeCount:
-        type === ProjectType.SERIES
-          ? data.episodeCount
-          : type != null
-            ? null
-            : undefined,
-      episodeRuntimeMin:
-        type === ProjectType.SERIES
-          ? data.episodeRuntimeMin
-          : type != null
-            ? null
-            : undefined,
-    },
-  });
+  // Смены и серии — значения СМЕНЫ и СЕРИИ, если у переменных нет своего: если они изменились,
+  // суммы смет пересчитываются в той же транзакции.
+  await prisma.$transaction(async (tx) => {
+    const counts = { shootingDaysCount: true, episodeCount: true } as const;
+    const before = await tx.project.findUnique({ where: { id: projectId }, select: counts });
+    const after = await tx.project.update({
+      select: counts,
+      where: { id: projectId },
+      data: {
+        ...data,
+        startDate: clearableDate(data.startDate),
+        endDate: clearableDate(data.endDate),
+        episodeCount:
+          type === ProjectType.SERIES
+            ? data.episodeCount
+            : type != null
+              ? null
+              : undefined,
+        episodeRuntimeMin:
+          type === ProjectType.SERIES
+            ? data.episodeRuntimeMin
+            : type != null
+              ? null
+              : undefined,
+      },
+    });
+    if (before?.shootingDaysCount !== after.shootingDaysCount || before?.episodeCount !== after.episodeCount) {
+      await recalcItemsAfterVariables(tx, { user: { id: user.id! } }, projectId, "изменились параметры проекта (смены, серии)");
+    }
+  }, { timeout: 20_000 });
+  revalidateSmetaPages(projectId);
 
   await recordAudit({ user: { id: user.id! } }, {
     projectId,

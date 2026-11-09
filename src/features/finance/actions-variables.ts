@@ -11,9 +11,10 @@ import {
 import { parseOptionalVariableValue } from "@/features/finance/lib/percent";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { canEditBudgetDictionaries } from "@/features/smeta/lib/smeta-access";
+import { recalcItemsAfterVariables, revalidateSmetaPages } from "@/features/smeta/items-recalc";
 import { prisma } from "@/shared/db/prisma";
 import { AuditEntityType } from "@/shared/audit/entity-types";
-import { recordAudit } from "@/shared/audit/with-audit";
+import { auditMutation, recordAudit } from "@/shared/audit/with-audit";
 
 export type FinanceVariableActionState = {
   error?: string;
@@ -23,6 +24,7 @@ export type FinanceVariableActionState = {
 function revalidate(projectId: string) {
   revalidatePath(`/ru/projects/${projectId}/finance`);
   revalidatePath(`/ru/projects/${projectId}/finance/settings`);
+  revalidateSmetaPages(projectId);
 }
 
 /** Значение переменной: пусто — не задано (null, не 0), иначе число от 0. */
@@ -73,32 +75,36 @@ export async function upsertSystemFinanceVariableAction(
 
   const def = SYSTEM_FINANCE_VARIABLES.find((v) => v.key === key)!;
 
-  await prisma.projectFinanceVariable.upsert({
-    where: { projectId_key: { projectId, key } },
-    create: {
+  // Значение и пересчёт смет — одной транзакцией: строки не видят полуизменённого состояния.
+  await prisma.$transaction(async (tx) => {
+    await tx.projectFinanceVariable.upsert({
+      where: { projectId_key: { projectId, key } },
+      create: {
+        projectId,
+        key,
+        label: def.label,
+        value: parsed.data.value,
+        isSystem: true,
+        sortOrder: def.sortOrder,
+        notes: parsed.data.notes ?? null,
+      },
+      update: {
+        value: parsed.data.value,
+        notes: parsed.data.notes ?? null,
+        label: def.label,
+        isSystem: true,
+      },
+    });
+    // Запись журнала — в той же транзакции: значение без записи не останется.
+    await auditMutation(ctx, async () => null, undefined, {
       projectId,
-      key,
-      label: def.label,
-      value: parsed.data.value,
-      isSystem: true,
-      sortOrder: def.sortOrder,
-      notes: parsed.data.notes ?? null,
-    },
-    update: {
-      value: parsed.data.value,
-      notes: parsed.data.notes ?? null,
-      label: def.label,
-      isSystem: true,
-    },
-  });
-
-  await recordAudit(ctx, {
-    projectId,
-    entityType: AuditEntityType.financeVariable,
-    entityId: key,
-    action: "UPDATE",
-    summary: `Переменная ${def.label} = ${valueText(parsed.data.value)}`,
-  });
+      entityType: AuditEntityType.financeVariable,
+      entityId: key,
+      action: "UPDATE",
+      summary: `Переменная ${def.label} = ${valueText(parsed.data.value)}`,
+    }, { db: tx });
+    await recalcItemsAfterVariables(tx, ctx, projectId, `переменная ${def.label} = ${valueText(parsed.data.value)}`);
+  }, { timeout: 20_000 });
 
   revalidate(projectId);
   return { success: "Сохранено" };
@@ -115,23 +121,30 @@ export async function resetSystemFinanceVariableAction(
   }
 
   // Системная переменная остаётся (на неё ссылаются строки сметы): очищается только значение.
-  await prisma.projectFinanceVariable.updateMany({
-    where: { projectId, key, isSystem: true },
-    data: { value: null },
-  });
-
   // У СМЕНЫ и СЕРИИ пустое значение берётся из параметров проекта, у остальных — не задано.
   const def = SYSTEM_FINANCE_VARIABLES.find((v) => v.key === key)!;
   const fromProject = def.projectField != null;
-  await recordAudit(ctx, {
-    projectId,
-    entityType: AuditEntityType.financeVariable,
-    entityId: key,
-    action: "UPDATE",
-    summary: fromProject
-      ? `Сброс переменной ${def.label} к параметрам проекта`
-      : `Значение переменной ${def.label} очищено`,
-  });
+  await prisma.$transaction(async (tx) => {
+    await tx.projectFinanceVariable.updateMany({
+      where: { projectId, key, isSystem: true },
+      data: { value: null },
+    });
+    await auditMutation(ctx, async () => null, undefined, {
+      projectId,
+      entityType: AuditEntityType.financeVariable,
+      entityId: key,
+      action: "UPDATE",
+      summary: fromProject
+        ? `Сброс переменной ${def.label} к параметрам проекта`
+        : `Значение переменной ${def.label} очищено`,
+    }, { db: tx });
+    await recalcItemsAfterVariables(
+      tx,
+      ctx,
+      projectId,
+      fromProject ? `переменная ${def.label} — из параметров проекта` : `переменная ${def.label} очищена`,
+    );
+  }, { timeout: 20_000 });
 
   revalidate(projectId);
   return { success: fromProject ? "Сброшено к параметрам проекта" : "Значение очищено" };
@@ -210,22 +223,24 @@ export async function updateCustomFinanceVariableAction(
   });
   if (!parsed.success) return { error: "Проверьте данные" };
 
-  await prisma.projectFinanceVariable.update({
-    where: { id: variableId },
-    data: {
-      label: parsed.data.label,
-      value: parsed.data.value,
-      notes: parsed.data.notes ?? null,
-    },
-  });
-
-  await recordAudit(ctx, {
-    projectId,
-    entityType: AuditEntityType.financeVariable,
-    entityId: variableId,
-    action: "UPDATE",
-    summary: `Переменная ${parsed.data.label} = ${valueText(parsed.data.value)}`,
-  });
+  await prisma.$transaction(async (tx) => {
+    await tx.projectFinanceVariable.update({
+      where: { id: variableId },
+      data: {
+        label: parsed.data.label,
+        value: parsed.data.value,
+        notes: parsed.data.notes ?? null,
+      },
+    });
+    await auditMutation(ctx, async () => null, undefined, {
+      projectId,
+      entityType: AuditEntityType.financeVariable,
+      entityId: variableId,
+      action: "UPDATE",
+      summary: `Переменная ${parsed.data.label} = ${valueText(parsed.data.value)}`,
+    }, { db: tx });
+    await recalcItemsAfterVariables(tx, ctx, projectId, `переменная ${parsed.data.label} = ${valueText(parsed.data.value)}`);
+  }, { timeout: 20_000 });
 
   revalidate(projectId);
   return { success: "Сохранено" };

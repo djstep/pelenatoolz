@@ -28,7 +28,7 @@ const KIND_ROW: Record<DiffRow["kind"], string> = {
 
 function fieldValue(values: DiffValues, field: DiffField): string {
   const v = values[field];
-  if (v === null || v === "") return "—";
+  if (v == null || v === "") return "—";
   if (typeof v === "number") {
     return field === "amount" || field === "tax" || field === "total" || field === "rate"
       ? formatRub(v)
@@ -52,7 +52,7 @@ function BeforeAfter({ row, field }: { row: DiffRow; field: "amount" | "total" }
   );
 }
 
-/** Сравнение «последняя утверждённая версия ↔ черновик» по статьям. */
+/** Сравнение «версия ↔ черновик» или двух версий по строкам. Внутренних кодов на экране нет. */
 export function BudgetDiffTable({
   diff,
   beforeLabel,
@@ -80,7 +80,7 @@ export function BudgetDiffTable({
         <span className="text-[var(--muted-fg)]">Без изменений: {diff.counts.same}</span>
         <span className="ml-auto">
           <Checkbox checked={showSame} onChange={(e) => setShowSame(e.currentTarget.checked)}>
-            Показать статьи без изменений
+            Показать строки без изменений
           </Checkbox>
         </span>
       </div>
@@ -91,10 +91,9 @@ export function BudgetDiffTable({
         </p>
       ) : (
         <div className="overflow-x-auto rounded-lg border border-[var(--border)]">
-          <table className="w-full min-w-[760px] text-sm">
+          <table className="w-full min-w-[680px] text-sm">
             <thead className="bg-[var(--glass-table-head)] text-left text-xs text-[var(--muted-fg)]">
               <tr>
-                <th className="px-3 py-2 font-medium">Код</th>
                 <th className="px-3 py-2 font-medium">Наименование</th>
                 <th className="px-3 py-2 font-medium">Что</th>
                 <th className="px-3 py-2 text-right font-medium">Сумма</th>
@@ -113,7 +112,6 @@ export function BudgetDiffTable({
                     key={row.itemId}
                     className={cn("border-t border-[var(--border)]/60 align-top", KIND_ROW[row.kind])}
                   >
-                    <td className="px-3 py-2 tabular-nums text-xs whitespace-nowrap">{row.code}</td>
                     <td className="px-3 py-2">
                       {row.fields.includes("name") && row.before && row.after ? (
                         <>
@@ -122,12 +120,15 @@ export function BudgetDiffTable({
                           </span>{" "}
                           → <span className="font-medium">{row.after.name || "—"}</span>
                           <span className="block text-xs text-[var(--muted-fg)]">
-                            переименование — код и связи с платежами те же
+                            переименование — связи с начислениями и платежами те же
                           </span>
                         </>
                       ) : (
                         values.name || "—"
                       )}
+                      {values.group ? (
+                        <span className="block text-xs text-[var(--muted-fg)]">{values.group}</span>
+                      ) : null}
                     </td>
                     <td className="px-3 py-2 whitespace-nowrap">
                       {KIND_LABEL[row.kind]}
@@ -148,13 +149,6 @@ export function BudgetDiffTable({
                           {fieldValue(row.after!, f)}
                         </span>
                       ))}
-                      {row.codeChangePair ? (
-                        <span className="block text-[var(--muted-fg)]">
-                          {row.kind === "removed"
-                            ? `Похоже на смену кода → ${row.codeChangePair}. Факт по ${row.code} останется на старой статье.`
-                            : `Похоже на смену кода: было ${row.codeChangePair}.`}
-                        </span>
-                      ) : null}
                     </td>
                   </tr>
                 );

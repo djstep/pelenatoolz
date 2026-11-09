@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { submitBudgetAction } from "@/features/smeta/actions";
 import type { BudgetApprovalInfo } from "@/features/smeta/approval-queries";
+import type { VariableChange } from "@/features/smeta/lib/items-snapshot";
 import { BudgetCommentModal } from "@/features/smeta/components/budget-comment-modal";
 import { SmetaStatusBadge } from "@/features/smeta/components/smeta-status-badge";
 import { formatDateTimeShort } from "@/shared/i18n/format-date";
@@ -92,13 +93,13 @@ export function SmetaApprovalControls({
 }
 
 /** Плашка под шапкой: возврат с комментарием, «изменена после отправки», «на утверждении». */
-export function SmetaApprovalBanner({ info }: { info: BudgetApprovalInfo }) {
+export function SmetaApprovalBanner({ info, timeZone }: { info: BudgetApprovalInfo; timeZone?: string | null }) {
   if (info.status === "RETURNED" && info.returnComment) {
     return (
       <div className="border-b border-[var(--tone-danger-line)] bg-[var(--tone-danger-bg)] px-4 py-2 text-sm">
         <span className="font-medium">
           Возвращена{info.returnedByName ? ` — ${info.returnedByName}` : ""}
-          {info.returnedAt ? `, ${formatDateTimeShort(info.returnedAt)}` : ""}:
+          {info.returnedAt ? `, ${formatDateTimeShort(info.returnedAt, timeZone)}` : ""}:
         </span>{" "}
         <span className="whitespace-pre-wrap">«{info.returnComment}»</span>
       </div>
@@ -107,7 +108,7 @@ export function SmetaApprovalBanner({ info }: { info: BudgetApprovalInfo }) {
   if (info.status === "DRAFT" && info.changedAfterSubmitAt) {
     return (
       <div className="border-b border-[var(--tone-warning-line)] bg-[var(--tone-warning-bg)] px-4 py-2 text-sm">
-        Смету изменили после отправки ({formatDateTimeShort(info.changedAfterSubmitAt)}) — она
+        Смету изменили после отправки ({formatDateTimeShort(info.changedAfterSubmitAt, timeZone)}) — она
         снова черновик. Продюсер видит её в списке, но утвердить сможет после повторной
         отправки.
       </div>
@@ -117,7 +118,7 @@ export function SmetaApprovalBanner({ info }: { info: BudgetApprovalInfo }) {
     return (
       <div className="border-b border-[var(--tone-info-line)] bg-[var(--tone-info-bg)] px-4 py-2 text-sm">
         На утверждении
-        {info.submittedAt ? ` с ${formatDateTimeShort(info.submittedAt)}` : ""}
+        {info.submittedAt ? ` с ${formatDateTimeShort(info.submittedAt, timeZone)}` : ""}
         {info.submittedByName ? ` (отправил ${info.submittedByName})` : ""}
         {info.submitComment ? (
           <>
@@ -129,4 +130,39 @@ export function SmetaApprovalBanner({ info }: { info: BudgetApprovalInfo }) {
     );
   }
   return null;
+}
+
+function variableValueText(value: string | null): string {
+  return value == null ? "не задана" : value.replace(".", ",");
+}
+
+/**
+ * Пометка «изменилась после утверждения»: значения переменных в строках сметы теперь не те, что
+ * в утверждённой версии. Версия не меняется, черновик уже пересчитан.
+ */
+export function SmetaVariableChangesBanner({
+  changes,
+  versionNumber,
+}: {
+  changes: readonly VariableChange[];
+  versionNumber: number | null;
+}) {
+  if (changes.length === 0) return null;
+  return (
+    <div
+      className="border-b border-[var(--tone-warning-line)] bg-[var(--tone-warning-bg)] px-4 py-2 text-sm"
+      data-variables-changed
+    >
+      <span className="font-medium">
+        Изменилась после утверждения{versionNumber ? ` версии ${versionNumber}` : ""}:
+      </span>{" "}
+      {changes.map((c, index) => (
+        <span key={c.label}>
+          {index > 0 ? ", " : ""}
+          {c.label} {variableValueText(c.before)} → {variableValueText(c.after)}
+        </span>
+      ))}
+      . Суммы черновика пересчитаны, утверждённая версия не изменилась.
+    </div>
+  );
 }

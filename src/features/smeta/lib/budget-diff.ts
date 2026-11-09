@@ -16,11 +16,17 @@ export type DiffValues = {
   tax: number;
   total: number;
   sortOrder: number;
+  /** Смета по статьям: «Статья / Подстатья» — где строка (не сравнивается). */
+  group?: string;
+  /** Смета по статьям: тип расхода, множители текстом со значениями, форма оплаты. */
+  expenseType?: string | null;
+  multipliers?: string | null;
+  paymentForm?: string | null;
 };
 
 export type DiffSource = DiffValues & { itemId: string };
 
-export type DiffField = Exclude<keyof DiffValues, "code" | "sortOrder">;
+export type DiffField = Exclude<keyof DiffValues, "code" | "sortOrder" | "group">;
 
 export const DIFF_FIELD_LABELS: Record<DiffField, string> = {
   name: "Наименование",
@@ -28,6 +34,9 @@ export const DIFF_FIELD_LABELS: Record<DiffField, string> = {
   quantity: "Кол-во",
   rate: "Ставка",
   days: "Дни/смены",
+  expenseType: "Тип",
+  multipliers: "Множители",
+  paymentForm: "Форма оплаты",
   amount: "Сумма",
   taxPercent: "Налог, %",
   tax: "Налог",
@@ -57,13 +66,25 @@ export type BudgetDiff = {
   empty: boolean;
 };
 
-function sameValue(a: string | number | null, b: string | number | null) {
+function sameValue(a: string | number | null | undefined, b: string | number | null | undefined) {
   if (typeof a === "number" && typeof b === "number") return Math.abs(a - b) < 0.00005;
   return (a ?? null) === (b ?? null);
 }
 
 function round2(n: number) {
   return Math.round((n + Number.EPSILON) * 100) / 100;
+}
+
+/**
+ * Сравнение для браузера: внутренние коды строк на экран не идут — убираем их из данных,
+ * которые уходят в клиентский компонент.
+ */
+export function withoutCodes(diff: BudgetDiff): BudgetDiff {
+  const strip = (v: DiffValues | null) => (v ? { ...v, code: "" } : null);
+  return {
+    ...diff,
+    rows: diff.rows.map((r) => ({ ...r, code: "", codeChangePair: null, before: strip(r.before), after: strip(r.after) })),
+  };
 }
 
 /** before — строки последней версии (или пусто), after — активные статьи черновика. */

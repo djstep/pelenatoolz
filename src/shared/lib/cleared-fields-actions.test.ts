@@ -68,6 +68,10 @@ mock.module("@/features/projects/lib/owner", {
 mock.module("@/features/cloud/lib/drive-access-sync", {
   namedExports: { scheduleProjectDriveAccessSync: () => {} },
 });
+// Пересчёт смет после смены параметров проекта проверяется отдельно (e2e c32).
+mock.module("@/features/smeta/items-recalc", {
+  namedExports: { recalcItemsAfterVariables: async () => 0, revalidateSmetaPages: () => {} },
+});
 mock.module("server-only", { namedExports: {} });
 mock.module("next/cache", { namedExports: { revalidatePath: () => {} } });
 mock.module("next/navigation", { namedExports: { redirect: () => {} } });

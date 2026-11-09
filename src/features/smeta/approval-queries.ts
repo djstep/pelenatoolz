@@ -1,32 +1,110 @@
 import "server-only";
 
-import { BudgetStatus, Prisma } from "@prisma/client";
+import { createHash } from "node:crypto";
+import { BudgetStatus, BudgetVersionFormat, Prisma } from "@prisma/client";
+import { AuditEntityType } from "@/shared/audit/entity-types";
+import { auditMutation, type AuditContext } from "@/shared/audit/with-audit";
 import { prisma } from "@/shared/db/prisma";
+import { loadBudgetVariables } from "@/features/smeta/items-queries";
+import { lockBudget, type BudgetClient, type Tx } from "@/features/smeta/queries";
+import { diffBudget, withoutCodes, type BudgetDiff, type DiffSource } from "@/features/smeta/lib/budget-diff";
 import {
-  analyzeWithProject,
-  lockBudget,
-  type BudgetClient,
-  type Tx,
-} from "@/features/smeta/queries";
-import { diffBudget, type DiffSource } from "@/features/smeta/lib/budget-diff";
-import { freezeSheetFormulas } from "@/features/smeta/lib/version-snapshot";
-import {
-  assembleWorkbookFromSheets,
-  type UniverWorksheetData,
-} from "@/features/smeta/lib/workbook-model";
-import {
-  findMainColumns,
-  type MainSheetLike,
-  type SmetaCheck,
-} from "@/features/smeta/lib/main-sheet";
+  buildItemsSnapshot,
+  changedVariables,
+  parseItemsSnapshot,
+  snapshotDiffSources,
+  snapshotVariableIds,
+  type ItemsSnapshot,
+  type SnapshotVariable,
+  type VariableChange,
+} from "@/features/smeta/lib/items-snapshot";
+import { assembleWorkbookFromSheets, type UniverWorksheetData } from "@/features/smeta/lib/workbook-model";
 
 /**
- * Утверждение смет цехов: отправка главой, утверждение и возврат продюсером, версии.
- * Все переходы — в транзакции под блокировкой строки сметы (`lockBudget`), как и сохранение:
- * они не перемешиваются, и продюсер утверждает ровно ту ревизию, которую видел.
+ * Утверждение смет цехов по статьям: отправка главой, утверждение и возврат продюсером, версии.
+ * Все переходы — в транзакции под блокировкой строки сметы (`lockBudget`), запись журнала —
+ * в той же транзакции. Продюсер утверждает ровно то, что видел: экран сравнения отдаёт отпечаток
+ * снимка (строки и значения переменных), утверждение сверяет его заново.
  */
 
-const lineSelect = {
+type Db = Pick<
+  Tx,
+  "budgetArticle" | "budgetVersion" | "project" | "projectFinanceVariable"
+>;
+
+// ---------------------------------------------------------------------------
+// Снимок черновика и версии
+// ---------------------------------------------------------------------------
+
+/** Снимок действующих статей, подстатей и строк сметы по действующим значениям переменных. */
+export async function loadItemsSnapshot(db: Db, projectId: string, budgetId: string): Promise<ItemsSnapshot> {
+  const [variables, articles] = await Promise.all([
+    loadBudgetVariables(projectId, db),
+    db.budgetArticle.findMany({
+      where: { projectId, budgetId, archivedAt: null },
+      orderBy: [{ templateArticle: { sortOrder: "asc" } }, { templateArticle: { number: "asc" } }],
+      select: {
+        id: true,
+        templateArticleId: true,
+        templateArticle: { select: { name: true } },
+        subarticles: {
+          where: { archivedAt: null },
+          orderBy: [{ sortOrder: "asc" }, { number: "asc" }],
+          select: {
+            id: true,
+            name: true,
+            items: {
+              where: { archivedAt: null },
+              orderBy: [{ sortOrder: "asc" }, { number: "asc" }],
+              select: {
+                id: true,
+                code: true,
+                name: true,
+                unit: true,
+                quantity: true,
+                rate: true,
+                taxPercent: true,
+                expenseType: { select: { name: true } },
+                paymentForm: { select: { name: true } },
+                multiplier1VariableId: true,
+                multiplier1Value: true,
+                multiplier2VariableId: true,
+                multiplier2Value: true,
+                multiplier3VariableId: true,
+                multiplier3Value: true,
+              },
+            },
+          },
+        },
+      },
+    }),
+  ]);
+  return buildItemsSnapshot(
+    articles.map((a) => ({
+      id: a.id,
+      templateArticleId: a.templateArticleId,
+      name: a.templateArticle.name,
+      subarticles: a.subarticles.map((s) => ({
+        id: s.id,
+        name: s.name,
+        items: s.items.map(({ expenseType, paymentForm, ...item }) => ({
+          ...item,
+          expenseType: expenseType?.name ?? null,
+          paymentForm: paymentForm?.name ?? null,
+        })),
+      })),
+    })),
+    variables,
+  );
+}
+
+/** Отпечаток снимка: тот же снимок — тот же отпечаток. */
+export function snapshotFingerprint(snapshot: ItemsSnapshot): string {
+  return createHash("sha256").update(JSON.stringify(snapshot)).digest("hex");
+}
+
+const versionLineSelect = {
+  budgetItemId: true,
   code: true,
   name: true,
   unit: true,
@@ -40,27 +118,16 @@ const lineSelect = {
   sortOrder: true,
 } as const;
 
-type LineRow = {
-  code: string;
-  name: string;
-  unit: string | null;
-  quantity: Prisma.Decimal | null;
-  rate: Prisma.Decimal | null;
-  days: Prisma.Decimal | null;
-  amount: Prisma.Decimal;
-  taxPercent: Prisma.Decimal | null;
-  tax: Prisma.Decimal;
-  total: Prisma.Decimal;
-  sortOrder: number;
-};
+type VersionLineRow = Prisma.BudgetVersionLineGetPayload<{ select: typeof versionLineSelect }>;
 
 function num(d: Prisma.Decimal | null): number | null {
   return d === null ? null : Number(d);
 }
 
-function toDiffSource(itemId: string, row: LineRow): DiffSource {
+/** Строка старой версии (табличный формат) для сравнения. */
+function sheetLineSource(row: VersionLineRow): DiffSource {
   return {
-    itemId,
+    itemId: row.budgetItemId,
     code: row.code,
     name: row.name,
     unit: row.unit,
@@ -75,143 +142,137 @@ function toDiffSource(itemId: string, row: LineRow): DiffSource {
   };
 }
 
-type Db = Pick<Tx, "budgetItem" | "budgetVersion">;
+type VersionForDiff = { format: BudgetVersionFormat; snapshot: Prisma.JsonValue; lines: VersionLineRow[] };
 
-/** Активные статьи черновика и последняя утверждённая версия цеха (со строками). */
-async function draftAndLastVersion(db: Db, projectId: string, departmentId: string) {
-  const items = await db.budgetItem.findMany({
-    where: { projectId, departmentId, archivedAt: null },
-    select: { id: true, ...lineSelect },
-    orderBy: { sortOrder: "asc" },
-  });
-  const version = await db.budgetVersion.findFirst({
+/** Строки версии для сравнения: снимок новой сметы или строки старой. */
+export function versionSources(v: VersionForDiff): DiffSource[] {
+  if (v.format === BudgetVersionFormat.ITEMS) {
+    const snapshot = parseItemsSnapshot(v.snapshot);
+    return snapshot ? snapshotDiffSources(snapshot) : [];
+  }
+  return v.lines.map(sheetLineSource);
+}
+
+export async function lastVersion(db: Pick<Tx, "budgetVersion">, projectId: string, departmentId: string) {
+  return db.budgetVersion.findFirst({
     where: { projectId, departmentId },
     orderBy: { number: "desc" },
     select: {
       number: true,
       approvedAt: true,
       approvedByName: true,
-      approvedByHead: true,
-      lines: { select: { budgetItemId: true, ...lineSelect } },
+      format: true,
+      snapshot: true,
+      lines: { select: versionLineSelect, orderBy: { sortOrder: "asc" } },
     },
   });
-  const diff = diffBudget(
-    version?.lines.map((l) => toDiffSource(l.budgetItemId, l)) ?? [],
-    items.map((i) => toDiffSource(i.id, i)),
-  );
-  return { items, version, diff };
 }
+
+/** Сколько строк без суммы мешает отправке и утверждению — словами. */
+function incompleteError(snapshot: ItemsSnapshot): string | null {
+  const n = snapshot.totals.incomplete;
+  if (n === 0) return null;
+  const word = n % 10 === 1 && n % 100 !== 11 ? "строка" : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? "строки" : "строк";
+  return `В смете ${n} ${word} без суммы (не задана переменная или нет кол-ва и ставки) — заполните их или уберите в архив`;
+}
+
+// ---------------------------------------------------------------------------
+// Отправка, утверждение, возврат
+// ---------------------------------------------------------------------------
 
 type Fail = { ok: false; error: string };
 
 const NOT_FOUND: Fail = { ok: false, error: "Смета не найдена" };
 
-async function lockedBudgetId(tx: Tx, projectId: string, departmentId: string) {
+async function lockedBudget(tx: Tx, projectId: string, departmentId: string) {
   const found = await tx.budget.findFirst({
     where: { projectId, departmentId },
-    select: { id: true },
+    select: { id: true, department: { select: { name: true } } },
   });
   if (!found) return null;
   await lockBudget(tx, found.id);
-  return found.id;
+  return { id: found.id, departmentName: found.department.name };
 }
 
 /** Отправить смету на утверждение (глава). */
-export async function submitBudget(input: {
-  projectId: string;
-  departmentId: string;
-  userId: string;
-  revision: number;
-  comment: string | null;
-}): Promise<Fail | { ok: true; budgetId: string; itemCount: number; total: number }> {
+export async function submitBudget(
+  ctx: AuditContext,
+  input: { projectId: string; departmentId: string; revision: number; comment: string | null },
+): Promise<Fail | { ok: true }> {
   const { projectId, departmentId } = input;
   return prisma.$transaction(
     async (tx) => {
-      const budgetId = await lockedBudgetId(tx, projectId, departmentId);
-      if (!budgetId) return NOT_FOUND;
+      const locked = await lockedBudget(tx, projectId, departmentId);
+      if (!locked) return NOT_FOUND;
       const budget = await tx.budget.findUniqueOrThrow({
-        where: { id: budgetId },
-        select: {
-          status: true,
-          revision: true,
-          mainSheet: { select: { data: { select: { data: true } } } },
-        },
+        where: { id: locked.id },
+        select: { status: true, revision: true },
       });
-      if (budget.status === BudgetStatus.SUBMITTED) {
-        return { ok: false, error: "Смета уже на утверждении" } as const;
-      }
+      if (budget.status === BudgetStatus.SUBMITTED) return { ok: false, error: "Смета уже на утверждении" } as const;
       if (budget.status === BudgetStatus.APPROVED) {
-        return {
-          ok: false,
-          error: "Смета утверждена, изменений после утверждения нет — отправлять нечего",
-        } as const;
+        return { ok: false, error: "Смета утверждена, изменений после утверждения нет — отправлять нечего" } as const;
       }
       if (budget.revision !== input.revision) {
-        return {
-          ok: false,
-          error: "Смета ещё сохраняется или изменилась — подождите сохранения и отправьте снова",
-        } as const;
+        return { ok: false, error: "Смета ещё сохраняется или изменилась — подождите сохранения и отправьте снова" } as const;
       }
 
-      const analysis = await analyzeWithProject(
-        tx,
-        projectId,
-        departmentId,
-        (budget.mainSheet?.data?.data as MainSheetLike | undefined) ?? null,
-      );
-      if (analysis.broken) {
-        return {
-          ok: false,
-          error: "Заголовки основного листа повреждены — восстановите их перед отправкой",
-        } as const;
+      const snapshot = await loadItemsSnapshot(tx, projectId, locked.id);
+      if (snapshot.lineCount === 0) return { ok: false, error: "В смете нет строк — отправлять нечего" } as const;
+      const incomplete = incompleteError(snapshot);
+      if (incomplete) return { ok: false, error: incomplete } as const;
+      const last = await lastVersion(tx, projectId, departmentId);
+      if (last && diffBudget(versionSources(last), snapshotDiffSources(snapshot)).empty) {
+        return { ok: false, error: `Отличий от утверждённой версии ${last.number} нет — отправлять нечего` } as const;
       }
 
-      const { items, version, diff } = await draftAndLastVersion(tx, projectId, departmentId);
-      if (items.length === 0) {
-        return { ok: false, error: "В смете нет статей — отправлять нечего" } as const;
-      }
-      if (version && diff.empty) {
-        return {
-          ok: false,
-          error: `Отличий от утверждённой версии ${version.number} нет — отправлять нечего`,
-        } as const;
-      }
-
-      await tx.budget.update({
-        where: { id: budgetId },
-        data: {
-          status: BudgetStatus.SUBMITTED,
-          submittedAt: new Date(),
-          submittedById: input.userId,
-          submitComment: input.comment,
-          submittedRevision: budget.revision,
-          changedAfterSubmitAt: null,
+      await auditMutation(
+        ctx,
+        () =>
+          tx.budget.update({
+            where: { id: locked.id },
+            data: {
+              status: BudgetStatus.SUBMITTED,
+              submittedAt: new Date(),
+              submittedById: ctx.user.id,
+              submitComment: input.comment,
+              submittedRevision: budget.revision,
+              changedAfterSubmitAt: null,
+            },
+          }),
+        undefined,
+        {
+          projectId,
+          entityType: AuditEntityType.budget,
+          entityId: locked.id,
+          action: "UPDATE",
+          summary: `Смета цеха «${locked.departmentName}» отправлена на утверждение`,
+          changes: {
+            revision: budget.revision,
+            comment: input.comment,
+            itemCount: snapshot.lineCount,
+            total: snapshot.totals.total,
+          },
         },
-      });
-      return { ok: true, budgetId, itemCount: items.length, total: diff.totalAfter } as const;
+        { db: tx },
+      );
+      return { ok: true } as const;
     },
     { timeout: 20_000 },
   );
 }
 
-/** Утвердить смету (продюсер): создать неизменяемую версию из ревизии, которую он видел. */
-export async function approveBudget(input: {
-  projectId: string;
-  departmentId: string;
-  userId: string;
-  revision: number;
-  approvedByHead: boolean;
-}): Promise<
-  | Fail
-  | { ok: true; budgetId: string; versionId: string; number: number; total: number; itemCount: number }
-> {
+/** Утвердить смету (продюсер): неизменяемая версия ровно из того снимка, который он видел. */
+export async function approveBudget(
+  ctx: AuditContext,
+  input: { projectId: string; departmentId: string; fingerprint: string; approvedByHead: boolean },
+): Promise<Fail | { ok: true; number: number }> {
   const { projectId, departmentId } = input;
   return prisma.$transaction(
     async (tx) => {
-      const budgetId = await lockedBudgetId(tx, projectId, departmentId);
-      if (!budgetId) return NOT_FOUND;
+      const locked = await lockedBudget(tx, projectId, departmentId);
+      if (!locked) return NOT_FOUND;
       const budget = await tx.budget.findUniqueOrThrow({
-        where: { id: budgetId },
+        where: { id: locked.id },
         select: {
           status: true,
           revision: true,
@@ -220,8 +281,6 @@ export async function approveBudget(input: {
           submittedById: true,
           submitComment: true,
           submittedBy: { select: { name: true } },
-          styles: true,
-          mainSheet: { select: { name: true, data: { select: { data: true } } } },
         },
       });
       if (budget.status !== BudgetStatus.SUBMITTED) {
@@ -232,69 +291,91 @@ export async function approveBudget(input: {
             : "Смета не на утверждении",
         } as const;
       }
-      if (budget.revision !== input.revision) {
+
+      const snapshot = await loadItemsSnapshot(tx, projectId, locked.id);
+      if (snapshotFingerprint(snapshot) !== input.fingerprint) {
         return {
           ok: false,
-          error: "Смету изменили после того, как вы её открыли — обновите страницу",
+          error: "Смета или значения переменных изменились после того, как вы её открыли — обновите страницу",
         } as const;
       }
-      const sheetData = budget.mainSheet?.data?.data as MainSheetLike | undefined;
-      if (!budget.mainSheet || !sheetData) {
-        return { ok: false, error: "Основной лист сметы не найден" } as const;
-      }
-      const analysis = await analyzeWithProject(tx, projectId, departmentId, sheetData);
-      if (analysis.broken) {
-        return { ok: false, error: "Заголовки основного листа повреждены" } as const;
-      }
+      if (snapshot.lineCount === 0) return { ok: false, error: "В смете нет строк" } as const;
+      const incomplete = incompleteError(snapshot);
+      if (incomplete) return { ok: false, error: incomplete } as const;
 
-      const { items, version: last } = await draftAndLastVersion(tx, projectId, departmentId);
-      if (items.length === 0) return { ok: false, error: "В смете нет статей" } as const;
-
-      const approver = await tx.user.findUniqueOrThrow({
-        where: { id: input.userId },
-        select: { name: true },
+      const approver = await tx.user.findUniqueOrThrow({ where: { id: ctx.user.id }, select: { name: true } });
+      const last = await tx.budgetVersion.findFirst({
+        where: { projectId, departmentId },
+        orderBy: { number: "desc" },
+        select: { number: true },
       });
-      const total = items.reduce((sum, i) => sum.plus(i.total), new Prisma.Decimal(0));
       const number = (last?.number ?? 0) + 1;
+      // Строки плана — точными Decimal из строк снимка (не через число JS).
+      const lines = snapshot.articles.flatMap((a) => a.subarticles.flatMap((s) => s.lines));
+      const dec = (v: string | null) => (v == null ? null : new Prisma.Decimal(v));
 
-      const version = await tx.budgetVersion.create({
-        data: {
+      await auditMutation(
+        ctx,
+        () =>
+          tx.budgetVersion.create({
+            data: {
+              projectId,
+              departmentId,
+              budgetId: locked.id,
+              number,
+              revision: budget.revision,
+              approvedById: ctx.user.id,
+              approvedByName: approver.name,
+              approvedByHead: input.approvedByHead,
+              submittedById: budget.submittedById,
+              submittedByName: budget.submittedBy?.name ?? null,
+              submittedAt: budget.submittedAt,
+              submitComment: budget.submitComment,
+              total: new Prisma.Decimal(snapshot.totals.total),
+              itemCount: snapshot.lineCount,
+              format: BudgetVersionFormat.ITEMS,
+              snapshot: snapshot as unknown as Prisma.InputJsonValue,
+              // Строки версии — план цеха для плана/факта (по id строки).
+              lines: {
+                create: lines.map((l, index) => ({
+                  budgetItemId: l.id,
+                  code: l.code,
+                  name: l.name,
+                  unit: l.unit,
+                  quantity: dec(l.quantity),
+                  rate: dec(l.rate),
+                  days: null,
+                  // Строки без суммы до утверждения не доходят (проверка выше).
+                  amount: dec(l.amount) ?? new Prisma.Decimal(0),
+                  taxPercent: dec(l.taxPercent),
+                  tax: dec(l.tax) ?? new Prisma.Decimal(0),
+                  total: dec(l.total) ?? new Prisma.Decimal(0),
+                  sortOrder: index,
+                })),
+              },
+            },
+            select: { id: true },
+          }),
+        undefined,
+        {
           projectId,
-          departmentId,
-          budgetId,
-          number,
-          revision: budget.revision,
-          approvedById: input.userId,
-          approvedByName: approver.name,
-          approvedByHead: input.approvedByHead,
-          submittedById: budget.submittedById,
-          submittedByName: budget.submittedBy?.name ?? null,
-          submittedAt: budget.submittedAt,
-          submitComment: budget.submitComment,
-          total,
-          itemCount: items.length,
-          sheetName: budget.mainSheet.name,
-          // Картинка версии совпадает со строками: Сумма/Налог/Итого — серверный расчёт.
-          sheetData: freezeSheetFormulas(
-            sheetData,
-            findMainColumns(sheetData).columns,
-            items.map((i) => ({
-              row: i.sortOrder,
-              amount: Number(i.amount),
-              tax: Number(i.tax),
-              total: Number(i.total),
-            })),
-          ) as Prisma.InputJsonValue,
-          styles: (budget.styles ?? {}) as Prisma.InputJsonValue,
-          lines: {
-            create: items.map(({ id, ...line }) => ({ budgetItemId: id, ...line })),
+          entityType: AuditEntityType.budgetVersion,
+          action: "CREATE",
+          entityId: (_input, r) => r.id,
+          summary: `Смета цеха «${locked.departmentName}»: утверждена версия ${number}${input.approvedByHead ? " (утвердил глава цеха)" : ""}`,
+          changes: {
+            number,
+            total: snapshot.totals.total,
+            itemCount: snapshot.lineCount,
+            approvedByHead: input.approvedByHead,
+            variables: Object.fromEntries(snapshot.variables.map((v) => [v.label, v.value])),
           },
         },
-        select: { id: true },
-      });
+        { db: tx },
+      );
 
       await tx.budget.update({
-        where: { id: budgetId },
+        where: { id: locked.id },
         data: {
           status: BudgetStatus.APPROVED,
           submittedAt: null,
@@ -304,54 +385,63 @@ export async function approveBudget(input: {
           changedAfterSubmitAt: null,
         },
       });
-      return {
-        ok: true,
-        budgetId,
-        versionId: version.id,
-        number,
-        total: Number(total),
-        itemCount: items.length,
-      } as const;
+      return { ok: true, number } as const;
     },
     { timeout: 20_000 },
   );
 }
 
 /** Вернуть смету главе с комментарием (продюсер). */
-export async function returnBudget(input: {
-  projectId: string;
-  departmentId: string;
-  userId: string;
-  comment: string;
-}): Promise<Fail | { ok: true; budgetId: string }> {
+export async function returnBudget(
+  ctx: AuditContext,
+  input: { projectId: string; departmentId: string; comment: string },
+): Promise<Fail | { ok: true }> {
   const { projectId, departmentId } = input;
   return prisma.$transaction(async (tx) => {
-    const budgetId = await lockedBudgetId(tx, projectId, departmentId);
-    if (!budgetId) return NOT_FOUND;
+    const locked = await lockedBudget(tx, projectId, departmentId);
+    if (!locked) return NOT_FOUND;
     const budget = await tx.budget.findUniqueOrThrow({
-      where: { id: budgetId },
+      where: { id: locked.id },
       select: { status: true, changedAfterSubmitAt: true },
     });
     if (budget.status !== BudgetStatus.SUBMITTED && !budget.changedAfterSubmitAt) {
       return { ok: false, error: "Смета не на утверждении" } as const;
     }
-    await tx.budget.update({
-      where: { id: budgetId },
-      data: {
-        status: BudgetStatus.RETURNED,
-        returnedAt: new Date(),
-        returnedById: input.userId,
-        returnComment: input.comment,
-        submittedAt: null,
-        submittedById: null,
-        submitComment: null,
-        submittedRevision: null,
-        changedAfterSubmitAt: null,
+    await auditMutation(
+      ctx,
+      () =>
+        tx.budget.update({
+          where: { id: locked.id },
+          data: {
+            status: BudgetStatus.RETURNED,
+            returnedAt: new Date(),
+            returnedById: ctx.user.id,
+            returnComment: input.comment,
+            submittedAt: null,
+            submittedById: null,
+            submitComment: null,
+            submittedRevision: null,
+            changedAfterSubmitAt: null,
+          },
+        }),
+      undefined,
+      {
+        projectId,
+        entityType: AuditEntityType.budget,
+        entityId: locked.id,
+        action: "UPDATE",
+        summary: `Смета цеха «${locked.departmentName}» возвращена главе`,
+        changes: { comment: input.comment },
       },
-    });
-    return { ok: true, budgetId } as const;
+      { db: tx },
+    );
+    return { ok: true } as const;
   });
 }
+
+// ---------------------------------------------------------------------------
+// Чтение: статус, сравнение, версии
+// ---------------------------------------------------------------------------
 
 const approvalSelect = {
   id: true,
@@ -380,18 +470,8 @@ export type BudgetApprovalInfo = {
 };
 
 function toApprovalInfo(
-  budget: {
-    status: BudgetStatus;
-    revision: number;
-    submittedAt: Date | null;
-    submitComment: string | null;
-    submittedBy: { name: string } | null;
-    changedAfterSubmitAt: Date | null;
-    returnedAt: Date | null;
-    returnComment: string | null;
-    returnedBy: { name: string } | null;
-  },
-  lastVersion: { number: number; approvedAt: Date; approvedByName: string } | null,
+  budget: Prisma.BudgetGetPayload<{ select: typeof approvalSelect }>,
+  last: { number: number; approvedAt: Date; approvedByName: string } | null,
 ): BudgetApprovalInfo {
   return {
     status: budget.status,
@@ -403,22 +483,15 @@ function toApprovalInfo(
     returnedAt: budget.returnedAt?.toISOString() ?? null,
     returnedByName: budget.returnedBy?.name ?? null,
     returnComment: budget.returnComment,
-    lastVersion: lastVersion
-      ? {
-          number: lastVersion.number,
-          approvedAt: lastVersion.approvedAt.toISOString(),
-          approvedByName: lastVersion.approvedByName,
-        }
+    lastVersion: last
+      ? { number: last.number, approvedAt: last.approvedAt.toISOString(), approvedByName: last.approvedByName }
       : null,
   };
 }
 
-/** Статус сметы для шапки редактора. */
+/** Статус сметы для шапки. */
 export async function getBudgetApprovalInfo(projectId: string, departmentId: string) {
-  const budget = await prisma.budget.findFirst({
-    where: { projectId, departmentId },
-    select: approvalSelect,
-  });
+  const budget = await prisma.budget.findFirst({ where: { projectId, departmentId }, select: approvalSelect });
   if (!budget) return null;
   const last = await prisma.budgetVersion.findFirst({
     where: { projectId, departmentId },
@@ -429,36 +502,54 @@ export async function getBudgetApprovalInfo(projectId: string, departmentId: str
 }
 
 /**
- * Экран сравнения: статус, ревизия и разница «последняя версия ↔ черновик» — одним снимком
- * базы (RepeatableRead), чтобы показанная разница точно соответствовала ревизии.
+ * Пометка «изменилась после утверждения»: переменные в строках утверждённой версии или
+ * черновика, у которых значение сейчас другое, чем при утверждении.
+ */
+function variableChangesOf(last: VersionForDiff | null, current: readonly SnapshotVariable[], draft: ItemsSnapshot): VariableChange[] {
+  if (!last || last.format !== BudgetVersionFormat.ITEMS) return [];
+  const approved = parseItemsSnapshot(last.snapshot);
+  if (!approved) return [];
+  const used = new Set([...snapshotVariableIds(approved), ...snapshotVariableIds(draft)]);
+  return changedVariables(approved.variables, current, used);
+}
+
+/** Переменные, изменившиеся после утверждения, — для плашки на экране сметы цеха. */
+export async function getVariableChangesSinceApproval(projectId: string, departmentId: string): Promise<VariableChange[]> {
+  return prisma.$transaction(
+    async (tx) => {
+      const budget = await tx.budget.findFirst({ where: { projectId, departmentId }, select: { id: true } });
+      if (!budget) return [];
+      const last = await lastVersion(tx, projectId, departmentId);
+      if (!last || last.format !== BudgetVersionFormat.ITEMS) return [];
+      const draft = await loadItemsSnapshot(tx, projectId, budget.id);
+      return variableChangesOf(last, draft.variables, draft);
+    },
+    { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead, timeout: 20_000 },
+  );
+}
+
+/**
+ * Экран сравнения: статус, разница «последняя версия ↔ черновик» и отпечаток черновика —
+ * одним снимком базы (RepeatableRead), чтобы утверждался ровно показанный черновик.
  */
 export async function getBudgetReview(projectId: string, departmentId: string) {
   return prisma.$transaction(
     async (tx) => {
-      const budget = await tx.budget.findFirst({
-        where: { projectId, departmentId },
-        select: {
-          ...approvalSelect,
-          mainSheet: { select: { data: { select: { data: true } } } },
-        },
-      });
+      const budget = await tx.budget.findFirst({ where: { projectId, departmentId }, select: approvalSelect });
       if (!budget) return null;
-      const { version, diff } = await draftAndLastVersion(tx, projectId, departmentId);
-      // «Вручную X, по расчёту Y»: в план идёт расчёт, продюсер должен это видеть.
-      const analysis = await analyzeWithProject(
-        tx,
-        projectId,
-        departmentId,
-        (budget.mainSheet?.data?.data as MainSheetLike | undefined) ?? null,
-      );
-      const sheetDiffers: SmetaCheck[] = analysis.checks.filter(
-        (c) => c.kind === "sheet_differs",
-      );
+      const [last, draft] = await Promise.all([
+        lastVersion(tx, projectId, departmentId),
+        loadItemsSnapshot(tx, projectId, budget.id),
+      ]);
+      const diff = withoutCodes(diffBudget(last ? versionSources(last) : [], snapshotDiffSources(draft)));
       return {
-        info: toApprovalInfo(budget, version),
+        info: toApprovalInfo(budget, last),
         diff,
-        nextNumber: (version?.number ?? 0) + 1,
-        sheetDiffers,
+        nextNumber: (last?.number ?? 0) + 1,
+        fingerprint: snapshotFingerprint(draft),
+        incomplete: draft.totals.incomplete,
+        lineCount: draft.lineCount,
+        variableChanges: variableChangesOf(last, draft.variables, draft),
       };
     },
     { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead, timeout: 20_000 },
@@ -479,43 +570,73 @@ export async function listDepartmentVersions(projectId: string, departmentId: st
       submitComment: true,
       total: true,
       itemCount: true,
+      format: true,
     },
   });
-  return rows.map((r) => ({
-    ...r,
-    approvedAt: r.approvedAt.toISOString(),
-    total: Number(r.total),
-  }));
+  return rows.map((r) => ({ ...r, approvedAt: r.approvedAt.toISOString(), total: Number(r.total) }));
 }
 
 export type VersionLine = DiffSource;
 
-/** Одна версия: строки и снимок листа как книга Univer только для показа. */
+const versionSelect = {
+  id: true,
+  number: true,
+  approvedAt: true,
+  approvedByName: true,
+  approvedByHead: true,
+  submittedByName: true,
+  submittedAt: true,
+  submitComment: true,
+  total: true,
+  itemCount: true,
+  format: true,
+  snapshot: true,
+  sheetName: true,
+  sheetData: true,
+  styles: true,
+  lines: { select: versionLineSelect, orderBy: { sortOrder: "asc" } },
+} as const;
+
+type VersionMeta = {
+  number: number;
+  approvedAt: string;
+  approvedByName: string;
+  approvedByHead: boolean;
+  submittedByName: string | null;
+  submittedAt: string | null;
+  submitComment: string | null;
+  total: number;
+  itemCount: number;
+};
+
+export type DepartmentVersion =
+  | (VersionMeta & { format: "ITEMS"; snapshot: ItemsSnapshot })
+  | (VersionMeta & { format: "SHEET"; lines: DiffSource[]; sheetBook: BudgetClient });
+
+/** Одна версия: снимок сметы по статьям или (старый формат) строки и лист только для показа. */
 export async function getDepartmentVersion(
   projectId: string,
   departmentId: string,
   number: number,
-) {
-  const v = await prisma.budgetVersion.findFirst({
-    where: { projectId, departmentId, number },
-    select: {
-      id: true,
-      number: true,
-      approvedAt: true,
-      approvedByName: true,
-      approvedByHead: true,
-      submittedByName: true,
-      submittedAt: true,
-      submitComment: true,
-      total: true,
-      itemCount: true,
-      sheetName: true,
-      sheetData: true,
-      styles: true,
-      lines: { select: { budgetItemId: true, ...lineSelect }, orderBy: { sortOrder: "asc" } },
-    },
-  });
+): Promise<DepartmentVersion | null> {
+  const v = await prisma.budgetVersion.findFirst({ where: { projectId, departmentId, number }, select: versionSelect });
   if (!v) return null;
+  const meta: VersionMeta = {
+    number: v.number,
+    approvedAt: v.approvedAt.toISOString(),
+    approvedByName: v.approvedByName,
+    approvedByHead: v.approvedByHead,
+    submittedByName: v.submittedByName,
+    submittedAt: v.submittedAt?.toISOString() ?? null,
+    submitComment: v.submitComment,
+    total: Number(v.total),
+    itemCount: v.itemCount,
+  };
+  if (v.format === BudgetVersionFormat.ITEMS) {
+    const snapshot = parseItemsSnapshot(v.snapshot);
+    if (!snapshot) return null;
+    return { ...meta, format: "ITEMS", snapshot };
+  }
 
   // Книга версии: id начинается с «version-» — сервер такую книгу никогда не сохраняет.
   const data = (v.sheetData ?? {}) as UniverWorksheetData;
@@ -537,18 +658,22 @@ export async function getDepartmentVersion(
     workbook,
     sheetsMeta: [{ id: sheetKey, name: v.sheetName ?? "Смета", sortOrder: 0, pinned: false }],
   };
+  return { ...meta, format: "SHEET", lines: v.lines.map(sheetLineSource), sheetBook };
+}
 
-  return {
-    number: v.number,
-    approvedAt: v.approvedAt.toISOString(),
-    approvedByName: v.approvedByName,
-    approvedByHead: v.approvedByHead,
-    submittedByName: v.submittedByName,
-    submittedAt: v.submittedAt?.toISOString() ?? null,
-    submitComment: v.submitComment,
-    total: Number(v.total),
-    itemCount: v.itemCount,
-    lines: v.lines.map((l) => toDiffSource(l.budgetItemId, l)),
-    sheetBook,
-  };
+/** Сравнение двух версий цеха: что добавлено, удалено, изменено (по суммам и полям). */
+export async function compareDepartmentVersions(
+  projectId: string,
+  departmentId: string,
+  before: number,
+  after: number,
+): Promise<{ before: number; after: number; diff: BudgetDiff } | null> {
+  const rows = await prisma.budgetVersion.findMany({
+    where: { projectId, departmentId, number: { in: [before, after] } },
+    select: { number: true, format: true, snapshot: true, lines: { select: versionLineSelect, orderBy: { sortOrder: "asc" } } },
+  });
+  const a = rows.find((r) => r.number === before);
+  const b = rows.find((r) => r.number === after);
+  if (!a || !b) return null;
+  return { before, after, diff: withoutCodes(diffBudget(versionSources(a), versionSources(b))) };
 }
