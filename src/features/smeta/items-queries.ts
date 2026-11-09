@@ -12,6 +12,7 @@ import {
   type Totals,
   type VariableValues,
 } from "@/features/smeta/lib/item-calc";
+import { ACTIVE_BUDGET_ITEM } from "@/features/smeta/lib/item-where";
 import { prisma } from "@/shared/db/prisma";
 
 type Db = { project: Pick<typeof prisma.project, "findUnique">; projectFinanceVariable: Pick<typeof prisma.projectFinanceVariable, "findMany"> };
@@ -223,4 +224,118 @@ export async function getDepartmentItemsTree(
     totals: serializeTotals(sumTotals(articleTotals)),
     variables,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Справочники для экрана сметы цеха
+// ---------------------------------------------------------------------------
+
+export type ItemsDictionaries = {
+  /** Статьи шаблона, которые можно взять: действующие и ещё не взятые этим цехом. */
+  templates: { id: string; name: string }[];
+  expenseTypes: { id: string; name: string; archived: boolean }[];
+  paymentForms: { id: string; name: string; defaultTaxPercent: string | null; archived: boolean }[];
+};
+
+/**
+ * Справочники для ввода строк: только чтение. Архивные типы и формы отдаются, чтобы строки,
+ * где они уже стоят, показывались с названием; выбрать их заново экран не даёт.
+ */
+export async function getItemsDictionaries(projectId: string, budgetId: string): Promise<ItemsDictionaries> {
+  const [templates, taken, expenseTypes, paymentForms] = await Promise.all([
+    prisma.budgetTemplateArticle.findMany({
+      where: { projectId, archivedAt: null },
+      orderBy: [{ sortOrder: "asc" }, { number: "asc" }],
+      select: { id: true, name: true },
+    }),
+    prisma.budgetArticle.findMany({
+      where: { projectId, budgetId, archivedAt: null },
+      select: { templateArticleId: true },
+    }),
+    prisma.projectExpenseType.findMany({
+      where: { projectId },
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+      select: { id: true, name: true, archivedAt: true },
+    }),
+    prisma.projectPaymentForm.findMany({
+      where: { projectId },
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+      select: { id: true, name: true, defaultTaxPercent: true, archivedAt: true },
+    }),
+  ]);
+  const takenIds = new Set(taken.map((t) => t.templateArticleId));
+  return {
+    templates: templates.filter((t) => !takenIds.has(t.id)),
+    expenseTypes: expenseTypes.map((t) => ({ id: t.id, name: t.name, archived: t.archivedAt !== null })),
+    paymentForms: paymentForms.map((f) => ({
+      id: f.id,
+      name: f.name,
+      defaultTaxPercent: f.defaultTaxPercent?.toString() ?? null,
+      archived: f.archivedAt !== null,
+    })),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Итоги смет цехов для списка — пересчётом, а не из сохранённых сумм строк
+// ---------------------------------------------------------------------------
+
+export type DepartmentItemTotals = {
+  /** Итого по действующим строкам с суммой. */
+  total: string;
+  /** Действующих строк. */
+  count: number;
+  /** Строк без суммы (не задана переменная, нет кол-ва или ставки): в итог не вошли. */
+  incomplete: number;
+};
+
+/**
+ * Итоги смет по статьям для нескольких цехов: строки считаются заново по действующим
+ * значениям переменных (как в дереве сметы). Записи старого табличного формата не входят.
+ */
+export async function departmentItemTotals(
+  projectId: string,
+  departmentIds: readonly string[],
+): Promise<Map<string, DepartmentItemTotals>> {
+  if (departmentIds.length === 0) return new Map();
+  const [variables, items] = await Promise.all([
+    loadBudgetVariables(projectId),
+    prisma.budgetItem.findMany({
+      where: {
+        projectId,
+        departmentId: { in: [...departmentIds] },
+        subarticleId: { not: null },
+        ...ACTIVE_BUDGET_ITEM,
+      },
+      select: {
+        departmentId: true,
+        quantity: true,
+        rate: true,
+        taxPercent: true,
+        multiplier1VariableId: true,
+        multiplier1Value: true,
+        multiplier2VariableId: true,
+        multiplier2Value: true,
+        multiplier3VariableId: true,
+        multiplier3Value: true,
+      },
+    }),
+  ]);
+  const values = variableValueMap(variables);
+  const byDepartment = new Map<string, ItemCalc[]>();
+  for (const item of items) {
+    const calc = calcItem(
+      { quantity: item.quantity, rate: item.rate, multipliers: multipliersOf(item), taxPercent: item.taxPercent },
+      values,
+    );
+    const list = byDepartment.get(item.departmentId) ?? [];
+    list.push(calc);
+    byDepartment.set(item.departmentId, list);
+  }
+  return new Map(
+    [...byDepartment].map(([departmentId, calcs]) => {
+      const t = sumCalcs(calcs);
+      return [departmentId, { total: t.total.toFixed(2), count: calcs.length, incomplete: t.incomplete }];
+    }),
+  );
 }

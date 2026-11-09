@@ -294,6 +294,7 @@ export function SmetaSpreadsheetEditor({
   mode = "draft",
   title,
   driveButton = null,
+  unsavedSheetKeys,
 }: {
   projectId: string;
   department: { id: string; name: string; codePrefix: string };
@@ -304,13 +305,27 @@ export function SmetaSpreadsheetEditor({
   listHref: string;
   /** Статус утверждения черновика и ссылки на сравнение и версии. */
   approval?: SmetaApprovalProps;
-  /** «version» — просмотр утверждённой версии: только чтение, без сохранения и проверок. */
-  mode?: "draft" | "version" | "summary";
+  /**
+   * «version» — просмотр утверждённой версии: только чтение, без сохранения и проверок.
+   * «drafts» — вкладка «Черновики» сметы по статьям: только листы-черновики, без основного листа,
+   * проверок, автокода и утверждения (смета ведётся статьями, а не листом).
+   */
+  mode?: "draft" | "drafts" | "version" | "summary";
   title?: string;
   /** «На диск…» сметы цеха: null — права выгружать нет. */
   driveButton?: BudgetDriveButton | null;
+  /** Листы, которых ещё нет на сервере (пустой черновик при открытии): уйдут с первым сохранением. */
+  unsavedSheetKeys?: string[];
 }) {
-  const canWrite = mode === "draft" ? canWriteProp : false;
+  const editable = mode === "draft" || mode === "drafts";
+  const canWrite = editable ? canWriteProp : false;
+  const unsavedKeysRef = useRef(new Set(unsavedSheetKeys ?? []));
+  /** Точка отсчёта при открытии: листы, которых нет на сервере, считаются новыми. */
+  function openedBaseline(parts: WorkbookParts): Baseline {
+    const base = baselineOf(parts);
+    for (const key of unsavedKeysRef.current) base.sheets.delete(key);
+    return base;
+  }
   const [approvalInfo, setApprovalInfo] = useState(approval?.info);
   const [approvalProp, setApprovalProp] = useState(approval?.info);
   if (approval?.info !== approvalProp) {
@@ -365,18 +380,16 @@ export function SmetaSpreadsheetEditor({
   const [activeSheetId, setActiveSheetId] = useState<string | null>(
     budget.workbook.sheetOrder?.[0] ?? null,
   );
-  const [navCollapsed, setNavCollapsed] = useState(false);
+  // Редактор открывается только в браузере (без отрисовки на сервере) — память читается сразу.
+  const [navCollapsed, setNavCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem(`smeta-nav-collapsed:${budget.id}`) === "1";
+    } catch {
+      return false;
+    }
+  });
   const [freezeRows, setFreezeRows] = useState(0);
   const [freezeCols, setFreezeCols] = useState(0);
-
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(`smeta-nav-collapsed:${budget.id}`);
-      if (raw === "1") setNavCollapsed(true);
-    } catch {
-      /* ignore */
-    }
-  }, [budget.id]);
 
   function toggleNavCollapsed() {
     setNavCollapsed((prev) => {
@@ -556,6 +569,7 @@ export function SmetaSpreadsheetEditor({
     }
 
     baselineRef.current = baselineOf(parts);
+    unsavedKeysRef.current.clear();
     revisionRef.current = result.revision;
     // Правка во время утверждения или после него — смета снова черновик (решает сервер).
     setApprovalInfo((prev) =>
@@ -628,12 +642,12 @@ export function SmetaSpreadsheetEditor({
   // Несохранённые правки и идущее сохранение — в общем механизме: предупреждение браузера
   // при закрытии вкладки и вопрос при переходе по ссылке. Только черновик у главы цеха.
   useEffect(() => {
-    if (mode !== "draft" || !canWrite) return;
+    if (!editable || !canWrite) return;
     return unsaved.register(
       () => !conflictRef.current && (dirtyRef.current || inFlightRef.current !== null),
       async () => (await flushSaveRef.current()) !== null && !dirtyRef.current,
     );
-  }, [mode, canWrite, unsaved]);
+  }, [editable, canWrite, unsaved]);
 
   /** Импорт .xlsx: досохранить правки, отправить файл, перезагрузить книгу с новыми листами. */
   async function importExcel(file: File) {
@@ -994,7 +1008,7 @@ export function SmetaSpreadsheetEditor({
         // правкой и уходило на сервер с первым же сохранением.
         if (canWriteRef.current) {
           const parts = currentParts();
-          if (parts) baselineRef.current = baselineOf(parts);
+          if (parts) baselineRef.current = openedBaseline(parts);
           const openedRevision = revisionRef.current;
           try {
             const sub = api.getFormula?.().calculationResultApplied?.(() => {
@@ -1003,7 +1017,7 @@ export function SmetaSpreadsheetEditor({
                 if (dirtyRef.current || inFlightRef.current !== null) return;
                 if (revisionRef.current !== openedRevision) return;
                 const next = currentParts();
-                if (next) baselineRef.current = baselineOf(next);
+                if (next) baselineRef.current = openedBaseline(next);
               }, 0);
             });
             if (sub) disposables.push(sub);
@@ -1216,22 +1230,25 @@ export function SmetaSpreadsheetEditor({
       )}
     >
       <header className="flex shrink-0 flex-wrap items-center gap-2 border-b border-[var(--border)] bg-[var(--surface)] px-3 py-2 sm:gap-3 sm:px-4">
-        <div className="flex min-w-[16rem] flex-1 flex-col gap-0.5">
-          <Link
-            href={listHref}
-            className="text-[13px] text-[var(--accent)] hover:underline"
-          >
-            {mode === "version" ? "← Версии" : "← Все сметы"}
-          </Link>
-          <div className="flex min-w-0 items-center gap-2">
-            <h2 className="font-display truncate text-[17px] font-bold leading-tight">
-              {title ?? `Смета — ${department.name}`}
-            </h2>
-            <span className="rounded-[5px] border border-[var(--border-strong)] px-1.5 text-xs tabular-nums text-[var(--muted-fg)]">
-              {department.codePrefix}
-            </span>
+        {mode === "drafts" ? (
+          <p className="min-w-[12rem] flex-1 text-xs text-[var(--muted-fg)]">
+            Листы-черновики: расчёты и заметки. В смету и итоги не входят.
+          </p>
+        ) : (
+          <div className="flex min-w-[16rem] flex-1 flex-col gap-0.5">
+            <Link
+              href={listHref}
+              className="text-[13px] text-[var(--accent)] hover:underline"
+            >
+              {mode === "version" ? "← Версии" : "← Все сметы"}
+            </Link>
+            <div className="flex min-w-0 items-center gap-2">
+              <h2 className="font-display truncate text-[17px] font-bold leading-tight">
+                {title ?? `Смета — ${department.name}`}
+              </h2>
+            </div>
           </div>
-        </div>
+        )}
 
         <div className="flex flex-wrap items-center gap-2">
           {approval && approvalInfo ? (
@@ -1246,7 +1263,7 @@ export function SmetaSpreadsheetEditor({
               flushSave={flushSave}
             />
           ) : null}
-          {mode === "draft" ? (
+          {editable ? (
             <span
               className={cn(
                 // Постоянная ширина: смена «Сохранение…» / «Сохранено …» не переносит кнопки.

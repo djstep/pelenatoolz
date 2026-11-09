@@ -18,7 +18,7 @@ import {
   type SmetaCheck,
 } from "@/features/smeta/lib/main-sheet";
 import { stableJson } from "@/features/smeta/lib/stable-json";
-import { ACTIVE_BUDGET_ITEM } from "@/features/smeta/lib/item-where";
+import { departmentItemTotals } from "@/features/smeta/items-queries";
 
 const budgetInclude = {
   sheets: {
@@ -91,6 +91,26 @@ function toClientBudget(row: {
 
 export type BudgetClient = ReturnType<typeof toClientBudget>;
 
+/**
+ * Книга вкладки «Черновики»: листы-черновики без основного листа (смета ведётся статьями).
+ * Черновиков нет — пустой лист «Черновик 1», которого ещё нет на сервере (`unsavedSheetKeys`):
+ * он сохранится с первой правкой.
+ */
+export async function getDepartmentDraftsBook(projectId: string, departmentId: string) {
+  const row = await prisma.budget.findFirst({
+    where: { projectId, departmentId },
+    include: budgetInclude,
+  });
+  if (!row) return null;
+  const drafts = row.sheets.filter((s) => s.id !== row.mainSheetId);
+  const fresh =
+    drafts.length === 0
+      ? { id: "", sheetKey: `sheet-${randomUUID().slice(0, 8)}`, name: "Черновик 1", sortOrder: 1, pinned: false, data: null }
+      : null;
+  const book = toClientBudget({ ...row, mainSheetId: null, sheets: fresh ? [fresh] : drafts });
+  return { book, unsavedSheetKeys: fresh ? [fresh.sheetKey] : [] };
+}
+
 export async function getDepartmentBudget(projectId: string, departmentId: string) {
   const row = await prisma.budget.findFirst({
     where: { projectId, departmentId },
@@ -102,8 +122,12 @@ export async function getDepartmentBudget(projectId: string, departmentId: strin
 export type DepartmentBudgetSummary = {
   revision: number;
   updatedAt: string;
+  /** Действующих строк сметы по статьям. */
   itemCount: number;
+  /** Итого, пересчитанное по строкам (не из сохранённых сумм). */
   total: number;
+  /** Строк без суммы (не задана переменная, нет кол-ва или ставки): в итог не вошли. */
+  incomplete: number;
   status: BudgetStatus;
   /** Глава правил смету после отправки — она в списке продюсера с пометкой. */
   changedAfterSubmit: boolean;
@@ -112,7 +136,7 @@ export type DepartmentBudgetSummary = {
   lastVersionNumber: number | null;
 };
 
-/** Есть ли смета у цехов, сколько в ней статей и итог по ним. */
+/** Есть ли смета у цехов, сколько в ней строк и итог — пересчётом по действующим значениям переменных. */
 export async function listDepartmentBudgetSummaries(
   projectId: string,
   departmentIds: readonly string[],
@@ -131,19 +155,14 @@ export async function listDepartmentBudgetSummaries(
         returnComment: true,
       },
     }),
-    prisma.budgetItem.groupBy({
-      by: ["departmentId"],
-      where: { projectId, departmentId: { in: [...departmentIds] }, ...ACTIVE_BUDGET_ITEM },
-      _count: { _all: true },
-      _sum: { total: true },
-    }),
+    departmentItemTotals(projectId, departmentIds),
     prisma.budgetVersion.groupBy({
       by: ["departmentId"],
       where: { projectId, departmentId: { in: [...departmentIds] } },
       _max: { number: true },
     }),
   ]);
-  const totalsById = new Map(totals.map((t) => [t.departmentId, t]));
+  const totalsById = totals;
   const lastVersionById = new Map(versions.map((v) => [v.departmentId, v._max.number]));
   return new Map(
     budgets.map((b) => {
@@ -153,8 +172,9 @@ export async function listDepartmentBudgetSummaries(
         {
           revision: b.revision,
           updatedAt: b.updatedAt.toISOString(),
-          itemCount: t?._count._all ?? 0,
-          total: t?._sum.total ? Number(t._sum.total) : 0,
+          itemCount: t?.count ?? 0,
+          total: t ? Number(t.total) : 0,
+          incomplete: t?.incomplete ?? 0,
           status: b.status,
           changedAfterSubmit: b.changedAfterSubmitAt !== null,
           submittedAt: b.submittedAt?.toISOString() ?? null,
@@ -501,6 +521,9 @@ export function statusAfterEdit(status: BudgetStatus) {
   return { change, data };
 }
 
+/** Правка листов-черновиков: статус сметы не меняется. */
+const NO_STATUS_CHANGE: { change: SaveStatusChange; data: Record<string, never> } = { change: null, data: {} };
+
 /** Сохранение из браузера: данные только изменённых и новых листов, порядок и имена — всех. */
 export type BudgetSaveInput = {
   /** Id книги в Univer: у черновика это id сметы. */
@@ -688,7 +711,9 @@ export async function persistDepartmentBudget(
             ? await syncItems(tx, projectId, departmentId, analysis.items, analysis.factCodes)
             : null;
 
-        const status = statusAfterEdit(budget.status);
+        // Статус меняет только правка самой сметы (основной лист старого формата). Листы-черновики
+        // в смету не входят: их правка утверждённую или отправленную смету в черновик не возвращает.
+        const status = mainData ? statusAfterEdit(budget.status) : NO_STATUS_CHANGE;
         const saved = await tx.budget.update({
           where: { id: budget.id },
           data: {
@@ -788,7 +813,8 @@ export async function appendImportedSheets(
           });
         }
 
-        const status = statusAfterEdit(budget.status);
+        // Импорт добавляет только листы-черновики — статус сметы не меняется.
+        const status = NO_STATUS_CHANGE;
         const stored =
           budget.styles && typeof budget.styles === "object"
             ? (budget.styles as Record<string, unknown>)

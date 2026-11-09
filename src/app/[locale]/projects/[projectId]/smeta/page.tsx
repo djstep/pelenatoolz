@@ -130,9 +130,6 @@ export default async function SmetaPage({ params }: Props) {
                     ) : (
                       <span className="font-medium">{department.name}</span>
                     )}
-                    <span className="tabular-nums text-xs text-[var(--muted-fg)]">
-                      {department.codePrefix}
-                    </span>
                   </span>
                   {summary ? (
                     <span className="flex flex-wrap items-center gap-3 text-[var(--muted-fg)]">
@@ -149,8 +146,13 @@ export default async function SmetaPage({ params }: Props) {
                           «{summary.returnComment}»
                         </span>
                       ) : null}
-                      <span>статей: {summary.itemCount}</span>
-                      <span className="font-medium text-[var(--foreground)]">
+                      <span>строк: {summary.itemCount}</span>
+                      {summary.incomplete > 0 ? (
+                        <span className="text-xs text-[var(--tone-warning)]">
+                          без суммы: {summary.incomplete}
+                        </span>
+                      ) : null}
+                      <span className="font-medium tabular-nums text-[var(--foreground)]">
                         {formatRub(summary.total)}
                       </span>
                       <span className="text-xs">изменена {formatDateShort(summary.updatedAt)}</span>

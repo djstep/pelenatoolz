@@ -1,17 +1,15 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CreateDepartmentBudgetButton } from "@/features/smeta/components/create-department-budget-button";
-import { SmetaWorkspace } from "@/features/smeta/components/smeta-workspace";
-import {
-  checkDepartmentBudget,
-  getDepartmentBudget,
-  listDepartmentCodes,
-} from "@/features/smeta/queries";
+import { BudgetDepartmentView } from "@/features/smeta/components/budget-department-view";
+import { getDepartmentDraftsBook } from "@/features/smeta/queries";
+import { getDepartmentItemsTree, getItemsDictionaries } from "@/features/smeta/items-queries";
 import { getBudgetApprovalInfo } from "@/features/smeta/approval-queries";
 import { getBudgetDriveButton } from "@/features/smeta/drive-queries";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import {
   canApproveSmeta,
+  canEditBudgetDictionaries,
   canEditDepartmentSmeta,
   canReadDepartmentSmeta,
 } from "@/features/smeta/lib/smeta-access";
@@ -24,10 +22,16 @@ export const maxDuration = 120;
 
 type Props = {
   params: Promise<{ locale: string; projectId: string; departmentId: string }>;
+  searchParams: Promise<{ tab?: string }>;
 };
 
-export default async function DepartmentSmetaPage({ params }: Props) {
+/**
+ * Смета цеха по статьям. Вкладка «Смета» — статьи, подстатьи и строки (правит глава цеха),
+ * «Черновики» — листы Excel, в смету не входят. Старый табличный основной лист не показывается.
+ */
+export default async function DepartmentSmetaPage({ params, searchParams }: Props) {
   const { locale, projectId, departmentId } = await params;
+  const { tab: tabParam } = await searchParams;
   const ctx = await requireProjectContext(projectId);
 
   // Нет цеха в проекте и нет доступа — одинаково «не найдено».
@@ -40,7 +44,11 @@ export default async function DepartmentSmetaPage({ params }: Props) {
 
   const canWrite = canEditDepartmentSmeta(ctx, department.id);
   const listHref = `/${locale}/projects/${projectId}/smeta`;
-  const budget = await getDepartmentBudget(projectId, department.id);
+  const departmentHref = `${listHref}/${department.id}`;
+  const budget = await prisma.budget.findFirst({
+    where: { projectId, departmentId: department.id },
+    select: { id: true, revision: true },
+  });
 
   if (!budget) {
     return (
@@ -56,7 +64,7 @@ export default async function DepartmentSmetaPage({ params }: Props) {
               <CreateDepartmentBudgetButton
                 projectId={projectId}
                 departmentId={department.id}
-                href={`${listHref}/${department.id}`}
+                href={departmentHref}
               />
             </div>
           ) : null}
@@ -65,36 +73,41 @@ export default async function DepartmentSmetaPage({ params }: Props) {
     );
   }
 
-  const [checks, usedCodes, approvalInfo, driveButton] = await Promise.all([
-    checkDepartmentBudget(projectId, budget),
-    canWrite ? listDepartmentCodes(projectId, department.id) : Promise.resolve([]),
+  const tab = tabParam === "drafts" ? "drafts" : "items";
+  const [approvalInfo, driveButton, tree, dictionaries, drafts] = await Promise.all([
     getBudgetApprovalInfo(projectId, department.id),
     getBudgetDriveButton(ctx, department.id),
+    tab === "items" ? getDepartmentItemsTree(projectId, department.id) : Promise.resolve(null),
+    tab === "items" ? getItemsDictionaries(projectId, budget.id) : Promise.resolve(null),
+    tab === "drafts" ? getDepartmentDraftsBook(projectId, department.id) : Promise.resolve(null),
   ]);
-  const departmentHref = `${listHref}/${department.id}`;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-6">
-      <SmetaWorkspace
-        projectId={projectId}
-        department={department}
-        budget={budget}
-        canWrite={canWrite}
-        initialChecks={checks}
-        usedCodes={usedCodes}
-        listHref={listHref}
-        driveButton={driveButton}
-        approval={
-          approvalInfo
-            ? {
-                info: approvalInfo,
-                canApprove: canApproveSmeta(ctx),
-                reviewHref: `${departmentHref}/review`,
-                versionsHref: `${departmentHref}/versions`,
-              }
-            : undefined
-        }
-      />
-    </div>
+    <BudgetDepartmentView
+      projectId={projectId}
+      department={department}
+      tab={tab}
+      hrefs={{
+        list: listHref,
+        items: departmentHref,
+        drafts: `${departmentHref}?tab=drafts`,
+        settings: canEditBudgetDictionaries(ctx) ? `/${locale}/projects/${projectId}/finance/settings` : null,
+      }}
+      canWrite={canWrite}
+      revision={budget.revision}
+      approval={
+        approvalInfo
+          ? {
+              info: approvalInfo,
+              canApprove: canApproveSmeta(ctx),
+              reviewHref: `${departmentHref}/review`,
+              versionsHref: `${departmentHref}/versions`,
+            }
+          : undefined
+      }
+      driveButton={driveButton}
+      items={tree && dictionaries ? { tree, dictionaries } : null}
+      drafts={drafts}
+    />
   );
 }

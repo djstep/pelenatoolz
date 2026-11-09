@@ -22,7 +22,8 @@ import { prisma } from "@/shared/db/prisma";
  * транзакции. Внутренние коды строк на экран и в журнал не выводятся.
  */
 
-export type ItemsActionState = { error?: string; success?: string; id?: string };
+/** `revision` — ревизия сметы после правки (для отправки на утверждение). */
+export type ItemsActionState = { error?: string; success?: string; id?: string; revision?: number };
 
 const NO_RIGHTS = "Смету цеха правит глава цеха";
 const NOT_FOUND = "Не найдено";
@@ -85,7 +86,7 @@ async function editBudget(
   access: Access,
   action: AuditAction,
   write: (tx: Tx) => Promise<WriteResult>,
-): Promise<{ error: string } | { unchanged: true } | { result: WriteResult }> {
+): Promise<{ error: string } | { unchanged: true } | { result: WriteResult; revision: number }> {
   const { ctx, budget } = access;
   try {
     const result = await prisma.$transaction(
@@ -102,9 +103,10 @@ async function editBudget(
         }, { db: tx });
 
         const status = statusAfterEdit(current.status);
-        await tx.budget.update({
+        const updated = await tx.budget.update({
           where: { id: budget.id },
           data: { revision: { increment: 1 }, ...status.data },
+          select: { revision: true },
         });
         if (status.change) {
           await auditMutation(ctx, async () => null, undefined, {
@@ -118,11 +120,11 @@ async function editBudget(
                 : `Смета цеха «${budget.departmentName}» изменена после утверждения — статус «черновик»`,
           }, { db: tx });
         }
-        return result;
+        return { result, revision: updated.revision };
       },
       { timeout: 20_000 },
     );
-    return { result };
+    return result;
   } catch (error) {
     if (error instanceof ItemsError) return { error: error.message };
     if (error instanceof NoChange) return { unchanged: true };
@@ -133,13 +135,13 @@ async function editBudget(
 function done(
   projectId: string,
   departmentId: string,
-  outcome: { error: string } | { unchanged: true } | { result: WriteResult },
+  outcome: { error: string } | { unchanged: true } | { result: WriteResult; revision: number },
   success: string,
 ): ItemsActionState {
   if ("error" in outcome) return { error: outcome.error };
   if ("unchanged" in outcome) return { success: "Без изменений" };
   revalidate(projectId, departmentId);
-  return { success, id: outcome.result.entityId };
+  return { success, id: outcome.result.entityId, revision: outcome.revision };
 }
 
 // ---------------------------------------------------------------------------

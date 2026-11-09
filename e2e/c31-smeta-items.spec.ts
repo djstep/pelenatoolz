@@ -21,6 +21,11 @@ const RUN = Date.now().toString(36);
 const actionIds: Record<string, string> = {};
 
 test.afterAll(async () => {
+  // Сметы цехов по статьям, собранные тестом: строки → подстатьи → статьи → статьи шаблона.
+  const runArticles = { projectId: ctx.projectId, templateArticle: { name: { contains: RUN } } };
+  await db.budgetItem.deleteMany({ where: { projectId: ctx.projectId, subarticle: { article: runArticles } } });
+  await db.budgetSubarticle.deleteMany({ where: { projectId: ctx.projectId, article: runArticles } });
+  await db.budgetArticle.deleteMany({ where: runArticles });
   await db.budgetTemplateArticle.deleteMany({ where: { projectId: ctx.projectId, name: { contains: RUN } } });
   await db.projectExpenseType.deleteMany({ where: { projectId: ctx.projectId, name: { contains: RUN } } });
   await db.counterparty.deleteMany({ where: { projectId: ctx.projectId, name: { contains: RUN } } });
@@ -437,4 +442,198 @@ test("налог по умолчанию без права на финансы: 
   } finally {
     await context.close();
   }
+});
+
+// ---------------------------------------------------------------------------
+// Шаг 5. Экран сметы цеха по статьям
+// ---------------------------------------------------------------------------
+
+test.describe.serial("смета цеха по статьям: экран", () => {
+  const transport = `Транспорт смета ${RUN}`;
+  const sub = `Спецтранспорт ${RUN}`;
+  const camera = `Камерваген ${RUN}`;
+  const grim = `Гримваген ${RUN}`;
+  const dep = () => ctx.smetaDepartmentId ?? ctx.departmentId;
+  const smetaPath = () => projectPath(ctx, `/smeta/${dep()}`);
+  let smenyBefore: string | null = null;
+
+  test.beforeAll(async () => {
+    const settings = await db.projectBudgetSettings.update({
+      where: { projectId: ctx.projectId },
+      data: { lastTemplateArticleNumber: { increment: 1 } },
+    });
+    await db.budgetTemplateArticle.create({
+      data: { projectId: ctx.projectId, number: settings.lastTemplateArticleNumber, name: transport, sortOrder: 999 },
+    });
+    const smeny = await db.projectFinanceVariable.findUniqueOrThrow({
+      where: { projectId_key: { projectId: ctx.projectId, key: "SMENY" } },
+    });
+    smenyBefore = smeny.value?.toString() ?? null;
+    await db.projectFinanceVariable.update({ where: { id: smeny.id }, data: { value: 10 } });
+    await db.projectFinanceVariable.update({
+      where: { projectId_key: { projectId: ctx.projectId, key: "NEDELI" } },
+      data: { value: null },
+    });
+  });
+
+  test.afterAll(async () => {
+    await db.projectFinanceVariable.update({
+      where: { projectId_key: { projectId: ctx.projectId, key: "SMENY" } },
+      data: { value: smenyBefore },
+    });
+  });
+
+  const line = (page: Page, name: string) => page.locator(`tr[data-budget-line="${name}"]`);
+
+  test("глава цеха собирает смету: статья, подстатья, строки, множители, налог из формы, итоги; кодов нет", async ({ page }) => {
+    await page.goto(smetaPath());
+    await expect(page.getByRole("link", { name: "Смета", exact: true })).toHaveAttribute("aria-current", "page");
+
+    // Взять статью из шаблона.
+    await page.locator("#take-template-trigger").click();
+    await page.getByRole("option", { name: transport }).click();
+    await page.getByRole("button", { name: "Взять статью" }).click();
+    const article = page.locator(`tr[data-budget-article="${transport}"]`);
+    await expect(article).toBeVisible();
+
+    // Подстатья.
+    await article.getByRole("button", { name: "+ подстатья" }).click();
+    await page.getByPlaceholder("Название подстатьи, Enter — добавить").fill(sub);
+    await page.keyboard.press("Enter");
+    const subRow = page.locator(`tr[data-budget-subarticle="${sub}"]`);
+    await expect(subRow).toBeVisible();
+
+    // Две строки.
+    for (const name of [camera, grim]) {
+      await subRow.getByRole("button", { name: "+ строка" }).click();
+      await page.getByPlaceholder("Наименование строки, Enter — добавить").fill(name);
+      await page.keyboard.press("Enter");
+      await expect(line(page, name)).toBeVisible();
+    }
+
+    // Камерваген: 1 × 15 000 × СМЕНЫ (10), форма ИП — налог 6 % подставляется.
+    const cam = line(page, camera);
+    await cam.getByLabel("Количество").fill("1");
+    await cam.getByLabel("Ставка").fill("15 000");
+    await cam.getByRole("button", { name: "Множители" }).click();
+    const modal = page.getByRole("dialog", { name: "Множители строки" });
+    await expect(modal).toContainText("Можно ввести число, например 0,7 — скидка 30%");
+    await modal.locator("#multiplier-0-trigger").click();
+    await page.getByRole("option", { name: "СМЕНЫ (10)" }).click();
+    await modal.getByRole("button", { name: "Готово" }).click();
+    await cam.locator(`[id$="-form-trigger"]`).click();
+    await page.getByRole("option", { name: "ИП", exact: true }).click();
+    await expect(cam.getByLabel("Налог, %")).toHaveValue("6");
+    // Предпросмотр до сохранения: 150 000 + 9 000 = 159 000.
+    await expect(cam).toContainText("159 000,00");
+    await cam.getByRole("button", { name: "Сохранить" }).click();
+    await expect
+      .poll(async () => {
+        const saved = await db.budgetItem.findFirstOrThrow({ where: { projectId: ctx.projectId, name: camera } });
+        return [saved.total.toFixed(2), saved.taxPercent?.toString()];
+      })
+      .toEqual(["159000.00", "6"]);
+    await expect(cam.getByRole("button", { name: /Сохранить|…/ })).toHaveCount(0);
+
+    // Гримваген: × НЕДЕЛИ (не задана) — суммы нет, пометка, в итог не входит.
+    const gr = line(page, grim);
+    await gr.getByLabel("Количество").fill("1");
+    await gr.getByLabel("Ставка").fill("10000");
+    await gr.getByRole("button", { name: "Множители" }).click();
+    await page.getByRole("dialog", { name: "Множители строки" }).locator("#multiplier-0-trigger").click();
+    await page.getByRole("option", { name: "НЕДЕЛИ (не задана)" }).click();
+    await page.getByRole("dialog", { name: "Множители строки" }).getByRole("button", { name: "Готово" }).click();
+    await gr.getByRole("button", { name: "Сохранить" }).click();
+    await expect(gr.getByRole("button", { name: /Сохранить|…/ })).toHaveCount(0);
+    await expect(gr.locator("[data-line-problem]")).toHaveText("не задана переменная: НЕДЕЛИ");
+
+    // Итоги: подстатья, статья и смета — 159 000,00; одна строка без суммы.
+    await expect(subRow).toContainText("159 000,00");
+    await expect(article).toContainText("159 000,00");
+    const foot = page.locator("tfoot");
+    await expect(foot).toContainText("Итого по смете");
+    await expect(foot).toContainText("1 строка без суммы");
+
+    // Кодов статей и префикса цеха на экране нет.
+    const text = await page.locator("main").innerText();
+    expect(text).not.toMatch(/[A-Z]{2,6}-\d{2}/);
+    const prefix = (await db.department.findUniqueOrThrow({ where: { id: dep() } })).codePrefix;
+    expect(text).not.toContain(` ${prefix} `);
+  });
+
+  test("свёрнутость подстатьи запоминается; архив строки и «Показать архив»", async ({ page }) => {
+    await page.goto(smetaPath());
+    const subRow = page.locator(`tr[data-budget-subarticle="${sub}"]`);
+    await subRow.getByRole("button", { name: `Свернуть: ${sub}` }).click();
+    await expect(line(page, camera)).toHaveCount(0);
+    await page.reload();
+    await expect(page.locator(`tr[data-budget-subarticle="${sub}"]`)).toBeVisible();
+    await expect(line(page, camera)).toHaveCount(0);
+    await page.locator(`tr[data-budget-subarticle="${sub}"]`).getByRole("button", { name: `Развернуть: ${sub}` }).click();
+    await expect(line(page, camera)).toBeVisible();
+
+    await line(page, grim).getByRole("button", { name: `В архив: ${grim}` }).click();
+    await expect(line(page, grim)).toHaveCount(0);
+    await expect(page.locator("tfoot")).not.toContainText("без суммы");
+    await page.getByLabel("Показать архив").check();
+    await expect(line(page, grim)).toBeVisible();
+    await line(page, grim).getByRole("button", { name: "Вернуть" }).click();
+    await page.getByLabel("Показать архив").uncheck();
+    await expect(line(page, grim)).toBeVisible();
+  });
+
+  test("несохранённая строка: уход со страницы спрашивает", async ({ page }) => {
+    await page.goto(smetaPath());
+    await line(page, camera).getByLabel("Ставка").fill("16000");
+    await page.getByRole("link", { name: "← Все сметы" }).click();
+    const question = page.getByRole("alertdialog");
+    await expect(question.getByRole("button", { name: "Не сохранять" })).toBeVisible();
+    await question.getByRole("button", { name: "Не сохранять" }).click();
+    await expect(page).toHaveURL(new RegExp(`${projectPath(ctx, "/smeta")}$`));
+    const still = await db.budgetItem.findFirstOrThrow({ where: { projectId: ctx.projectId, name: camera } });
+    expect(still.rate?.toString()).toBe("15000");
+  });
+
+  test("вкладка «Черновики»: листы Excel без основного листа сметы", async ({ page }) => {
+    await page.goto(smetaPath());
+    await page.getByRole("link", { name: "Черновики" }).click();
+    await expect(page).toHaveURL(/\?tab=drafts$/);
+    await expect(page.getByText("Листы-черновики: расчёты и заметки")).toBeVisible();
+    await page.waitForSelector(".univer-smeta-host canvas", { timeout: 90_000 });
+    const main = await db.budget.findFirstOrThrow({
+      where: { departmentId: dep() },
+      select: { mainSheet: { select: { name: true } } },
+    });
+    if (main.mainSheet) {
+      await expect(page.getByRole("button", { name: main.mainSheet.name, exact: true })).toHaveCount(0);
+    }
+    await expect(page.getByRole("button", { name: "Взять статью" })).toHaveCount(0);
+  });
+
+  test("глава цеха без финансов: переменные и формы оплаты видны только для чтения", async ({ browser }) => {
+    const nofin = await db.projectMembership.findFirstOrThrow({
+      where: { projectId: ctx.projectId, user: { email: E2E_ROLES.nofin.email } },
+      select: { id: true },
+    });
+    const head = await db.departmentHead.create({ data: { departmentId: dep(), membershipId: nofin.id } });
+    const { context, page } = await openAs(browser, "nofin");
+    try {
+      await page.goto(smetaPath());
+      const reference = page.locator("[data-budget-reference]");
+      await reference.locator("summary").click();
+      await expect(reference.locator('[data-budget-variable="СМЕНЫ"]')).toContainText("10");
+      await expect(reference.locator('[data-budget-variable="НЕДЕЛИ"]')).toContainText("не задана");
+      await expect(reference).toContainText("Самозанятый");
+      await expect(reference.getByRole("link", { name: "настройках финансов" })).toHaveCount(0);
+      // Денег не видно: у главы нет права на финансы, но сумм своей сметы он не лишён — проверяем
+      // только, что смета другого цеха ему не видна.
+      if (ctx.departmentId !== dep()) {
+        const res = await page.goto(projectPath(ctx, `/smeta/${ctx.departmentId}`));
+        expect(res?.status()).toBe(404);
+      }
+    } finally {
+      await context.close();
+      await db.departmentHead.delete({ where: { id: head.id } });
+    }
+  });
 });
