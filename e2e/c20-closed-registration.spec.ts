@@ -130,7 +130,7 @@ test.describe("закрытая регистрация", () => {
     expect(Number(project.plannedDailyOutputMin)).toBe(270);
     // Справочники сметы создаются вместе с проектом (страницы в базу ничего не пишут).
     expect(project.budgetSettings).not.toBeNull();
-    expect(project._count).toEqual({ expenseTypes: 10, paymentForms: 5, counterpartyPaymentForms: 4 });
+    expect(project._count).toEqual({ expenseTypes: 10, paymentForms: 5, counterpartyPaymentForms: 2 });
     expect(project.financeVariables).toEqual([
       { key: "SMENY", value: null },
       { key: "SERII", value: null },

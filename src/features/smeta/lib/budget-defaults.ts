@@ -44,15 +44,17 @@ export const DEFAULT_PAYMENT_FORMS: readonly {
   { key: "LEGAL_ENTITY", name: "Юрлицо", defaultTaxPercent: null },
 ];
 
-/** Тип контрагента → ключ формы оплаты: налог по умолчанию в договоре и акте. */
+/**
+ * Тип контрагента → ключ формы оплаты: налог по умолчанию в договоре и акте.
+ * Юрлицо и физлицо (ГПХ) не сопоставлены: налог уже в итоговой стоимости, по умолчанию выключен
+ * (миграция `counterparty_mapping_defaults`).
+ */
 export const DEFAULT_COUNTERPARTY_PAYMENT_FORMS: readonly {
   counterpartyType: CounterpartyType;
   paymentFormKey: string;
 }[] = [
-  { counterpartyType: "LEGAL_ENTITY", paymentFormKey: "LEGAL_ENTITY" },
   { counterpartyType: "IP", paymentFormKey: "IP" },
   { counterpartyType: "SELF_EMPLOYED", paymentFormKey: "SELF_EMPLOYED" },
-  { counterpartyType: "INDIVIDUAL", paymentFormKey: "GPH" },
 ];
 
 /**

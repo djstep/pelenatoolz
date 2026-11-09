@@ -12,6 +12,10 @@ const migration = readFileSync(
   "prisma/migrations/20261109120000_smeta_items/migration.sql",
   "utf8",
 );
+const mappingMigration = readFileSync(
+  "prisma/migrations/20261109140000_counterparty_mapping_defaults/migration.sql",
+  "utf8",
+);
 const defaultsMigration = readFileSync(
   "prisma/migrations/20261109130000_payment_form_defaults/migration.sql",
   "utf8",
@@ -55,9 +59,16 @@ describe("справочники сметы: код и миграция совп
     );
   });
 
-  test("тип контрагента → форма оплаты", () => {
+  test("тип контрагента → форма оплаты (после миграции, снявшей юрлицо и ГПХ)", () => {
+    const removed = new Set(
+      [...mappingMigration.matchAll(/^\s+\('([A-Z_]+)', '([A-Z_]+)'\),?$/gm)].map(([, type, key]) => `${type}:${key}`),
+    );
+    assert.equal(removed.size, 2);
+    const effective = valuesAfter('INSERT INTO "ProjectCounterpartyPaymentForm"').filter(
+      ([type, key]) => !removed.has(`${type}:${key}`),
+    );
     assert.deepEqual(
-      valuesAfter('INSERT INTO "ProjectCounterpartyPaymentForm"'),
+      effective,
       DEFAULT_COUNTERPARTY_PAYMENT_FORMS.map((m) => [m.counterpartyType, m.paymentFormKey]),
     );
   });
@@ -81,14 +92,15 @@ describe("справочники сметы: состав", () => {
     assert.equal(new Set(DEFAULT_EXPENSE_TYPES.map((t) => t.key)).size, 10);
   });
 
-  test("каждый тип контрагента сопоставлен существующей форме оплаты", () => {
+  test("сопоставление ссылается на существующие формы оплаты", () => {
     const keys = new Set(DEFAULT_PAYMENT_FORMS.map((f) => f.key));
     for (const m of DEFAULT_COUNTERPARTY_PAYMENT_FORMS) {
       assert.ok(keys.has(m.paymentFormKey), m.paymentFormKey);
     }
+    // Юрлицо и физлицо (ГПХ) не сопоставлены: налог по умолчанию выключен.
     assert.deepEqual(
       DEFAULT_COUNTERPARTY_PAYMENT_FORMS.map((m) => m.counterpartyType).sort(),
-      ["INDIVIDUAL", "IP", "LEGAL_ENTITY", "SELF_EMPLOYED"],
+      ["IP", "SELF_EMPLOYED"],
     );
   });
 

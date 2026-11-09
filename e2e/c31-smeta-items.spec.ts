@@ -99,7 +99,7 @@ test("справочники сметы в проекте: типы расход
   ]);
   expect(
     Object.fromEntries(project.counterpartyPaymentForms.map((m) => [m.counterpartyType, m.paymentForm.key])),
-  ).toEqual({ LEGAL_ENTITY: "LEGAL_ENTITY", IP: "IP", SELF_EMPLOYED: "SELF_EMPLOYED", INDIVIDUAL: "GPH" });
+  ).toEqual({ IP: "IP", SELF_EMPLOYED: "SELF_EMPLOYED" });
   expect(project.financeVariables.map((v) => v.key)).toEqual(["SMENY", "SERII", "DNI_PODGOTOVKI", "NEDELI"]);
 });
 
@@ -290,10 +290,10 @@ test.describe.serial("справочники сметы в настройках 
         .poll(
           async () =>
             (
-              await db.projectCounterpartyPaymentForm.findUniqueOrThrow({
+              await db.projectCounterpartyPaymentForm.findUnique({
                 where: { projectId_counterpartyType: { projectId: ctx.projectId, counterpartyType: "INDIVIDUAL" } },
               })
-            ).paymentFormId,
+            )?.paymentFormId,
         )
         .toBe(selfEmployed);
 
@@ -337,10 +337,9 @@ test.describe.serial("справочники сметы в настройках 
       });
       await db.projectPaymentForm.update({ where: { id: ip }, data: { defaultTaxPercent: 6 } });
       await db.projectPaymentForm.update({ where: { id: gph }, data: { archivedAt: null } });
-      await db.projectCounterpartyPaymentForm.upsert({
-        where: { projectId_counterpartyType: { projectId: ctx.projectId, counterpartyType: "INDIVIDUAL" } },
-        create: { projectId: ctx.projectId, counterpartyType: "INDIVIDUAL", paymentFormId: gph },
-        update: { paymentFormId: gph },
+      // Физлицо по умолчанию не сопоставлено.
+      await db.projectCounterpartyPaymentForm.deleteMany({
+        where: { projectId: ctx.projectId, counterpartyType: "INDIVIDUAL" },
       });
     }
   });
@@ -378,11 +377,14 @@ test("новый договор: налог по умолчанию из фор�
       { projectId: ctx.projectId, name: names.company, type: "LEGAL_ENTITY" },
     ],
   });
-  // Юрлицо на время теста не сопоставлено.
-  const legal = await db.projectCounterpartyPaymentForm.findUniqueOrThrow({
-    where: { projectId_counterpartyType: { projectId: ctx.projectId, counterpartyType: "LEGAL_ENTITY" } },
+  // Юрлицо на время теста сопоставлено форме без процента (ГПХ); по умолчанию — не сопоставлено.
+  const gph = await db.projectPaymentForm.findFirstOrThrow({
+    where: { projectId: ctx.projectId, key: "GPH" },
+    select: { id: true },
   });
-  await db.projectCounterpartyPaymentForm.delete({ where: { id: legal.id } });
+  await db.projectCounterpartyPaymentForm.create({
+    data: { projectId: ctx.projectId, counterpartyType: "LEGAL_ENTITY", paymentFormId: gph.id },
+  });
   try {
     await page.goto(projectPath(ctx, "/counterparties/contracts"));
     await page.getByRole("button", { name: "Добавить договор" }).click();
@@ -403,18 +405,18 @@ test("новый договор: налог по умолчанию из фор�
     await expect(tax).toBeChecked();
     await expect(dialog.locator("#vatRate")).toHaveValue("6");
 
-    // Физлицо → ГПХ без процента: налог включён, ставку вводят руками.
+    // Физлицо (ГПХ) не сопоставлено: налог уже в стоимости, по умолчанию выключен.
     await pickCounterparty(names.person);
+    await expect(tax).not.toBeChecked();
+
+    // Форма без процента: налог включён, ставку вводят руками.
+    await pickCounterparty(names.company);
     await expect(tax).toBeChecked();
     await expect(dialog.locator("#vatRate")).toHaveValue("");
-
-    // Юрлицо не сопоставлено → налог пустой.
-    await pickCounterparty(names.company);
-    await expect(tax).not.toBeChecked();
     await expect(dialog).not.toContainText("НДС");
   } finally {
-    await db.projectCounterpartyPaymentForm.create({
-      data: { projectId: ctx.projectId, counterpartyType: "LEGAL_ENTITY", paymentFormId: legal.paymentFormId },
+    await db.projectCounterpartyPaymentForm.deleteMany({
+      where: { projectId: ctx.projectId, counterpartyType: "LEGAL_ENTITY" },
     });
   }
 });
