@@ -9,12 +9,15 @@ export type FinanceVariableRow = {
   id: string | null;
   key: string;
   label: string;
-  value: number;
+  /** Пусто — значение не задано (не ноль). */
+  value: number | null;
   isSystem: boolean;
   sortOrder: number;
   notes: string | null;
   /** True when value comes from Project.* and has not been overridden yet */
   fromProjectDefault: boolean;
+  /** У переменной есть параметр проекта (СМЕНЫ, СЕРИИ); у ДНИ ПОДГОТОВКИ, НЕДЕЛИ и своих — нет. */
+  hasProjectDefault: boolean;
   projectDefault: number | null;
   description?: string;
 };
@@ -43,8 +46,11 @@ export async function listFinanceVariables(
     const projectDefault =
       def.projectField === "shootingDaysCount"
         ? project.shootingDaysCount
-        : project.episodeCount;
-    if (stored) {
+        : def.projectField === "episodeCount"
+          ? project.episodeCount
+          : null;
+    // Своё значение задано — оно; пусто — у СМЕНЫ и СЕРИИ из параметров проекта, у остальных пусто.
+    if (stored?.value != null) {
       return {
         id: stored.id,
         key: stored.key,
@@ -54,19 +60,21 @@ export async function listFinanceVariables(
         sortOrder: stored.sortOrder,
         notes: stored.notes,
         fromProjectDefault: false,
+        hasProjectDefault: def.projectField != null,
         projectDefault: projectDefault ?? null,
         description: def.description,
       };
     }
     return {
-      id: null,
+      id: stored?.id ?? null,
       key: def.key,
       label: def.label,
-      value: projectDefault ?? 0,
+      value: projectDefault ?? null,
       isSystem: true,
       sortOrder: def.sortOrder,
-      notes: null,
-      fromProjectDefault: true,
+      notes: stored?.notes ?? null,
+      fromProjectDefault: def.projectField != null,
+      hasProjectDefault: def.projectField != null,
       projectDefault: projectDefault ?? null,
       description: def.description,
     };
@@ -78,11 +86,12 @@ export async function listFinanceVariables(
       id: r.id,
       key: r.key,
       label: r.label,
-      value: Number(r.value),
+      value: r.value == null ? null : Number(r.value),
       isSystem: false,
       sortOrder: r.sortOrder,
       notes: r.notes,
       fromProjectDefault: false,
+      hasProjectDefault: false,
       projectDefault: null,
     }));
 
@@ -93,12 +102,12 @@ export async function listFinanceVariables(
   return serializeForClient(merged) as FinanceVariableRow[];
 }
 
-/** Resolved map key → number for budget qty defaults. */
+/** Значения переменных по ключу; пусто — не задано. */
 export async function getFinanceVariableMap(
   projectId: string,
-): Promise<Record<string, number>> {
+): Promise<Record<string, number | null>> {
   const list = await listFinanceVariables(projectId);
-  const map: Record<string, number> = {};
+  const map: Record<string, number | null> = {};
   for (const v of list) map[v.key] = v.value;
   return map;
 }

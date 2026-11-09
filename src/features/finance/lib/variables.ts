@@ -1,20 +1,43 @@
-/** Built-in finance variables — defaults from Project.shootingDaysCount / episodeCount. */
-export const SYSTEM_FINANCE_VARIABLES = [
+/**
+ * Системные переменные: есть в каждом проекте (миграция `smeta_items` и создание проекта).
+ * Пустое значение у СМЕНЫ и СЕРИИ берётся из параметров проекта, у остальных — не задано.
+ */
+export const SYSTEM_FINANCE_VARIABLES: readonly {
+  key: "SMENY" | "SERII" | "DNI_PODGOTOVKI" | "NEDELI";
+  label: string;
+  projectField: "shootingDaysCount" | "episodeCount" | null;
+  sortOrder: number;
+  description: string;
+}[] = [
   {
     key: "SMENY",
     label: "СМЕНЫ",
-    projectField: "shootingDaysCount" as const,
+    projectField: "shootingDaysCount",
     sortOrder: 0,
     description: "Число съёмочных смен (по умолчанию из параметров проекта)",
   },
   {
     key: "SERII",
     label: "СЕРИИ",
-    projectField: "episodeCount" as const,
+    projectField: "episodeCount",
     sortOrder: 1,
     description: "Число серий (по умолчанию из параметров проекта)",
   },
-] as const;
+  {
+    key: "DNI_PODGOTOVKI",
+    label: "ДНИ ПОДГОТОВКИ",
+    projectField: null,
+    sortOrder: 2,
+    description: "Число дней подготовки",
+  },
+  {
+    key: "NEDELI",
+    label: "НЕДЕЛИ",
+    projectField: null,
+    sortOrder: 3,
+    description: "Число недель",
+  },
+];
 
 export type SystemFinanceVariableKey =
   (typeof SYSTEM_FINANCE_VARIABLES)[number]["key"];

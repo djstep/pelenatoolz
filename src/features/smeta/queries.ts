@@ -395,7 +395,10 @@ async function syncItems(
   rows: ParsedRow[],
   factCodes: ReadonlySet<string>,
 ): Promise<ItemChanges> {
-  const existing = await tx.budgetItem.findMany({ where: { projectId, departmentId } });
+  // Только записи старого табличного формата: строки новой сметы (с подстатьёй) лист не трогает.
+  const existing = await tx.budgetItem.findMany({
+    where: { projectId, departmentId, subarticleId: null },
+  });
   const byCode = new Map(existing.map((i) => [i.code, i]));
   const changes: ItemChanges = {
     added: [],

@@ -120,9 +120,23 @@ test.describe("закрытая регистрация", () => {
     await page.waitForURL(/\/projects\/c/);
     const project = await db.project.findFirstOrThrow({
       where: { name: "Проверка выработки", owner: { email } },
-      select: { plannedDailyOutputMin: true },
+      select: {
+        plannedDailyOutputMin: true,
+        budgetSettings: { select: { reservePercent: true, agencyPercent: true } },
+        _count: { select: { expenseTypes: true, paymentForms: true, counterpartyPaymentForms: true } },
+        financeVariables: { where: { isSystem: true }, select: { key: true, value: true }, orderBy: { sortOrder: "asc" } },
+      },
     });
     expect(Number(project.plannedDailyOutputMin)).toBe(270);
+    // Справочники сметы создаются вместе с проектом (страницы в базу ничего не пишут).
+    expect(project.budgetSettings).not.toBeNull();
+    expect(project._count).toEqual({ expenseTypes: 10, paymentForms: 5, counterpartyPaymentForms: 4 });
+    expect(project.financeVariables).toEqual([
+      { key: "SMENY", value: null },
+      { key: "SERII", value: null },
+      { key: "DNI_PODGOTOVKI", value: null },
+      { key: "NEDELI", value: null },
+    ]);
     await context.close();
   });
 

@@ -35,6 +35,7 @@ import {
   type PermissionMatrix,
 } from "../src/features/roles/permissions-matrix";
 import { defaultPrepEventTypeRows } from "../src/features/prep-calendar/lib/default-event-types";
+import { createBudgetDefaults } from "../src/features/smeta/lib/budget-defaults";
 import { e2eDatabaseEnvProblem, resolveE2EDatabaseEnv } from "../src/shared/db/e2e-database-guard";
 import { prisma } from "../src/shared/db/prisma";
 import { databaseHost, seedDatabaseProblem } from "../src/shared/db/seed-database-guard";
@@ -216,6 +217,7 @@ async function createProject(users: Record<E2ERoleKey, string>) {
       await tx.projectLedgerType.createMany({
         data: DEFAULT_LEDGER_TYPES.map((t) => ({ projectId, name: t.name, isSystem: true, sortOrder: t.sortOrder })),
       });
+      await createBudgetDefaults(tx, projectId);
       await tx.projectMembership.createMany({
         data: [
           { projectId, userId: users.producer, roleId: roles.get(DEFAULT_ROLE_NAMES.producer)!, status: MembershipStatus.ACTIVE },
@@ -948,8 +950,11 @@ async function ensureSeedForeignProject() {
     select: { id: true },
   });
   if (exists) return;
-  await prisma.project.create({
-    data: { name: FOREIGN_PROJECT_NAME, type: "FEATURE", createdById: owner.id, ownerUserId: owner.id },
+  await prisma.$transaction(async (tx) => {
+    const project = await tx.project.create({
+      data: { name: FOREIGN_PROJECT_NAME, type: "FEATURE", createdById: owner.id, ownerUserId: owner.id },
+    });
+    await createBudgetDefaults(tx, project.id);
   });
 }
 

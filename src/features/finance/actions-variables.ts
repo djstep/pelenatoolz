@@ -1,5 +1,6 @@
 "use server";
 
+import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import {
@@ -97,20 +98,27 @@ export async function resetSystemFinanceVariableAction(
     return { error: "Неизвестная системная переменная" };
   }
 
-  await prisma.projectFinanceVariable.deleteMany({
+  // Системная переменная остаётся (на неё ссылаются строки сметы): очищается только значение.
+  await prisma.projectFinanceVariable.updateMany({
     where: { projectId, key, isSystem: true },
+    data: { value: null },
   });
 
+  // У СМЕНЫ и СЕРИИ пустое значение берётся из параметров проекта, у остальных — не задано.
+  const def = SYSTEM_FINANCE_VARIABLES.find((v) => v.key === key)!;
+  const fromProject = def.projectField != null;
   await recordAudit(ctx, {
     projectId,
     entityType: AuditEntityType.financeVariable,
     entityId: key,
     action: "UPDATE",
-    summary: `Сброс переменной ${key} к параметрам проекта`,
+    summary: fromProject
+      ? `Сброс переменной ${def.label} к параметрам проекта`
+      : `Значение переменной ${def.label} очищено`,
   });
 
   revalidate(projectId);
-  return { success: "Сброшено к параметрам проекта" };
+  return { success: fromProject ? "Сброшено к параметрам проекта" : "Значение очищено" };
 }
 
 export async function createCustomFinanceVariableAction(
@@ -219,7 +227,29 @@ export async function deleteCustomFinanceVariableAction(
   });
   if (!existing) return { error: "Переменная не найдена" };
 
-  await prisma.projectFinanceVariable.delete({ where: { id: variableId } });
+  // Строки сметы ссылаются на переменную: удалить используемую нельзя.
+  const usedInBudget = await prisma.budgetItem.count({
+    where: {
+      projectId,
+      OR: [
+        { multiplier1VariableId: variableId },
+        { multiplier2VariableId: variableId },
+        { multiplier3VariableId: variableId },
+      ],
+    },
+  });
+  const usedMessage = "Переменная используется в смете — уберите её из строк сметы";
+  if (usedInBudget > 0) return { error: usedMessage };
+
+  try {
+    await prisma.projectFinanceVariable.delete({ where: { id: variableId } });
+  } catch (error) {
+    // Строку сметы с этой переменной добавили между проверкой и удалением — база не даст удалить.
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003") {
+      return { error: usedMessage };
+    }
+    throw error;
+  }
 
   await recordAudit(ctx, {
     projectId,

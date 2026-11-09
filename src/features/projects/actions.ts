@@ -44,6 +44,7 @@ import { DEFAULT_LEDGER_TYPES } from "@/features/contracts/lib/vat";
 import { PROJECT_CREATION_CLOSED_MESSAGE } from "@/features/auth/lib/registration-access";
 import { canCreateProjects } from "@/features/auth/lib/registration-gate";
 import { defaultPrepEventTypeRows } from "@/features/prep-calendar/lib/default-event-types";
+import { createBudgetDefaults } from "@/features/smeta/lib/budget-defaults";
 import { getDefaultProjectRoles } from "@/features/roles/default-roles";
 import { parsePermissionMatrix } from "@/features/roles/permissions-matrix";
 import {
@@ -241,6 +242,7 @@ export async function createProjectAction(
     });
 
     await tx.prepEventType.createMany({ data: defaultPrepEventTypeRows(created.id) });
+    await createBudgetDefaults(tx, created.id);
 
     const producer = roles.find((r) => r.name === producerRole.name)!;
 

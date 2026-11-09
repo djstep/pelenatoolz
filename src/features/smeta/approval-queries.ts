@@ -525,7 +525,7 @@ export async function getDepartmentVersion(
     budgetId: workbookId,
     name: `Версия ${v.number}`,
     styles: v.styles,
-    sheets: [{ id: sheetKey, name: v.sheetName, sortOrder: 0, data }],
+    sheets: [{ id: sheetKey, name: v.sheetName ?? "Смета", sortOrder: 0, data }],
   });
   const sheetBook: BudgetClient = {
     id: workbookId,
@@ -535,7 +535,7 @@ export async function getDepartmentVersion(
     updatedAt: v.approvedAt.toISOString(),
     mainSheetKey: sheetKey,
     workbook,
-    sheetsMeta: [{ id: sheetKey, name: v.sheetName, sortOrder: 0, pinned: false }],
+    sheetsMeta: [{ id: sheetKey, name: v.sheetName ?? "Смета", sortOrder: 0, pinned: false }],
   };
 
   return {

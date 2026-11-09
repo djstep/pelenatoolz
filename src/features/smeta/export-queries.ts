@@ -71,7 +71,7 @@ export async function loadDepartmentBudgetExport(
     if (!version || !isObject(version.sheetData)) return { error: "Версия не найдена" };
     return {
       // Снимок версии уже без формул; повторная заморозка — на случай старых снимков.
-      sheet: { name: version.sheetName, data: freezeSheetFormulas(version.sheetData), styles: version.styles },
+      sheet: { name: version.sheetName ?? "Смета", data: freezeSheetFormulas(version.sheetData), styles: version.styles },
       source,
       status: budget.status,
       approved: { at: version.approvedAt, byName: version.approvedByName, byHead: version.approvedByHead },

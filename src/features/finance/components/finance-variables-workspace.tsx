@@ -54,6 +54,8 @@ function SystemVariableRow({
             <span className="text-[10px] text-[var(--tone-success-strong)]/90">
               из параметров проекта
             </span>
+          ) : variable.value == null ? (
+            <span className="text-[10px] text-[var(--muted-fg)]">не задано</span>
           ) : (
             <span className="text-[10px] text-[var(--tone-warning)]/90">переопределено</span>
           )}
@@ -61,9 +63,11 @@ function SystemVariableRow({
         {variable.description ? (
           <p className="mt-1 text-xs text-[var(--muted-fg)]">
             {variable.description}
-            {variable.projectDefault != null
-              ? ` · сейчас в проекте: ${variable.projectDefault}`
-              : " · в проекте не задано"}
+            {!variable.hasProjectDefault
+              ? ""
+              : variable.projectDefault != null
+                ? ` · сейчас в проекте: ${variable.projectDefault}`
+                : " · в проекте не задано"}
           </p>
         ) : null}
       </div>
@@ -75,8 +79,8 @@ function SystemVariableRow({
           type="number"
           min={0}
           step="any"
-          key={variable.value}
-          defaultValue={variable.value}
+          key={variable.value ?? ""}
+          defaultValue={variable.value ?? ""}
           disabled={!canWrite || pending}
           required
         />
@@ -86,7 +90,7 @@ function SystemVariableRow({
           <Button type="submit" disabled={pending}>
             {pending ? "…" : "Сохранить"}
           </Button>
-          {!variable.fromProjectDefault ? (
+          {!variable.fromProjectDefault && variable.value != null ? (
             <Button
               type="button"
               variant="secondary"
@@ -205,7 +209,8 @@ export function FinanceVariablesWorkspace({
           <p className="mt-1 text-xs text-[var(--muted-fg)]">
             «СМЕНЫ» и «СЕРИИ» по умолчанию берутся из параметров проекта
             (создание / настройки), но здесь их можно переопределить для
-            расчётов в статьях сметы.
+            расчётов в статьях сметы. «ДНИ ПОДГОТОВКИ» и «НЕДЕЛИ» сначала
+            не заданы.
           </p>
         </div>
         {system.map((v) => (
@@ -259,7 +264,7 @@ export function FinanceVariablesWorkspace({
                     ) : null}
                   </td>
                   <td className="px-4 py-3 text-[var(--muted-fg)]">{v.key}</td>
-                  <td className="px-4 py-3">{v.value}</td>
+                  <td className="px-4 py-3">{v.value ?? "—"}</td>
                   {canWrite ? (
                     <td className="px-4 py-3 text-right whitespace-nowrap">
                       <div className="inline-flex gap-1">
