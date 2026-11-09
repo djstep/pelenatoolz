@@ -13,6 +13,13 @@ export function isDateKey(value: string): boolean {
   return toDateKey(parseDateKey(value)) === value;
 }
 
+/** Дата из запроса: настоящая и в разумных годах. Иначе огромный период или 30 февраля. */
+export function isCalendarDateKey(value: string): boolean {
+  if (!isDateKey(value)) return false;
+  const year = Number(value.slice(0, 4));
+  return year >= 2000 && year <= 2100;
+}
+
 /** Текст ошибки или null. Окончание равно началу — можно. */
 export function prepEventRangeError(range: PrepEventRange): string | null {
   if (range.allDay) {

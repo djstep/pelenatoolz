@@ -48,7 +48,11 @@ export default defineConfig({
   expect: { timeout: 20_000 },
   reporter: [["list"], ["html", { open: "never", outputFolder: "playwright-report" }]],
   webServer: {
-    command: `npx next dev -p ${siteUrl.port || 80}`,
+    // E2E_PROD_BUILD=1 — рабочая сборка (`npm run build` заранее) вместо режима разработки:
+    // в нём страница дособирается на лету и под нагрузкой ведёт себя иначе, чем на сервере.
+    command: process.env.E2E_PROD_BUILD
+      ? `npx next start -p ${siteUrl.port || 80}`
+      : `npx next dev -p ${siteUrl.port || 80}`,
     url: `${siteUrl.origin}/ru/login`,
     reuseExistingServer: false,
     timeout: 180_000,

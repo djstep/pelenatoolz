@@ -67,6 +67,9 @@ function whenText(
   return `${start.dateKey} ${start.time} – ${end.dateKey} ${end.time}`;
 }
 
+/** Событие исчезло между проверкой и удалением. */
+class EventGoneError extends Error {}
+
 function firstIssue(error: { issues: { message: string }[] }): string {
   return error.issues[0]?.message ?? "Проверьте поля события";
 }
@@ -197,7 +200,9 @@ export async function savePrepEventAction(
       range,
       crewIds,
       actorIds,
-      candidateIds,
+      // Без права на кастинг кандидаты в проверку не идут: иначе предупреждение выдало бы,
+      // что тот же скрытый кандидат занят в другом событии.
+      candidateIds: rights.canReadCast ? candidateIds : [],
       canReadCast: rights.canReadCast,
     });
     if (conflicts.length > 0) return { conflicts };
@@ -298,22 +303,32 @@ export async function deletePrepEventAction(
   });
   if (!event) return { error: NOT_FOUND };
 
-  const deleted = await prisma.$transaction((tx) =>
-    auditMutation(
-      ctx,
-      () => tx.prepEvent.deleteMany({ where: { id: eventId, projectId } }),
+  // Удалили параллельно — откатываем транзакцию, чтобы в журнале не было удаления, которого не было.
+  const deleted = await prisma
+    .$transaction((tx) =>
+      auditMutation(
+        ctx,
+        async () => {
+          const result = await tx.prepEvent.deleteMany({ where: { id: eventId, projectId } });
+          if (result.count === 0) throw new EventGoneError();
+          return result;
+        },
       null,
       {
         projectId,
         entityType: AuditEntityType.prepEvent,
         action: "DELETE",
         entityId: eventId,
-        summary: `Удалено событие календаря: ${event.title}`,
-      },
-      { db: tx },
-    ),
-  );
-  if (deleted.count === 0) return { error: NOT_FOUND };
+          summary: `Удалено событие календаря: ${event.title}`,
+        },
+        { db: tx },
+      ),
+    )
+    .catch((error: unknown) => {
+      if (error instanceof EventGoneError) return null;
+      throw error;
+    });
+  if (!deleted) return { error: NOT_FOUND };
 
   revalidateCalendar(projectId);
   return {};

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import {
+  isCalendarDateKey,
   prepEventRangeColumns,
   prepEventRangeError,
 } from "@/features/prep-calendar/lib/event-dates";
@@ -61,5 +62,14 @@ describe("prepEventRangeColumns", () => {
     assert.equal(row.startDate, null);
     assert.equal(row.endDate, null);
     assert.equal(row.startAt, startAt);
+  });
+});
+
+describe("isCalendarDateKey", () => {
+  test("настоящая дата в годах 2000–2100", () => {
+    assert.equal(isCalendarDateKey("2026-11-10"), true);
+    assert.equal(isCalendarDateKey("2026-02-30"), false);
+    assert.equal(isCalendarDateKey("1000-01-01"), false);
+    assert.equal(isCalendarDateKey("9999-12-31"), false);
   });
 });

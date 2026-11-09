@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { PREP_EVENT_COLORS } from "@/features/prep-calendar/lib/event-colors";
+import { isCalendarDateKey } from "@/features/prep-calendar/lib/event-dates";
 
 const COLOR_KEYS = PREP_EVENT_COLORS.map((c) => c.key) as [string, ...string[]];
 
@@ -36,8 +37,8 @@ export const prepEventInputSchema = z
     title: z.string().trim().min(1, "Укажите название").max(200, "Название — не длиннее 200 символов"),
     typeId: z.string({ message: "Выберите тип" }).min(1, "Выберите тип").max(64),
     allDay: z.boolean(),
-    startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Укажите дату начала"),
-    endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Укажите дату окончания"),
+    startDate: z.string().refine(isCalendarDateKey, "Укажите дату начала"),
+    endDate: z.string().refine(isCalendarDateKey, "Укажите дату окончания"),
     startTime: z.preprocess(emptyToNull, timeSchema.nullable()),
     endTime: z.preprocess(emptyToNull, timeSchema.nullable()),
     locationId: z.preprocess(emptyToNull, idSchema.nullable()),

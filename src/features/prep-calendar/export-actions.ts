@@ -17,8 +17,7 @@ import {
 import { buildCalendarPrintHtml } from "@/features/prep-calendar/lib/calendar-export-print";
 import { buildCalendarWorkbook } from "@/features/prep-calendar/lib/calendar-export-xlsx";
 import { parseCalendarFilters } from "@/features/prep-calendar/lib/calendar-filters";
-import { eachDayKey } from "@/features/prep-calendar/lib/calendar-view";
-import { isDateKey } from "@/features/prep-calendar/lib/event-dates";
+import { isCalendarDateKey } from "@/features/prep-calendar/lib/event-dates";
 import { calendarRights } from "@/features/prep-calendar/queries";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { formatDateRange } from "@/shared/i18n/format-date";
@@ -46,8 +45,8 @@ const exportSchema = z.object({
       }),
     )
     .max(50),
-  from: z.string().refine(isDateKey, "Укажите начало периода"),
-  to: z.string().refine(isDateKey, "Укажите конец периода"),
+  from: z.string().refine(isCalendarDateKey, "Укажите начало периода"),
+  to: z.string().refine(isCalendarDateKey, "Укажите конец периода"),
   title: z.enum(["list", "week"]).optional(),
   /** Параметры адреса экрана: фильтры и переключатели источников. Права сервер решает сам. */
   query: z.record(z.string(), z.string().max(200)).default({}),
@@ -69,7 +68,9 @@ export async function exportCalendarAction(
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Проверьте период" };
   const { format, from, to, query } = parsed.data;
   if (to < from) return { error: "Конец периода раньше начала" };
-  if (eachDayKey({ from, to }).length > MAX_DAYS) return { error: "Период — не больше года" };
+  // Разница дат без перебора дней: длинный период не должен занимать сервер.
+  const days = (parseDateKey(to).getTime() - parseDateKey(from).getTime()) / 86_400_000 + 1;
+  if (days > MAX_DAYS) return { error: "Период — не больше года" };
 
   let columns = calendarExportColumns(parsed.data.columns);
   if (columns.length === 0) {
