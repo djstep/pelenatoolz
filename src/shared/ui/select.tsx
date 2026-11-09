@@ -118,6 +118,8 @@ export function Select({
 
   function commitValue(nextValue: string) {
     setOpen(false);
+    // Выбранный пункт исчезает вместе со списком — фокус обратно на поле, чтобы Tab шёл дальше.
+    triggerRef.current?.focus();
     const native = nativeRef.current;
     if (!native) {
       if (!isControlled) setInternalValue(nextValue);

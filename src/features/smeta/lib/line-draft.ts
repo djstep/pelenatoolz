@@ -73,6 +73,32 @@ export function sameDraft(a: LineDraft, b: LineDraft): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
+/** Пустая новая строка. */
+export const EMPTY_DRAFT: LineDraft = {
+  name: "",
+  unit: "",
+  quantity: "",
+  rate: "",
+  slots: [{ kind: "none" }, { kind: "none" }, { kind: "none" }],
+  expenseTypeId: "",
+  paymentFormId: "",
+  taxPercent: "",
+};
+
+/** В новой строке ничего не набрано (пробелы не в счёт). */
+export function isEmptyDraft(d: LineDraft): boolean {
+  return (
+    !d.name.trim() &&
+    !d.unit.trim() &&
+    !d.quantity.trim() &&
+    !d.rate.trim() &&
+    !d.taxPercent.trim() &&
+    !d.expenseTypeId &&
+    !d.paymentFormId &&
+    d.slots.every((s) => s.kind === "none" || (s.kind === "number" && !s.value.trim()))
+  );
+}
+
 export type DraftField = "quantity" | "rate" | "taxPercent" | "multipliers";
 
 export type DraftPreview = ItemCalc & {

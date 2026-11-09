@@ -3,8 +3,10 @@ import { describe, test } from "node:test";
 import {
   draftFromLine,
   draftToPayload,
+  EMPTY_DRAFT,
   formatMoney,
   formatNumber,
+  isEmptyDraft,
   previewDraft,
   sameDraft,
 } from "@/features/smeta/lib/line-draft";
@@ -83,5 +85,13 @@ describe("строка сметы на экране", () => {
       ),
       "× СМЕНЫ (32) × 0,7 × НЕДЕЛИ (не задана)",
     );
+  });
+
+  test("новая строка: пустая, пока ничего не набрано (пробелы не в счёт)", () => {
+    assert.equal(isEmptyDraft(EMPTY_DRAFT), true);
+    assert.equal(isEmptyDraft({ ...EMPTY_DRAFT, name: "  " }), true);
+    assert.equal(isEmptyDraft({ ...EMPTY_DRAFT, slots: [{ kind: "number", value: " " }, { kind: "none" }, { kind: "none" }] }), true);
+    assert.equal(isEmptyDraft({ ...EMPTY_DRAFT, rate: "1" }), false);
+    assert.equal(isEmptyDraft({ ...EMPTY_DRAFT, paymentFormId: "ip" }), false);
   });
 });

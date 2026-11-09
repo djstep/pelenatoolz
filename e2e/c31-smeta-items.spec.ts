@@ -484,6 +484,8 @@ test.describe.serial("смета цеха по статьям: экран", () =
   });
 
   const line = (page: Page, name: string) => page.locator(`tr[data-budget-line="${name}"]`);
+  /** Скрытые колонки строки — под ней, пока строку правят. */
+  const lineDetail = (page: Page, name: string) => page.locator(`tr[data-budget-line-detail="${name}"]`);
 
   test("глава цеха собирает смету: статья, подстатья, строки, множители, налог из формы, итоги; кодов нет", async ({ page }) => {
     await page.goto(smetaPath());
@@ -521,9 +523,10 @@ test.describe.serial("смета цеха по статьям: экран", () =
     await modal.locator("#multiplier-0-trigger").click();
     await page.getByRole("option", { name: "СМЕНЫ (10)" }).click();
     await modal.getByRole("button", { name: "Готово" }).click();
-    await cam.locator(`[id$="-form-trigger"]`).click();
+    // Форма оплаты и налог % скрыты по умолчанию — при правке строки они под ней.
+    await lineDetail(page, camera).locator(`[id$="-form-trigger"]`).click();
     await page.getByRole("option", { name: "ИП", exact: true }).click();
-    await expect(cam.getByLabel("Налог, %")).toHaveValue("6");
+    await expect(lineDetail(page, camera).getByLabel("Налог, %")).toHaveValue("6");
     // Предпросмотр до сохранения: 150 000 + 9 000 = 159 000.
     await expect(cam).toContainText("159 000,00");
     await cam.getByRole("button", { name: "Сохранить" }).click();
@@ -592,6 +595,132 @@ test.describe.serial("смета цеха по статьям: экран", () =
     await expect(page).toHaveURL(new RegExp(`${projectPath(ctx, "/smeta")}$`));
     const still = await db.budgetItem.findFirstOrThrow({ where: { projectId: ctx.projectId, name: camera } });
     expect(still.rate?.toString()).toBe("15000");
+  });
+
+  test("клавиатура: Enter — сохранить и вниз, Esc — отмена, быстрый ввод новых строк подряд", async ({ page }) => {
+    const quick = [`Рация ${RUN}`, `Генератор ${RUN}`, `Плейбек ${RUN}`];
+    await page.goto(smetaPath());
+    const cam = line(page, camera);
+    const gr = line(page, grim);
+
+    // Enter: строка сохраняется, фокус — в ту же колонку следующей строки.
+    await cam.getByLabel("Количество").fill("2");
+    await page.keyboard.press("Enter");
+    await expect(gr.getByLabel("Количество")).toBeFocused();
+    await expect
+      .poll(async () => (await db.budgetItem.findFirst({ where: { projectId: ctx.projectId, name: camera } }))?.quantity?.toString())
+      .toBe("2");
+
+    // Esc — отмена правки строки.
+    await page.keyboard.type("7");
+    await expect(gr.getByLabel("Количество")).toHaveValue("7");
+    await page.keyboard.press("Escape");
+    await expect(gr.getByLabel("Количество")).toHaveValue("1");
+
+    // Enter на последней строке — новая строка в той же подстатье; ввод подряд без мыши.
+    await page.keyboard.press("Enter");
+    const fresh = page.locator("tr[data-budget-new-line]");
+    await expect(fresh.getByLabel("Наименование")).toBeFocused();
+    for (const [i, name] of quick.entries()) {
+      await page.keyboard.type(name);
+      await page.keyboard.press("Tab");
+      await page.keyboard.type(String(i + 1));
+      await page.keyboard.press("Tab");
+      await page.keyboard.type("1000");
+      await page.keyboard.press("Enter");
+    }
+    for (const name of quick) await expect(line(page, name)).toBeVisible();
+    await expect
+      .poll(async () =>
+        (
+          await db.budgetItem.findMany({
+            where: { projectId: ctx.projectId, name: { in: quick } },
+            orderBy: { sortOrder: "asc" },
+            select: { name: true, quantity: true, rate: true, subarticle: { select: { name: true } } },
+          })
+        ).map((r) => `${r.name}|${r.quantity}|${r.rate}|${r.subarticle?.name}`),
+      )
+      .toEqual(quick.map((name, i) => `${name}|${i + 1}|1000|${sub}`));
+    // Пустая новая строка закрывается по Esc.
+    await expect(fresh.getByLabel("Наименование")).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(fresh).toHaveCount(0);
+    await db.budgetItem.updateMany({ where: { projectId: ctx.projectId, name: camera }, data: { quantity: 1 } });
+  });
+
+  test("список и окно множителей не сохраняют строку раньше времени; уход из строки — сохраняет", async ({ page }) => {
+    await page.goto(smetaPath());
+    const cam = line(page, camera);
+    const rateInDb = async () =>
+      (await db.budgetItem.findFirst({ where: { projectId: ctx.projectId, name: camera } }))?.rate?.toString();
+    await cam.getByLabel("Ставка").fill("20000");
+
+    // Окно множителей: открыть, выбрать в его списке, закрыть «Отменой».
+    await cam.getByRole("button", { name: "Множители" }).click();
+    const modal = page.getByRole("dialog", { name: "Множители строки" });
+    await modal.locator("#multiplier-1-trigger").click();
+    await page.getByRole("option", { name: "СМЕНЫ (10)" }).click();
+    await modal.getByRole("button", { name: "Отмена" }).click();
+    await expect(modal).toHaveCount(0);
+    await expect(cam.getByRole("button", { name: "Множители" })).toBeFocused();
+    await page.waitForTimeout(500);
+    expect(await rateInDb()).toBe("15000");
+
+    // Выпадающий список формы оплаты (колонка скрыта — список под строкой).
+    await lineDetail(page, camera).locator(`[id$="-form-trigger"]`).click();
+    await page.getByRole("option", { name: "ИП", exact: true }).click();
+    await page.waitForTimeout(500);
+    expect(await rateInDb()).toBe("15000");
+    await expect(cam.getByLabel("Ставка")).toHaveValue("20000");
+
+    // Щелчок мимо строки — строка сохраняется сама.
+    await page.getByRole("heading", { name: /^Смета — / }).click();
+    await expect.poll(rateInDb).toBe("20000");
+    await expect(lineDetail(page, camera)).toHaveCount(0);
+
+    // Tab из строки в следующую — тоже уход из строки.
+    await cam.getByLabel("Ставка").fill("15000");
+    await cam.getByRole("button", { name: "Множители" }).focus();
+    const grimName = line(page, grim).getByLabel("Наименование");
+    for (let i = 0; i < 12; i++) {
+      await page.keyboard.press("Tab");
+      if (await grimName.evaluate((el) => el === document.activeElement)) break;
+    }
+    await expect(grimName).toBeFocused();
+    await expect.poll(rateInDb).toBe("15000");
+  });
+
+  test("колонки: по умолчанию пять и без прокрутки в 1280 px, выбор запоминается", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto(smetaPath());
+    const table = page.getByRole("table", { name: "Смета цеха" });
+    await expect(table.locator("thead th")).toHaveText(["Наименование", "Кол-во", "Ставка", "Множители", "Итого", ""]);
+    const overflow = await table.evaluate((t) => {
+      const wrap = t.parentElement!;
+      return { table: wrap.scrollWidth - wrap.clientWidth, page: document.documentElement.scrollWidth - window.innerWidth };
+    });
+    expect(overflow).toEqual({ table: 0, page: 0 });
+
+    // Скрытые колонки — под строкой, пока её правят.
+    await line(page, camera).getByLabel("Количество").click();
+    const detail = lineDetail(page, camera);
+    await expect(detail.getByLabel("Единица")).toBeVisible();
+    await expect(detail.getByLabel("Налог, %")).toHaveValue("6");
+    await expect(detail).toContainText("Сумма");
+
+    // Включить «Сумму» и «Налог» — запоминается после перезагрузки.
+    await page.getByRole("button", { name: "Колонки" }).click();
+    const menu = page.getByRole("dialog").filter({ hasText: "Скрытые колонки видны при правке строки" });
+    await menu.getByLabel("Сумма", { exact: true }).check();
+    await menu.getByLabel("Налог", { exact: true }).check();
+    await expect(menu.getByLabel("Итого", { exact: true })).toBeDisabled();
+    await page.keyboard.press("Escape");
+    await page.reload();
+    await expect(table.locator("thead th")).toHaveText(["Наименование", "Кол-во", "Ставка", "Множители", "Сумма", "Налог", "Итого", ""]);
+    await expect(line(page, camera)).toContainText("150 000,00");
+    await page.getByRole("button", { name: "Колонки" }).click();
+    await page.getByRole("button", { name: "Как было по умолчанию" }).click();
+    await expect(table.locator("thead th")).toHaveCount(6);
   });
 
   test("вкладка «Черновики»: листы Excel без основного листа сметы", async ({ page }) => {
