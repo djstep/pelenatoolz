@@ -5,9 +5,12 @@ import {
   hasPermission,
   type Permission,
 } from "@/features/memberships/permissions";
+import { isProjectId } from "@/features/projects/lib/project-id";
 import { parsePermissionMatrix } from "@/features/roles/permissions-matrix";
 
 export async function getActiveMembership(projectId: string, userId: string) {
+  // id из браузера: объект-фильтр Prisma нашёл бы участие в любом проекте пользователя.
+  if (!isProjectId(projectId)) return null;
   return prisma.projectMembership.findFirst({
     where: {
       projectId,
@@ -23,6 +26,7 @@ export async function requireProjectAccess(
   userId: string,
   permission: Permission = "project:read",
 ) {
+  if (!isProjectId(projectId)) throw new Error("FORBIDDEN");
   const membership = await getActiveMembership(projectId, userId);
   if (!membership) {
     throw new Error("FORBIDDEN");

@@ -4,6 +4,7 @@ import {
   projectIdsForMembersCount,
   type ProjectCardAccess,
 } from "@/features/projects/lib/project-list-access";
+import { isProjectId } from "@/features/projects/lib/project-id";
 import { parsePermissionMatrix } from "@/features/roles/permissions-matrix";
 import { prisma } from "@/shared/db/prisma";
 
@@ -65,6 +66,8 @@ export async function listUserProjects(
 }
 
 export async function getProjectForUser(projectId: string, userId: string) {
+  // id из адреса или запроса: объект-фильтр Prisma нашёл бы любой проект пользователя.
+  if (!isProjectId(projectId)) return null;
   return prisma.project.findFirst({
     where: {
       id: projectId,

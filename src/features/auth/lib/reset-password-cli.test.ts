@@ -8,9 +8,10 @@ import {
   parseResetPasswordArgs,
 } from "@/features/auth/lib/reset-password-cli";
 
-const DEV = "postgresql://user:secret@ep-floral-bread-1.neon.tech/neondb?sslmode=require";
-const PROD = "postgresql://user:secret@ep-steep-sound-1.neon.tech/neondb?sslmode=require";
-const SERVER_PROD = "postgresql://user:secret@db:5432/pelena";
+const DEV = "postgresql://user:secret@localhost:5432/pelena_dev";
+/** Прод — база в Docker на сервере (служба `db`). */
+const PROD = "postgresql://user:secret@db:5432/pelena";
+const SERVER_PROD = PROD;
 
 describe("parseResetPasswordArgs", () => {
   test("почта", () => {
@@ -84,6 +85,10 @@ describe("databaseProblem", () => {
     assert.equal(databaseProblem([SERVER_PROD], true), null);
   });
 
+  test("старый прод в облаке больше не прод: метки по имени хоста нет", () => {
+    assert.equal(databaseProblem(["postgresql://user:secret@ep-old-prod.example/neondb"], false), null);
+  });
+
   test("база с db в другом месте адреса не прод", () => {
     assert.equal(databaseProblem(["postgresql://db:secret@dev.example:5432/db"], false), null);
   });
@@ -113,7 +118,17 @@ describe("databaseProblem", () => {
 
 describe("databaseHost", () => {
   test("только адрес, без пользователя и пароля", () => {
-    assert.equal(databaseHost(DEV), "ep-floral-bread-1.neon.tech");
+    assert.equal(databaseHost(DEV), "localhost");
+  });
+
+  test("@ в пароле не сбивает: прод узнаётся, без --prod отказ", () => {
+    const url = "postgresql://user:p@ss@db:5432/pelena";
+    assert.equal(databaseHost(url), "db");
+    assert.match(databaseProblem([url], false) ?? "", /--prod/);
+  });
+
+  test("неразборчивый адрес — «?»", () => {
+    assert.equal(databaseHost("не адрес"), "?");
   });
 });
 

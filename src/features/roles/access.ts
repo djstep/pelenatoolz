@@ -1,3 +1,4 @@
+import { isProjectId } from "@/features/projects/lib/project-id";
 import { prisma } from "@/shared/db/prisma";
 import {
   parsePermissionMatrix,
@@ -10,6 +11,8 @@ export async function getMembershipWithPermissions(
   projectId: string,
   userId: string,
 ) {
+  // id из браузера: объект-фильтр Prisma нашёл бы участие в любом проекте пользователя.
+  if (!isProjectId(projectId)) return null;
   return prisma.projectMembership.findFirst({
     where: {
       projectId,

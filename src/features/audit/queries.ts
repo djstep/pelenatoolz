@@ -10,12 +10,15 @@ import {
   visibleAuditEntityTypes,
   type AuditViewer,
 } from "@/features/audit/lib/entity-access";
+import { formatAuditTime } from "@/features/audit/lib/audit-time";
 import { auditMemberName } from "@/shared/audit/member-name";
 import { prisma } from "@/shared/db/prisma";
 
 export type AuditLogRow = {
   id: string;
   createdAt: Date;
+  /** Время по поясу проекта, готовой строкой: браузер его не пересчитывает. */
+  createdAtLabel: string;
   action: AuditAction;
   entityType: string;
   entityId: string;
@@ -33,11 +36,12 @@ export async function listAuditLogs(
   projectId: string,
   viewer: AuditViewer,
   filters: AuditLogFilters = {},
+  timeZone = "Europe/Moscow",
 ) {
   const page = Math.max(1, filters.page ?? 1);
   const pageSize = Math.min(50, Math.max(10, filters.pageSize ?? 25));
   const visibleTypes = visibleAuditEntityTypes(viewer);
-  const where = buildAuditLogWhere(projectId, filters, visibleTypes);
+  const where = buildAuditLogWhere(projectId, filters, visibleTypes, timeZone);
 
   const [rows, total, users] = await Promise.all([
     prisma.auditLog.findMany({
@@ -68,6 +72,7 @@ export async function listAuditLogs(
       (r): AuditLogRow => ({
         id: r.id,
         createdAt: r.createdAt,
+        createdAtLabel: formatAuditTime(r.createdAt, timeZone),
         action: r.action,
         entityType: r.entityType,
         entityId: r.entityId,

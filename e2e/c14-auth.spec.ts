@@ -556,8 +556,9 @@ test.describe("политика обработки персональных да
 
 test.describe("скрипт владельца: сброс пароля", () => {
   const ROOT = process.cwd();
-  const FAKE_PROD = "postgresql://user:secret@ep-steep-sound-fake.invalid/neondb";
-  const FAKE_DEV = "postgresql://user:secret@ep-floral-bread-fake.invalid/neondb";
+  // Прод — база в Docker на сервере (служба `db`); на этой машине такого хоста нет, вход не удастся.
+  const FAKE_PROD = "postgresql://user:secret@db:5432/pelena";
+  const FAKE_DEV = "postgresql://user:secret@dev-fake.invalid:5432/pelena_dev";
 
   /**
    * Скрипт берёт базу только из `.env` в папке запуска. Чтобы он шёл в базу тестов, а не в настоящий
@@ -690,7 +691,7 @@ test.describe("скрипт владельца: сброс пароля", () => 
     test("прод в файле с --prod: работа идёт с базой из файла, а не из .env", () => {
       inFile(fakeProdEnv, (file) => {
         const result = runScript(["someone@pelena.test", "--env-file", file, "--prod"]);
-        expect(result.stdout).toContain("База: ep-steep-sound-fake.invalid");
+        expect(result.stdout).toContain("База: db");
         expect(result.status).toBe(1);
         expect(result.stderr).not.toContain("secret");
       });
