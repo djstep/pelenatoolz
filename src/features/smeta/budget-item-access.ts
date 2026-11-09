@@ -10,6 +10,7 @@ import {
   type SmetaAccessContext,
 } from "@/features/smeta/lib/smeta-access";
 import type { BudgetItemOption } from "@/features/smeta/lib/budget-item-option";
+import { ACTIVE_BUDGET_ITEM, isItemArchived } from "@/features/smeta/lib/item-where";
 import { prisma } from "@/shared/db/prisma";
 
 /** Цеха, чьи сметы пользователь видит: "all" или список id. */
@@ -30,7 +31,7 @@ export async function listVisibleBudgetItems(
   const rows = await prisma.budgetItem.findMany({
     where: {
       projectId,
-      archivedAt: null,
+      ...ACTIVE_BUDGET_ITEM,
       ...(all ? {} : { departmentId: { in: [...access.headDepartmentIds] } }),
     },
     select: {
@@ -110,13 +111,17 @@ export async function checkBudgetItemsUsable(
   }
   const rows = await prisma.budgetItem.findMany({
     where: { projectId, id: { in: fresh } },
-    select: { departmentId: true, archivedAt: true },
+    select: {
+      departmentId: true,
+      archivedAt: true,
+      subarticle: { select: { archivedAt: true, article: { select: { archivedAt: true } } } },
+    },
   });
   // Тот же текст, что и для чужой статьи: по ответу не понять, что статья есть.
   if (rows.some((r) => !canReadDepartmentSmeta(access, r.departmentId))) {
     return "Статья сметы не найдена";
   }
-  if (rows.some((r) => r.archivedAt !== null)) {
+  if (rows.some(isItemArchived)) {
     return "Статья в архиве сметы — выберите действующую";
   }
   return null;

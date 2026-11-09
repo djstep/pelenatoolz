@@ -3,6 +3,7 @@ import "server-only";
 import { listDepartmentsForSmeta } from "@/features/departments/queries";
 import { EXCEL_EMPTY } from "@/features/smeta/lib/export-summary-xlsx";
 import { freezeSheetFormulas } from "@/features/smeta/lib/version-snapshot";
+import { ACTIVE_BUDGET_ITEM } from "@/features/smeta/lib/item-where";
 import {
   assembleWorkbookFromSheets,
   createDefaultWorksheet,
@@ -206,7 +207,7 @@ export async function getSummaryBook(
       ? Promise.resolve([])
       : prisma.budgetItem.groupBy({
           by: ["departmentId"],
-          where: { projectId, departmentId: { in: ids }, archivedAt: null },
+          where: { projectId, departmentId: { in: ids }, ...ACTIVE_BUDGET_ITEM },
           _sum: { total: true },
         }),
   ]);

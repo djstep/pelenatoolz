@@ -18,6 +18,7 @@ import {
   type SmetaCheck,
 } from "@/features/smeta/lib/main-sheet";
 import { stableJson } from "@/features/smeta/lib/stable-json";
+import { ACTIVE_BUDGET_ITEM } from "@/features/smeta/lib/item-where";
 
 const budgetInclude = {
   sheets: {
@@ -132,7 +133,7 @@ export async function listDepartmentBudgetSummaries(
     }),
     prisma.budgetItem.groupBy({
       by: ["departmentId"],
-      where: { projectId, departmentId: { in: [...departmentIds] }, archivedAt: null },
+      where: { projectId, departmentId: { in: [...departmentIds] }, ...ACTIVE_BUDGET_ITEM },
       _count: { _all: true },
       _sum: { total: true },
     }),
@@ -484,7 +485,7 @@ export async function lockBudget(tx: Tx, budgetId: string): Promise<number | nul
  */
 export type SaveStatusChange = "changed_after_submit" | "draft_after_approve" | null;
 
-function statusAfterEdit(status: BudgetStatus) {
+export function statusAfterEdit(status: BudgetStatus) {
   const change: SaveStatusChange =
     status === BudgetStatus.SUBMITTED
       ? "changed_after_submit"
