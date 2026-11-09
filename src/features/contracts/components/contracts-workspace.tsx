@@ -218,6 +218,7 @@ export function ContractsWorkspace({
       amount: Number(row.amount),
       vatEnabled: row.vatEnabled,
       vatRate: row.vatRate != null ? Number(row.vatRate) : null,
+      vatAmount: row.vatAmount != null ? Number(row.vatAmount) : null,
       isPreliminary: row.isPreliminary,
       statusId: defaultStatusId,
       tags: row.tags,

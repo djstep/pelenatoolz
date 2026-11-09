@@ -12,10 +12,9 @@ import {
 } from "@/features/contracts/actions";
 import type { ContractFinanceAccess } from "@/features/contracts/lib/finance-access";
 import {
-  VAT_RATE_PRESETS,
   computeContractVat,
-  vatRateChoice,
-  vatRateCustom,
+  vatManualInput,
+  vatRateInput,
 } from "@/features/contracts/lib/vat";
 import {
   EntityPicker,
@@ -117,15 +116,9 @@ export function ContractFormModal({
   );
   const [amount, setAmount] = useState(String(defaults?.amount ?? ""));
   const [vatEnabled, setVatEnabled] = useState(defaults?.vatEnabled ?? false);
-  const [vatRate, setVatRate] = useState(() => vatRateChoice(defaults?.vatRate));
-  const [vatCustom, setVatCustom] = useState(() => vatRateCustom(defaults?.vatRate));
-  // На сервер уходит число: выбранный вариант или введённое вручную, а не слово «custom».
-  const effectiveVatRate = vatRate === "custom" ? vatCustom.trim() : vatRate;
-  const [vatManual, setVatManual] = useState(
-    defaults?.vatAmount != null && defaults?.vatRate == null
-      ? String(defaults.vatAmount)
-      : "",
-  );
+  const [vatRate, setVatRate] = useState(() => vatRateInput(defaults?.vatRate));
+  const effectiveVatRate = vatRate.trim();
+  const [vatManual, setVatManual] = useState(() => vatManualInput(defaults));
 
   // Поля сбрасываются только при открытии окна. Новые списки с сервера (после быстрого
   // добавления компании, контрагента, типа или статуса) дополняют варианты, выбранное остаётся.
@@ -140,9 +133,8 @@ export function ContractFormModal({
       setStatusId(defaults?.statusId ?? defaultStatusId);
       setAmount(String(defaults?.amount ?? ""));
       setVatEnabled(defaults?.vatEnabled ?? false);
-      setVatRate(vatRateChoice(defaults?.vatRate));
-      setVatCustom(vatRateCustom(defaults?.vatRate));
-      setVatManual("");
+      setVatRate(vatRateInput(defaults?.vatRate));
+      setVatManual(vatManualInput(defaults));
       setCompanyOptions(companies);
       setCpOptions(counterparties);
       setLedgerTypes(initialLedgerTypes);
@@ -370,40 +362,21 @@ export function ContractFormModal({
             {vatEnabled ? (
               <div className="grid gap-3 rounded-xl border border-[var(--border)] bg-[rgb(var(--tint-rgb)/0.02)] p-3 sm:grid-cols-3">
                 <div>
-                  <Label htmlFor="vatRate">Ставка %</Label>
-                  <Select
+                  <Label htmlFor="vatRate">Ставка налога, %</Label>
+                  <Input
                     id="vatRate"
+                    name="vatRate"
+                    type="number"
+                    min={0}
+                    max={100}
+                    step="0.01"
+                    placeholder="%"
                     value={vatRate}
                     onChange={(e) => {
                       setVatRate(e.target.value);
                       setVatManual("");
                     }}
-                  >
-                    <option value="">—</option>
-                    {VAT_RATE_PRESETS.map((r) => (
-                      <option key={r} value={String(r)}>
-                        {`${r}%`}
-                      </option>
-                    ))}
-                    <option value="custom">Другая…</option>
-                  </Select>
-                  {vatRate === "custom" ? (
-                    <Input
-                      className="mt-2"
-                      type="number"
-                      min={0}
-                      max={100}
-                      step="0.01"
-                      placeholder="%"
-                      aria-label="Своя ставка налога, %"
-                      value={vatCustom}
-                      onChange={(e) => {
-                        setVatCustom(e.target.value);
-                        setVatManual("");
-                      }}
-                    />
-                  ) : null}
-                  <input type="hidden" name="vatRate" value={effectiveVatRate} />
+                  />
                 </div>
                 <div>
                   <Label htmlFor="vatAmountManual">Налог вручную</Label>

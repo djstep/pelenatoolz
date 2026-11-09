@@ -1,13 +1,19 @@
 import { expect, test, type Page } from "@playwright/test";
+import { e2eDb } from "./helpers/db";
 import { e2eContext, projectPath, storageStatePath } from "./helpers/session";
 
 /**
  * Договоры и акты: в системе нет НДС, есть «Налог» (налог на доход исполнителя).
- * Подписи — «Налог», ставка по умолчанию не подставляется (раньше было 22%).
- * Файл только открывает экраны и окна, в базу ничего не пишет.
+ * Подписи — «Налог», ставка по умолчанию не подставляется (раньше было 22%), списка
+ * ставок нет — своя ставка или сумма налога. Последний тест пишет в базу свой акт и удаляет его.
  */
 
 const ctx = e2eContext();
+const db = e2eDb();
+
+test.afterAll(async () => {
+  await db.$disconnect();
+});
 test.use({ storageState: storageStatePath("producer") });
 
 async function expectNoVat(page: Page) {
@@ -53,4 +59,48 @@ test("акты: в таблице и окне нового акта нет «Н�
   await tax.check();
   await expect(dialog.locator("#vatRate")).toHaveValue("");
   await expectNoVat(page);
+});
+
+test("акт с налогом суммой: при правке сумма на месте, повторное сохранение её не теряет", async ({ page }) => {
+  test.skip(!ctx.contractId, "в сиде нет договора");
+  const contract = await db.contract.findUniqueOrThrow({
+    where: { id: ctx.contractId! },
+    select: { companyId: true, counterpartyId: true, statusId: true },
+  });
+  const number = `E2E-налог-${Date.now()}`;
+  const act = await db.certificate.create({
+    data: {
+      projectId: ctx.projectId,
+      date: new Date("2026-11-09T00:00:00Z"),
+      number,
+      ...contract,
+      amount: 1000,
+      vatEnabled: true,
+      vatRate: null,
+      vatAmount: 60,
+      amountWithVat: 1060,
+    },
+  });
+  try {
+    await page.goto(projectPath(ctx, "/counterparties/acts"));
+    const row = page.locator("tr", { hasText: number });
+    await row.getByRole("button", { name: "Изменить" }).click();
+    const dialog = page.getByRole("dialog", { name: "Редактирование акта" });
+    await expect(dialog.getByRole("checkbox", { name: "С налогом" })).toBeChecked();
+    await expect(dialog.locator("#vatRate")).toHaveValue("");
+    await expect(dialog.locator("#vatAmountManual")).toHaveValue("60");
+    await dialog.getByRole("button", { name: "Сохранить" }).click();
+    await expect(dialog).toBeHidden();
+
+    const saved = await db.certificate.findUniqueOrThrow({
+      where: { id: act.id },
+      select: { vatEnabled: true, vatRate: true, vatAmount: true, amountWithVat: true },
+    });
+    expect(saved.vatEnabled).toBe(true);
+    expect(saved.vatRate).toBeNull();
+    expect(Number(saved.vatAmount)).toBe(60);
+    expect(Number(saved.amountWithVat)).toBe(1060);
+  } finally {
+    await db.certificate.delete({ where: { id: act.id } });
+  }
 });

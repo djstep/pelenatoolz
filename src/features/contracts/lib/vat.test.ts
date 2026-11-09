@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import {
   computeContractVat,
-  vatRateChoice,
-  vatRateCustom,
+  vatManualInput,
+  vatRateInput,
 } from "@/features/contracts/lib/vat";
 import {
   CERTIFICATE_COLUMNS,
@@ -53,17 +53,49 @@ describe("налог договора и акта: расчёт", () => {
   });
 });
 
-describe("налог договора и акта: выбор ставки в форме", () => {
-  test("ставка не задана — пусто, а не 22%", () => {
-    assert.equal(vatRateChoice(null), "");
-    assert.equal(vatRateChoice(undefined), "");
-    assert.equal(vatRateCustom(null), "");
+describe("налог договора и акта: поля формы при правке", () => {
+  test("ставка: сохранённая или пусто, а не 22%", () => {
+    assert.equal(vatRateInput(null), "");
+    assert.equal(vatRateInput(undefined), "");
+    assert.equal(vatRateInput(6), "6");
+    assert.equal(vatRateInput(4.5), "4.5");
   });
 
-  test("ставка из списка и своя ставка", () => {
-    assert.equal(vatRateChoice(7), "7");
-    assert.equal(vatRateChoice(6), "custom");
-    assert.equal(vatRateCustom(6), "6");
+  test("налог введён суммой без ставки — «Налог вручную» заполнен", () => {
+    assert.equal(
+      vatManualInput({ amount: 1000, vatEnabled: true, vatRate: null, vatAmount: 60 }),
+      "60",
+    );
+  });
+
+  test("сумма налога не сходится со ставкой (старые записи) — тоже вручную", () => {
+    assert.equal(
+      vatManualInput({ amount: 1000, vatEnabled: true, vatRate: 22, vatAmount: 100 }),
+      "100",
+    );
+  });
+
+  test("налог посчитан по ставке или выключен — «Налог вручную» пустой", () => {
+    assert.equal(
+      vatManualInput({ amount: 1234.56, vatEnabled: true, vatRate: 6, vatAmount: 74.07 }),
+      "",
+    );
+    assert.equal(
+      vatManualInput({ amount: 1000, vatEnabled: false, vatRate: null, vatAmount: null }),
+      "",
+    );
+    assert.equal(vatManualInput(null), "");
+  });
+
+  test("повторное сохранение: из полей формы получается тот же налог", () => {
+    const saved = { amount: 1000, vatEnabled: true, vatRate: null, vatAmount: 60 };
+    const again = computeContractVat({
+      amount: saved.amount,
+      vatEnabled: saved.vatEnabled,
+      vatRate: vatRateInput(saved.vatRate) === "" ? null : Number(vatRateInput(saved.vatRate)),
+      vatAmountManual: Number(vatManualInput(saved)),
+    });
+    assert.deepEqual(again, { vatAmount: 60, amountWithVat: 1060 });
   });
 });
 

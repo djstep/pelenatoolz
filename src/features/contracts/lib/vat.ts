@@ -5,22 +5,31 @@ export const DEFAULT_LEDGER_TYPES = [
   { name: "Транспорт", sortOrder: 40 },
 ] as const;
 
-export const VAT_RATE_PRESETS = [5, 7, 22] as const;
-
-/**
- * Значение списка ставок налога: вариант из списка, «custom», если сохранённой ставки
- * среди вариантов нет, или пусто, если ставка не задана (ставка по умолчанию не подставляется).
- */
-export function vatRateChoice(rate?: number | null) {
-  if (rate == null) return "";
-  return (VAT_RATE_PRESETS as readonly number[]).includes(rate)
-    ? String(rate)
-    : "custom";
+/** Поле «Ставка налога, %» в форме: сохранённая ставка или пусто (ставка по умолчанию не подставляется). */
+export function vatRateInput(rate?: number | null) {
+  return rate == null ? "" : String(rate);
 }
 
-/** Своя ставка для поля «Другая…» (пусто, если ставка из списка). */
-export function vatRateCustom(rate?: number | null) {
-  return vatRateChoice(rate) === "custom" ? String(rate) : "";
+/**
+ * Поле «Налог вручную» при правке: сохранённая сумма налога, если она введена суммой,
+ * а не посчитана по ставке (ставки нет или сумма с ней не сходится). Иначе пусто.
+ */
+export function vatManualInput(
+  saved?: {
+    amount?: number;
+    vatEnabled?: boolean;
+    vatRate?: number | null;
+    vatAmount?: number | null;
+  } | null,
+) {
+  if (!saved?.vatEnabled || saved.vatAmount == null) return "";
+  if (
+    saved.vatRate != null &&
+    round2(((saved.amount ?? 0) * saved.vatRate) / 100) === round2(saved.vatAmount)
+  ) {
+    return "";
+  }
+  return String(saved.vatAmount);
 }
 
 /**
