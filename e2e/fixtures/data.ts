@@ -12,6 +12,8 @@ export const E2E_ROLES = {
   nocallsheet: { key: "nocallsheet", email: "e2e-nocallsheet@pelena.test", name: "E2E Без вызывных" },
   /** Команда: просмотр и правка, но без контактов и без договоров. */
   crewonly: { key: "crewonly", email: "e2e-crewonly@pelena.test", name: "E2E Только команда" },
+  /** Как «только команда», но без кастинга: проверка, что пробы и имена кандидатов к нему не приходят. */
+  nocast: { key: "nocast", email: "e2e-nocast@pelena.test", name: "E2E Без кастинга" },
 } as const;
 
 /** Почты для проверки регистрации. Вместе с ролями попадают в REGISTRATION_ALLOWLIST сайта. */
@@ -27,6 +29,7 @@ export const E2E_ROLE_NAMES = {
   nofin: "E2E без финансов",
   nocallsheet: "E2E без вызывных",
   crewonly: "E2E без договоров и контактов",
+  nocast: "E2E без кастинга",
 } as const;
 
 /** Переменные `.env.e2e`: пароль роли. */

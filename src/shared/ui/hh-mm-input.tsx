@@ -161,7 +161,8 @@ export function HhMmInput({
   function moveCaretToEnd() {
     requestAnimationFrame(() => {
       const el = inputRef.current;
-      if (!el) return;
+      // По той же причине курсор двигаем только в поле, которое ещё в фокусе.
+      if (!el || document.activeElement !== el) return;
       const pos = el.value.length;
       el.setSelectionRange(pos, pos);
     });
@@ -231,7 +232,12 @@ export function HhMmInput({
         }
         setInvalid(false);
         replaceOnNextKeyRef.current = !isEmptyDigits(digits);
-        requestAnimationFrame(() => inputRef.current?.select());
+        // Через кадр человек мог уже уйти в другое поле: выделение вернуло бы фокус сюда,
+        // и ввод в соседнее поле пропал бы. Выделяем, только если поле ещё в фокусе.
+        requestAnimationFrame(() => {
+          const el = inputRef.current;
+          if (el && document.activeElement === el) el.select();
+        });
       }}
       onMouseDown={(e) => {
         const input = e.currentTarget;

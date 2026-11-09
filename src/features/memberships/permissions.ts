@@ -20,6 +20,8 @@ export const PERMISSIONS = [
   "crew:read",
   "crew:write",
   "crew:contacts",
+  "calendar:read",
+  "calendar:write",
   "cast:read",
   "cast:write",
   "smeta:read_all",
@@ -67,6 +69,8 @@ const PERMISSION_TO_SECTION: Record<
   "crew:write": { section: "crew", action: "write" },
   /** Телефон и почта команды: раздел-флаг «Команда: контакты», только «Доступ». */
   "crew:contacts": { section: "crew_contacts", action: "access" },
+  "calendar:read": { section: "calendar", action: "read" },
+  "calendar:write": { section: "calendar", action: "write" },
   "cast:read": { section: "actors", action: "read" },
   "cast:write": { section: "actors", action: "write" },
   /** Сметы цехов: просмотр всех (без правки и утверждения). Продюсер видит их и без флага. */

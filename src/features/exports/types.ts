@@ -6,6 +6,7 @@ export const EXPORT_LAYOUT_KEYS = [
   "kppShort",
   "directorsScript",
   "crew",
+  "prepCalendar",
 ] as const;
 
 export type ExportLayoutKey = (typeof EXPORT_LAYOUT_KEYS)[number];

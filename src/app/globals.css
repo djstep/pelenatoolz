@@ -89,6 +89,32 @@
   --inset-bg: rgba(0, 0, 0, 0.15);
   --inset-bg-soft: rgba(0, 0, 0, 0.1);
 
+  /* Типы событий календаря препродакшена: заливка, текст (контраст ≥ 4.5:1), рамка. */
+  --event-blue-bg: #1e2b48;
+  --event-blue-fg: #c4d5ff;
+  --event-blue-line: #3a5488;
+  --event-green-bg: #1a3423;
+  --event-green-fg: #a8e6bf;
+  --event-green-line: #2e5b3d;
+  --event-amber-bg: #3b2e10;
+  --event-amber-fg: #f6d48a;
+  --event-amber-line: #5f4b1f;
+  --event-red-bg: #432020;
+  --event-red-fg: #ffc2bb;
+  --event-red-line: #6e3633;
+  --event-violet-bg: #2d2547;
+  --event-violet-fg: #d6caff;
+  --event-violet-line: #4c3f7a;
+  --event-teal-bg: #123336;
+  --event-teal-fg: #a0e4e4;
+  --event-teal-line: #245a5e;
+  --event-pink-bg: #43203a;
+  --event-pink-fg: #ffc2e4;
+  --event-pink-line: #6e3660;
+  --event-gray-bg: #2e2e2e;
+  --event-gray-fg: #d4d4d4;
+  --event-gray-line: #4a4a4a;
+
   /* Текст со смыслом. */
   --tone-success: #6ee7b7;
   --tone-warning: #fcd34d;
@@ -257,6 +283,32 @@
   --tint-rgb: 22 24 29;
   --inset-bg: rgba(15, 23, 42, 0.035);
   --inset-bg-soft: rgba(15, 23, 42, 0.025);
+
+  /* Типы событий календаря препродакшена: заливка, текст (контраст ≥ 4.5:1), рамка. */
+  --event-blue-bg: #dce6fb;
+  --event-blue-fg: #1e3f9e;
+  --event-blue-line: #a9bef0;
+  --event-green-bg: #d6eedd;
+  --event-green-fg: #17603a;
+  --event-green-line: #a6d8b6;
+  --event-amber-bg: #fbe9c4;
+  --event-amber-fg: #6f4600;
+  --event-amber-line: #ebcb85;
+  --event-red-bg: #faddda;
+  --event-red-fg: #97261e;
+  --event-red-line: #f0b4ae;
+  --event-violet-bg: #e8e0fa;
+  --event-violet-fg: #4f2ba3;
+  --event-violet-line: #c9b8f2;
+  --event-teal-bg: #d2eeee;
+  --event-teal-fg: #0f5c62;
+  --event-teal-line: #9fd9da;
+  --event-pink-bg: #faddec;
+  --event-pink-fg: #8e1f5f;
+  --event-pink-line: #f0b3d3;
+  --event-gray-bg: #e7e7e2;
+  --event-gray-fg: #3d4048;
+  --event-gray-line: #cfcfc8;
 
   /* Тёмные оттенки той же гаммы: контраст к светлому фону не ниже 4.5:1. */
   --tone-success: #065f46;

@@ -31,6 +31,8 @@ npm run dev
 
 Откройте [http://localhost:3000](http://localhost:3000) → редирект на `/ru/login`.
 
+`npm run dev`, `npm start`, `npm test` и e2e считают время в UTC, как сервер (`scripts/tz-utc.mjs`, `TZ` в `docker-compose.prod.yml`). Запускать сайт напрямую через `next dev` не стоит: на компьютере в Москве даты без времени запишутся на день раньше.
+
 ## Что умеет модуль 1
 
 - Регистрация / вход (email + пароль)

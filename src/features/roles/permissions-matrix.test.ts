@@ -11,6 +11,7 @@ import {
   emptySectionPermissions,
   fullSectionPermissions,
   normalizePermissionMatrix,
+  isSectionFlagAllowed,
   parsePermissionMatrix,
   PERMISSION_SECTIONS,
 } from "@/features/roles/permissions-matrix";
@@ -269,15 +270,39 @@ describe("Волна 8: права «Команда»", () => {
     assert.equal(hasPermission(m, "crew:contacts"), false);
   });
 
-  test("новая своя роль — только просмотр команды", () => {
+  test("новая своя роль — только просмотр команды и календаря", () => {
     const m = buildNewRoleMatrix();
     assert.equal(hasPermission(m, "crew:read"), true);
     assert.equal(hasPermission(m, "crew:write"), false);
     assert.equal(hasPermission(m, "crew:contacts"), false);
+    assert.equal(hasPermission(m, "calendar:read"), true);
+    assert.equal(hasPermission(m, "calendar:write"), false);
     for (const s of PERMISSION_SECTIONS) {
-      if (s.id === "crew") continue;
+      if (s.id === "crew" || s.id === "calendar") continue;
       assert.deepEqual(m[s.id], emptySectionPermissions(), s.id);
     }
+  });
+
+  test("календарь: продюсер правит, наблюдатель только смотрит", () => {
+    const producer = buildFullMatrix();
+    assert.equal(hasPermission(producer, "calendar:read"), true);
+    assert.equal(hasPermission(producer, "calendar:write"), true);
+    const viewer = buildViewerMatrix();
+    assert.equal(hasPermission(viewer, "calendar:read"), true);
+    assert.equal(hasPermission(viewer, "calendar:write"), false);
+  });
+
+  test("календарь: у раздела только «Доступ», «Просмотр» и «Редактирование»", () => {
+    assert.equal(isSectionFlagAllowed("calendar", "update"), true);
+    assert.equal(isSectionFlagAllowed("calendar", "create"), false);
+    assert.equal(isSectionFlagAllowed("calendar", "delete"), false);
+    assert.equal(isSectionFlagAllowed("calendar", "financeRead"), false);
+  });
+
+  test("календарь: роль без раздела в базе ничего не получает", () => {
+    const m = parsePermissionMatrix({ crew: { access: true, read: true } });
+    assert.equal(hasPermission(m, "calendar:read"), false);
+    assert.equal(hasPermission(m, "calendar:write"), false);
   });
 
   test("«Контакты» сами по себе не дают просмотр и правку", () => {

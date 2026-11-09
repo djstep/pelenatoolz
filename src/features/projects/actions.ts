@@ -43,6 +43,7 @@ import { DEFAULT_APPROVAL_STATUSES } from "@/features/finance/lib/approval-statu
 import { DEFAULT_LEDGER_TYPES } from "@/features/contracts/lib/vat";
 import { PROJECT_CREATION_CLOSED_MESSAGE } from "@/features/auth/lib/registration-access";
 import { canCreateProjects } from "@/features/auth/lib/registration-gate";
+import { defaultPrepEventTypeRows } from "@/features/prep-calendar/lib/default-event-types";
 import { getDefaultProjectRoles } from "@/features/roles/default-roles";
 import { parsePermissionMatrix } from "@/features/roles/permissions-matrix";
 import {
@@ -238,6 +239,8 @@ export async function createProjectAction(
         sortOrder: t.sortOrder,
       })),
     });
+
+    await tx.prepEventType.createMany({ data: defaultPrepEventTypeRows(created.id) });
 
     const producer = roles.find((r) => r.name === producerRole.name)!;
 
