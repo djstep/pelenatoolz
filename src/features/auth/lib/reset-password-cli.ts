@@ -1,8 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { passwordProblem } from "@/features/auth/lib/password-rules";
 
-/** Старый прод в Neon. */
-const PROD_HOST_MARK = "ep-steep-sound";
 /** Прод на сервере: база в Docker, имя службы из docker-compose.prod.yml. */
 const PROD_DOCKER_HOST = "db";
 
@@ -42,8 +40,16 @@ export function parseResetPasswordArgs(argv: string[]): ResetPasswordArgs | { er
   return { email, prod, envFile: envFile ?? DEFAULT_ENV_FILE };
 }
 
+/**
+ * Хост базы так же, как его поймёт драйвер: `@` внутри пароля без кодирования не должен сбить
+ * разбор, иначе прод (`db`) не узнали бы. Неразборчивый адрес — «?».
+ */
 export function databaseHost(url: string): string {
-  return url.match(/@([^/?:]+)/)?.[1] ?? "?";
+  try {
+    return new URL(url).hostname || "?";
+  } catch {
+    return "?";
+  }
 }
 
 /**
@@ -58,7 +64,7 @@ export function databaseProblem(
   const present = urls.filter((url): url is string => Boolean(url));
   const databaseUrl = urls[0];
   if (!databaseUrl) return `В файле ${envFile} нет DATABASE_URL: скрипт работает только с базой из этого файла`;
-  const isProd = present.some((url) => url.includes(PROD_HOST_MARK) || databaseHost(url) === PROD_DOCKER_HOST);
+  const isProd = present.some((url) => databaseHost(url) === PROD_DOCKER_HOST);
   if (isProd && !prodFlag) {
     return `База из ${envFile} — прод. Чтобы сбросить пароль на проде, добавьте флаг --prod`;
   }

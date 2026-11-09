@@ -1,4 +1,5 @@
 import type { AuditAction, Prisma } from "@prisma/client";
+import { auditDateBounds } from "@/features/audit/lib/audit-time";
 
 export type AuditLogFilters = {
   entityType?: string;
@@ -28,6 +29,8 @@ export function buildAuditLogWhere(
   projectId: string,
   filters: AuditLogFilters,
   visibleTypes: readonly string[] | null,
+  /** Пояс проекта: дни фильтра «с … по …» считаются по нему. */
+  timeZone = "Europe/Moscow",
 ): Prisma.AuditLogWhereInput {
   const where = visibleTypesWhere(projectId, visibleTypes);
 
@@ -43,17 +46,8 @@ export function buildAuditLogWhere(
   if (filters.userId) {
     where.userId = filters.userId;
   }
-  if (filters.dateFrom || filters.dateTo) {
-    where.createdAt = {};
-    if (filters.dateFrom) {
-      where.createdAt.gte = new Date(filters.dateFrom);
-    }
-    if (filters.dateTo) {
-      const end = new Date(filters.dateTo);
-      end.setHours(23, 59, 59, 999);
-      where.createdAt.lte = end;
-    }
-  }
+  const bounds = auditDateBounds(filters.dateFrom, filters.dateTo, timeZone);
+  if (bounds.gte || bounds.lt) where.createdAt = bounds;
   if (filters.search?.trim()) {
     where.summary = { contains: filters.search.trim(), mode: "insensitive" };
   }

@@ -192,7 +192,7 @@ export function AuditWorkspace({
                     </p>
                   </div>
                   <time className="text-xs text-[var(--muted-fg)] whitespace-nowrap">
-                    {new Date(log.createdAt).toLocaleString("ru-RU")}
+                    {log.createdAtLabel}
                   </time>
                 </div>
                 <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--muted-fg)]">

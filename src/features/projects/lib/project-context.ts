@@ -4,6 +4,7 @@ import {
   hasPermission,
   type Permission,
 } from "@/features/memberships/permissions";
+import { isProjectId } from "@/features/projects/lib/project-id";
 import { getProjectForUser } from "@/features/projects/queries";
 import {
   canEntityFinance,
@@ -13,6 +14,8 @@ import {
 } from "@/features/roles/permissions-matrix";
 
 export async function requireProjectContext(projectId: string) {
+  // До базы: подделанный id (объект-фильтр, массив) не должен найти чужой проект.
+  if (!isProjectId(projectId)) notFound();
   const user = await requireUser();
   const project = await getProjectForUser(projectId, user.id!);
 

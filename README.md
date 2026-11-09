@@ -8,18 +8,18 @@
 - Auth.js (email/password, JWT)
 - PostgreSQL + Prisma
 - next-intl (UI: ru по умолчанию, en готов)
-- Хостинг-ориентир: Vercel + Neon + Cloudflare R2 (без vendor-lock в коде)
+- Хостинг: свой сервер в РФ (cloud.ru), сайт и PostgreSQL в Docker, файлы на диске сервера — см. `ops/README.md`
 
 ## Быстрый старт
 
-1. Скопируйте `.env.example` → `.env` и задайте `DATABASE_URL`, `AUTH_SECRET`, `APP_URL`, `REGISTRATION_ALLOWLIST`. Без последнего регистрация открыта только по приглашению, а проект не создать никому. На Vercel переменная задаётся в настройках проекта.
+1. Скопируйте `.env.example` → `.env` и задайте `DATABASE_URL`, `AUTH_SECRET`, `APP_URL`, `REGISTRATION_ALLOWLIST`. Без последнего регистрация открыта только по приглашению, а проект не создать никому. На сервере переменные лежат в `.env.prod` (см. шапку `docker-compose.prod.yml`).
 2. Поднимите Postgres (Docker Desktop):
 
 ```bash
 docker compose up -d
 ```
 
-Либо укажите connection string Neon / другого Postgres.
+Либо укажите адрес любого другого PostgreSQL.
 
 3. Примените миграции и запустите:
 
@@ -57,4 +57,4 @@ messages/{ru,en}.json                   — UI-строки
 docker build -t film-prod .
 ```
 
-Образ использует Next.js standalone — тот же билд подойдёт для Selectel/Yandex Cloud позже.
+Образ использует Next.js standalone. На сервере (cloud.ru) он собирается и запускается через `sudo pelena-deploy`, см. `ops/README.md`.

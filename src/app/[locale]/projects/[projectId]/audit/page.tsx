@@ -46,7 +46,7 @@ export default async function AuditLogPage({ params, searchParams }: Props) {
       dateTo: sp.dateTo,
       search: sp.search,
       page: Number.isFinite(page) ? page : 1,
-    }),
+    }, ctx.project.timezone),
     listAuditEntityTypes(projectId, viewer),
   ]);
 
