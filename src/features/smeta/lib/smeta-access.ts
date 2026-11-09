@@ -48,3 +48,16 @@ export function canApproveSmeta(ctx: SmetaAccessContext): boolean {
 export function canManageDepartments(ctx: SmetaAccessContext): boolean {
   return isProducerRole(ctx.role) || ctx.can("members:manage");
 }
+
+/** Вести общий шаблон статей фильма (добавить, переименовать, переставить, в архив): только продюсер. */
+export function canEditBudgetTemplate(ctx: SmetaAccessContext): boolean {
+  return isProducerRole(ctx.role);
+}
+
+/**
+ * Менять справочники сметы — переменные, типы расходов, формы оплаты, сопоставление типов
+ * контрагентов, резерв и агентские: продюсер и роль с «Финансы: правка». Главы цехов только видят.
+ */
+export function canEditBudgetDictionaries(ctx: SmetaAccessContext): boolean {
+  return isProducerRole(ctx.role) || ctx.can("finance:write");
+}

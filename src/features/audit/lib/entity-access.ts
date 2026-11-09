@@ -95,6 +95,12 @@ const AUDIT_ENTITY_VISIBILITY: Record<AuditEntityTypeValue, AuditVisibility> = {
   [AuditEntityType.budgetLine]: smetaAll,
   [AuditEntityType.budgetTemplate]: smetaAll,
   [AuditEntityType.smetaExport]: smetaAll,
+  [AuditEntityType.budgetTemplateArticle]: smetaAll,
+  // Справочники сметы ведутся в «Финансы → Настройки» — как переменные.
+  [AuditEntityType.expenseType]: finance,
+  [AuditEntityType.paymentForm]: finance,
+  [AuditEntityType.counterpartyPaymentForm]: finance,
+  [AuditEntityType.budgetSettings]: finance,
 };
 
 /** Старые значения в базе, которые код больше не пишет. */

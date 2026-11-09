@@ -12,6 +12,10 @@ const migration = readFileSync(
   "prisma/migrations/20261109120000_smeta_items/migration.sql",
   "utf8",
 );
+const defaultsMigration = readFileSync(
+  "prisma/migrations/20261109130000_payment_form_defaults/migration.sql",
+  "utf8",
+);
 
 /** Кортежи VALUES из блока миграции, который начинается с `start`. */
 function valuesAfter(start: string): string[][] {
@@ -31,15 +35,23 @@ describe("справочники сметы: код и миграция совп
     );
   });
 
-  test("формы оплаты с процентом налога", () => {
+  test("формы оплаты с процентом налога (после миграции, очистившей проценты)", () => {
+    const cleared = new Set(
+      [...defaultsMigration.matchAll(/^\s+\('([A-Z_]+)', [\d.]+::numeric\),?$/gm)].map(([, key]) => key),
+    );
+    const effective = valuesAfter('INSERT INTO "ProjectPaymentForm"').map(([key, name, percent, order]) => [
+      key,
+      name,
+      cleared.has(key) ? null : Number(percent),
+      Number(order),
+    ]);
     assert.deepEqual(
-      valuesAfter('INSERT INTO "ProjectPaymentForm"'),
-      DEFAULT_PAYMENT_FORMS.map((f, order) => [
-        f.key,
-        f.name,
-        String(f.defaultTaxPercent),
-        String(order),
-      ]),
+      effective,
+      DEFAULT_PAYMENT_FORMS.map((f, order) => [f.key, f.name, f.defaultTaxPercent, order]),
+    );
+    assert.deepEqual(
+      DEFAULT_PAYMENT_FORMS.map((f) => f.defaultTaxPercent),
+      [6, 6, null, null, null],
     );
   });
 

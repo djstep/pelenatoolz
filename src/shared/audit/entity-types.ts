@@ -64,6 +64,14 @@ export const AuditEntityType = {
   budget: "budget",
   budgetVersion: "budget_version",
   smetaExport: "smeta_export",
+  /** Статья общего шаблона сметы фильма. */
+  budgetTemplateArticle: "budget_template_article",
+  expenseType: "expense_type",
+  paymentForm: "payment_form",
+  /** Сопоставление «тип контрагента → форма оплаты». */
+  counterpartyPaymentForm: "counterparty_payment_form",
+  /** Проценты резерва и агентских сводной сметы. */
+  budgetSettings: "budget_settings",
 } as const;
 
 export type AuditEntityTypeValue =
@@ -136,6 +144,11 @@ export const auditEntityLabels: Record<string, string> = {
   [AuditEntityType.budget]: "Смета цеха",
   [AuditEntityType.budgetVersion]: "Версия сметы",
   [AuditEntityType.smetaExport]: "Выгрузка смет",
+  [AuditEntityType.budgetTemplateArticle]: "Статья шаблона сметы",
+  [AuditEntityType.expenseType]: "Тип расхода",
+  [AuditEntityType.paymentForm]: "Форма оплаты",
+  [AuditEntityType.counterpartyPaymentForm]: "Налог по типу контрагента",
+  [AuditEntityType.budgetSettings]: "Резерв и агентские",
   ShootDay: "Вызывной (устар.)",
 };
 

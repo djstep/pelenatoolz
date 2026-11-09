@@ -55,6 +55,12 @@ export default async function SmetaPage({ params }: Props) {
           >
             План/факт
           </Link>
+          <Link
+            href={`${base}/template`}
+            className="rounded-md border border-[var(--border)] px-3 py-1 hover:bg-[var(--nav-hover-bg)]"
+          >
+            Шаблон статей
+          </Link>
           {canReadAllSmeta(ctx) ? (
             <Link
               href={`${base}/summary`}

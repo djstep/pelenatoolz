@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSafeActionState } from "@/shared/ui/forms/use-safe-action-state";
+import { useCounterpartyTaxDefault } from "@/features/contracts/components/use-counterparty-tax-default";
 import { useRouter } from "next/navigation";
 import {
   createContractAction,
@@ -119,6 +120,28 @@ export function ContractFormModal({
   const [vatRate, setVatRate] = useState(() => vatRateInput(defaults?.vatRate));
   const effectiveVatRate = vatRate.trim();
   const [vatManual, setVatManual] = useState(() => vatManualInput(defaults));
+
+  // Новый договор: налог по умолчанию — из формы оплаты, сопоставленной типу контрагента.
+  // Подставляется при выборе контрагента; в заготовке «На основе» налог уже задан — не трогаем.
+  const autoTax = !isEdit && finance.write;
+  const taxDefault = useCounterpartyTaxDefault(projectId, (fields) => {
+    setVatEnabled(fields.vatEnabled);
+    setVatRate(fields.vatRate);
+    setVatManual(fields.vatManual);
+  });
+  function chooseCounterparty(id: string) {
+    setCounterpartyId(id);
+    if (autoTax && id !== counterpartyId) taxDefault.request(id);
+  }
+  const presetCounterpartyId = defaults?.counterpartyId ?? "";
+  const presetHasTax = defaults?.vatEnabled !== undefined;
+  useEffect(() => {
+    // Окно открыли или закрыли: ответ на прежний запрос уже не к месту.
+    taxDefault.cancel();
+    if (open && autoTax && !presetHasTax && presetCounterpartyId) {
+      taxDefault.request(presetCounterpartyId);
+    }
+  }, [open, autoTax, presetHasTax, presetCounterpartyId, taxDefault]);
 
   // Поля сбрасываются только при открытии окна. Новые списки с сервера (после быстрого
   // добавления компании, контрагента, типа или статуса) дополняют варианты, выбранное остаётся.
@@ -261,7 +284,7 @@ export function ContractFormModal({
           label="Контрагент *"
           options={cpOptions}
           value={counterpartyId}
-          onChange={setCounterpartyId}
+          onChange={chooseCounterparty}
           onQuickCreate={
             canCreateParties
               ? async (fd) => {
@@ -281,7 +304,7 @@ export function ContractFormModal({
                     setCpOptions((prev) =>
                       prev.some((x) => x.id === r.id) ? prev : [...prev, r],
                     );
-                    setCounterpartyId(r.id);
+                    chooseCounterparty(r.id);
                   }
                   return r;
                 }

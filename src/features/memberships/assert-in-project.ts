@@ -28,6 +28,12 @@ export type AssertInProjectEntity =
   | "CrewMember"
   | "PrepEventType"
   | "BudgetItem"
+  | "BudgetTemplateArticle"
+  | "BudgetArticle"
+  | "BudgetSubarticle"
+  | "ProjectExpenseType"
+  | "ProjectPaymentForm"
+  | "ProjectFinanceVariable"
   | "ShootDay"
   | "CallSheetSection"
   /** Выдача доступа к папке диска проекта — по проекту папки. */
@@ -71,6 +77,12 @@ type ProjectDb = Pick<
   | "crewMember"
   | "prepEventType"
   | "budgetItem"
+  | "budgetTemplateArticle"
+  | "budgetArticle"
+  | "budgetSubarticle"
+  | "projectExpenseType"
+  | "projectPaymentForm"
+  | "projectFinanceVariable"
   | "shootDay"
   | "callSheetSection"
   | "driveFolderGrant"
@@ -222,6 +234,30 @@ async function countInProject(
       });
     case "BudgetItem":
       return db.budgetItem.count({
+        where: { id: { in: ids }, projectId },
+      });
+    case "BudgetTemplateArticle":
+      return db.budgetTemplateArticle.count({
+        where: { id: { in: ids }, projectId },
+      });
+    case "BudgetArticle":
+      return db.budgetArticle.count({
+        where: { id: { in: ids }, projectId },
+      });
+    case "BudgetSubarticle":
+      return db.budgetSubarticle.count({
+        where: { id: { in: ids }, projectId },
+      });
+    case "ProjectExpenseType":
+      return db.projectExpenseType.count({
+        where: { id: { in: ids }, projectId },
+      });
+    case "ProjectPaymentForm":
+      return db.projectPaymentForm.count({
+        where: { id: { in: ids }, projectId },
+      });
+    case "ProjectFinanceVariable":
+      return db.projectFinanceVariable.count({
         where: { id: { in: ids }, projectId },
       });
     case "ShootDay":

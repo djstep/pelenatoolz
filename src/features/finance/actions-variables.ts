@@ -8,7 +8,9 @@ import {
   isSystemFinanceVariableKey,
   SYSTEM_FINANCE_VARIABLES,
 } from "@/features/finance/lib/variables";
+import { parseOptionalVariableValue } from "@/features/finance/lib/percent";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
+import { canEditBudgetDictionaries } from "@/features/smeta/lib/smeta-access";
 import { prisma } from "@/shared/db/prisma";
 import { AuditEntityType } from "@/shared/audit/entity-types";
 import { recordAudit } from "@/shared/audit/with-audit";
@@ -23,7 +25,21 @@ function revalidate(projectId: string) {
   revalidatePath(`/ru/projects/${projectId}/finance/settings`);
 }
 
-const valueSchema = z.coerce.number().min(0).max(1_000_000_000);
+/** Значение переменной: пусто — не задано (null, не 0), иначе число от 0. */
+const valueSchema = z.unknown().transform((raw, issue) => {
+  const parsed = parseOptionalVariableValue(typeof raw === "string" ? raw : null);
+  if (!parsed.ok) {
+    issue.addIssue({ code: "custom", message: "Значение — число от 0 или пусто" });
+    return z.NEVER;
+  }
+  return parsed.value;
+});
+
+const NO_RIGHTS = "Переменные меняют продюсер и роль с правом «Финансы: правка»";
+
+function valueText(value: number | null) {
+  return value == null ? "не задано" : String(value);
+}
 
 const customSchema = z.object({
   label: z.string().trim().min(1).max(80),
@@ -38,7 +54,7 @@ export async function upsertSystemFinanceVariableAction(
   formData: FormData,
 ): Promise<FinanceVariableActionState> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("finance:write")) return { error: "Недостаточно прав" };
+  if (!canEditBudgetDictionaries(ctx)) return { error: NO_RIGHTS };
 
   if (!isSystemFinanceVariableKey(key)) {
     return { error: "Неизвестная системная переменная" };
@@ -81,7 +97,7 @@ export async function upsertSystemFinanceVariableAction(
     entityType: AuditEntityType.financeVariable,
     entityId: key,
     action: "UPDATE",
-    summary: `Переменная ${def.label} = ${parsed.data.value}`,
+    summary: `Переменная ${def.label} = ${valueText(parsed.data.value)}`,
   });
 
   revalidate(projectId);
@@ -93,7 +109,7 @@ export async function resetSystemFinanceVariableAction(
   key: string,
 ): Promise<FinanceVariableActionState> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("finance:write")) return { error: "Недостаточно прав" };
+  if (!canEditBudgetDictionaries(ctx)) return { error: NO_RIGHTS };
   if (!isSystemFinanceVariableKey(key)) {
     return { error: "Неизвестная системная переменная" };
   }
@@ -127,7 +143,7 @@ export async function createCustomFinanceVariableAction(
   formData: FormData,
 ): Promise<FinanceVariableActionState> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("finance:write")) return { error: "Недостаточно прав" };
+  if (!canEditBudgetDictionaries(ctx)) return { error: NO_RIGHTS };
 
   const parsed = customSchema.safeParse({
     label: formData.get("label"),
@@ -166,7 +182,7 @@ export async function createCustomFinanceVariableAction(
     entityType: AuditEntityType.financeVariable,
     entityId: row.id,
     action: "CREATE",
-    summary: `Переменная ${row.label} = ${parsed.data.value}`,
+    summary: `Переменная ${row.label} = ${valueText(parsed.data.value)}`,
   });
 
   revalidate(projectId);
@@ -180,7 +196,7 @@ export async function updateCustomFinanceVariableAction(
   formData: FormData,
 ): Promise<FinanceVariableActionState> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("finance:write")) return { error: "Недостаточно прав" };
+  if (!canEditBudgetDictionaries(ctx)) return { error: NO_RIGHTS };
 
   const existing = await prisma.projectFinanceVariable.findFirst({
     where: { id: variableId, projectId, isSystem: false },
@@ -208,7 +224,7 @@ export async function updateCustomFinanceVariableAction(
     entityType: AuditEntityType.financeVariable,
     entityId: variableId,
     action: "UPDATE",
-    summary: `Переменная ${parsed.data.label} = ${parsed.data.value}`,
+    summary: `Переменная ${parsed.data.label} = ${valueText(parsed.data.value)}`,
   });
 
   revalidate(projectId);
@@ -220,7 +236,7 @@ export async function deleteCustomFinanceVariableAction(
   variableId: string,
 ): Promise<FinanceVariableActionState> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("finance:write")) return { error: "Недостаточно прав" };
+  if (!canEditBudgetDictionaries(ctx)) return { error: NO_RIGHTS };
 
   const existing = await prisma.projectFinanceVariable.findFirst({
     where: { id: variableId, projectId, isSystem: false },

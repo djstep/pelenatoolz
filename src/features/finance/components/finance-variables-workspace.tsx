@@ -82,7 +82,7 @@ function SystemVariableRow({
           key={variable.value ?? ""}
           defaultValue={variable.value ?? ""}
           disabled={!canWrite || pending}
-          required
+          placeholder="не задано"
         />
       </div>
       {canWrite ? (
@@ -166,15 +166,15 @@ function CustomVariableModal({
           />
         </div>
         <div>
-          <Label htmlFor="value">Значение *</Label>
+          <Label htmlFor="value">Значение</Label>
           <Input
             id="value"
             name="value"
             type="number"
             min={0}
             step="any"
-            required
-            defaultValue={variable?.value ?? 0}
+            placeholder="не задано"
+            defaultValue={variable?.value ?? ""}
           />
         </div>
         <div>

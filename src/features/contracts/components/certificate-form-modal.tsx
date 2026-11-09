@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSafeActionState } from "@/shared/ui/forms/use-safe-action-state";
+import { useCounterpartyTaxDefault } from "@/features/contracts/components/use-counterparty-tax-default";
 import { useRouter } from "next/navigation";
 import {
   attachCertificateFileAction,
@@ -152,6 +153,28 @@ export function CertificateFormModal({
   const [uploading, setUploading] = useState(false);
   const effectiveVatRate = vatRate.trim();
   const [pendingFile, setPendingFile] = useState<File | null>(null);
+
+  // Новый акт: налог по умолчанию — из формы оплаты, сопоставленной типу контрагента.
+  // Подставляется при выборе контрагента; в заготовке «На основе» налог уже задан — не трогаем.
+  const autoTax = !isEdit && finance.write;
+  const taxDefault = useCounterpartyTaxDefault(projectId, (fields) => {
+    setVatEnabled(fields.vatEnabled);
+    setVatRate(fields.vatRate);
+    setVatManual(fields.vatManual);
+  });
+  function chooseCounterparty(id: string) {
+    setCounterpartyId(id);
+    if (autoTax && id !== counterpartyId) taxDefault.request(id);
+  }
+  const presetCounterpartyId = defaults?.counterpartyId ?? "";
+  const presetHasTax = defaults?.vatEnabled !== undefined;
+  useEffect(() => {
+    // Окно открыли или закрыли: ответ на прежний запрос уже не к месту.
+    taxDefault.cancel();
+    if (open && autoTax && !presetHasTax && presetCounterpartyId) {
+      taxDefault.request(presetCounterpartyId);
+    }
+  }, [open, autoTax, presetHasTax, presetCounterpartyId, taxDefault]);
 
   // Поля сбрасываются только при открытии окна. Новые списки с сервера (после быстрого
   // добавления компании или контрагента) дополняют варианты, выбранное остаётся.
@@ -380,7 +403,7 @@ export function CertificateFormModal({
             options={cpOpts}
             value={counterpartyId}
             onChange={(id) => {
-              setCounterpartyId(id);
+              chooseCounterparty(id);
               if (!lockContract) setContractId("");
               if (!lockPayment) setPaymentId("");
             }}
@@ -395,7 +418,7 @@ export function CertificateFormModal({
                       setCpOpts((p) =>
                         p.some((x) => x.id === r.id) ? p : [...p, r],
                       );
-                      setCounterpartyId(r.id);
+                      chooseCounterparty(r.id);
                     }
                     return r;
                   }
@@ -449,7 +472,7 @@ export function CertificateFormModal({
                   const p = payments.find((x) => x.id === id);
                   if (p) {
                     setCompanyId(p.companyId);
-                    setCounterpartyId(p.counterpartyId);
+                    chooseCounterparty(p.counterpartyId);
                     if (p.contractId) setContractId(p.contractId);
                   }
                 }}

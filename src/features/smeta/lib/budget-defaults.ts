@@ -28,17 +28,20 @@ export const DEFAULT_EXPENSE_TYPES: readonly { key: string; name: string }[] = [
   { key: "OTHER", name: "Прочее" },
 ];
 
-/** Формы оплаты с процентом налога по умолчанию (налог на доход исполнителя, не НДС). */
+/**
+ * Формы оплаты с процентом налога по умолчанию (налог на доход исполнителя, не НДС).
+ * Пусто — процента по умолчанию нет, налог вводится руками (миграция `payment_form_defaults`).
+ */
 export const DEFAULT_PAYMENT_FORMS: readonly {
   key: string;
   name: string;
-  defaultTaxPercent: number;
+  defaultTaxPercent: number | null;
 }[] = [
   { key: "SELF_EMPLOYED", name: "Самозанятый", defaultTaxPercent: 6 },
   { key: "IP", name: "ИП", defaultTaxPercent: 6 },
-  { key: "GPH", name: "ГПХ", defaultTaxPercent: 13 },
-  { key: "CASH", name: "Наличные", defaultTaxPercent: 0 },
-  { key: "LEGAL_ENTITY", name: "Юрлицо", defaultTaxPercent: 0 },
+  { key: "GPH", name: "ГПХ", defaultTaxPercent: null },
+  { key: "CASH", name: "Наличные", defaultTaxPercent: null },
+  { key: "LEGAL_ENTITY", name: "Юрлицо", defaultTaxPercent: null },
 ];
 
 /** Тип контрагента → ключ формы оплаты: налог по умолчанию в договоре и акте. */
