@@ -7,6 +7,16 @@ const optionalCuid = z.preprocess(
 
 const money = z.coerce.number().min(0).max(1_000_000_000_000);
 
+/** Налог включён — нужна ставка или сумма налога: ставки по умолчанию нет. */
+const TAX_REQUIRED = "Укажите налог: ставку % или сумму";
+function taxIsSet(v: {
+  vatEnabled: boolean;
+  vatRate?: number | null;
+  vatAmountManual?: number | null;
+}) {
+  return !v.vatEnabled || v.vatRate != null || v.vatAmountManual != null;
+}
+
 export const contractFormSchema = z.object({
   date: z.string().min(1),
   number: z.string().trim().min(1).max(80),
@@ -23,7 +33,7 @@ export const contractFormSchema = z.object({
   summary: z.string().trim().max(5000).optional().nullable(),
   comment: z.string().trim().max(5000).optional().nullable(),
   creditsName: z.string().trim().max(200).optional().nullable(),
-});
+}).refine(taxIsSet, { message: TAX_REQUIRED, path: ["vatRate"] });
 
 export const actFormSchema = z.object({
   date: z.string().min(1),
@@ -39,7 +49,7 @@ export const actFormSchema = z.object({
   statusId: z.string().cuid(),
   summary: z.string().trim().max(5000).optional().nullable(),
   comment: z.string().trim().max(5000).optional().nullable(),
-});
+}).refine(taxIsSet, { message: TAX_REQUIRED, path: ["vatRate"] });
 
 export const certificateFormSchema = actFormSchema;
 export type ContractFormInput = z.infer<typeof contractFormSchema>;

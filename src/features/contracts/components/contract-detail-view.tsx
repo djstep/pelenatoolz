@@ -84,7 +84,7 @@ export function ContractDetailView({
     ledgerTypeId: contract.ledgerTypeId,
     amount: Number(contract.amount),
     vatEnabled: contract.vatEnabled,
-    vatRate: contract.vatRate != null ? Number(contract.vatRate) : 22,
+    vatRate: contract.vatRate != null ? Number(contract.vatRate) : null,
     vatAmount:
       contract.vatAmount != null ? Number(contract.vatAmount) : null,
     isPreliminary: contract.isPreliminary,
@@ -195,7 +195,7 @@ export function ContractDetailView({
             </div>
             {finance.read ? (
               <div>
-                <dt className="text-xs text-[var(--muted-fg)]">Сумма / с НДС</dt>
+                <dt className="text-xs text-[var(--muted-fg)]">Сумма / с налогом</dt>
                 <dd>
                   {money(contract.amount)} / {money(contract.amountWithVat)}
                 </dd>

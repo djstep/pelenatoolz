@@ -88,7 +88,7 @@ function amountFields(input: AmountInput) {
   return {
     amount: input.amount,
     vatEnabled: input.vatEnabled,
-    vatRate: input.vatEnabled ? (input.vatRate ?? 22) : null,
+    vatRate: input.vatEnabled ? (input.vatRate ?? null) : null,
     vatAmount: vat.vatAmount,
     amountWithVat: vat.amountWithVat,
   };
@@ -150,12 +150,12 @@ export async function createContractAction(
   }
 
   // Без права на финансы суммы из формы не принимаются: договор создаётся с нулевой
-  // суммой и ставкой НДС по умолчанию, суммы потом заполнит тот, у кого есть право.
+  // суммой, без налога; суммы и налог потом заполнит тот, у кого есть право.
   const amounts = finance.write
     ? contractAmounts(parsed.data)
     : contractAmounts({
         amount: 0,
-        vatEnabled: true,
+        vatEnabled: false,
         vatRate: null,
         vatAmountManual: null,
         isPreliminary: false,
@@ -561,7 +561,7 @@ export async function createCertificateAction(
     statusId = fallback;
   }
 
-  // Без права на финансы акт создаётся с нулевой суммой, без НДС (как в пустой форме акта).
+  // Без права на финансы акт создаётся с нулевой суммой, без налога (как в пустой форме акта).
   const amounts = amountFields(
     finance.write
       ? parsed.data

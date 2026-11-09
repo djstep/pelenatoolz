@@ -255,7 +255,7 @@ export function CertificateFormModal({
     return computeContractVat({
       amount: amt,
       vatEnabled,
-      vatRate: effectiveVatRate === "" ? 22 : Number(effectiveVatRate) || 0,
+      vatRate: effectiveVatRate === "" ? null : Number(effectiveVatRate) || 0,
       vatAmountManual: Number.isFinite(manual as number) ? manual : null,
     });
   }, [amount, vatEnabled, effectiveVatRate, vatManual]);
@@ -469,7 +469,7 @@ export function CertificateFormModal({
 
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
-                <Label htmlFor="amount">Сумма (без НДС) *</Label>
+                <Label htmlFor="amount">Сумма (без налога) *</Label>
                 <Input
                   id="amount"
                   name="amount"
@@ -488,7 +488,7 @@ export function CertificateFormModal({
                   checked={vatEnabled}
                   onChange={(e) => setVatEnabled(e.target.checked)}
                 />
-                С НДС
+                С налогом
               </label>
             </div>
 
@@ -504,6 +504,7 @@ export function CertificateFormModal({
                       setVatManual("");
                     }}
                   >
+                    <option value="">—</option>
                     {VAT_RATE_PRESETS.map((r) => (
                       <option key={r} value={String(r)}>
                         {`${r}%`}
@@ -519,7 +520,7 @@ export function CertificateFormModal({
                       max={100}
                       step="0.01"
                       placeholder="%"
-                      aria-label="Своя ставка НДС, %"
+                      aria-label="Своя ставка налога, %"
                       value={vatCustom}
                       onChange={(e) => {
                         setVatCustom(e.target.value);
@@ -530,7 +531,7 @@ export function CertificateFormModal({
                   <input type="hidden" name="vatRate" value={effectiveVatRate} />
                 </div>
                 <div>
-                  <Label htmlFor="vatAmountManual">НДС вручную</Label>
+                  <Label htmlFor="vatAmountManual">Налог вручную</Label>
                   <Input
                     id="vatAmountManual"
                     name="vatAmountManual"
@@ -542,7 +543,7 @@ export function CertificateFormModal({
                   />
                 </div>
                 <div>
-                  <Label>Итого с НДС</Label>
+                  <Label>Итого с налогом</Label>
                   <p className="mt-2 text-lg font-semibold tabular-nums">
                     {vatPreview.amountWithVat.toLocaleString("ru-RU", {
                       minimumFractionDigits: 2,

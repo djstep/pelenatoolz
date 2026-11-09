@@ -116,7 +116,7 @@ export function ContractFormModal({
     defaults?.statusId ?? defaultStatusId,
   );
   const [amount, setAmount] = useState(String(defaults?.amount ?? ""));
-  const [vatEnabled, setVatEnabled] = useState(defaults?.vatEnabled ?? true);
+  const [vatEnabled, setVatEnabled] = useState(defaults?.vatEnabled ?? false);
   const [vatRate, setVatRate] = useState(() => vatRateChoice(defaults?.vatRate));
   const [vatCustom, setVatCustom] = useState(() => vatRateCustom(defaults?.vatRate));
   // На сервер уходит число: выбранный вариант или введённое вручную, а не слово «custom».
@@ -139,7 +139,7 @@ export function ContractFormModal({
       setLedgerTypeId(defaults?.ledgerTypeId ?? "");
       setStatusId(defaults?.statusId ?? defaultStatusId);
       setAmount(String(defaults?.amount ?? ""));
-      setVatEnabled(defaults?.vatEnabled ?? true);
+      setVatEnabled(defaults?.vatEnabled ?? false);
       setVatRate(vatRateChoice(defaults?.vatRate));
       setVatCustom(vatRateCustom(defaults?.vatRate));
       setVatManual("");
@@ -185,7 +185,7 @@ export function ContractFormModal({
     return computeContractVat({
       amount: amt,
       vatEnabled,
-      vatRate: effectiveVatRate === "" ? 22 : Number(effectiveVatRate) || 0,
+      vatRate: effectiveVatRate === "" ? null : Number(effectiveVatRate) || 0,
       vatAmountManual: Number.isFinite(manual as number) ? manual : null,
     });
   }, [amount, vatEnabled, effectiveVatRate, vatManual]);
@@ -334,7 +334,7 @@ export function ContractFormModal({
           <>
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
-                <Label htmlFor="amount">Сумма (без НДС) *</Label>
+                <Label htmlFor="amount">Сумма (без налога) *</Label>
                 <Input
                   id="amount"
                   name="amount"
@@ -354,7 +354,7 @@ export function ContractFormModal({
                     checked={vatEnabled}
                     onChange={(e) => setVatEnabled(e.target.checked)}
                   />
-                  С НДС
+                  С налогом
                 </label>
                 <label className="flex items-center gap-2 text-sm">
                   <input
@@ -379,6 +379,7 @@ export function ContractFormModal({
                       setVatManual("");
                     }}
                   >
+                    <option value="">—</option>
                     {VAT_RATE_PRESETS.map((r) => (
                       <option key={r} value={String(r)}>
                         {`${r}%`}
@@ -394,7 +395,7 @@ export function ContractFormModal({
                       max={100}
                       step="0.01"
                       placeholder="%"
-                      aria-label="Своя ставка НДС, %"
+                      aria-label="Своя ставка налога, %"
                       value={vatCustom}
                       onChange={(e) => {
                         setVatCustom(e.target.value);
@@ -405,7 +406,7 @@ export function ContractFormModal({
                   <input type="hidden" name="vatRate" value={effectiveVatRate} />
                 </div>
                 <div>
-                  <Label htmlFor="vatAmountManual">НДС вручную</Label>
+                  <Label htmlFor="vatAmountManual">Налог вручную</Label>
                   <Input
                     id="vatAmountManual"
                     name="vatAmountManual"
@@ -418,7 +419,7 @@ export function ContractFormModal({
                   />
                 </div>
                 <div>
-                  <Label>Итого с НДС</Label>
+                  <Label>Итого с налогом</Label>
                   <p className="mt-2 text-lg font-semibold tabular-nums">
                     {vatPreview.amountWithVat.toLocaleString("ru-RU", {
                       minimumFractionDigits: 2,

@@ -7,11 +7,14 @@ export const DEFAULT_LEDGER_TYPES = [
 
 export const VAT_RATE_PRESETS = [5, 7, 22] as const;
 
-/** Значение списка ставок: вариант из списка или «custom», если сохранённой ставки среди вариантов нет. */
+/**
+ * Значение списка ставок налога: вариант из списка, «custom», если сохранённой ставки
+ * среди вариантов нет, или пусто, если ставка не задана (ставка по умолчанию не подставляется).
+ */
 export function vatRateChoice(rate?: number | null) {
-  const value = rate ?? 22;
-  return (VAT_RATE_PRESETS as readonly number[]).includes(value)
-    ? String(value)
+  if (rate == null) return "";
+  return (VAT_RATE_PRESETS as readonly number[]).includes(rate)
+    ? String(rate)
     : "custom";
 }
 
@@ -20,6 +23,10 @@ export function vatRateCustom(rate?: number | null) {
   return vatRateChoice(rate) === "custom" ? String(rate) : "";
 }
 
+/**
+ * Налог договора или акта (поля в базе по-прежнему называются vat*). Налог включён,
+ * но ни ставка, ни сумма не заданы — налога нет (пусто), ставка по умолчанию не берётся.
+ */
 export function computeContractVat(input: {
   amount: number;
   vatEnabled: boolean;
@@ -37,8 +44,10 @@ export function computeContractVat(input: {
     const vatAmount = round2(input.vatAmountManual);
     return { vatAmount, amountWithVat: round2(amount + vatAmount) };
   }
-  const rate = input.vatRate ?? 22;
-  const vatAmount = round2((amount * rate) / 100);
+  if (input.vatRate == null || !Number.isFinite(input.vatRate)) {
+    return { vatAmount: null, amountWithVat: round2(amount) };
+  }
+  const vatAmount = round2((amount * input.vatRate) / 100);
   return { vatAmount, amountWithVat: round2(amount + vatAmount) };
 }
 

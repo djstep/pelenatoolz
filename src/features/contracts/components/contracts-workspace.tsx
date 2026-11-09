@@ -217,7 +217,7 @@ export function ContractsWorkspace({
       ledgerTypeId: row.ledgerTypeId,
       amount: Number(row.amount),
       vatEnabled: row.vatEnabled,
-      vatRate: row.vatRate != null ? Number(row.vatRate) : 22,
+      vatRate: row.vatRate != null ? Number(row.vatRate) : null,
       isPreliminary: row.isPreliminary,
       statusId: defaultStatusId,
       tags: row.tags,
