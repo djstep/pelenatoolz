@@ -11,6 +11,8 @@ type InviteRow = {
   role: { name: string };
   /** Цех, главой которого станет принявший. */
   department?: { name: string } | null;
+  /** Название цеха при создании: цеха уже нет — так и показать. */
+  departmentName?: string | null;
   expiresAt: Date;
 };
 
@@ -45,7 +47,11 @@ export function InvitesList({
               <div className="text-sm">
                 <p className="font-medium">
                   {invite.email ?? "Открытая ссылка"} · {invite.role.name}
-                  {invite.department ? ` · глава цеха «${invite.department.name}»` : ""}
+                  {invite.department
+                    ? ` · глава цеха «${invite.department.name}»`
+                    : invite.departmentName
+                      ? ` · цех «${invite.departmentName}» удалён — вступит без цеха`
+                      : ""}
                 </p>
                 <p className="break-all text-[var(--muted-fg)]">{url}</p>
               </div>

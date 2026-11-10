@@ -13,7 +13,12 @@ import {
   updateProjectSchema,
 } from "@/features/projects/schemas";
 import { inviteOrigin } from "@/features/memberships/lib/invite-origin";
-import { canManageMembers } from "@/features/memberships/permissions";
+import {
+  canManageMembers,
+  hasPermission,
+  type Permission,
+} from "@/features/memberships/permissions";
+import { canManageDepartments } from "@/features/smeta/lib/smeta-access";
 import { MEMBERS_PAGES_PERMISSION } from "@/features/memberships/lib/members-pages-access";
 import {
   requireProjectAccess,
@@ -505,10 +510,18 @@ export async function createInviteAction(
     return { error: "Нельзя пригласить с правами шире ваших собственных" };
   }
 
-  // Цех из браузера — только цех этого проекта. Назначать глав может тот, кто приглашает
-  // (`members:manage`, как canManageDepartments).
+  // Цех из браузера — только цех этого проекта, и только у того, кто может назначать глав цехов
+  // (продюсер или «Участники и роли: управление» — canManageDepartments, как в «Настройки → Цеха»).
   let department: { id: string; name: string } | null = null;
   if (parsed.data.departmentId) {
+    const departmentAccess = {
+      role: membership.role,
+      can: (permission: Permission) => hasPermission(matrix, permission),
+      headDepartmentIds: [],
+    };
+    if (!canManageDepartments(departmentAccess)) {
+      return { error: "Назначать глав цехов может продюсер или тот, кто управляет участниками" };
+    }
     try {
       await assertInProject("Department", parsed.data.departmentId, projectId);
     } catch (error) {
@@ -537,6 +550,7 @@ export async function createInviteAction(
       expiresAt,
       createdById: user.id!,
       departmentId: department?.id ?? null,
+      departmentName: department?.name ?? null,
     },
     select: { id: true },
   });
@@ -841,6 +855,7 @@ export async function acceptInviteAction(token: string): Promise<ActionState> {
   const ownerRefusal = memberChangeRefusal(user.id!, invite.project.ownerUserId);
   if (ownerRefusal) return { error: ownerRefusal };
 
+  const ALREADY_MEMBER = new Error("ALREADY_MEMBER");
   const accepted = await prisma.$transaction(async (tx) => {
     // Приглашение отмечается первым и только если оно ещё действует: одновременное второе
     // принятие той же ссылки или отзыв в ту же секунду — отказ, а не второй участник.
@@ -849,6 +864,14 @@ export async function acceptInviteAction(token: string): Promise<ActionState> {
       data: { acceptedAt: new Date() },
     });
     if (marked.count === 0) return null;
+
+    // Запись участия блокируется и проверяется заново: два разных приглашения одного человека,
+    // принятые одновременно, не меняют роль уже вступившему (откат — и приглашение не тратится).
+    const locked = await tx.$queryRaw<{ status: MembershipStatus }[]>`
+      SELECT "status" FROM "ProjectMembership"
+      WHERE "projectId" = ${invite.projectId} AND "userId" = ${user.id!}
+      FOR UPDATE`;
+    if (locked[0]?.status === MembershipStatus.ACTIVE) throw ALREADY_MEMBER;
 
     const existing = await tx.projectMembership.findUnique({
       where: {
@@ -887,19 +910,36 @@ export async function acceptInviteAction(token: string): Promise<ActionState> {
         WHERE "id" = ${invite.departmentId} AND "projectId" = ${invite.projectId}
         FOR UPDATE`;
       headOf = rows[0] ?? null;
-      if (headOf) {
-        await tx.departmentHead.createMany({
-          data: [{ departmentId: headOf.id, membershipId: membership.id }],
-          skipDuplicates: true,
-        });
-      }
+    }
+    // Прежние главы цеха не снимаются: принявший становится ещё одним главой — в журнал.
+    let coHeads: string[] = [];
+    if (headOf) {
+      const others = await tx.departmentHead.findMany({
+        where: {
+          departmentId: headOf.id,
+          membershipId: { not: membership.id },
+          membership: { status: MembershipStatus.ACTIVE },
+        },
+        select: { membership: { select: { user: { select: { name: true } } } } },
+      });
+      coHeads = others.map((h) => auditMemberName(h.membership.user.name));
+      await tx.departmentHead.createMany({
+        data: [{ departmentId: headOf.id, membershipId: membership.id }],
+        skipDuplicates: true,
+      });
     }
 
     // Прежняя запись участия — возврат в проект; роль до возврата пишется в журнал.
-    return { membershipId: membership.id, previousRole: existing?.role ?? null, headOf };
+    return { membershipId: membership.id, previousRole: existing?.role ?? null, headOf, coHeads };
+  }).catch((error: unknown) => {
+    if (error === ALREADY_MEMBER) return "already" as const;
+    throw error;
   });
+  if (accepted === "already") return { error: "Вы уже участник проекта" };
   if (!accepted) return { error: "Приглашение недействительно" };
-  const { membershipId, previousRole, headOf } = accepted;
+  const { membershipId, previousRole, headOf, coHeads } = accepted;
+  // Цех был в приглашении, но его удалили до принятия: человек вступил без цеха.
+  const lostDepartment = !headOf && invite.departmentName ? invite.departmentName : null;
 
   // Возврат пишется тем же действием CREATE, что и первое принятие, — отличается по returned.
   await recordAudit({ user: { id: user.id! } }, {
@@ -911,13 +951,19 @@ export async function acceptInviteAction(token: string): Promise<ActionState> {
       (previousRole
         ? `Принято приглашение с ролью «${invite.role.name}» — возврат в проект (была роль «${previousRole.name}»)`
         : `Принято приглашение с ролью «${invite.role.name}»`) +
-      (headOf ? `, назначен главой цеха «${headOf.name}»` : ""),
+      (headOf
+        ? `, назначен главой цеха «${headOf.name}»` +
+          (coHeads.length > 0 ? ` (прежние главы остаются: ${coHeads.join(", ")})` : "")
+        : "") +
+      (lostDepartment ? `; вступил без цеха: цех «${lostDepartment}» удалён` : ""),
     changes: {
       inviteId: invite.id,
       userId: user.id!,
       roleId: invite.roleId,
       roleName: invite.role.name,
       ...(headOf ? { headOfDepartmentId: headOf.id, headOfDepartmentName: headOf.name } : {}),
+      ...(coHeads.length > 0 ? { otherDepartmentHeads: coHeads } : {}),
+      ...(lostDepartment ? { departmentDeleted: lostDepartment } : {}),
       ...(previousRole
         ? {
             returned: true,

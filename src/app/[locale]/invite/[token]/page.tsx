@@ -69,6 +69,13 @@ export default async function InvitePage({ params }: Props) {
               <dt className="text-[var(--muted-fg)]">Глава цеха</dt>
               <dd className="font-medium">{invite.department.name}</dd>
             </div>
+          ) : invite.departmentName ? (
+            <div className="flex justify-between gap-4">
+              <dt className="text-[var(--muted-fg)]">Глава цеха</dt>
+              <dd className="text-[var(--tone-warning-strong)]">
+                цех «{invite.departmentName}» удалён — вы вступите без цеха
+              </dd>
+            </div>
           ) : null}
         </dl>
 

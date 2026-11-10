@@ -46,11 +46,24 @@ export default async function ProjectMembersPage({ params }: Props) {
     manage
       ? prisma.department.findMany({
           where: { projectId },
-          select: { id: true, name: true },
+          select: {
+            id: true,
+            name: true,
+            // Нынешние главы — предупреждение в форме: прежний глава не снимается.
+            heads: {
+              where: { membership: { status: MembershipStatus.ACTIVE } },
+              select: { membership: { select: { user: { select: { name: true, email: true } } } } },
+            },
+          },
           orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
         })
       : Promise.resolve([]),
   ]);
+  const departmentOptions = departments.map((d) => ({
+    id: d.id,
+    name: d.name,
+    heads: d.heads.map((h) => h.membership.user.name || h.membership.user.email || "участник"),
+  }));
   // Роли из шаблонов — кнопки быстрого выбора в порядке ROLE_PRESETS; список ролей — как был.
   const presetIndex = new Map(ROLE_PRESETS.map((p, index) => [p.key as string, index]));
   const inviteRoles = roles.map((r) => {
@@ -114,7 +127,7 @@ export default async function ProjectMembersPage({ params }: Props) {
                 projectId={projectId}
                 locale={locale}
                 roles={inviteRoles}
-                departments={departments}
+                departments={departmentOptions}
               />
             </Card>
             <InvitesList
@@ -126,6 +139,7 @@ export default async function ProjectMembersPage({ params }: Props) {
                 email: invite.email,
                 role: { name: invite.role.name },
                 department: invite.department,
+                departmentName: invite.departmentName,
                 expiresAt: invite.expiresAt,
               }))}
               appUrl={appUrl}

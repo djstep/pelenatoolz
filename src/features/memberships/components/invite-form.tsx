@@ -31,7 +31,12 @@ type RoleOption = {
   departmentHead?: boolean;
 };
 
-type DepartmentOption = { id: string; name: string };
+type DepartmentOption = {
+  id: string;
+  name: string;
+  /** Нынешние главы цеха: принявший станет ещё одним, прежние не снимаются. */
+  heads?: string[];
+};
 
 export function InviteForm({
   projectId,
@@ -52,6 +57,7 @@ export function InviteForm({
   const [roleId, setRoleId] = useState(defaultRoleId);
   const [departmentId, setDepartmentId] = useState("");
   const selectedRole = roles.find((r) => r.id === roleId);
+  const selectedDepartment = departments.find((d) => d.id === departmentId);
   const presets = roles
     .filter((r) => r.presetOrder != null)
     .sort((a, b) => a.presetOrder! - b.presetOrder!);
@@ -166,6 +172,12 @@ export function InviteForm({
             .
           </p>
         )}
+        {selectedDepartment?.heads?.length ? (
+          <p className="mt-1 text-xs text-[var(--tone-warning-strong)]" data-testid="invite-department-heads">
+            У цеха уже есть глава: {selectedDepartment.heads.join(", ")}. Принявший станет ещё одним
+            главой — прежний не снимается. Снять главу можно в «Настройки → Цеха».
+          </p>
+        ) : null}
         {selectedRole?.departmentHead && !departmentId && departments.length > 0 ? (
           <p className="mt-1 text-xs text-[var(--tone-warning-strong)]" data-testid="invite-department-hint">
             Эта роль правит смету своего цеха — выберите цех, иначе смета будет недоступна.

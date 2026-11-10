@@ -532,6 +532,8 @@ model ProjectInvite {
   createdAt   DateTime  @default(now())
   /// Цех, главой которого человек станет, приняв приглашение (смета своего цеха). Цех удалён — пусто.
   departmentId String?
+  /// Название цеха на момент приглашения: цех удалят — в журнале видно, какой цех пропал.
+  departmentName String?
 
   project    Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
   role       ProjectRoleDefinition @relation(fields: [roleId], references: [id])
