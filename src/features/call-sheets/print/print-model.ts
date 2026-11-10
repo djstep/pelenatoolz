@@ -12,6 +12,7 @@ import {
 } from "@/features/call-sheets/lib/sections";
 import {
   formatLocationTitle,
+  formatScenePlaces,
   hasOwnPlace,
   placeOf,
   type LocationNameSource,
@@ -646,8 +647,11 @@ function planRow(
       timing: null,
     };
   }
-  const location = scene.locations[0]?.location;
-  const title = custom ?? (location ? locationName(location) : null) ?? text(scene.title);
+  // Все места сцены, как в шапке сценария: «ДОМ. ДЕТСКАЯ / КОРИДОР».
+  const places = scene.locations.length
+    ? formatScenePlaces(scene.locations.map((l) => l.location), ". ")
+    : null;
+  const title = custom ?? text(places) ?? text(scene.title);
   const summary = text(scene.summary) ?? (title === text(scene.title) ? null : text(scene.title));
   return {
     ...base,

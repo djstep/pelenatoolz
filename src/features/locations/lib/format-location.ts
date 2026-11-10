@@ -68,8 +68,9 @@ export function compareLocations(a: SortableLocation, b: SortableLocation): numb
 }
 
 export type PlaceRow = LocationNameSource & {
-  id: string;
-  parent: { id: string; name: string } | null;
+  // Без id (печать вызывного) объекты различаются по названию.
+  id?: string;
+  parent: { id?: string; name: string } | null;
   sortOrder?: number | null;
 };
 
@@ -80,7 +81,8 @@ export type PlaceRow = LocationNameSource & {
 export function groupScenePlaces(locations: readonly PlaceRow[]) {
   const groups = new Map<string, { objectId: string; object: string; subs: string[] }>();
   for (const location of [...locations].sort(compareLocations)) {
-    const objectId = location.parent?.id ?? location.id;
+    const byName = `name:${locationObjectName(location)}`;
+    const objectId = location.parent ? (location.parent.id ?? byName) : (location.id ?? byName);
     const group = groups.get(objectId) ?? { objectId, object: locationObjectName(location), subs: [] };
     const sub = locationSubName(location);
     if (sub && !group.subs.includes(sub)) group.subs.push(sub);
@@ -93,10 +95,10 @@ export function groupScenePlaces(locations: readonly PlaceRow[]) {
  * Колонка «Объект / подобъекты»: «ДОМ · ДЕТСКАЯ / КОРИДОР», два объекта — «ДВОР ДОМА / ОПУШКА ЛЕСА».
  * Если у объектов есть подобъекты, объекты разделяются «; »: «ДОМ · КУХНЯ; ДВОР». Мест нет — «—».
  */
-export function formatScenePlaces(locations: readonly PlaceRow[]): string {
+export function formatScenePlaces(locations: readonly PlaceRow[], separator = " · "): string {
   const groups = groupScenePlaces(locations);
   if (groups.length === 0) return "—";
-  const parts = groups.map((g) => (g.subs.length ? `${g.object} · ${g.subs.join(" / ")}` : g.object));
+  const parts = groups.map((g) => (g.subs.length ? `${g.object}${separator}${g.subs.join(" / ")}` : g.object));
   return parts.join(groups.some((g) => g.subs.length > 0) ? "; " : " / ");
 }
 

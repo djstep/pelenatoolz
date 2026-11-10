@@ -8,6 +8,7 @@ import {
 } from "@/shared/i18n/domain-labels";
 import { defaultArrivalTime } from "@/features/day-docs/lib/time-utils";
 import {
+  formatScenePlaces,
   locationObjectName,
   placeOf,
   type LocationObjectSource,
@@ -474,7 +475,7 @@ export function buildShootingSlotDetails(
     sceneNumber: formatSceneNumber(scene),
     planLabel: planParts.join(" · ") || "—",
     scriptDay: scene.scriptDay,
-    location: loc ? locationObjectName(loc) : null,
+    location: scene.locations.length ? formatScenePlaces(scene.locations.map((l) => l.location)) : null,
     locationAddress: loc ? placeOf(loc).address : null,
     summary: scene.summary ?? scene.title ?? null,
     characters: scene.characters.map((c) => c.character.name),

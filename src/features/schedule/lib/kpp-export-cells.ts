@@ -18,7 +18,7 @@ import {
   shootDayTypeLabels,
 } from "@/shared/i18n/domain-labels";
 import { formatDateShort } from "@/shared/i18n/format-date";
-import { formatLocationTitle } from "@/features/locations/lib/format-location";
+import { formatScenePlaces } from "@/features/locations/lib/format-location";
 
 const CELL_FONT = { name: "Calibri", size: 11 } as const;
 
@@ -50,10 +50,9 @@ function formatSceneNumber(
   return num;
 }
 
+/** Все места сцены: «ДОМ · ДЕТСКАЯ / КОРИДОР». */
 function formatLocation(scene: KppExportScene): string {
-  const loc = scene.locations[0]?.location;
-  if (!loc) return "—";
-  return formatLocationTitle(loc);
+  return formatScenePlaces(scene.locations.map((l) => l.location));
 }
 
 function formatCharacters(scene: KppExportScene): string {
@@ -250,16 +249,8 @@ export function getKppShortCellValue(
   if (fieldId === "sceneCount") return String(scenes.length);
 
   if (fieldId === "locations") {
-    const set = new Set<string>();
-    for (const scene of scenes) {
-      for (const link of scene.locations) {
-        const loc = link.location;
-        set.add(
-          formatLocationTitle(loc),
-        );
-      }
-    }
-    return [...set].join(", ") || "—";
+    // Места дня: объекты, при каждом — его подобъекты.
+    return formatScenePlaces(scenes.flatMap((scene) => scene.locations.map((l) => l.location)));
   }
 
   if (fieldId === "characters") {
