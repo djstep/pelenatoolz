@@ -39,9 +39,18 @@ export function canEditDepartmentSmeta(
   return ctx.headDepartmentIds.includes(departmentId);
 }
 
-/** Утверждать и возвращать сметы: только продюсер. */
+/** Утверждать сметы (и утверждать пересчёт по переменным): только продюсер. */
 export function canApproveSmeta(ctx: SmetaAccessContext): boolean {
   return isProducerRole(ctx.role);
+}
+
+/**
+ * Вернуть смету главе с комментарием: продюсер или «Сметы — вернуть на доработку» —
+ * только ту смету, которую видишь.
+ */
+export function canReturnSmeta(ctx: SmetaAccessContext, departmentId: string): boolean {
+  if (isProducerRole(ctx.role)) return true;
+  return ctx.can("smeta:return") && canReadDepartmentSmeta(ctx, departmentId);
 }
 
 /** Управлять цехами (создать, изменить, упорядочить, удалить, назначить глав). */
@@ -56,8 +65,9 @@ export function canEditBudgetTemplate(ctx: SmetaAccessContext): boolean {
 
 /**
  * Менять справочники сметы — переменные, типы расходов, формы оплаты, сопоставление типов
- * контрагентов, резерв и агентские: продюсер и роль с «Финансы: правка». Главы цехов только видят.
+ * контрагентов, резерв и агентские: продюсер и роль с «Сметы — настройки». Правка начислений и
+ * платежей («Финансы») сюда не входит. Главы цехов только видят.
  */
 export function canEditBudgetDictionaries(ctx: SmetaAccessContext): boolean {
-  return isProducerRole(ctx.role) || ctx.can("finance:write");
+  return isProducerRole(ctx.role) || ctx.can("smeta:settings");
 }

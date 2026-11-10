@@ -266,37 +266,58 @@ export async function updateCharacterRecordAction(
   return { success: "Персонаж сохранён" };
 }
 
-export async function deleteCharacterAction(projectId: string, characterId: string) {
+/** Кандидаты кастинга удаляются вместе с персонажем — для этого нужна ещё и правка «Актёров». */
+const DELETE_WITH_CANDIDATES_ERROR =
+  "У персонажа есть кандидаты кастинга — удалить его может только тот, кто правит «Актёров»";
+
+export async function deleteCharacterAction(
+  projectId: string,
+  characterId: string,
+): Promise<{ error?: string }> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("characters:write")) throw new Error("FORBIDDEN");
+  if (!ctx.can("characters:write")) return { error: "Недостаточно прав" };
 
   const character = await prisma.character.findFirst({
     where: { id: characterId, projectId },
   });
-  if (!character) throw new Error("NOT_FOUND");
+  if (!character) return { error: "Персонаж не найден" };
 
-  await auditMutation(
-    ctx,
-    async () => {
-      await prisma.$transaction([
-        prisma.actor.updateMany({
+  const canWriteCast = ctx.can("cast:write");
+  const refused = await prisma.$transaction(async (tx) => {
+    // Кандидаты считаются в той же транзакции, что и удаление, под блокировкой персонажа:
+    // добавление кандидата ждёт её и не уйдёт молча вместе с персонажем.
+    await tx.$queryRaw`SELECT 1 FROM "Character" WHERE "id" = ${characterId} AND "projectId" = ${projectId} FOR UPDATE`;
+    if (!canWriteCast) {
+      const candidates = await tx.castingCandidate.count({
+        where: { characterId, projectId },
+      });
+      if (candidates > 0) return true;
+    }
+    await auditMutation(
+      ctx,
+      async () => {
+        await tx.actor.updateMany({
           where: { projectId, characterId },
           data: { characterId: null },
-        }),
-        prisma.character.deleteMany({ where: { id: characterId, projectId } }),
-      ]);
-    },
-    null,
-    {
-      projectId,
-      entityType: AuditEntityType.character,
-      action: "DELETE",
-      entityId: characterId,
-      summary: `Удалён персонаж «${character.name}»`,
-    },
-  );
+        });
+        await tx.character.deleteMany({ where: { id: characterId, projectId } });
+      },
+      null,
+      {
+        projectId,
+        entityType: AuditEntityType.character,
+        action: "DELETE",
+        entityId: characterId,
+        summary: `Удалён персонаж «${character.name}»`,
+      },
+      { db: tx },
+    );
+    return false;
+  });
+  if (refused) return { error: DELETE_WITH_CANDIDATES_ERROR };
 
   revalidateCharacters(projectId);
+  return {};
 }
 
 
@@ -314,10 +335,12 @@ export async function getCharacterDeleteImpactAction(
     prisma.actor.count({ where: { character } }),
     prisma.auditionActor.count({ where: { character } }),
   ]);
-  return impactLines([
+  const lines = impactLines([
     [candidates, "Удалятся кандидаты кастинга на эту роль"],
     [scenes, "Персонаж уберётся из сцен"],
     [actors, "Отвяжутся актёры"],
     [auditions, "Отвяжутся записи в пробах"],
   ]);
+  // Без правки «Актёров» персонажа с кандидатами не удалить — сказать заранее, в том же окне.
+  return candidates > 0 && !ctx.can("cast:write") ? [...lines, DELETE_WITH_CANDIDATES_ERROR] : lines;
 }

@@ -7,6 +7,7 @@ import {
   assertInProject,
   isNotInProjectError,
 } from "@/features/memberships/assert-in-project";
+import { canQuickCreate } from "@/features/memberships/permissions";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { manualRenumberSchema } from "@/features/locations/schemas";
 import {
@@ -912,12 +913,15 @@ export async function quickCreateCharacterAction(
   name: string,
 ): Promise<{ id: string; name: string } | { error: string }> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("scenes:write")) {
+  // Пустой персонаж по имени — из либретто, сценария или персонажей.
+  if (!canQuickCreate(ctx.can, "character")) {
     return { error: "Недостаточно прав" };
   }
 
-  const trimmed = name.trim();
+  const trimmed = typeof name === "string" ? name.trim() : "";
   if (!trimmed) return { error: "Пустое имя" };
+  // Как у карточки персонажа (characters/actions.ts).
+  if (trimmed.length > 200) return { error: "Имя длиннее 200 символов" };
 
   const existing = await prisma.character.findFirst({
     where: { projectId, name: { equals: trimmed, mode: "insensitive" } },
@@ -926,6 +930,13 @@ export async function quickCreateCharacterAction(
 
   const created = await prisma.character.create({
     data: { projectId, name: trimmed },
+  });
+  await recordAudit(ctx, {
+    projectId,
+    entityType: AuditEntityType.character,
+    entityId: created.id,
+    action: "CREATE",
+    summary: `Быстро добавлен персонаж «${created.name}»`,
   });
   revalidateScript(projectId);
   return { id: created.id, name: created.name };

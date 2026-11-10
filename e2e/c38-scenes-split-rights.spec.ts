@@ -100,6 +100,50 @@ test("только «Персонажи»: персонажи видны, кас
   // «Файлы» здесь открыты: у роли есть просмотр настроек проекта (project:read) — так было и раньше.
 });
 
+test("«Персонажи: правка» без «Актёров»: персонажа без кандидатов удалить можно, с кандидатами — нет", async ({ page }) => {
+  await grantOnly({ characters: { ...READ, create: true, update: true, delete: true } });
+  const temp = await db.character.create({
+    data: { projectId: ctx.projectId, name: `Временный ${Date.now().toString(36)}` },
+    select: { id: true, name: true },
+  });
+  const ivan = await db.character.findFirstOrThrow({
+    where: { projectId: ctx.projectId, name: NAMES.character },
+    select: { id: true },
+  });
+  try {
+    await page.goto(projectPath(ctx, "/characters"));
+    // Иван: окно предупреждает, что кандидаты удалятся и нужно право на «Актёров».
+    await page.locator("tr", { hasText: NAMES.character }).first().getByRole("button", { name: "×" }).click();
+    const ivanDialog = page.getByRole("dialog");
+    await expect(ivanDialog).toContainText("Удалятся кандидаты кастинга на эту роль: 1");
+    await expect(ivanDialog).toContainText("правит «Актёров»");
+    await ivanDialog.getByRole("button", { name: "Отмена" }).click();
+
+    // Временный без кандидатов удаляется; id действия — для подделанного запроса.
+    await page.locator("tr", { hasText: temp.name }).getByRole("button", { name: "×" }).click();
+    const dialog = page.getByRole("dialog");
+    const request = page.waitForRequest((r) => Boolean(r.headers()["next-action"]) && r.postData()?.includes(temp.id) === true);
+    await dialog.getByRole("button", { name: "Удалить" }).click();
+    const deleteId = (await request).headers()["next-action"]!;
+    await expect.poll(async () => db.character.count({ where: { id: temp.id } })).toBe(0);
+
+    const forged = await page.request.post(projectPath(ctx, "/characters"), {
+      headers: {
+        "next-action": deleteId,
+        accept: "text/x-component",
+        "content-type": "text/plain;charset=UTF-8",
+        origin: new URL(page.url()).origin,
+      },
+      data: JSON.stringify([ctx.projectId, ivan.id]),
+    });
+    expect(await forged.text()).toContain("правит «Актёров»");
+    expect(await db.character.count({ where: { id: ivan.id } })).toBe(1);
+    expect(await db.castingCandidate.count({ where: { characterId: ivan.id } })).toBeGreaterThan(0);
+  } finally {
+    await db.character.deleteMany({ where: { id: temp.id } });
+  }
+});
+
 test("«Персонажи» вместе с «Актёрами» — кандидат и телефон на карточке есть (проверка не пустая)", async ({ page }) => {
   await grantOnly({ characters: READ, actors: READ });
   const ivan = await db.character.findFirstOrThrow({

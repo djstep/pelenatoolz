@@ -23,6 +23,7 @@ import {
   assertInProject,
   isNotInProjectError,
 } from "@/features/memberships/assert-in-project";
+import { canQuickCreate } from "@/features/memberships/permissions";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { prisma } from "@/shared/db/prisma";
 import { impactLines } from "@/shared/lib/plural";
@@ -63,6 +64,15 @@ function revalidateLocations(projectId: string, locationId?: string) {
 async function assertScriptWrite(projectId: string) {
   const ctx = await requireProjectContext(projectId);
   if (!ctx.can("locations:write")) {
+    return { error: "Недостаточно прав" } as const;
+  }
+  return { ctx } as const;
+}
+
+/** Пустой объект или подобъект по названию — из раздела, который человек правит (см. canQuickCreate). */
+async function assertQuickCreate(projectId: string, target: "location" | "place") {
+  const ctx = await requireProjectContext(projectId);
+  if (!canQuickCreate(ctx.can, target)) {
     return { error: "Недостаточно прав" } as const;
   }
   return { ctx } as const;
@@ -506,7 +516,7 @@ export async function quickCreateLocationAction(
   projectId: string,
   name: string,
 ): Promise<{ id: string; name: string } | { error: string }> {
-  const gate = await assertScriptWrite(projectId);
+  const gate = await assertQuickCreate(projectId, "location");
   if ("error" in gate) return { error: gate.error ?? "Недостаточно прав" };
 
   const trimmed = cleanSpaces(name);
@@ -531,7 +541,7 @@ export async function quickCreatePlaceAction(
   projectId: string,
   place: string,
 ): Promise<{ id: string; name: string } | { error: string }> {
-  const gate = await assertScriptWrite(projectId);
+  const gate = await assertQuickCreate(projectId, "place");
   if ("error" in gate) return { error: gate.error ?? "Недостаточно прав" };
 
   const created: CreatedLocation[] = [];
@@ -550,7 +560,7 @@ export async function quickCreateSubLocationAction(
   objectId: string,
   name: string,
 ): Promise<{ id: string; name: string; parentId: string } | { error: string }> {
-  const gate = await assertScriptWrite(projectId);
+  const gate = await assertQuickCreate(projectId, "location");
   if ("error" in gate) return { error: gate.error ?? "Недостаточно прав" };
 
   const trimmed = cleanSpaces(name);

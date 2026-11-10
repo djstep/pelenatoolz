@@ -345,7 +345,9 @@ export function CharactersWorkspace({
                               title: `Удалить персонажа „${row.name}“?`,
                               details: () => getCharacterDeleteImpactAction(projectId, row.id),
                               action: async () => {
-                                await deleteCharacterAction(projectId, row.id);
+                                const result = await deleteCharacterAction(projectId, row.id);
+                                // Отказ сервера остаётся в окне подтверждения.
+                                if (result.error) return result.error;
                                 toast.success("Персонаж удалён");
                               },
                             })

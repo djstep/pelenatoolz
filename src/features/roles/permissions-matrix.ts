@@ -17,6 +17,10 @@ export const PERMISSION_SECTIONS = [
   /** «Настройки → Ресурсы»: категории и позиции; фин. колонки — ставки категорий без своей строки. */
   { id: "elements", label: "Ресурсы" },
   { id: "smeta_all", label: "Сметы — просмотр всех" },
+  /** Вернуть смету главе цеха с комментарием (утверждает по-прежнему только Продюсер). */
+  { id: "smeta_return", label: "Сметы — вернуть на доработку" },
+  /** Переменные, резерв, агентские и справочники сметы (типы расходов, формы оплаты). */
+  { id: "smeta_settings", label: "Сметы — настройки" },
   { id: "reports", label: "Производственные отчёты" },
   { id: "finance", label: "Финансы" },
   { id: "contracts", label: "Договоры и акты" },
@@ -71,6 +75,9 @@ const RESTRICTED_SECTION_FLAGS: Partial<
   Record<PermissionSectionId, readonly (keyof SectionPermissions)[]>
 > = {
   smeta_all: ["access", "read"],
+  // Вернуть смету и настройки сметы — по одному праву, только «Доступ».
+  smeta_return: ["access"],
+  smeta_settings: ["access"],
   // Утвердить вызывной — одно право, без просмотра и правки (их даёт «КПП и вызывные»).
   callsheet_approve: ["access"],
   // Команда: людей не удаляют, а отправляют в архив — это та же правка.
@@ -188,6 +195,8 @@ export function buildViewerMatrix(): PermissionMatrix {
   for (const section of PERMISSION_SECTIONS) {
     // «Сметы — просмотр всех» наблюдателю не выдаётся: сметы цехов видят продюсер и главы.
     if (section.id === "smeta_all") continue;
+    // Возврат смет и настройки сметы наблюдателю не выдаются.
+    if (section.id === "smeta_return" || section.id === "smeta_settings") continue;
     // Наблюдатель вызывные не утверждает.
     if (section.id === "callsheet_approve") continue;
     // Телефоны и почты команды выдаются в ролях вручную.
@@ -202,6 +211,16 @@ export function buildViewerMatrix(): PermissionMatrix {
   return matrix;
 }
 
+/**
+ * «Сметы — настройки» отделены от правки «Финансов» миграцией 20261111130000. Роль без этого
+ * раздела сохранена старым кодом (окно выкатки) — настройки для неё, как раньше, по правке «Финансов».
+ */
+function legacySmetaSettings(finance: unknown): { access: boolean } | undefined {
+  if (!finance || typeof finance !== "object") return undefined;
+  const f = finance as Record<string, unknown>;
+  return { access: f.access === true && (f.create === true || f.update === true || f.delete === true) };
+}
+
 export function parsePermissionMatrix(raw: unknown): PermissionMatrix {
   const base = buildEmptyMatrix();
   if (!raw || typeof raw !== "object") return base;
@@ -209,7 +228,13 @@ export function parsePermissionMatrix(raw: unknown): PermissionMatrix {
   for (const section of PERMISSION_SECTIONS) {
     // «Сценарий» отделён от «Сцен» миграцией 20261111120000. Роль без этого раздела сохранена
     // старым кодом (окно выкатки) — сценарий для неё, как раньше, по «Сценам».
-    const value = doc[section.id] ?? (section.id === "screenplay" ? doc.scenes : undefined);
+    const value =
+      doc[section.id] ??
+      (section.id === "screenplay"
+        ? doc.scenes
+        : section.id === "smeta_settings"
+          ? legacySmetaSettings(doc.finance)
+          : undefined);
     if (!value || typeof value !== "object") continue;
     const v = value as Record<string, unknown>;
     base[section.id] = restrictSectionFlags(section.id, {

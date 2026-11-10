@@ -37,7 +37,7 @@ const valueSchema = z.unknown().transform((raw, issue) => {
   return parsed.value;
 });
 
-const NO_RIGHTS = "Переменные меняют продюсер и роль с правом «Финансы: правка»";
+const NO_RIGHTS = "Переменные меняют продюсер и роль с правом «Сметы — настройки»";
 
 function valueText(value: number | null) {
   return value == null ? "не задано" : String(value);

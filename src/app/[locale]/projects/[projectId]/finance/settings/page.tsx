@@ -27,7 +27,7 @@ export default async function FinanceSettingsPage({ params }: Props) {
   }
 
   const canWrite = ctx.can("finance:write");
-  // Справочники сметы и переменные: продюсер и «Финансы: правка», остальные только видят.
+  // Справочники сметы и переменные: продюсер и «Сметы — настройки», остальные только видят.
   const canEditDictionaries = canEditBudgetDictionaries(ctx);
   const [variables, approvalStatuses, percents, expenseTypes, paymentForms, mapping] =
     await Promise.all([

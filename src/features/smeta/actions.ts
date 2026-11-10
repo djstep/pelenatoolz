@@ -29,6 +29,7 @@ import { requireProjectContext } from "@/features/projects/lib/project-context";
 import {
   canApproveSmeta,
   canEditDepartmentSmeta,
+  canReturnSmeta,
 } from "@/features/smeta/lib/smeta-access";
 import {
   assertInProject,
@@ -336,8 +337,15 @@ export async function submitBudgetAction(
   return { success: "Смета отправлена на утверждение" };
 }
 
-/** Вход, цех из этого проекта и право утверждать (только продюсер). */
-async function requireApprover(projectId: string, departmentId: unknown) {
+/**
+ * Вход, цех из этого проекта и право: утверждать (только продюсер) или вернуть главе
+ * (продюсер или «Сметы — вернуть на доработку» на видимую смету).
+ */
+async function requireApprover(
+  projectId: string,
+  departmentId: unknown,
+  mode: "approve" | "return" = "approve",
+) {
   const ctx = await requireProjectContext(projectId);
   if (typeof departmentId !== "string" || !departmentId) {
     return { ok: false, error: NOT_FOUND } as const;
@@ -348,7 +356,8 @@ async function requireApprover(projectId: string, departmentId: unknown) {
     if (isNotInProjectError(error)) return { ok: false, error: NOT_FOUND } as const;
     throw error;
   }
-  if (!canApproveSmeta(ctx)) return { ok: false, error: NO_RIGHTS } as const;
+  const allowed = mode === "approve" ? canApproveSmeta(ctx) : canReturnSmeta(ctx, departmentId);
+  if (!allowed) return { ok: false, error: NO_RIGHTS } as const;
   return { ok: true, ctx } as const;
 }
 
@@ -381,13 +390,16 @@ export async function approveBudgetAction(
   return { success: `Утверждена версия ${result.number}`, number: result.number };
 }
 
-/** Вернуть смету главе (продюсер). Комментарий обязателен — глава его видит. */
+/**
+ * Вернуть смету главе (продюсер или «Сметы — вернуть на доработку»). Комментарий обязателен —
+ * глава его видит.
+ */
 export async function returnBudgetAction(
   projectId: string,
   departmentId: string,
   payload: unknown,
 ): Promise<{ error?: string; success?: string }> {
-  const access = await requireApprover(projectId, departmentId);
+  const access = await requireApprover(projectId, departmentId, "return");
   if (!access.ok) return { error: access.error };
   const { ctx } = access;
 

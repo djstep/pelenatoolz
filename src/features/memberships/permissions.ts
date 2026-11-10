@@ -33,6 +33,8 @@ export const PERMISSIONS = [
   "cast:read",
   "cast:write",
   "smeta:read_all",
+  "smeta:return",
+  "smeta:settings",
   "report:read",
   "report:write",
   "finance:read",
@@ -96,6 +98,10 @@ const PERMISSION_TO_SECTION: Record<
   "cast:write": { section: "actors", action: "write" },
   /** Сметы цехов: просмотр всех (без правки и утверждения). Продюсер видит их и без флага. */
   "smeta:read_all": { section: "smeta_all", action: "read" },
+  /** Вернуть смету главе с комментарием — смету, которую видишь. Утверждает только продюсер. */
+  "smeta:return": { section: "smeta_return", action: "access" },
+  /** Переменные, резерв, агентские и справочники сметы. Продюсер может и без флага. */
+  "smeta:settings": { section: "smeta_settings", action: "access" },
   "report:read": { section: "reports", action: "read" },
   "report:write": { section: "reports", action: "write" },
   "finance:read": { section: "finance", action: "finance" },
@@ -127,6 +133,28 @@ export const CONTENT_WRITE_PERMISSIONS: readonly Permission[] = [
   "characters:write",
   "resources:write",
 ];
+
+/**
+ * Быстрое создание «по названию» из раздела, который человек правит: пустая запись — только
+ * название. Детали (адрес, ставки, контакты) — по-прежнему только с правкой своего раздела.
+ */
+export const QUICK_CREATE_PERMISSIONS = {
+  /** Персонаж из карточки сцены или из реплики сценария. */
+  character: ["characters:write", "scenes:write", "screenplay:write"],
+  /** Объект и подобъект из карточки сцены. */
+  location: ["locations:write", "scenes:write"],
+  /** Объект и подобъекты из шапки сценария. */
+  place: ["locations:write", "screenplay:write"],
+  /** Позиция ресурса из карточки сцены. */
+  resourceItem: ["resources:write", "scenes:write"],
+} as const satisfies Record<string, readonly Permission[]>;
+
+export function canQuickCreate(
+  can: (permission: Permission) => boolean,
+  target: keyof typeof QUICK_CREATE_PERMISSIONS,
+): boolean {
+  return QUICK_CREATE_PERMISSIONS[target].some((p) => can(p));
+}
 
 export function canManageMembers(matrix: PermissionMatrix): boolean {
   return hasPermission(matrix, "members:manage");

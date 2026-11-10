@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { canQuickCreate } from "@/features/memberships/permissions";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { parseHhMmToMinutes } from "@/shared/i18n/domain-labels";
 import { AuditEntityType } from "@/shared/audit/entity-types";
@@ -534,7 +535,8 @@ export async function quickCreateResourceItemAction(
   name: string,
 ): Promise<{ id: string; name: string } | { error: string }> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("resources:write")) return { error: "Недостаточно прав" };
+  // Пустая позиция по названию — и из карточки сцены (см. canQuickCreate).
+  if (!canQuickCreate(ctx.can, "resourceItem")) return { error: "Недостаточно прав" };
 
   const trimmed = name.trim();
   if (!trimmed) return { error: "Пустое название" };
