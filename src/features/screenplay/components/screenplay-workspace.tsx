@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useState, useTransition } from "react";
-import { quickCreateLocationAction } from "@/features/locations/actions";
+import { quickCreatePlaceAction } from "@/features/locations/actions";
 import { ScreenplayBlockEditor } from "@/features/screenplay/components/screenplay-block-editor";
 import { ScreenplaySaveModal } from "@/features/screenplay/components/screenplay-save-modal";
 import { ScriptVersionTitleEditor } from "@/features/screenplay/components/script-version-title-editor";
@@ -164,7 +164,8 @@ export function ScreenplayWorkspace({
 
   const handleCreateLocation = useCallback(
     async (name: string) => {
-      const result = await quickCreateLocationAction(projectId, name);
+      // Место из шапки: объект и подобъекты по правилу шапки, как у импорта.
+      const result = await quickCreatePlaceAction(projectId, name);
       if ("error" in result) return null;
       const option = { id: result.id, name: result.name };
       setLocations((prev) =>

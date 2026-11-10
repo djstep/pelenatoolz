@@ -5,6 +5,7 @@ import { ruleText } from "@/features/import/review/question-text";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { prisma } from "@/shared/db/prisma";
 import { LOCATION_PARENT_SELECT } from "@/features/locations/lib/location-fields";
+import { locationAsPair } from "@/features/locations/lib/format-location";
 
 type Props = {
   params: Promise<{ locale: string; projectId: string }>;
@@ -40,7 +41,7 @@ export default async function ScriptDictionaryPage({ params }: Props) {
     }),
   ]);
 
-  const existing = { characters, locations };
+  const existing = { characters, locations: locations.map(locationAsPair) };
   const asRule = (rule: (typeof rules)[number]): DictionaryRule => ({
     type: rule.type,
     key: rule.key,

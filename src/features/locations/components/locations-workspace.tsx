@@ -252,9 +252,7 @@ export function LocationsWorkspace({
                             void confirmDelete({
                               title: `Удалить локацию „${cell(loc, "name")}“?`,
                               details: () => getLocationDeleteImpactAction(projectId, loc.id),
-                              action: async () => {
-                                await deleteLocationAction(projectId, loc.id);
-                              },
+                              action: () => deleteLocationAction(projectId, loc.id),
                             })
                           }
                         >

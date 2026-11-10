@@ -9,6 +9,10 @@ import {
   type LocationActionState,
 } from "@/features/locations/actions";
 import type { LocationEditSource } from "@/features/locations/queries";
+import {
+  locationObjectName,
+  locationSubName,
+} from "@/features/locations/lib/format-location";
 import { locationKindLabels } from "@/shared/i18n/domain-labels";
 import { Button } from "@/shared/ui/button";
 import { submitKeepingFields } from "@/shared/ui/forms/submit-keeping-fields";
@@ -91,7 +95,7 @@ export function LocationModal({
               id="loc-name"
               name="name"
               required
-              defaultValue={location?.name ?? ""}
+              defaultValue={location ? locationObjectName(location) : ""}
               placeholder="Госпиталь"
             />
           </div>
@@ -100,7 +104,7 @@ export function LocationModal({
             <Input
               id="loc-sublocation"
               name="sublocation"
-              defaultValue={location?.sublocation ?? ""}
+              defaultValue={location ? (locationSubName(location) ?? "") : ""}
               placeholder="Кабинет"
             />
           </div>

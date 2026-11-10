@@ -621,7 +621,8 @@ model Location {
   updatedAt              DateTime           @updatedAt
 
   project             Project                   @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  parent              Location?                 @relation("LocationParent", fields: [parentId], references: [id], onDelete: NoAction)
+  /// Родитель — только из того же проекта (составной ключ). Ссылка на себя запрещена в базе (CHECK в миграции).
+  parent              Location?                 @relation("LocationParent", fields: [parentId, projectId], references: [id, projectId], onDelete: NoAction)
   children           Location[]                @relation("LocationParent")
   defaultBudgetItem   BudgetItem?               @relation("LocationDefaultBudgetItem", fields: [defaultBudgetItemId], references: [id], onDelete: SetNull)
   overtimeBudgetItem  BudgetItem?               @relation("LocationOvertimeBudgetItem", fields: [overtimeBudgetItemId], references: [id], onDelete: SetNull)
@@ -635,6 +636,7 @@ model Location {
   dictionaryRules     ScriptDictionaryRule[]
   prepEvents          PrepEvent[]
 
+  @@unique([id, projectId])
   @@index([projectId])
   @@index([parentId, sortOrder])
 }

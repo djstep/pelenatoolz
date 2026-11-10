@@ -5,6 +5,7 @@ import {
   LOCATION_PARENT_SELECT,
   SCOUT_SNAPSHOT_FIELDS,
 } from "@/features/locations/lib/location-fields";
+import { compareLocations } from "@/features/locations/lib/format-location";
 import { serializeForClient } from "@/shared/db/serialize-decimal";
 import { pickFinanceFields } from "@/shared/lib/finance-fields";
 
@@ -43,9 +44,10 @@ export async function listLocationsWithStats(projectId: string, canFinanceRead: 
       photos: { orderBy: { sortOrder: "asc" } },
       _count: { select: { scenes: true, photos: true } },
     },
-    orderBy: [{ name: "asc" }, { sublocation: "asc" }],
   });
-  return locations.map((location) => locationForClient(location, canFinanceRead));
+  return locations
+    .sort(compareLocations)
+    .map((location) => locationForClient(location, canFinanceRead));
 }
 
 function locationForClient<T extends { scoutSnapshot: unknown }>(

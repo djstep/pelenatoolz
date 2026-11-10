@@ -1,10 +1,8 @@
 import { ScoutWorkspace } from "@/features/scout/components/scout-workspace";
-import { listScoutCandidates } from "@/features/scout/queries";
+import { listLocationsForScout, listScoutCandidates } from "@/features/scout/queries";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
-import { prisma } from "@/shared/db/prisma";
 import { financeAccess } from "@/shared/lib/finance-fields";
 import { Card } from "@/shared/ui/card";
-import { LOCATION_PARENT_SELECT } from "@/features/locations/lib/location-fields";
 
 type Props = {
   params: Promise<{ locale: string; projectId: string }>;
@@ -20,11 +18,7 @@ export default async function ScoutPage({ params }: Props) {
 
   const [candidates, locations] = await Promise.all([
     listScoutCandidates(projectId, ctx.canFinanceRead("locations")),
-    prisma.location.findMany({
-      where: { projectId },
-      select: { id: true, name: true, sublocation: true, parent: LOCATION_PARENT_SELECT },
-      orderBy: [{ name: "asc" }, { sublocation: "asc" }],
-    }),
+    listLocationsForScout(projectId),
   ]);
 
   return (

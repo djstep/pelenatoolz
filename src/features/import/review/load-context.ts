@@ -10,6 +10,8 @@ import {
   type VersionScene,
 } from "@/features/import/normalize/scene-match";
 import { prisma } from "@/shared/db/prisma";
+import { locationAsPair } from "@/features/locations/lib/format-location";
+import { LOCATION_PARENT_SELECT } from "@/features/locations/lib/location-fields";
 
 const INT_EXT_WORDS = { INT: "ИНТ.", EXT: "НАТ.", INT_EXT: "ИНТ./НАТ." } as const;
 const DAY_NIGHT_WORDS = { DAY: "ДЕНЬ", NIGHT: "НОЧЬ", DAWN: "УТРО", DUSK: "ВЕЧЕР" } as const;
@@ -24,7 +26,7 @@ export async function loadImportContext(
   projectId: string,
   options: { referenceVersionId?: string } = {},
 ) {
-  const [rules, characters, locations, current, project, scenes] = await Promise.all([
+  const [rules, characters, locationRows, current, project, scenes] = await Promise.all([
     prisma.scriptDictionaryRule.findMany({
       where: { projectId },
       select: {
@@ -43,7 +45,7 @@ export async function loadImportContext(
     }),
     prisma.location.findMany({
       where: { projectId },
-      select: { id: true, name: true, sublocation: true },
+      select: { id: true, name: true, sublocation: true, parent: LOCATION_PARENT_SELECT },
       orderBy: { createdAt: "asc" },
     }),
     prisma.scriptVersion.findFirst({
@@ -122,6 +124,8 @@ export async function loadImportContext(
       },
     ];
   });
+  // Импорт видит объект и подобъект парой — для старых записей (sublocation) и новых (parent).
+  const locations = locationRows.map(locationAsPair);
   const locationById = new Map(locations.map((l) => [l.id, l]));
 
   const existingScenes: ExistingScene[] = scenes.map((scene) => {

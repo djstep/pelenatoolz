@@ -14,6 +14,7 @@ import { fullNameFromParts } from "@/features/preproduction/lib/snapshots";
 import { prisma } from "@/shared/db/prisma";
 import { LOCATION_PARENT_SELECT } from "@/features/locations/lib/location-fields";
 import {
+  compareLocations,
   formatLocationTitle,
   type LocationNameSource,
 } from "@/features/locations/lib/format-location";
@@ -230,11 +231,9 @@ export async function listCalendarOptions(
         })
       : null,
     rights.canReadLocations
-      ? prisma.location.findMany({
-          where: { projectId },
-          orderBy: [{ name: "asc" }, { sublocation: "asc" }],
-          select: { id: true, name: true, sublocation: true, parent: LOCATION_PARENT_SELECT },
-        })
+      ? prisma.location
+          .findMany({ where: { projectId }, select: { id: true, name: true, sublocation: true, sortOrder: true, parent: LOCATION_PARENT_SELECT } })
+          .then((rows) => rows.sort(compareLocations))
       : null,
     prisma.department.findMany({
       where: { projectId },

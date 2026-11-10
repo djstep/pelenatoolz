@@ -1,6 +1,6 @@
 "use server";
 
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import {
   locationFormSchema,
@@ -30,7 +30,14 @@ import {
   SCOUT_SNAPSHOT_INPUT_FIELDS,
 } from "@/features/locations/lib/location-fields";
 import { AuditEntityType } from "@/shared/audit/entity-types";
-import { auditMutation, recordAudit } from "@/shared/audit/with-audit";
+import { auditMutation, recordAudit, type AuditContext } from "@/shared/audit/with-audit";
+import {
+  ensurePlace,
+  findOrCreateObject,
+  nextSubOrder,
+  type CreatedLocation,
+} from "@/features/locations/lib/location-tree-write";
+import { cleanSpaces } from "@/features/import/normalize/text";
 import { z } from "zod";
 
 export type LocationActionState = { error?: string; success?: string };
@@ -50,6 +57,26 @@ async function assertScriptWrite(projectId: string) {
     return { error: "Недостаточно прав" } as const;
   }
   return { ctx } as const;
+}
+
+const HAS_SUBOBJECTS =
+  "У объекта есть подобъекты — сначала удалите их или перенесите в другой объект";
+
+async function auditCreated(
+  ctx: AuditContext,
+  projectId: string,
+  created: CreatedLocation[],
+  reason: string,
+) {
+  for (const object of created) {
+    await recordAudit(ctx, {
+      projectId,
+      entityType: AuditEntityType.location,
+      entityId: object.id,
+      action: "CREATE",
+      summary: `Создана локация ${object.title} (${reason})`,
+    });
+  }
 }
 
 function parseLocationForm(formData: FormData) {
@@ -79,36 +106,45 @@ export async function createLocationAction(
   }
 
   const d = parsed.data;
-  const location = await prisma.location.create({
-    data: {
-      projectId,
-      name: d.name,
-      sublocation: d.sublocation || null,
-      locationKind: d.locationKind ?? null,
-      hasDecoration: d.hasDecoration ?? false,
-      address: d.address || null,
-      tags: d.tags || null,
-      notes: d.notes || null,
-    },
+  const sub = d.sublocation?.trim() || null;
+  const createdObjects: CreatedLocation[] = [];
+  const location = await prisma.$transaction(async (tx) => {
+    // «Подлокация» заполнена — подобъект объекта с этим названием (нет такого — создаётся).
+    const parent = sub ? await findOrCreateObject(tx, projectId, d.name, null, createdObjects) : null;
+    const created = await tx.location.create({
+      data: {
+        projectId,
+        name: sub ?? d.name,
+        parentId: parent?.id ?? null,
+        sortOrder: parent ? await nextSubOrder(tx, projectId, parent.id) : 0,
+        locationKind: d.locationKind ?? null,
+        hasDecoration: d.hasDecoration ?? false,
+        address: d.address || null,
+        tags: d.tags || null,
+        notes: d.notes || null,
+      },
+      select: { id: true },
+    });
+    if (parent && d.applyAddressToSiblings && d.address) {
+      await tx.location.updateMany({
+        where: {
+          projectId,
+          OR: [{ id: parent.id }, { parentId: parent.id }],
+          id: { not: created.id },
+        },
+        data: { address: d.address },
+      });
+    }
+    return created;
   });
 
-  if (d.applyAddressToSiblings && d.address && d.sublocation) {
-    await prisma.location.updateMany({
-      where: {
-        projectId,
-        name: d.name,
-        id: { not: location.id },
-      },
-      data: { address: d.address },
-    });
-  }
-
+  await auditCreated(gate.ctx, projectId, createdObjects, "для подобъекта");
   await recordAudit(gate.ctx, {
     projectId,
     entityType: AuditEntityType.location,
     entityId: location.id,
     action: "CREATE",
-    summary: `Создана локация ${d.name}${d.sublocation ? `.${d.sublocation}` : ""}`,
+    summary: `Создана локация ${sub ? `${d.name}.${sub}` : d.name}`,
   });
 
   revalidateLocations(projectId, location.id);
@@ -130,49 +166,118 @@ export async function updateLocationAction(
   }
 
   const d = parsed.data;
-  await prisma.location.update({
+  const sub = d.sublocation?.trim() || null;
+  const current = await prisma.location.findFirst({
     where: { id: locationId, projectId },
-    data: {
-      name: d.name,
-      sublocation: d.sublocation || null,
-      locationKind: d.locationKind ?? null,
-      hasDecoration: d.hasDecoration ?? false,
-      address: d.address || null,
-      tags: d.tags || null,
-      notes: d.notes || null,
+    select: {
+      name: true,
+      sublocation: true,
+      parentId: true,
+      parent: LOCATION_PARENT_SELECT,
+      address: true,
+      _count: { select: { children: true } },
     },
   });
-
-  if (d.applyAddressToSiblings && d.address) {
-    await prisma.location.updateMany({
-      where: { projectId, name: d.name, id: { not: locationId } },
-      data: { address: d.address },
-    });
+  if (!current) return { error: LOCATION_NOT_FOUND };
+  // Объект с подобъектами сам подобъектом стать не может: вложенность — один уровень.
+  if (sub && current._count.children > 0) {
+    return { error: "У объекта есть подобъекты — подлокацию ему задать нельзя" };
   }
+
+  const createdObjects: CreatedLocation[] = [];
+  const siblings = await prisma.$transaction(async (tx) => {
+    // Подлокация заполнена — строка становится подобъектом объекта «Название» (нет — создаётся);
+    // пусто — строка объект, его подобъекты остаются при нём.
+    const parent = sub
+      ? await findOrCreateObject(tx, projectId, d.name, locationId, createdObjects)
+      : null;
+    const parentId = parent?.id ?? null;
+    await tx.location.update({
+      where: { id: locationId, projectId },
+      data: {
+        name: sub ?? d.name,
+        parentId,
+        ...(parentId !== current.parentId
+          ? { sortOrder: parentId ? await nextSubOrder(tx, projectId, parentId) : 0 }
+          : {}),
+        locationKind: d.locationKind ?? null,
+        hasDecoration: d.hasDecoration ?? false,
+        address: d.address || null,
+        tags: d.tags || null,
+        notes: d.notes || null,
+      },
+    });
+
+    if (d.applyAddressToSiblings && d.address) {
+      // Соседи — объект и все его подобъекты.
+      const groupId = parentId ?? locationId;
+      const result = await tx.location.updateMany({
+        where: {
+          projectId,
+          OR: [{ id: groupId }, { parentId: groupId }],
+          id: { not: locationId },
+        },
+        data: { address: d.address },
+      });
+      return result.count;
+    }
+    return 0;
+  });
+
+  const before = formatLocationTitle(current);
+  const after = sub ? `${cleanSpaces(d.name)}.${sub}` : d.name;
+  const notes = [
+    before !== after ? `«${before}» → «${after}»` : null,
+    (current.address ?? "") !== (d.address ?? "") ? "адрес" : null,
+    siblings > 0 ? `адрес соседям: ${siblings}` : null,
+  ].filter(Boolean);
+  await auditCreated(gate.ctx, projectId, createdObjects, "для подобъекта");
+  await recordAudit(gate.ctx, {
+    projectId,
+    entityType: AuditEntityType.location,
+    entityId: locationId,
+    action: "UPDATE",
+    summary: `Изменена локация «${after}»${notes.length ? ` (${notes.join("; ")})` : ""}`,
+  });
 
   revalidateLocations(projectId, locationId);
   return { success: "Локация сохранена" };
 }
 
+/** Отказ (текст для окна подтверждения) — у объекта есть подобъекты. */
 export async function deleteLocationAction(
   projectId: string,
   locationId: string,
-) {
+): Promise<string | undefined> {
   const gate = await assertScriptWrite(projectId);
   if ("error" in gate) throw new Error(gate.error);
 
   const location = await prisma.location.findFirst({
     where: { id: locationId, projectId },
-    select: { name: true },
+    select: {
+      name: true,
+      sublocation: true,
+      parent: LOCATION_PARENT_SELECT,
+      _count: { select: { children: true } },
+    },
   });
   if (!location) return;
-  await prisma.location.deleteMany({ where: { id: locationId, projectId } });
+  if (location._count.children > 0) return HAS_SUBOBJECTS;
+  try {
+    await prisma.location.deleteMany({ where: { id: locationId, projectId } });
+  } catch (error) {
+    // Подобъект добавили между проверкой и удалением — база не даёт удалить объект.
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003") {
+      return HAS_SUBOBJECTS;
+    }
+    throw error;
+  }
   await recordAudit(gate.ctx, {
     projectId,
     entityType: AuditEntityType.location,
     entityId: locationId,
     action: "DELETE",
-    summary: `Удалена локация «${location.name}»`,
+    summary: `Удалена локация «${formatLocationTitle(location)}»`,
   });
   revalidateLocations(projectId);
 }
@@ -248,6 +353,7 @@ export async function deleteLocationPhotoAction(
   revalidateLocations(projectId, locationId);
 }
 
+/** Объект по названию (карточка сцены): есть — тот же, нет — создаётся. */
 export async function quickCreateLocationAction(
   projectId: string,
   name: string,
@@ -255,19 +361,39 @@ export async function quickCreateLocationAction(
   const gate = await assertScriptWrite(projectId);
   if ("error" in gate) return { error: gate.error ?? "Недостаточно прав" };
 
-  const trimmed = name.trim();
+  const trimmed = cleanSpaces(name);
   if (!trimmed) return { error: "Пустое название" };
 
-  const existing = await prisma.location.findFirst({
-    where: { projectId, parentId: null, name: { equals: trimmed, mode: "insensitive" } },
-  });
-  if (existing) return { id: existing.id, name: existing.name };
+  const created: CreatedLocation[] = [];
+  const object = await prisma.$transaction((tx) =>
+    findOrCreateObject(tx, projectId, trimmed, null, created),
+  );
+  if (created.length > 0) {
+    await auditCreated(gate.ctx, projectId, created, "быстрое создание");
+    revalidateLocations(projectId);
+  }
+  return object;
+}
 
-  const created = await prisma.location.create({
-    data: { projectId, name: trimmed },
-  });
-  revalidateLocations(projectId);
-  return { id: created.id, name: created.name };
+/**
+ * Место из шапки сценария («ДОМ. ВАННАЯ / КОРИДОР»): по правилу шапки — объект и подобъекты,
+ * как у импорта. Нет — создаются. Ответ — первый объект (подсказки места в редакторе).
+ */
+export async function quickCreatePlaceAction(
+  projectId: string,
+  place: string,
+): Promise<{ id: string; name: string } | { error: string }> {
+  const gate = await assertScriptWrite(projectId);
+  if ("error" in gate) return { error: gate.error ?? "Недостаточно прав" };
+
+  const created: CreatedLocation[] = [];
+  const first = await prisma.$transaction((tx) => ensurePlace(tx, projectId, place, created));
+  if (!first) return { error: "Пустое название" };
+  if (created.length > 0) {
+    await auditCreated(gate.ctx, projectId, created, "из шапки сценария");
+    revalidateLocations(projectId);
+  }
+  return first;
 }
 
 const requirementSchema = z.object({
@@ -552,7 +678,8 @@ export async function getLocationDeleteImpactAction(
   const gate = await assertScriptWrite(projectId);
   if ("error" in gate) return [];
   const location = { id: locationId, projectId };
-  const [scenes, scout, photos, rates, reportRows] = await Promise.all([
+  const [children, scenes, scout, photos, rates, reportRows] = await Promise.all([
+    prisma.location.count({ where: { projectId, parentId: locationId } }),
     prisma.sceneLocation.count({ where: { location } }),
     prisma.scoutCandidateLocation.count({ where: { location } }),
     prisma.locationPhoto.count({ where: { location } }),
@@ -560,6 +687,7 @@ export async function getLocationDeleteImpactAction(
     prisma.productionReportWorkRow.count({ where: { location } }),
   ]);
   return impactLines([
+    [children, "Подобъекты (пока они есть, объект не удалится)"],
     [scenes, "Локация уберётся из сцен"],
     [scout, "Уберётся из кандидатов скаута"],
     [photos, "Удалятся фото"],

@@ -55,6 +55,8 @@ const SCENE_LOCATION_KEYS = [
   "projectId",
   "name",
   "sublocation",
+  // Порядок подобъекта внутри объекта (`compareLocations`).
+  "sortOrder",
   "locationKind",
   "hasDecoration",
   "address",
