@@ -45,7 +45,7 @@ export async function loadImportContext(
     }),
     prisma.location.findMany({
       where: { projectId },
-      select: { id: true, name: true, sublocation: true, parent: LOCATION_PARENT_SELECT },
+      select: { id: true, name: true, parent: LOCATION_PARENT_SELECT },
       orderBy: { createdAt: "asc" },
     }),
     prisma.scriptVersion.findFirst({

@@ -32,7 +32,6 @@ const ROW_SELECT = {
   id: true,
   projectId: true,
   name: true,
-  sublocation: true,
   parentId: true,
   parent: { select: { id: true, name: true } },
   locationKind: true,

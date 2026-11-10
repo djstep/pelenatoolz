@@ -44,10 +44,10 @@ type RentRow = Prisma.LocationGetPayload<{ select: typeof RENT_SELECT }>;
  * (одно реальное место — одна строка в день; решение владельца).
  */
 function rentOwner(
-  location: RentRow & { sublocation: string | null; address: string | null; parent: RentRow | null },
+  location: RentRow & { address: string | null; parent: RentRow | null },
 ) {
   if (location.parent && !hasOwnPlace(location)) {
-    return { ...location.parent, sublocation: null, parent: null };
+    return { ...location.parent, parent: null };
   }
   return location;
 }
@@ -100,7 +100,6 @@ async function loadCandidates(projectId: string, shootDayId: string) {
                   locationId: true,
                   location: {
                     select: {
-                      sublocation: true,
                       address: true,
                       // Подобъект без своего адреса снимается на месте объекта: аренда — объекта.
                       parent: { select: RENT_SELECT },

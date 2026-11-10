@@ -20,7 +20,6 @@ export type KppExportScene = {
     location: {
       id: string;
       name: string;
-      sublocation: string | null;
       parent: { id: string; name: string } | null;
     };
   }[];
@@ -112,7 +111,6 @@ export async function getKppExportBundle(
                       select: {
                         id: true,
                         name: true,
-                        sublocation: true,
                         parent: LOCATION_PARENT_SELECT,
                       },
                     },

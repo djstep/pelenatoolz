@@ -7,7 +7,6 @@ export const LOCATION_FIELDS = {
     "id",
     "projectId",
     "name",
-    "sublocation",
     // Объект — пусто; подобъект — объект-родитель (только id и название).
     "parentId",
     "parent",
@@ -62,7 +61,6 @@ const SCENE_LOCATION_KEYS = [
   "id",
   "projectId",
   "name",
-  "sublocation",
   // Порядок подобъекта внутри объекта (`compareLocations`).
   "sortOrder",
   "locationKind",
@@ -86,7 +84,6 @@ const SCENE_LOCATION_KEYS = [
 const CALL_SHEET_SCHEME_LOCATION_KEYS = [
   "id",
   "name",
-  "sublocation",
   "latitude",
   "longitude",
   "address",

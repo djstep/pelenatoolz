@@ -127,7 +127,7 @@ export async function savePrepEventAction(
           locationId: true,
           locationText: true,
           type: { select: { name: true } },
-          location: { select: { name: true, sublocation: true, parent: LOCATION_PARENT_SELECT } },
+          location: { select: { name: true, parent: LOCATION_PARENT_SELECT } },
           participants: { select: { crewMemberId: true, actorId: true, castingPersonId: true } },
           departments: { select: { departmentId: true } },
         },
@@ -173,7 +173,7 @@ export async function savePrepEventAction(
   const location = locationId
     ? await prisma.location.findFirst({
         where: { id: locationId, projectId },
-        select: { name: true, sublocation: true, parent: LOCATION_PARENT_SELECT },
+        select: { name: true, parent: LOCATION_PARENT_SELECT },
       })
     : null;
 

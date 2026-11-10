@@ -3,11 +3,10 @@ import { locationKindLabels } from "@/shared/i18n/domain-labels";
 
 /**
  * Строка объекта из базы. Объект: `parent` пусто. Подобъект: `parent` — объект, `name` — подобъект.
- * Старые записи хранят подобъект в `sublocation` рядом с названием объекта (до разбивки данных).
  * `parent` обязателен в типе: выборка без `parent: LOCATION_PARENT_SELECT` не пройдёт проверку типов.
  */
 export type LocationObjectSource = { name: string; parent: { name: string } | null };
-export type LocationNameSource = LocationObjectSource & { sublocation: string | null };
+export type LocationNameSource = LocationObjectSource;
 
 /** Объект строки: «ДОМ» и для «ДОМ», и для подобъекта «КУХНЯ» объекта ДОМ. */
 export function locationObjectName(location: LocationObjectSource): string {
@@ -16,8 +15,7 @@ export function locationObjectName(location: LocationObjectSource): string {
 
 /** Подобъект строки: «КУХНЯ»; у объекта без подобъекта — null. */
 export function locationSubName(location: LocationNameSource): string | null {
-  if (location.parent) return location.name;
-  return location.sublocation?.trim() || null;
+  return location.parent ? location.name : null;
 }
 
 /** «ДОМ.КУХНЯ» или «ДОМ». Разделитель — как было на экране: «.», «. » или « / ». */
@@ -52,7 +50,7 @@ function groupId(location: SortableLocation) {
 
 /**
  * Порядок в списках: по объекту (алфавит), внутри — объект первым, затем подобъекты
- * по `sortOrder` и названию. Вместо `orderBy: [{ name }, { sublocation }]`: у подобъекта
+ * по `sortOrder` и названию. Вместо `orderBy: name`: у подобъекта
  * `name` — его собственное название, и сортировка базы разнесла бы подобъекты по алфавиту.
  */
 export function compareLocations(a: SortableLocation, b: SortableLocation): number {

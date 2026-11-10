@@ -178,7 +178,6 @@ export type CallSheetBlocks = {
   schemeLocation: {
     id: string;
     name: string;
-    sublocation: string | null;
     parent: { id: string; name: string } | null;
     latitude: number | null;
     longitude: number | null;

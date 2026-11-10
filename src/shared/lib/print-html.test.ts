@@ -220,7 +220,7 @@ const scene = {
   planSeconds: null,
   summary: IMG,
   scriptContent: null,
-  locations: [{ location: { name: IMG, sublocation: null, address: null } }],
+  locations: [{ location: { name: IMG, parent: null, address: null } }],
   characters: [{ character: { name: SCRIPT, actors: [] } }],
   resources: [],
   elements: [],

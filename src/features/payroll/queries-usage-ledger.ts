@@ -102,7 +102,7 @@ export async function listUsageLedgerSummary(
         },
       },
       location: {
-        select: { id: true, name: true, sublocation: true, parent: LOCATION_PARENT_SELECT },
+        select: { id: true, name: true, parent: LOCATION_PARENT_SELECT },
       },
       report: {
         select: { shootDayId: true },

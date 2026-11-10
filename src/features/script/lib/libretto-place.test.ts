@@ -5,7 +5,7 @@ import { formatPlaceCell } from "@/features/script/lib/libretto-display";
 // «Место» в либретто (волна feat/sub-objects, шаг 6): реальные адреса мест сцены.
 const house = { id: "h", name: "ДОМ", address: "ул. Лесная, 1", latitude: null, longitude: null };
 const sub = (id: string, name: string, address: string | null) => ({
-  location: { id, name, sublocation: null, address, parent: house },
+  location: { id, name, address, parent: house },
 });
 
 describe("колонка «Место»", () => {

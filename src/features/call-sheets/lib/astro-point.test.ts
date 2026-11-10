@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { pickAstroPoint } from "@/features/call-sheets/lib/astro-point";
 
-const noCoords = { name: "Квартира", sublocation: null, parent: null, latitude: null, longitude: null };
-const park = { name: "Парк", sublocation: "Аллея", parent: null, latitude: 59.94, longitude: 30.31 };
-const field = { name: "Поле", sublocation: null, parent: null, latitude: 55.75, longitude: 37.62 };
+const noCoords = { name: "Квартира", parent: null, latitude: null, longitude: null };
+const park = { name: "Аллея", address: "Парк, аллея", parent: { name: "Парк" }, latitude: 59.94, longitude: 30.31 };
+const field = { name: "Поле", parent: null, latitude: 55.75, longitude: 37.62 };
 
 describe("восход и закат — где считать", () => {
   test("объект схемы с координатами — по нему", () => {
@@ -29,20 +29,19 @@ describe("восход и закат — где считать", () => {
   });
 
   test("нулевые координаты — тоже координаты", () => {
-    assert.ok(pickAstroPoint({ name: "Гвинейский залив", sublocation: null, parent: null, latitude: 0, longitude: 0 }, []));
+    assert.ok(pickAstroPoint({ name: "Гвинейский залив", parent: null, latitude: 0, longitude: 0 }, []));
   });
 });
 
 describe("восход и закат — подобъект", () => {
   test("подобъект с родителем — подпись «Объект. Подобъект»", () => {
-    const kitchen = { name: "Кухня", sublocation: null, address: "Павильон 3", parent: { name: "Дом" }, latitude: 1, longitude: 2 };
+    const kitchen = { name: "Кухня", address: "Павильон 3", parent: { name: "Дом" }, latitude: 1, longitude: 2 };
     assert.equal(pickAstroPoint(kitchen, [])?.label, "Дом. Кухня");
   });
 
   test("подобъект без своего адреса — координаты объекта", () => {
     const hall = {
       name: "Коридор",
-      sublocation: null,
       parent: { name: "Дом", address: "ул. Лесная, 1", latitude: 55, longitude: 37 },
       latitude: 1,
       longitude: 2,

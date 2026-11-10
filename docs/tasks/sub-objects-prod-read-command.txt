@@ -1,3 +1,4 @@
+# Снимок перед волной «Объекты и подобъекты». После шага 8 (поле sublocation удалено) команда не сработает.
 cd ~/pelena && docker compose exec -T -e PGOPTIONS='-c default_transaction_read_only=on' db psql -U pelena -d pelena -X -P pager=off -v ON_ERROR_STOP=1 <<'SQL'
 -- Объекты и подобъекты: снимок прода только на чтение. Ничего не меняет.
 BEGIN READ ONLY;

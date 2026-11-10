@@ -45,8 +45,7 @@ async function children() {
     where: { projectId: ctx.projectId, name: OBJECT, parentId: null },
     select: {
       id: true,
-      sublocation: true,
-      children: { orderBy: { sortOrder: "asc" }, select: { name: true, sublocation: true, sortOrder: true, locationKind: true } },
+      children: { orderBy: { sortOrder: "asc" }, select: { name: true, sortOrder: true, locationKind: true } },
     },
   });
   return object;
@@ -67,10 +66,9 @@ test.describe("объекты и подобъекты", () => {
 
     // В базе: один объект (второе написание нашло тот же), подобъекты по порядку добавления.
     let object = await children();
-    expect(object.sublocation).toBeNull();
-    expect(object.children.map((c) => [c.name, c.sublocation, c.sortOrder])).toEqual([
-      ["КУХНЯ", null, 1],
-      ["ДЕТСКАЯ", null, 2],
+    expect(object.children.map((c) => [c.name, c.sortOrder])).toEqual([
+      ["КУХНЯ", 1],
+      ["ДЕТСКАЯ", 2],
     ]);
 
     // «+ подобъект»: объект заполнен, тип — от объекта (у объекта, созданного попутно, типа нет —

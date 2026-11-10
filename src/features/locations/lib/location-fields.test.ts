@@ -101,7 +101,7 @@ describe("объект в сценах (либретто, КПП, вызывно
   });
 
   test("название и вид объекта есть — по ним работают сцены и фильтры либретто", () => {
-    for (const key of ["id", "name", "sublocation", "locationKind", "address"]) {
+    for (const key of ["id", "name", "parent", "locationKind", "address"]) {
       assert.ok(keys.includes(key), key);
     }
   });

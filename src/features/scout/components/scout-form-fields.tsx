@@ -7,7 +7,7 @@ import { Label } from "@/shared/ui/label";
 import { MultiSelect } from "@/shared/ui/multi-select";
 import { formatLocationTitle } from "@/features/locations/lib/format-location";
 
-type LocationOpt = { id: string; name: string; sublocation: string | null; parent: { name: string } | null };
+type LocationOpt = { id: string; name: string; parent: { name: string } | null };
 
 function locationLabel(loc: LocationOpt) {
   return formatLocationTitle(loc, " / ");

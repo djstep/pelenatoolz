@@ -173,7 +173,6 @@ type PrintSourceScene = {
   locations: {
     location: {
       name: string;
-      sublocation: string | null;
       // Подобъект без своего адреса снимается по адресу объекта (`placeOf`).
       parent: { name: string; address?: string | null } | null;
       address: string | null;
@@ -259,7 +258,6 @@ export type CallSheetPrintSource = {
     actorRestrictions: string | null;
     schemeLocation: {
       name: string;
-      sublocation: string | null;
       // Схема подобъекта без своего адреса — схема объекта.
       parent: {
         name: string;

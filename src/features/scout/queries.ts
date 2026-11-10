@@ -8,7 +8,7 @@ import { pickFinanceFields } from "@/shared/lib/finance-fields";
 const scoutInclude = {
   locationLinks: {
     include: {
-      location: { select: { id: true, name: true, sublocation: true, parent: LOCATION_PARENT_SELECT } },
+      location: { select: { id: true, name: true, parent: LOCATION_PARENT_SELECT } },
     },
   },
 } as const;
@@ -43,7 +43,7 @@ export async function getScoutCandidate(
 export async function listLocationsForScout(projectId: string) {
   const rows = await prisma.location.findMany({
     where: { projectId },
-    select: { id: true, name: true, sublocation: true, sortOrder: true, parent: LOCATION_PARENT_SELECT },
+    select: { id: true, name: true, sortOrder: true, parent: LOCATION_PARENT_SELECT },
   });
   return rows.sort(compareLocations);
 }
