@@ -28,7 +28,7 @@ export function LocationsFiltersModal({
   addresses: string[];
 }) {
   return (
-    <Modal open={open} onClose={onClose} title="Фильтры локаций" wide>
+    <Modal open={open} onClose={onClose} title="Фильтры объектов" wide>
       <form
         className="space-y-5"
         onSubmit={(e) => {

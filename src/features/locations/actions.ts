@@ -6,7 +6,10 @@ import {
   locationFormSchema,
   locationPhotoSchema,
 } from "@/features/locations/schemas";
-import { formatLocationTitle } from "@/features/locations/lib/format-location";
+import {
+  compareLocations,
+  formatLocationTitle,
+} from "@/features/locations/lib/format-location";
 import {
   canEditLocationScheme,
   checkLocationSchemeSave,
@@ -148,7 +151,7 @@ export async function createLocationAction(
   });
 
   revalidateLocations(projectId, location.id);
-  return { success: "Локация добавлена" };
+  return { success: "Объект добавлен" };
 }
 
 export async function updateLocationAction(
@@ -241,7 +244,60 @@ export async function updateLocationAction(
   });
 
   revalidateLocations(projectId, locationId);
-  return { success: "Локация сохранена" };
+  return { success: "Сохранено" };
+}
+
+const moveDirectionSchema = z.enum(["up", "down"]);
+
+/**
+ * Подобъект на одну позицию выше или ниже внутри своего объекта. Порядок всех подобъектов
+ * объекта переписывается подряд (1, 2, 3…): одинаковые номера после старых правок исчезают.
+ * Отказ — текстом.
+ */
+export async function moveSubLocationAction(
+  projectId: string,
+  locationId: string,
+  direction: "up" | "down",
+): Promise<string | undefined> {
+  const gate = await assertScriptWrite(projectId);
+  if ("error" in gate) return gate.error;
+  const dir = moveDirectionSchema.safeParse(direction);
+  if (!dir.success) return "Не тот порядок";
+
+  const moved = await prisma.$transaction(async (tx) => {
+    const location = await tx.location.findFirst({
+      where: { id: locationId, projectId },
+      select: { parentId: true },
+    });
+    if (!location?.parentId) return null;
+    // Одна перестановка в объекте за раз: два одновременных нажатия не перепутают порядок.
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`location-order:${location.parentId}`}))`;
+    const siblings = await tx.location.findMany({
+      where: { projectId, parentId: location.parentId },
+      select: { id: true, name: true, sublocation: true, sortOrder: true, parent: LOCATION_PARENT_SELECT },
+    });
+    siblings.sort(compareLocations);
+    const index = siblings.findIndex((s) => s.id === locationId);
+    const target = dir.data === "up" ? index - 1 : index + 1;
+    if (index < 0 || target < 0 || target >= siblings.length) return null;
+    [siblings[index], siblings[target]] = [siblings[target]!, siblings[index]!];
+    for (const [i, sibling] of siblings.entries()) {
+      if (sibling.sortOrder !== i + 1) {
+        await tx.location.update({ where: { id: sibling.id }, data: { sortOrder: i + 1 } });
+      }
+    }
+    return siblings[target]!;
+  });
+  if (!moved) return;
+
+  await recordAudit(gate.ctx, {
+    projectId,
+    entityType: AuditEntityType.location,
+    entityId: locationId,
+    action: "UPDATE",
+    summary: `Подобъект «${formatLocationTitle(moved)}» перемещён ${dir.data === "up" ? "выше" : "ниже"}`,
+  });
+  revalidateLocations(projectId);
 }
 
 /** Отказ (текст для окна подтверждения) — у объекта есть подобъекты. */
@@ -533,7 +589,7 @@ export async function updateLocationFinancialAction(
     where: { id: locationId, projectId },
     select: { id: true },
   });
-  if (!existing) return { error: "Локация не найдена" };
+  if (!existing) return { error: "Объект не найден" };
 
   const data = clearEmptied(parsed.data, formData, [
     "shiftRate",
@@ -688,7 +744,7 @@ export async function getLocationDeleteImpactAction(
   ]);
   return impactLines([
     [children, "Подобъекты (пока они есть, объект не удалится)"],
-    [scenes, "Локация уберётся из сцен"],
+    [scenes, "Уберётся из сцен"],
     [scout, "Уберётся из кандидатов скаута"],
     [photos, "Удалятся фото"],
     [rates, "Удалятся ставки переработок"],

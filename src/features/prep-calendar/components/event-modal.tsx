@@ -247,7 +247,7 @@ function EventForm({
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
-          <Label htmlFor="event-location">Объект из «Локаций»</Label>
+          <Label htmlFor="event-location">Объект</Label>
           {options.locations ? (
             <Select
               id="event-location"

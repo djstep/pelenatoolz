@@ -118,7 +118,7 @@ export function LocationDetailView({
         <div>
           <p className="text-sm text-[var(--muted-fg)]">
             <a href={`/${locale}/projects/${projectId}/locations`} className="hover:text-[rgb(var(--tint-rgb))]">
-              ← Все локации
+              ← Все объекты
             </a>
           </p>
           <h2 className="font-display text-[27px] font-bold leading-tight">

@@ -169,18 +169,18 @@ for (const role of ["producer", "nofin", "crewonly"] as const) {
 }
 
 for (const role of ["producer", "nofin", "crewonly"] as const) {
-  test.describe(`вкладки Локаций, ${role}`, () => {
+  test.describe(`вкладки Объектов, ${role}`, () => {
     test.use({ storageState: storageStatePath(role) });
 
-    test("Локации · Скаут; пункт в «Планировании», Скаута в меню нет", async ({ page }) => {
+    test("Объекты · Скаут; пункт в «Планировании», Скаута в меню нет", async ({ page }) => {
       await page.goto(projectPath(ctx, "/locations"));
-      await expectTabs(page, ["Локации", "Скаут"], "Локации");
+      await expectTabs(page, ["Объекты", "Скаут"], "Объекты");
       await tab(page, "Скаут").click();
       await expect(page).toHaveURL(new RegExp(`${projectPath(ctx, "/preproduction/scout")}$`));
-      await expectTabs(page, ["Локации", "Скаут"], "Скаут");
+      await expectTabs(page, ["Объекты", "Скаут"], "Скаут");
       await expect(page.locator("main").getByText("Планирование", { exact: true })).toBeVisible();
       const menu = page.getByRole("complementary");
-      await expect(menu.getByRole("link", { name: "Локации", exact: true })).toHaveClass(/font-semibold/);
+      await expect(menu.getByRole("link", { name: "Объекты", exact: true })).toHaveClass(/font-semibold/);
       await expect(menu.getByRole("link", { name: "Скаут" })).toHaveCount(0);
     });
   });

@@ -149,7 +149,7 @@ test.describe("design components", () => {
 
       // «Несохранённые изменения» — «Не сохранять».
       await main.locator("textarea[name=summary]").fill("ТЕСТ волна 5");
-      await page.getByRole("link", { name: "Локации" }).first().click();
+      await page.getByRole("link", { name: "Объекты", exact: true }).first().click();
       await page.getByRole("alertdialog").waitFor();
       await shot("unsaved");
       await page.getByRole("alertdialog").getByRole("button", { name: "Не сохранять" }).click();
