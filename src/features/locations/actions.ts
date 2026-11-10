@@ -37,6 +37,7 @@ import { auditMutation, recordAudit, type AuditContext } from "@/shared/audit/wi
 import {
   ensurePlace,
   findOrCreateObject,
+  findOrCreateSub,
   nextSubOrder,
   type CreatedLocation,
 } from "@/features/locations/lib/location-tree-write";
@@ -450,6 +451,41 @@ export async function quickCreatePlaceAction(
     revalidateLocations(projectId);
   }
   return first;
+}
+
+/** Подобъект объекта по названию (карточка сцены): есть — тот же, нет — создаётся. */
+export async function quickCreateSubLocationAction(
+  projectId: string,
+  objectId: string,
+  name: string,
+): Promise<{ id: string; name: string; parentId: string } | { error: string }> {
+  const gate = await assertScriptWrite(projectId);
+  if ("error" in gate) return { error: gate.error ?? "Недостаточно прав" };
+
+  const trimmed = cleanSpaces(name);
+  if (!trimmed) return { error: "Пустое название" };
+  try {
+    await assertInProject("Location", objectId, projectId);
+  } catch (error) {
+    if (isNotInProjectError(error)) return { error: LOCATION_NOT_FOUND };
+    throw error;
+  }
+
+  const created: CreatedLocation[] = [];
+  const sub = await prisma.$transaction(async (tx) => {
+    const object = await tx.location.findFirst({
+      where: { id: objectId, projectId, parentId: null },
+      select: { id: true, name: true },
+    });
+    if (!object) return null;
+    return findOrCreateSub(tx, projectId, object, trimmed, created);
+  });
+  if (!sub) return { error: "Сначала выберите объект" };
+  if (created.length > 0) {
+    await auditCreated(gate.ctx, projectId, created, "из карточки сцены");
+    revalidateLocations(projectId);
+  }
+  return { id: sub.id, name: sub.name, parentId: objectId };
 }
 
 const requirementSchema = z.object({

@@ -24,7 +24,7 @@ import {
   sceneNumbersAccessRefusal,
 } from "@/features/script/lib/scene-numbers";
 import { scenesDeleteRefusal } from "@/features/script/lib/scene-delete";
-import { keptSceneLocationIds } from "@/features/script/lib/scene-locations";
+import { sceneLinkOf, sceneLocationIdsAfterCard } from "@/features/script/lib/scene-locations";
 import { impactLines } from "@/shared/lib/plural";
 
 export type ActionState = { error?: string; success?: string; keepOpen?: boolean };
@@ -47,6 +47,23 @@ function revalidateScript(projectId: string, sceneId?: string) {
   revalidatePath(`/ru/projects/${projectId}/call-sheets`);
   revalidatePath(`/ru/projects/${projectId}/reports`);
   revalidatePath(`/ru/projects/${projectId}/characters`);
+}
+
+/**
+ * Выбор карточки сцены: объект — строка без родителя, подобъекты — его подобъекты.
+ * Id уже проверены на проект (`assertInProject`). Ошибка — текстом, иначе null.
+ */
+async function checkSceneChoice(projectId: string, objectId: string, subIds: readonly string[]) {
+  const rows = await prisma.location.findMany({
+    where: { projectId, id: { in: [objectId, ...subIds] } },
+    select: { id: true, parentId: true },
+  });
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  if (byId.get(objectId)?.parentId !== null) return "Выберите объект, а не подобъект";
+  if (subIds.some((id) => byId.get(id)?.parentId !== objectId)) {
+    return "Подобъект не из выбранного объекта";
+  }
+  return null;
 }
 
 function parseSceneForm(formData: FormData) {
@@ -73,6 +90,8 @@ function parseSceneForm(formData: FormData) {
     dayNight: formData.get("dayNight") || undefined,
     status: formData.get("status") || undefined,
     locationId: formData.get("locationId") || undefined,
+    subLocationIds: formData.getAll("subLocationIds").filter(Boolean),
+    prevObjectId: formData.get("prevObjectId") || undefined,
     characterIds: formData.getAll("characterIds").filter(Boolean),
     elementIds: formData.getAll("elementIds").filter(Boolean),
     createAnother: formData.get("createAnother") ?? undefined,
@@ -212,7 +231,7 @@ export async function createSceneAction(
   const resourceItemLinks = parseResourceItemLinks(formData);
 
   try {
-    await assertInProject("Location", parsed.data.locationId, projectId);
+    await assertInProject("Location", [parsed.data.locationId, ...(parsed.data.subLocationIds ?? [])], projectId);
     if (parsed.data.characterIds?.length) {
       await assertInProject("Character", parsed.data.characterIds, projectId);
     }
@@ -223,6 +242,9 @@ export async function createSceneAction(
     if (isNotInProjectError(error)) return { error: "Объект не найден" };
     throw error;
   }
+
+  const choiceError = await checkSceneChoice(projectId, parsed.data.locationId, parsed.data.subLocationIds ?? []);
+  if (choiceError) return { error: choiceError };
 
   const tagElementIds = await resolveTagElements(projectId, formData);
   const allElementIds = [
@@ -255,7 +277,14 @@ export async function createSceneAction(
         dayNight: parsed.data.dayNight,
         status: parsed.data.status,
         sortOrder: (maxOrder._max.sortOrder ?? 0) + 1,
-        locations: { create: [{ locationId: parsed.data.locationId }] },
+        locations: {
+          create: sceneLocationIdsAfterCard({
+            current: [],
+            prevObjectId: null,
+            objectId: parsed.data.locationId,
+            subIds: parsed.data.subLocationIds ?? [],
+          }).map((locationId) => ({ locationId })),
+        },
         characters: parsed.data.characterIds?.length
           ? {
               create: parsed.data.characterIds.map((characterId) => ({
@@ -310,7 +339,13 @@ export async function updateSceneAction(
 
   const existing = await prisma.scene.findFirst({
     where: { id: sceneId, projectId },
-    select: { id: true, status: true, locations: { select: { locationId: true } } },
+    select: {
+      id: true,
+      status: true,
+      locations: {
+        select: { locationId: true, location: { select: { id: true, parent: { select: { id: true } } } } },
+      },
+    },
   });
   if (!existing) {
     return { error: "Сцена не найдена" };
@@ -328,7 +363,7 @@ export async function updateSceneAction(
   const resourceItemLinks = parseResourceItemLinks(formData);
 
   try {
-    await assertInProject("Location", parsed.data.locationId, projectId);
+    await assertInProject("Location", [parsed.data.locationId, ...(parsed.data.subLocationIds ?? [])], projectId);
     if (parsed.data.characterIds?.length) {
       await assertInProject("Character", parsed.data.characterIds, projectId);
     }
@@ -345,10 +380,14 @@ export async function updateSceneAction(
     ...new Set([...(parsed.data.elementIds ?? []), ...tagElementIds]),
   ];
   const statusChanged = parsed.data.status && parsed.data.status !== existing.status;
-  const locationIds = keptSceneLocationIds(
-    existing.locations.map((l) => l.locationId),
-    parsed.data.locationId,
-  );
+  const choiceError = await checkSceneChoice(projectId, parsed.data.locationId, parsed.data.subLocationIds ?? []);
+  if (choiceError) return { error: choiceError };
+  const locationIds = sceneLocationIdsAfterCard({
+    current: existing.locations.map(sceneLinkOf),
+    prevObjectId: parsed.data.prevObjectId ?? null,
+    objectId: parsed.data.locationId,
+    subIds: parsed.data.subLocationIds ?? [],
+  });
 
   try {
     await prisma.$transaction([

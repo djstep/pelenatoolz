@@ -42,6 +42,13 @@ export const createSceneSchema = z.object({
     (v) => (v === "" || v == null ? undefined : v),
     z.string().cuid().optional(),
   ),
+  /** Подобъекты выбранного объекта (смежные: «ДЕТСКАЯ / КОРИДОР»); пусто — объект целиком. */
+  subLocationIds: z.array(z.string().cuid()).max(50).optional(),
+  /** Объект, который карточка показывала при открытии: его привязки заменяются выбором. */
+  prevObjectId: z.preprocess(
+    (v) => (v === "" || v == null ? undefined : v),
+    z.string().cuid().optional(),
+  ),
   characterIds: z.array(z.string().cuid()).optional(),
   elementIds: z.array(z.string().cuid()).optional(),
   createAnother: z

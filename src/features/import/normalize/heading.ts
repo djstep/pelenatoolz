@@ -102,11 +102,27 @@ function timeOf(text: string) {
   return key in TIME_WORDS ? key : null;
 }
 
-/** Первый разделитель объекта и подобъекта: «/» без пробелов или точка. */
-function splitObject(part: string): { object: string; sub: string | null } {
+/**
+ * Как читать «/» без пробелов. Обычно — как « / » (смежные места: «ДОМ. ДЕТСКАЯ/КОРИДОР»,
+ * «ДВОР ДОМА/ОПУШКА ЛЕСА»). В файлах старой записи («КВАРТИРА/СПАЛЬНЯ///КОРИДОР», где есть «///»)
+ * — «/» без пробелов отделяет подобъект от объекта (решение владельца: правило по файлу).
+ */
+export type PlaceRules = { legacySlash?: boolean };
+
+/** Старая запись: в тексте есть «///» — «/» без пробелов отделяет подобъект. */
+export function usesLegacySlash(texts: Iterable<string>): boolean {
+  for (const text of texts) if (/\/{3,}/.test(text)) return true;
+  return false;
+}
+
+/**
+ * Первый разделитель объекта и подобъекта — точка («ДОМ. КУХНЯ»), кроме сокращений («КВ. ИВАНА»)
+ * и чисел («1.2»); в старой записи — ещё «/» без пробелов («КВАРТИРА/СПАЛЬНЯ»).
+ */
+function splitObject(part: string, rules: PlaceRules): { object: string; sub: string | null } {
   for (let i = 0; i < part.length; i++) {
     const ch = part[i];
-    if (ch !== "/" && ch !== ".") continue;
+    if (ch !== "." && !(ch === "/" && rules.legacySlash)) continue;
     const before = part.slice(0, i);
     const after = part.slice(i + 1);
     if (!after.trim() || !before.trim()) continue;
@@ -122,20 +138,23 @@ function splitObject(part: string): { object: string; sub: string | null } {
 
 /**
  * Место → объекты и подобъекты. «///» — ещё подобъект того же объекта.
- * « / » — подобъект, если у первого объекта уже есть подобъект; иначе новый объект (вопрос).
+ * « / » (и «/» без пробелов, кроме старой записи) — подобъект, если у первого объекта уже есть
+ * подобъект; иначе новый объект (вопрос). «/» между цифрами («1/2») не делит.
  */
-export function parsePlace(place: string): HeadingLocation[] {
-  const pieces = place.split(/(\s*\/{2,}\s*|\s+\/\s+)/u);
+export function parsePlace(place: string, rules: PlaceRules = {}): HeadingLocation[] {
+  const pieces = place.split(
+    rules.legacySlash ? /(\s*\/{2,}\s*|\s+\/\s+)/u : /(\s*\/{2,}\s*|(?<!\d)\s*\/\s*(?!\d))/u,
+  );
   const first = pieces[0]?.trim() ?? "";
   if (!first) return [];
-  let current = { ...splitObject(first), separate: false };
+  let current = { ...splitObject(first, rules), separate: false };
   const result: HeadingLocation[] = [current];
 
   for (let i = 1; i + 1 < pieces.length; i += 2) {
     const multi = pieces[i]!.trim().length >= 2;
     const part = pieces[i + 1]!.trim();
     if (!part) continue;
-    const parsed = splitObject(part);
+    const parsed = splitObject(part, rules);
     if (parsed.sub != null) {
       current = { ...parsed, separate: true };
       result.push(current);
@@ -156,6 +175,7 @@ export function parsePlace(place: string): HeadingLocation[] {
 export function parseHeading(
   source: string,
   mapPlace: (place: string) => string = (place) => place,
+  rules: PlaceRules = {},
 ): ParsedHeading {
   let rest = cleanSpaces(source).toUpperCase();
 
@@ -231,7 +251,7 @@ export function parseHeading(
   }
 
   const place = mapPlace(rest.replace(/[\s.]+$/u, "").trim());
-  const locations = parsePlace(place);
+  const locations = parsePlace(place, rules);
   const firstObject = locations[0] ? compareKey(locations[0].object) : "";
 
   return {

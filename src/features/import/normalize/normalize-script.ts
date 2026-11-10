@@ -19,8 +19,10 @@ import {
   headingText,
   isNumberOnly,
   parseHeading,
+  usesLegacySlash,
   TIME_WORDS,
   type HeadingLocation,
+  type PlaceRules,
   type ParsedHeading,
 } from "@/features/import/normalize/heading";
 import {
@@ -451,6 +453,8 @@ export function normalizeScript(
   let scene: SceneDraft | null = null;
   let speaker: string | null = null;
 
+  // «/» без пробелов: старая запись файла («КВАРТИРА/СПАЛЬНЯ///КОРИДОР») — подобъект, иначе смежные места.
+  const placeRules: PlaceRules = { legacySlash: usesLegacySlash(typing.blocks.map((b) => b.text)) };
   for (const typed of typing.blocks) {
     if (titleBlocks.includes(typed)) continue;
     const type = blockType(typed, conflicts.get(typed.paragraphIndex), book);
@@ -468,8 +472,10 @@ export function normalizeScript(
 
     if (type === "SLUGLINE") {
       speaker = null;
-      const heading = parseHeading(text, (place) =>
-        fixLatinWords(place, "scenes", typed.paragraphIndex),
+      const heading = parseHeading(
+        text,
+        (place) => fixLatinWords(place, "scenes", typed.paragraphIndex),
+        placeRules,
       );
       if (!heading.number && typed.autoNumber?.kind === "number") {
         heading.number = String(typed.autoNumber.value);

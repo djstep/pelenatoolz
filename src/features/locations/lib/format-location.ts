@@ -67,6 +67,39 @@ export function compareLocations(a: SortableLocation, b: SortableLocation): numb
   return byOrder !== 0 ? byOrder : subA.localeCompare(subB, "ru");
 }
 
+type PlaceRow = LocationNameSource & {
+  id: string;
+  parent: { id: string; name: string } | null;
+  sortOrder?: number | null;
+};
+
+/**
+ * Места сцены по объектам: подобъекты своего объекта вместе. Объект без подобъектов — сам.
+ * Группы — в порядке списков (`compareLocations`).
+ */
+export function groupScenePlaces(locations: readonly PlaceRow[]) {
+  const groups = new Map<string, { objectId: string; object: string; subs: string[] }>();
+  for (const location of [...locations].sort(compareLocations)) {
+    const objectId = location.parent?.id ?? location.id;
+    const group = groups.get(objectId) ?? { objectId, object: locationObjectName(location), subs: [] };
+    const sub = locationSubName(location);
+    if (sub && !group.subs.includes(sub)) group.subs.push(sub);
+    groups.set(objectId, group);
+  }
+  return [...groups.values()];
+}
+
+/**
+ * Колонка «Объект / подобъекты»: «ДОМ · ДЕТСКАЯ / КОРИДОР», два объекта — «ДВОР ДОМА / ОПУШКА ЛЕСА».
+ * Если у объектов есть подобъекты, объекты разделяются «; »: «ДОМ · КУХНЯ; ДВОР». Мест нет — «—».
+ */
+export function formatScenePlaces(locations: readonly PlaceRow[]): string {
+  const groups = groupScenePlaces(locations);
+  if (groups.length === 0) return "—";
+  const parts = groups.map((g) => (g.subs.length ? `${g.object} · ${g.subs.join(" / ")}` : g.object));
+  return parts.join(groups.some((g) => g.subs.length > 0) ? "; " : " / ");
+}
+
 export function formatLocationKind(kind: LocationKind | null | undefined) {
   return kind ? locationKindLabels[kind] : "—";
 }

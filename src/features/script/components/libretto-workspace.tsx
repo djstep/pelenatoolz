@@ -54,7 +54,8 @@ import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
 import { Input } from "@/shared/ui/input";
 import { cn } from "@/shared/lib/cn";
 
-type Option = { id: string; name: string };
+/** Вариант выбора. У объектов: `shortName` — своё название, `parentId` — объект подобъекта. */
+type Option = { id: string; name: string; shortName?: string; parentId?: string | null };
 
 function SortableColumnHeader({
   col,

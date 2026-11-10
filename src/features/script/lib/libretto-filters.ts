@@ -115,11 +115,9 @@ export function applyLibrettoFilters(
     if (scene.cutAt && !filters.showCut) return false;
     if (filters.search.trim()) {
       const q = filters.search.trim().toLowerCase();
-      const firstLocation = scene.locations[0]?.location;
       const blob = [
         formatNumber(scene),
-        firstLocation ? locationObjectName(firstLocation) : null,
-        firstLocation ? locationSubName(firstLocation) : null,
+        ...scene.locations.flatMap((l) => [locationObjectName(l.location), locationSubName(l.location)]),
         scene.summary,
         ...scene.characters.map((c) => c.character.name),
       ]
