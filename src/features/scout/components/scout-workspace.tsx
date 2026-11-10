@@ -21,13 +21,17 @@ import { Button } from "@/shared/ui/button";
 import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
 import { Modal } from "@/shared/ui/modal";
 import { useActionSuccess } from "@/shared/ui/unsaved/use-action-success";
+import {
+  formatLocationTitle,
+  type LocationNameSource,
+} from "@/features/locations/lib/format-location";
 
 const initial: ScoutActionState = {};
 
-type LocationOpt = { id: string; name: string; sublocation: string | null };
+type LocationOpt = { id: string; name: string; sublocation: string | null; parent: { name: string } | null };
 
-function locationLabel(loc: { name: string; sublocation: string | null }) {
-  return loc.sublocation ? `${loc.name} / ${loc.sublocation}` : loc.name;
+function locationLabel(loc: LocationNameSource) {
+  return formatLocationTitle(loc, " / ");
 }
 
 export function ScoutWorkspace({

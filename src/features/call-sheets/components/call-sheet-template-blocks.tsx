@@ -18,6 +18,7 @@ import { SheetBlock } from "@/features/call-sheets/components/sheet-block";
 import { useConfirm } from "@/shared/ui/confirm/confirm-provider";
 import { toast } from "@/shared/ui/toast";
 import { useUnsavedChanges } from "@/shared/ui/unsaved/unsaved-changes-provider";
+import { formatLocationTitle } from "@/features/locations/lib/format-location";
 
 function Block({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -160,9 +161,7 @@ export function CallSheetTemplateBlocks({
   }
 
   const schemeLabel = callSheet.schemeLocation
-    ? [callSheet.schemeLocation.name, callSheet.schemeLocation.sublocation]
-        .filter(Boolean)
-        .join(". ")
+    ? formatLocationTitle(callSheet.schemeLocation, ". ")
     : null;
 
   return (

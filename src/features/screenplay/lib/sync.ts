@@ -7,6 +7,8 @@ import {
   getCurrentScriptVersion,
 } from "@/features/screenplay/lib/versions";
 import { prisma } from "@/shared/db/prisma";
+import { LOCATION_PARENT_SELECT } from "@/features/locations/lib/location-fields";
+import { locationObjectName } from "@/features/locations/lib/format-location";
 
 export async function bootstrapScriptBlocks(
   projectId: string,
@@ -30,7 +32,7 @@ export async function bootstrapScriptBlocks(
   const scenes = await prisma.scene.findMany({
     where: { projectId },
     include: {
-      locations: { include: { location: true } },
+      locations: { include: { location: { include: { parent: LOCATION_PARENT_SELECT } } } },
       characters: { include: { character: true } },
     },
     orderBy: [{ sortOrder: "asc" }, { number: "asc" }],
@@ -47,7 +49,8 @@ export async function bootstrapScriptBlocks(
 
   let order = 0;
   for (const scene of scenes) {
-    const location = scene.locations[0]?.location.name ?? scene.summary ?? "";
+    const first = scene.locations[0]?.location;
+    const location = (first ? locationObjectName(first) : null) ?? scene.summary ?? "";
     rows.push({
       projectId,
       scriptVersionId: version.id,
@@ -98,7 +101,7 @@ export async function bootstrapScriptBlocks(
 export async function syncSluglineFromScene(projectId: string, sceneId: string) {
   const scene = await prisma.scene.findFirst({
     where: { id: sceneId, projectId },
-    include: { locations: { include: { location: true } } },
+    include: { locations: { include: { location: { include: { parent: LOCATION_PARENT_SELECT } } } } },
   });
   if (!scene) return;
 
@@ -111,7 +114,7 @@ export async function syncSluglineFromScene(projectId: string, sceneId: string) 
     postfix: scene.postfix,
     intExt: scene.intExt,
     dayNight: scene.dayNight,
-    location: scene.locations[0]?.location.name ?? scene.summary,
+    location: scene.locations[0] ? locationObjectName(scene.locations[0].location) : scene.summary,
   });
 
   const block = await prisma.scriptBlock.findFirst({

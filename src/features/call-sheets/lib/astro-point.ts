@@ -1,6 +1,9 @@
-type PlaceWithCoordinates = {
-  name: string;
-  sublocation?: string | null;
+import {
+  formatLocationTitle,
+  type LocationNameSource,
+} from "@/features/locations/lib/format-location";
+
+type PlaceWithCoordinates = LocationNameSource & {
   latitude: number | null;
   longitude: number | null;
 };
@@ -12,7 +15,7 @@ function pointOf(place: PlaceWithCoordinates | null | undefined): AstroPoint | n
   return {
     latitude: place.latitude,
     longitude: place.longitude,
-    label: [place.name, place.sublocation].filter(Boolean).join(". "),
+    label: formatLocationTitle(place, ". "),
   };
 }
 

@@ -2,6 +2,7 @@ import { prisma } from "@/shared/db/prisma";
 import { parseScoutSnapshot } from "@/features/preproduction/lib/snapshots";
 import {
   LOCATION_FIELDS,
+  LOCATION_PARENT_SELECT,
   SCOUT_SNAPSHOT_FIELDS,
 } from "@/features/locations/lib/location-fields";
 import { serializeForClient } from "@/shared/db/serialize-decimal";
@@ -33,6 +34,7 @@ export async function listLocationsWithStats(projectId: string, canFinanceRead: 
   const locations = await prisma.location.findMany({
     where: { projectId },
     include: {
+      parent: LOCATION_PARENT_SELECT,
       scenes: {
         include: {
           scene: { select: sceneBriefSelect },
@@ -80,6 +82,7 @@ export async function getLocationDetail(
   const location = await prisma.location.findFirst({
     where: { id: locationId, projectId },
     include: {
+      parent: LOCATION_PARENT_SELECT,
       photos: { orderBy: { sortOrder: "asc" } },
       overtimeRates: { orderBy: { hourNumber: "asc" } },
       points: {
@@ -125,6 +128,7 @@ export type LocationEditSource = Pick<
   | "id"
   | "name"
   | "sublocation"
+  | "parent"
   | "locationKind"
   | "hasDecoration"
   | "address"

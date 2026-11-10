@@ -1,0 +1,108 @@
+cd ~/pelena && docker compose exec -T -e PGOPTIONS='-c default_transaction_read_only=on' db psql -U pelena -d pelena -X -P pager=off -v ON_ERROR_STOP=1 <<'SQL'
+-- Объекты и подобъекты: снимок прода только на чтение. Ничего не меняет.
+BEGIN READ ONLY;
+
+\echo '=== 1. Проекты'
+SELECT p.name AS project, p.status,
+  (SELECT count(*) FROM "Location" l WHERE l."projectId" = p.id) AS locations,
+  (SELECT count(*) FROM "Location" l WHERE l."projectId" = p.id AND l.sublocation IS NOT NULL) AS with_sub,
+  (SELECT count(*) FROM "Scene" s WHERE s."projectId" = p.id) AS scenes
+FROM "Project" p
+ORDER BY 3 DESC, 1;
+
+\echo '=== 2. Все объекты: название, подобъект, адрес и сколько к ним привязано'
+SELECT p.name AS project,
+  l.name,
+  coalesce(l.sublocation, '') AS sub,
+  coalesce(l."locationKind"::text, '') AS kind,
+  left(coalesce(l.address, ''), 50) AS address,
+  (l."shiftRate" IS NOT NULL) AS rate,
+  (l."sourceScoutCandidateId" IS NOT NULL) AS scout_ok,
+  (SELECT count(*) FROM "SceneLocation" x WHERE x."locationId" = l.id) AS scenes,
+  (SELECT count(*) FROM "ScoutCandidateLocation" x WHERE x."locationId" = l.id) AS scout,
+  (SELECT count(*) FROM "ProductionReportWorkRow" x WHERE x."locationId" = l.id) AS report_rows,
+  (SELECT count(*) FROM "CallSheet" x WHERE x."schemeLocationId" = l.id) AS scheme,
+  (SELECT count(*) FROM "ScriptDictionaryRule" x WHERE x."targetLocationId" = l.id) AS dict,
+  (SELECT count(*) FROM "PrepEvent" x WHERE x."locationId" = l.id) AS calendar,
+  (SELECT count(*) FROM "LocationPhoto" x WHERE x."locationId" = l.id) AS photos,
+  (SELECT count(*) FROM "LocationPoint" x WHERE x."locationId" = l.id) AS points,
+  right(l.id, 6) AS id6
+FROM "Location" l
+JOIN "Project" p ON p.id = l."projectId"
+ORDER BY p.name, upper(l.name), upper(coalesce(l.sublocation, ''));
+
+\echo '=== 3. Сцены с несколькими привязками к объектам (смежные или разные объекты)'
+SELECT p.name AS project,
+  s."episodeNumber" AS ep,
+  s.number || s.postfix AS num,
+  (s."cutAt" IS NOT NULL) AS cut,
+  count(*) AS links,
+  count(DISTINCT upper(replace(trim(l.name), 'Ё', 'Е'))) AS objects,
+  string_agg(l.name || coalesce(' > ' || l.sublocation, ''), ' + ' ORDER BY l.name, l.sublocation) AS linked,
+  (SELECT left(b.content, 90) FROM "ScriptBlock" b
+    WHERE b."sceneId" = s.id AND b.type = 'SLUGLINE'
+    ORDER BY b."updatedAt" DESC LIMIT 1) AS heading
+FROM "Scene" s
+JOIN "SceneLocation" sl ON sl."sceneId" = s.id
+JOIN "Location" l ON l.id = sl."locationId"
+JOIN "Project" p ON p.id = s."projectId"
+GROUP BY p.name, s.id
+HAVING count(*) > 1
+ORDER BY p.name, s."episodeNumber", s."sortOrder";
+
+\echo '=== 4. Сцены без объекта'
+SELECT p.name AS project, count(*) AS scenes_without_location,
+  count(*) FILTER (WHERE s."cutAt" IS NULL) AS not_cut
+FROM "Scene" s
+JOIN "Project" p ON p.id = s."projectId"
+WHERE NOT EXISTS (SELECT 1 FROM "SceneLocation" x WHERE x."sceneId" = s.id)
+GROUP BY p.name
+ORDER BY 1;
+
+\echo '=== 5. Названия с точкой или «/» внутри, без подобъекта (могут быть не разобраны)'
+SELECT p.name AS project, l.name,
+  (SELECT count(*) FROM "SceneLocation" x WHERE x."locationId" = l.id) AS scenes,
+  right(l.id, 6) AS id6
+FROM "Location" l
+JOIN "Project" p ON p.id = l."projectId"
+WHERE l.sublocation IS NULL AND l.name ~ '[./]'
+ORDER BY 1, 2;
+
+\echo '=== 6. Один объект, разное написание (регистр, ё, пробелы)'
+SELECT p.name AS project,
+  upper(regexp_replace(replace(trim(l.name), 'Ё', 'Е'), '\s+', ' ', 'g')) AS key,
+  string_agg(DISTINCT l.name, ' | ') AS spellings,
+  count(*) AS rows
+FROM "Location" l
+JOIN "Project" p ON p.id = l."projectId"
+GROUP BY p.name, 2
+HAVING count(DISTINCT l.name) > 1
+ORDER BY 1, 2;
+
+\echo '=== 7. Шапки сцен с «/» (смежные) — как записаны в сценарии'
+SELECT p.name AS project, s."episodeNumber" AS ep, s.number || s.postfix AS num,
+  left(b.content, 90) AS heading,
+  (SELECT string_agg(l.name || coalesce(' > ' || l.sublocation, ''), ' + ')
+     FROM "SceneLocation" x JOIN "Location" l ON l.id = x."locationId"
+    WHERE x."sceneId" = s.id) AS linked
+FROM "ScriptBlock" b
+JOIN "Scene" s ON s.id = b."sceneId"
+JOIN "Project" p ON p.id = s."projectId"
+WHERE b.type = 'SLUGLINE' AND b.content LIKE '%/%'
+ORDER BY 1, 2, s."sortOrder"
+LIMIT 300;
+
+\echo '=== 8. Строки аренды объектов в отчётах смены'
+SELECT p.name AS project, count(*) AS location_rows,
+  count(DISTINCT w."reportId") AS reports,
+  count(DISTINCT w."locationId") AS locations
+FROM "ProductionReportWorkRow" w
+JOIN "ProductionReport" r ON r.id = w."reportId"
+JOIN "ShootDay" d ON d.id = r."shootDayId"
+JOIN "Project" p ON p.id = d."projectId"
+WHERE w.kind = 'LOCATION'
+GROUP BY p.name
+ORDER BY 1;
+
+ROLLBACK;
+SQL

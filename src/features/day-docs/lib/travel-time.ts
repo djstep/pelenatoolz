@@ -1,3 +1,5 @@
+import { locationObjectName, type LocationObjectSource } from "@/features/locations/lib/format-location";
+
 type GeoPoint = { lat: number; lon: number };
 
 async function geocodeAddress(address: string): Promise<GeoPoint | null> {
@@ -66,9 +68,9 @@ export async function estimateTravelMinutes(
 }
 
 export function scenePrimaryAddress(scene: {
-  locations: Array<{ location: { name: string; address: string | null } }>;
+  locations: Array<{ location: LocationObjectSource & { address: string | null } }>;
 }): string | null {
   const loc = scene.locations[0]?.location;
   if (!loc) return null;
-  return loc.address?.trim() || loc.name.trim() || null;
+  return loc.address?.trim() || locationObjectName(loc).trim() || null;
 }

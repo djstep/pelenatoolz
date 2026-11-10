@@ -8,6 +8,10 @@ export const LOCATION_FIELDS = {
     "projectId",
     "name",
     "sublocation",
+    // Объект — пусто; подобъект — объект-родитель (только id и название).
+    "parentId",
+    "parent",
+    "sortOrder",
     "locationKind",
     "hasDecoration",
     "address",
@@ -42,6 +46,9 @@ export const LOCATION_FIELDS = {
     "overtimeRates",
   ],
 } as const;
+
+/** Объект-родитель подобъекта: для подписи «ОБЪЕКТ.ПОДОБЪЕКТ» (`formatLocationTitle`). */
+export const LOCATION_PARENT_SELECT = { select: { id: true, name: true } } as const;
 
 const SCENE_LOCATION_KEYS = [
   "id",
@@ -78,9 +85,12 @@ const CALL_SHEET_SCHEME_LOCATION_KEYS = [
   "onSiteNotes",
 ] as const satisfies readonly (typeof LOCATION_FIELDS.open)[number][];
 
-export const CALL_SHEET_SCHEME_LOCATION_SELECT = Object.fromEntries(
-  CALL_SHEET_SCHEME_LOCATION_KEYS.map((key) => [key, true]),
-) as { readonly [K in (typeof CALL_SHEET_SCHEME_LOCATION_KEYS)[number]]: true };
+export const CALL_SHEET_SCHEME_LOCATION_SELECT = {
+  ...(Object.fromEntries(CALL_SHEET_SCHEME_LOCATION_KEYS.map((key) => [key, true])) as {
+    readonly [K in (typeof CALL_SHEET_SCHEME_LOCATION_KEYS)[number]]: true;
+  }),
+  parent: LOCATION_PARENT_SELECT,
+} as const;
 
 /**
  * Объект в выборках сцен (либретто, сценарий, КПП, вызывной) — вместо `location: true`.
@@ -88,9 +98,12 @@ export const CALL_SHEET_SCHEME_LOCATION_SELECT = Object.fromEntries(
  * Эти экраны денег объекта не показывают, поэтому фин. поля и снимок скаута (в нём стоимость)
  * из базы не берутся ни для кого.
  */
-export const SCENE_LOCATION_SELECT = Object.fromEntries(
-  SCENE_LOCATION_KEYS.map((key) => [key, true]),
-) as { readonly [K in (typeof SCENE_LOCATION_KEYS)[number]]: true };
+export const SCENE_LOCATION_SELECT = {
+  ...(Object.fromEntries(SCENE_LOCATION_KEYS.map((key) => [key, true])) as {
+    readonly [K in (typeof SCENE_LOCATION_KEYS)[number]]: true;
+  }),
+  parent: LOCATION_PARENT_SELECT,
+} as const;
 
 /** Снимок утверждённой площадки (`LocationScoutSnapshot`): стоимость — фин. условие объекта. */
 export const SCOUT_SNAPSHOT_FIELDS = {

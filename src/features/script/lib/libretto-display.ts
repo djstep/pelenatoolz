@@ -2,6 +2,7 @@ import type { ProjectType } from "@prisma/client";
 import { sceneStatusLabels } from "@/shared/i18n/domain-labels";
 import { formatDateShort } from "@/shared/i18n/format-date";
 import type { listScenes } from "@/features/script/queries";
+import { formatLocationTitle } from "@/features/locations/lib/format-location";
 
 export type LibrettoScene = Awaited<ReturnType<typeof listScenes>>[number];
 
@@ -19,9 +20,7 @@ export function formatSceneNumber(
 export function formatLocationCell(scene: LibrettoScene) {
   const loc = scene.locations[0]?.location;
   if (!loc) return "—";
-  return loc.sublocation?.trim()
-    ? `${loc.name}.${loc.sublocation}`
-    : loc.name;
+  return formatLocationTitle(loc);
 }
 
 export function formatPlaceCell(scene: LibrettoScene) {

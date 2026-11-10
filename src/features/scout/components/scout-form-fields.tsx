@@ -5,11 +5,12 @@ import type { FinanceAccess } from "@/shared/lib/finance-fields";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { MultiSelect } from "@/shared/ui/multi-select";
+import { formatLocationTitle } from "@/features/locations/lib/format-location";
 
-type LocationOpt = { id: string; name: string; sublocation: string | null };
+type LocationOpt = { id: string; name: string; sublocation: string | null; parent: { name: string } | null };
 
 function locationLabel(loc: LocationOpt) {
-  return loc.sublocation ? `${loc.name} / ${loc.sublocation}` : loc.name;
+  return formatLocationTitle(loc, " / ");
 }
 
 function mediaUrlsFromJson(value: unknown): string {

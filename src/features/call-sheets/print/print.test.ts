@@ -210,7 +210,7 @@ describe("модель листа вызывного", () => {
     const source = clone(FULL_DAY_SOURCE);
     const cut = source.day.scenes.find((row) => row.scene.number === "16")!.scene;
     assert.ok(cut.cutAt, "в фикстуре сцена 16 вырезана");
-    cut.locations = [{ location: { name: "Подвал (только в вырезанной)", sublocation: null, address: null } }];
+    cut.locations = [{ location: { name: "Подвал (только в вырезанной)", sublocation: null, parent: null, address: null } }];
     const slot = source.day.timeSlots.find((s) => s.scene?.number === "16")!;
     slot.scene = cut;
 

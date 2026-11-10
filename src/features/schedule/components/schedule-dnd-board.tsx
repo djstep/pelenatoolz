@@ -62,6 +62,7 @@ import type { ScheduleAvailabilityBundle } from "@/features/actor-availability/l
 import { isWorkingShootDay } from "@/features/schedule/lib/shoot-day-type";
 import { formatDateShort } from "@/shared/i18n/format-date";
 import { cn } from "@/shared/lib/cn";
+import { locationObjectName } from "@/features/locations/lib/format-location";
 
 type SceneCard = SceneDetails;
 
@@ -262,7 +263,8 @@ function SceneCardBody({ scene, hint }: { scene: SceneCard; hint?: PlanningHint 
   ]
     .filter(Boolean)
     .join(" · ");
-  const location = scene.locations?.[0]?.location.name;
+  const firstLocation = scene.locations?.[0]?.location;
+  const location = firstLocation ? locationObjectName(firstLocation) : undefined;
   const mark = hint ? AVAILABILITY_MARK[hint] : undefined;
   return (
     <>
@@ -502,7 +504,7 @@ function matchesFilters(
   },
 ) {
   if (filters.location) {
-    const names = scene.locations.map((l) => l.location.name);
+    const names = scene.locations.map((l) => locationObjectName(l.location));
     if (!names.includes(filters.location)) return false;
   }
   if (filters.intExt && scene.intExt !== filters.intExt) return false;
@@ -514,7 +516,7 @@ function matchesFilters(
       scene.title ?? "",
       scene.summary ?? "",
       ...scene.characters.map((c) => c.character.name),
-      ...scene.locations.map((l) => l.location.name),
+      ...scene.locations.map((l) => locationObjectName(l.location)),
     ]
       .join(" ")
       .toLowerCase();
@@ -566,7 +568,7 @@ export function ScheduleDnDBoard({
     const set = new Set<string>();
     for (const scene of unscheduled) {
       for (const link of scene.locations) {
-        set.add(link.location.name);
+        set.add(locationObjectName(link.location));
       }
     }
     return Array.from(set).sort((a, b) => a.localeCompare(b, "ru"));

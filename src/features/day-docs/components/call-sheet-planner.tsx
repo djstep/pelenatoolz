@@ -63,6 +63,7 @@ import { HhMmInput, isValidHhMm } from "@/shared/ui/hh-mm-input";
 import { Input } from "@/shared/ui/input";
 import { cn } from "@/shared/lib/cn";
 import { useActionToast } from "@/shared/ui/toast";
+import { locationObjectName } from "@/features/locations/lib/format-location";
 
 function uid() {
   return Math.random().toString(36).slice(2, 10);
@@ -880,7 +881,7 @@ export function CallSheetPlanner({
           kind: "break",
           id: `break-travel-${uid()}`,
           slotType: "TRAVEL",
-          label: `Переезд · ${toScene?.locations[0]?.location.name ?? "объект"}`,
+          label: `Переезд · ${toScene?.locations[0] ? locationObjectName(toScene.locations[0].location) : "объект"}`,
           duration,
           notes: `${from} → ${to}`,
         });

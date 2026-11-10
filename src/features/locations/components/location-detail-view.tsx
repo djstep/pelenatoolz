@@ -122,7 +122,7 @@ export function LocationDetailView({
             </a>
           </p>
           <h2 className="font-display text-[27px] font-bold leading-tight">
-            {formatLocationTitle(location.name, location.sublocation)}
+            {formatLocationTitle(location)}
           </h2>
           <p className="mt-1 text-sm text-[var(--muted-fg)]">
             {formatLocationKind(location.locationKind)}

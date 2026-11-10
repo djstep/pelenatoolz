@@ -19,6 +19,8 @@ import {
 import {
   formatLocationKind,
   formatLocationTitle,
+  locationObjectName,
+  locationSubName,
   parseTags,
 } from "@/features/locations/lib/format-location";
 import type { LocationWithStats } from "@/features/locations/queries";
@@ -66,8 +68,8 @@ export function LocationsWorkspace({
     if (!q) return rows;
     return rows.filter((loc) => {
       const blob = [
-        loc.name,
-        loc.sublocation,
+        locationObjectName(loc),
+        locationSubName(loc),
         loc.address,
         loc.tags,
       ]
@@ -114,7 +116,7 @@ export function LocationsWorkspace({
   function cell(loc: LocationWithStats, colId: string): string {
     switch (colId) {
       case "name":
-        return formatLocationTitle(loc.name, loc.sublocation);
+        return formatLocationTitle(loc);
       case "kind":
         return formatLocationKind(loc.locationKind);
       case "address":

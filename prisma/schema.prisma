@@ -587,7 +587,12 @@ model Location {
   id                     String             @id @default(cuid())
   projectId              String
   name                   String
+  /// Старая запись подобъекта одной строкой с объектом. Новые подобъекты — строки с `parentId`.
   sublocation            String?
+  /// Объект — пусто; подобъект — id объекта. Объект с подобъектами удалить нельзя.
+  parentId               String?
+  /// Порядок подобъектов внутри объекта (и объектов в списке).
+  sortOrder              Int                @default(0)
   locationKind           LocationKind?
   hasDecoration          Boolean            @default(false)
   address                String?
@@ -616,6 +621,8 @@ model Location {
   updatedAt              DateTime           @updatedAt
 
   project             Project                   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  parent              Location?                 @relation("LocationParent", fields: [parentId], references: [id], onDelete: NoAction)
+  children           Location[]                @relation("LocationParent")
   defaultBudgetItem   BudgetItem?               @relation("LocationDefaultBudgetItem", fields: [defaultBudgetItemId], references: [id], onDelete: SetNull)
   overtimeBudgetItem  BudgetItem?               @relation("LocationOvertimeBudgetItem", fields: [overtimeBudgetItemId], references: [id], onDelete: SetNull)
   scenes              SceneLocation[]
@@ -629,6 +636,7 @@ model Location {
   prepEvents          PrepEvent[]
 
   @@index([projectId])
+  @@index([parentId, sortOrder])
 }
 
 model LocationOvertimeRate {

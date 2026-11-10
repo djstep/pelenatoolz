@@ -1,4 +1,5 @@
 import { prisma } from "@/shared/db/prisma";
+import { LOCATION_PARENT_SELECT } from "@/features/locations/lib/location-fields";
 import { dec } from "@/shared/db/serialize-decimal";
 import { parseCastSnapshot } from "@/features/preproduction/lib/snapshots";
 import { CASTING_PERSON_FIELDS } from "@/features/casting/lib/casting-person-fields";
@@ -21,7 +22,7 @@ const sceneBriefSelect = {
   scriptDay: true,
   locations: {
     include: {
-      location: { select: { id: true, name: true, sublocation: true } },
+      location: { select: { id: true, name: true, sublocation: true, parent: LOCATION_PARENT_SELECT } },
     },
   },
   shootDayScenes: {
@@ -126,7 +127,7 @@ export async function getCharacterDetail(
             include: {
               locations: {
                 include: {
-                  location: { select: { id: true, name: true, sublocation: true } },
+                  location: { select: { id: true, name: true, sublocation: true, parent: LOCATION_PARENT_SELECT } },
                 },
               },
             },

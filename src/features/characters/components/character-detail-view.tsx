@@ -35,6 +35,7 @@ import { CharacterScriptButton } from "@/features/screenplay/components/characte
 import { CastListExportButton } from "@/features/casting/components/cast-list-export-button";
 import { CastingCandidateComments } from "@/features/casting/components/casting-candidate-comments";
 import type { CastListExportBundleClient } from "@/features/casting/lib/cast-list-export-data";
+import { locationObjectName } from "@/features/locations/lib/format-location";
 
 const initial: CharacterActionState = {};
 const actorInitial: ActorActionState = {};
@@ -373,7 +374,7 @@ export function CharacterDetailView({
               {sc.scene.locations[0]?.location ? (
                 <span className="text-[var(--muted-fg)]">
                   {" "}
-                  · {sc.scene.locations[0].location.name}
+                  · {locationObjectName(sc.scene.locations[0].location)}
                 </span>
               ) : null}
             </li>

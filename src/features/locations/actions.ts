@@ -25,7 +25,10 @@ import { prisma } from "@/shared/db/prisma";
 import { impactLines } from "@/shared/lib/plural";
 import { changedFrom, clearEmptied, orCurrent } from "@/shared/lib/cleared-fields";
 import { pickFinanceFields } from "@/shared/lib/finance-fields";
-import { SCOUT_SNAPSHOT_INPUT_FIELDS } from "@/features/locations/lib/location-fields";
+import {
+  LOCATION_PARENT_SELECT,
+  SCOUT_SNAPSHOT_INPUT_FIELDS,
+} from "@/features/locations/lib/location-fields";
 import { AuditEntityType } from "@/shared/audit/entity-types";
 import { auditMutation, recordAudit } from "@/shared/audit/with-audit";
 import { z } from "zod";
@@ -256,7 +259,7 @@ export async function quickCreateLocationAction(
   if (!trimmed) return { error: "Пустое название" };
 
   const existing = await prisma.location.findFirst({
-    where: { projectId, name: { equals: trimmed, mode: "insensitive" } },
+    where: { projectId, parentId: null, name: { equals: trimmed, mode: "insensitive" } },
   });
   if (existing) return { id: existing.id, name: existing.name };
 
@@ -473,6 +476,7 @@ export async function saveLocationSchemeAction(
     select: {
       name: true,
       sublocation: true,
+      parent: LOCATION_PARENT_SELECT,
       latitude: true,
       longitude: true,
       directions: true,
@@ -530,7 +534,7 @@ export async function saveLocationSchemeAction(
       entityType: AuditEntityType.location,
       entityId: checked.locationId,
       action: "UPDATE",
-      summary: `Изменена схема объекта «${formatLocationTitle(location.name, location.sublocation)}»`,
+      summary: `Изменена схема объекта «${formatLocationTitle(location)}»`,
       changes,
     },
   );

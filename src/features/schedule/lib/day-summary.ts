@@ -3,6 +3,10 @@ import {
   formatSecondsMmSs,
   intExtLabels,
 } from "@/shared/i18n/domain-labels";
+import {
+  locationObjectName,
+  type LocationObjectSource,
+} from "@/features/locations/lib/format-location";
 
 type DecimalLike = number | { toString(): string } | null | undefined;
 
@@ -16,7 +20,7 @@ type SceneLike = {
   pageCount?: DecimalLike;
   planSeconds?: number | null;
   status?: string;
-  locations?: { location: { name: string } }[];
+  locations?: { location: LocationObjectSource }[];
   characters?: { character: { name: string } }[];
 };
 
@@ -25,13 +29,19 @@ type DaySceneRow = {
   scene: SceneLike;
 };
 
+/** Объект первой привязки сцены: «ДОМ» и для подобъекта «КУХНЯ» объекта ДОМ. */
+function firstObjectName(scene: SceneLike): string | null {
+  const first = scene.locations?.[0]?.location;
+  return first ? locationObjectName(first) : null;
+}
+
 export function formatSceneBrief(scene: SceneLike): string {
   const ep = scene.episodeNumber && scene.episodeNumber > 0 ? `${scene.episodeNumber}-` : "";
   const num = `${ep}${scene.number}${scene.postfix ?? ""}`;
   // Как slugline в сценарии: № · Инт/Нат · Локация · День/Ночь
   const parts = [num];
   if (scene.intExt) parts.push(intExtLabels[scene.intExt]);
-  const location = scene.locations?.[0]?.location.name;
+  const location = firstObjectName(scene);
   if (location) parts.push(location);
   if (scene.dayNight) parts.push(dayNightLabels[scene.dayNight]);
   return parts.join(" · ");
@@ -64,7 +74,7 @@ export function computeDaySummary(scenes: DaySceneRow[]) {
       totalSeconds += row.scene.planSeconds;
     }
     for (const link of row.scene.locations ?? []) {
-      locations.add(link.location.name);
+      locations.add(locationObjectName(link.location));
     }
     if (row.scene.status === "SHOT") shotCount += 1;
   }
@@ -106,7 +116,7 @@ export function resolveSceneGroupKey(
   actorNames: Record<string, string> = {},
 ): string {
   if (mode === "location") {
-    return scene.locations?.[0]?.location.name ?? "Без объекта";
+    return firstObjectName(scene) ?? "Без объекта";
   }
   for (const link of scene.characters ?? []) {
     const actorId = characterToActor[link.character.id];
@@ -123,7 +133,7 @@ export function resolveSceneGroupKey(
 export function groupScenesByLocation<T extends SceneLike>(scenes: T[]) {
   const groups = new Map<string, T[]>();
   for (const scene of scenes) {
-    const key = scene.locations?.[0]?.location.name ?? "Без объекта";
+    const key = firstObjectName(scene) ?? "Без объекта";
     const list = groups.get(key) ?? [];
     list.push(scene);
     groups.set(key, list);

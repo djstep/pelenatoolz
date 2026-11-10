@@ -48,6 +48,7 @@ import { useActionSuccess } from "@/shared/ui/unsaved/use-action-success";
 import { useFormGuard } from "@/shared/ui/unsaved/use-form-guard";
 import { submitKeepingFields } from "@/shared/ui/forms/submit-keeping-fields";
 import { useUnsavedChanges } from "@/shared/ui/unsaved/unsaved-changes-provider";
+import { locationObjectName } from "@/features/locations/lib/format-location";
 
 type SlotRow = {
   unit: CallSheetUnit;
@@ -426,7 +427,8 @@ export function CallSheetEditor({
                 {activeDayScenes(day.scenes).map((s) => (
                   <option key={s.scene.id} value={s.scene.id}>
                     {s.scene.number}
-                    {s.scene.postfix} · {s.scene.locations[0]?.location.name ?? ""}
+                    {s.scene.postfix} ·{" "}
+                    {s.scene.locations[0] ? locationObjectName(s.scene.locations[0].location) : ""}
                   </option>
                 ))}
               </select>

@@ -1,5 +1,10 @@
 import type { SceneKind, SceneStatus } from "@prisma/client";
 import type { LibrettoScene } from "@/features/script/lib/libretto-display";
+import {
+  formatLocationTitle,
+  locationObjectName,
+  locationSubName,
+} from "@/features/locations/lib/format-location";
 
 export type TextMatchMode = "one_of" | "exclude" | "all" | "exact";
 
@@ -110,10 +115,11 @@ export function applyLibrettoFilters(
     if (scene.cutAt && !filters.showCut) return false;
     if (filters.search.trim()) {
       const q = filters.search.trim().toLowerCase();
+      const firstLocation = scene.locations[0]?.location;
       const blob = [
         formatNumber(scene),
-        scene.locations[0]?.location.name,
-        scene.locations[0]?.location.sublocation,
+        firstLocation ? locationObjectName(firstLocation) : null,
+        firstLocation ? locationSubName(firstLocation) : null,
         scene.summary,
         ...scene.characters.map((c) => c.character.name),
       ]
@@ -175,11 +181,7 @@ export function applyLibrettoFilters(
       if (!kind || !filters.locationKinds.includes(kind)) return false;
     }
 
-    const locNames = scene.locations.map((l) =>
-      l.location.sublocation
-        ? `${l.location.name}.${l.location.sublocation}`
-        : l.location.name,
-    );
+    const locNames = scene.locations.map((l) => formatLocationTitle(l.location));
     if (
       !matchText(locNames, filters.locationQuery, filters.locationMode)
     ) {

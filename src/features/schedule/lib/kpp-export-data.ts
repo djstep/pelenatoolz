@@ -1,5 +1,6 @@
 import { serializeForClient } from "@/shared/db/serialize-decimal";
 import { prisma } from "@/shared/db/prisma";
+import { LOCATION_PARENT_SELECT } from "@/features/locations/lib/location-fields";
 
 export type KppExportScene = {
   id: string;
@@ -15,7 +16,14 @@ export type KppExportScene = {
   status: string;
   cutAt: Date | null;
   scriptDay: number | null;
-  locations: { location: { id: string; name: string; sublocation: string | null } }[];
+  locations: {
+    location: {
+      id: string;
+      name: string;
+      sublocation: string | null;
+      parent: { id: string; name: string } | null;
+    };
+  }[];
   characters: { character: { id: string; name: string } }[];
   resourceItems: {
     quantity: number;
@@ -105,6 +113,7 @@ export async function getKppExportBundle(
                         id: true,
                         name: true,
                         sublocation: true,
+                        parent: LOCATION_PARENT_SELECT,
                       },
                     },
                   },

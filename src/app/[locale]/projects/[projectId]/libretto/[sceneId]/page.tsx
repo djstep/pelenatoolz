@@ -36,7 +36,7 @@ export default async function ScenePage({ params }: Props) {
 
   const locationOptions = locations.map((l) => ({
     id: l.id,
-    name: formatLocationTitle(l.name, l.sublocation),
+    name: formatLocationTitle(l),
   }));
 
   return (

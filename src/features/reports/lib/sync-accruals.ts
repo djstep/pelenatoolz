@@ -5,6 +5,8 @@ import {
   pickCounterparty,
   type CounterpartyHints,
 } from "@/features/accruals/lib/counterparty-hint";
+import { locationObjectName } from "@/features/locations/lib/format-location";
+import { LOCATION_PARENT_SELECT } from "@/features/locations/lib/location-fields";
 import { sumExtrasPay } from "@/features/payroll/lib/parse-extra-payments";
 import {
   budgetItemOnCreate,
@@ -59,6 +61,7 @@ const rowInclude = {
     select: {
       id: true,
       name: true,
+      parent: LOCATION_PARENT_SELECT,
       defaultBudgetItemId: true,
       overtimeBudgetItemId: true,
     },
@@ -144,7 +147,7 @@ function entityOf(row: WorkRowWithSources) {
       row.displayName,
       ...(row.actor ? actorNames(row.actor) : []),
       row.item?.name ?? "",
-      row.location?.name ?? "",
+      row.location ? locationObjectName(row.location) : "",
     ],
   };
 }
