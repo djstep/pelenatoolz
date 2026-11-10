@@ -219,6 +219,9 @@ describe("модель листа вызывного", () => {
     const pavilion = m.locations.find((g) => g.address === "Павильон 3");
     assert.ok(forest?.rows.some((r) => r.name === "Дом Е2Е. Детская"), JSON.stringify(m.locations));
     assert.ok(pavilion?.rows.some((r) => r.name === "Дом Е2Е. Кухня"), JSON.stringify(m.locations));
+    // План: сцена со всеми местами, как в шапке.
+    const row = m.plan.find((r) => r.kind === "scene" && r.title?.startsWith("Дом Е2Е"));
+    assert.equal(row && "title" in row ? row.title : null, "Дом Е2Е. Детская / Кухня");
   });
 
   test("вырезанные сцены не попадают: план, актёры, объекты, итоги", () => {
