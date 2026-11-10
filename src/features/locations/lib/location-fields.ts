@@ -50,6 +50,14 @@ export const LOCATION_FIELDS = {
 /** Объект-родитель подобъекта: для подписи «ОБЪЕКТ.ПОДОБЪЕКТ» (`formatLocationTitle`). */
 export const LOCATION_PARENT_SELECT = { select: { id: true, name: true } } as const;
 
+/**
+ * Родитель с реальным местом (адрес, координаты): подобъект без своего адреса берёт место
+ * объекта (`placeOf`). Только открытые поля.
+ */
+export const LOCATION_PARENT_PLACE_SELECT = {
+  select: { id: true, name: true, address: true, latitude: true, longitude: true },
+} as const;
+
 const SCENE_LOCATION_KEYS = [
   "id",
   "projectId",
@@ -91,7 +99,19 @@ export const CALL_SHEET_SCHEME_LOCATION_SELECT = {
   ...(Object.fromEntries(CALL_SHEET_SCHEME_LOCATION_KEYS.map((key) => [key, true])) as {
     readonly [K in (typeof CALL_SHEET_SCHEME_LOCATION_KEYS)[number]]: true;
   }),
-  parent: LOCATION_PARENT_SELECT,
+  // Схема подобъекта без своего адреса — схема объекта: адрес, координаты, тексты, точки.
+  parent: {
+    select: {
+      ...LOCATION_PARENT_PLACE_SELECT.select,
+      directions: true,
+      parking: true,
+      onSiteNotes: true,
+      points: {
+        orderBy: { sortOrder: "asc" },
+        select: { number: true, name: true, description: true },
+      },
+    },
+  },
 } as const;
 
 /**
@@ -104,7 +124,7 @@ export const SCENE_LOCATION_SELECT = {
   ...(Object.fromEntries(SCENE_LOCATION_KEYS.map((key) => [key, true])) as {
     readonly [K in (typeof SCENE_LOCATION_KEYS)[number]]: true;
   }),
-  parent: LOCATION_PARENT_SELECT,
+  parent: LOCATION_PARENT_PLACE_SELECT,
 } as const;
 
 /** Снимок утверждённой площадки (`LocationScoutSnapshot`): стоимость — фин. условие объекта. */

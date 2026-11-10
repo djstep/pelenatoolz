@@ -126,7 +126,11 @@ export function LocationDetailView({
           </h2>
           <p className="mt-1 text-sm text-[var(--muted-fg)]">
             {formatLocationKind(location.locationKind)}
-            {location.address ? ` · ${location.address}` : ""}
+            {location.address?.trim()
+              ? ` · ${location.address}`
+              : location.parent
+                ? ` · место как у объекта «${location.parent.name}»${location.parent.address ? `: ${location.parent.address}` : ""} — схема и аренда тоже объекта, пока у подобъекта нет своего адреса`
+                : ""}
           </p>
         </div>
         {canWrite ? (

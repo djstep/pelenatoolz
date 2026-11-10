@@ -123,3 +123,31 @@ export function newRowFields(reportId: string, c: SeedCandidate) {
     sortOrder: c.sortOrder,
   };
 }
+
+/**
+ * Строки аренды, у которых сменился владелец места (подобъекту вписали или стёрли адрес,
+ * подобъект перенесли): `location:<старый>` → ключ нового владельца, чтобы «Обновить из КПП»
+ * не удалило строку с фактом, доплатами и начислениями. `moves` — id старой строки места →
+ * ключ кандидата (только однозначные). Переносится, если старого ключа среди кандидатов нет,
+ * а нового — ещё нет в отчёте.
+ */
+export function rekeyLocationRows<R extends { id: string; sourceKey: string; locationId: string | null }>(
+  candidates: readonly SeedCandidate[],
+  existing: readonly R[],
+  moves: ReadonlyMap<string, string>,
+): { rows: R[]; rekeyed: { id: string; sourceKey: string; locationId: string }[] } {
+  const candidateKeys = new Set(candidates.map((c) => c.sourceKey));
+  const taken = new Set(existing.map((r) => r.sourceKey));
+  const rekeyed: { id: string; sourceKey: string; locationId: string }[] = [];
+  const rows = existing.map((row) => {
+    if (!row.sourceKey.startsWith("location:") || candidateKeys.has(row.sourceKey)) return row;
+    const oldId = row.sourceKey.slice("location:".length);
+    const next = moves.get(oldId);
+    if (!next || !candidateKeys.has(next) || taken.has(next)) return row;
+    taken.add(next);
+    const locationId = next.slice("location:".length);
+    rekeyed.push({ id: row.id, sourceKey: next, locationId });
+    return { ...row, sourceKey: next, locationId };
+  });
+  return { rows, rekeyed };
+}

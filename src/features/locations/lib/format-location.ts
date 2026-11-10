@@ -100,6 +100,31 @@ export function formatScenePlaces(locations: readonly PlaceRow[]): string {
   return parts.join(groups.some((g) => g.subs.length > 0) ? "; " : " / ");
 }
 
+type PlaceFields = { address?: string | null; latitude?: number | null; longitude?: number | null };
+
+/**
+ * Своё реальное место у строки: объект — всегда; подобъект — если у него заполнен адрес
+ * (фасад в реальном доме, интерьеры в павильоне). Иначе подобъект снимается там же, где объект.
+ */
+export function hasOwnPlace(location: PlaceFields & { parent: object | null }): boolean {
+  return !location.parent || Boolean(location.address?.trim());
+}
+
+/**
+ * Действующее место строки для вызывного, КПП, документов дня: своё или объекта — блоком,
+ * без смешивания полей (адрес подобъекта с координатами объекта не бывает).
+ */
+export function placeOf(location: PlaceFields & { parent: PlaceFields | null }) {
+  const own = hasOwnPlace(location);
+  const from = own || !location.parent ? location : location.parent;
+  return {
+    own,
+    address: from.address?.trim() || null,
+    latitude: from.latitude ?? null,
+    longitude: from.longitude ?? null,
+  };
+}
+
 export function formatLocationKind(kind: LocationKind | null | undefined) {
   return kind ? locationKindLabels[kind] : "—";
 }

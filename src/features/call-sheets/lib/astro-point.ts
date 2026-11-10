@@ -1,20 +1,26 @@
 import {
   formatLocationTitle,
+  placeOf,
   type LocationNameSource,
 } from "@/features/locations/lib/format-location";
 
-type PlaceWithCoordinates = LocationNameSource & {
+type PlaceWithCoordinates = Omit<LocationNameSource, "parent"> & {
   latitude: number | null;
   longitude: number | null;
+  // Подобъект без своего адреса — координаты объекта (`placeOf`).
+  address?: string | null;
+  parent: { name: string; address?: string | null; latitude?: number | null; longitude?: number | null } | null;
 };
 
 export type AstroPoint = { latitude: number; longitude: number; label: string };
 
 function pointOf(place: PlaceWithCoordinates | null | undefined): AstroPoint | null {
-  if (!place || place.latitude == null || place.longitude == null) return null;
+  if (!place) return null;
+  const { latitude, longitude } = placeOf(place);
+  if (latitude == null || longitude == null) return null;
   return {
-    latitude: place.latitude,
-    longitude: place.longitude,
+    latitude,
+    longitude,
     label: formatLocationTitle(place, ". "),
   };
 }

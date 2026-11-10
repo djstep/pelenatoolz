@@ -206,6 +206,21 @@ describe("модель листа вызывного", () => {
     assert.doesNotMatch(html(source), /ставк|за км/i);
   });
 
+  test("подобъект без своего адреса — в группе адреса объекта, со своим — в своей", () => {
+    const source = clone(FULL_DAY_SOURCE);
+    const live = source.day.scenes.filter((row) => !row.scene.cutAt).map((row) => row.scene);
+    const house = { name: "Дом Е2Е", address: "ул. Лесная, 1" };
+    live[0]!.locations = [
+      { location: { name: "Детская", sublocation: null, parent: house, address: null } },
+      { location: { name: "Кухня", sublocation: null, parent: house, address: "Павильон 3" } },
+    ];
+    const m = model(source);
+    const forest = m.locations.find((g) => g.address === "ул. Лесная, 1");
+    const pavilion = m.locations.find((g) => g.address === "Павильон 3");
+    assert.ok(forest?.rows.some((r) => r.name === "Дом Е2Е. Детская"), JSON.stringify(m.locations));
+    assert.ok(pavilion?.rows.some((r) => r.name === "Дом Е2Е. Кухня"), JSON.stringify(m.locations));
+  });
+
   test("вырезанные сцены не попадают: план, актёры, объекты, итоги", () => {
     const source = clone(FULL_DAY_SOURCE);
     const cut = source.day.scenes.find((row) => row.scene.number === "16")!.scene;

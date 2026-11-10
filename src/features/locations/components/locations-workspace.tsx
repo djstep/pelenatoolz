@@ -170,7 +170,9 @@ export function LocationsWorkspace({
       case "kind":
         return formatLocationKind(loc.locationKind);
       case "address":
-        return loc.address ?? "—";
+        if (loc.address?.trim()) return loc.address;
+        // Подобъект без своего адреса снимается на месте объекта.
+        return loc.parent?.address?.trim() ? `${loc.parent.address} (как у объекта)` : "—";
       case "decoration":
         return loc.hasDecoration ? "Да" : "—";
       case "sceneCount":

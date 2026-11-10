@@ -118,6 +118,11 @@ test.describe("объекты и подобъекты", () => {
     expect(overflow).toBeLessThanOrEqual(0);
     if (SHOT) await page.screenshot({ path: SHOT, fullPage: true });
 
+    // Адрес объекта — у подобъектов без своего адреса «(как у объекта)».
+    await db.location.update({ where: { id: object.id }, data: { address: "Е2Е ул. Лесная, 1" } });
+    await page.reload();
+    await expect(page.getByText("Е2Е ул. Лесная, 1 (как у объекта)")).toHaveCount(3);
+
     // Свернуть объект — подобъекты скрыты, развернуть — снова видны.
     await page.getByRole("button", { name: `Свернуть «${OBJECT}»` }).click();
     await expect.poll(() => ourRows(page)).toEqual([OBJECT]);
