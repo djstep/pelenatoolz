@@ -13,10 +13,7 @@ import {
   formatPagesMinutes,
   formatSceneBrief,
 } from "@/features/schedule/lib/day-summary";
-import {
-  locationObjectName,
-  type LocationObjectSource,
-} from "@/features/locations/lib/format-location";
+import { formatScenePlaces, type PlaceRow } from "@/features/locations/lib/format-location";
 
 export type SceneDetails = {
   id: string;
@@ -34,7 +31,7 @@ export type SceneDetails = {
   scriptDay: number | null;
   /** Сцена вырезана (пусто — нет). */
   cutAt?: Date | string | null;
-  locations: { location: LocationObjectSource }[];
+  locations: { location: PlaceRow }[];
   characters: { character: { id: string; name: string } }[];
 };
 
@@ -52,7 +49,7 @@ export function SceneDetailsModal({
 }) {
   if (!scene) return null;
 
-  const locations = scene.locations.map((l) => locationObjectName(l.location)).join(", ");
+  const locations = scene.locations.length ? formatScenePlaces(scene.locations.map((l) => l.location)) : "";
   const characters = scene.characters.map((c) => c.character.name).join(", ");
   const statusLabel =
     sceneStatusLabels[scene.status as keyof typeof sceneStatusLabels] ??

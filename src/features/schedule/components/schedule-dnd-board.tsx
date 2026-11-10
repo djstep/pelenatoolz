@@ -62,7 +62,7 @@ import type { ScheduleAvailabilityBundle } from "@/features/actor-availability/l
 import { isWorkingShootDay } from "@/features/schedule/lib/shoot-day-type";
 import { formatDateShort } from "@/shared/i18n/format-date";
 import { cn } from "@/shared/lib/cn";
-import { locationObjectName } from "@/features/locations/lib/format-location";
+import { formatScenePlaces, locationObjectName } from "@/features/locations/lib/format-location";
 
 type SceneCard = SceneDetails;
 
@@ -263,8 +263,10 @@ function SceneCardBody({ scene, hint }: { scene: SceneCard; hint?: PlanningHint 
   ]
     .filter(Boolean)
     .join(" · ");
-  const firstLocation = scene.locations?.[0]?.location;
-  const location = firstLocation ? locationObjectName(firstLocation) : undefined;
+  // Объект и подобъекты сцены: «ДОМ · ДЕТСКАЯ / КОРИДОР».
+  const location = scene.locations?.length
+    ? formatScenePlaces(scene.locations.map((l) => l.location))
+    : undefined;
   const mark = hint ? AVAILABILITY_MARK[hint] : undefined;
   return (
     <>

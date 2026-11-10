@@ -67,7 +67,7 @@ export function compareLocations(a: SortableLocation, b: SortableLocation): numb
   return byOrder !== 0 ? byOrder : subA.localeCompare(subB, "ru");
 }
 
-type PlaceRow = LocationNameSource & {
+export type PlaceRow = LocationNameSource & {
   id: string;
   parent: { id: string; name: string } | null;
   sortOrder?: number | null;

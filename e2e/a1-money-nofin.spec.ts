@@ -77,31 +77,36 @@ for (const p of PAGES) {
   });
 }
 
-test("без финансов — переход по меню (?_rsc при навигации) без ставок", async ({ page }) => {
-  const sniffer = sniff(page);
-  await page.goto(projectPath(ctx));
-  for (const [group, label] of [
-    [null, "КПП"],
-    [null, "Съёмочный день"],
-    // Отчёты смены — вкладка рядом с вызывными.
-    [null, "Отчёты смены"],
-    [null, "Объекты"],
-    ["Препродакшн", "Кастинг"],
-  ] as const) {
-    const link = page.getByRole("link", { name: label, exact: true }).first();
-    if (group) {
-      const toggle = page.getByRole("button", { name: group, exact: true }).first();
-      if ((await toggle.getAttribute("aria-expanded")) === "false") await toggle.click();
+test.describe("переход по меню", () => {
+  // Нестабилен (бэклог «Тесты»): браузер иногда не отдаёт тело ответа перехода — один повтор.
+  test.describe.configure({ retries: 1 });
+
+  test("без финансов — переход по меню (?_rsc при навигации) без ставок", async ({ page }) => {
+    const sniffer = sniff(page);
+    await page.goto(projectPath(ctx));
+    for (const [group, label] of [
+      [null, "КПП"],
+      [null, "Съёмочный день"],
+      // Отчёты смены — вкладка рядом с вызывными.
+      [null, "Отчёты смены"],
+      [null, "Объекты"],
+      ["Препродакшн", "Кастинг"],
+    ] as const) {
+      const link = page.getByRole("link", { name: label, exact: true }).first();
+      if (group) {
+        const toggle = page.getByRole("button", { name: group, exact: true }).first();
+        if ((await toggle.getAttribute("aria-expanded")) === "false") await toggle.click();
+      }
+      const href = await link.getAttribute("href");
+      await link.click();
+      // Клик идёт только после перехода: иначе на холодном сервере следующий клик отменяет предыдущий.
+      await page.waitForURL((url) => url.pathname === href);
+      await page.waitForLoadState("networkidle");
     }
-    const href = await link.getAttribute("href");
-    await link.click();
-    // Клик идёт только после перехода: иначе на холодном сервере следующий клик отменяет предыдущий.
-    await page.waitForURL((url) => url.pathname === href);
-    await page.waitForLoadState("networkidle");
-  }
-  const captured = await sniffer.done();
-  expect(captured.some((c) => c.type.startsWith("text/x-component")), "были ответы RSC").toBe(true);
-  expectNoLeaks(captured.flatMap((c) => findLeaks(`${c.type} ${c.url}`, c.body)));
+    const captured = await sniffer.done();
+    expect(captured.some((c) => c.type.startsWith("text/x-component")), "были ответы RSC").toBe(true);
+    expectNoLeaks(captured.flatMap((c) => findLeaks(`${c.type} ${c.url}`, c.body)));
+  });
 });
 
 test("без финансов — финансы, начисления, платежи, смета цеха: нет доступа", async ({ page }) => {
