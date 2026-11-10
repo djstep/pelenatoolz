@@ -129,7 +129,6 @@ export type LocationEditSource = Pick<
   LocationDetail,
   | "id"
   | "name"
-  | "sublocation"
   | "parent"
   | "locationKind"
   | "hasDecoration"

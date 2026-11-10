@@ -89,7 +89,7 @@ const eventSelect = {
   locationId: true,
   note: true,
   type: { select: { id: true, name: true, color: true } },
-  location: { select: { name: true, sublocation: true, parent: LOCATION_PARENT_SELECT } },
+  location: { select: { name: true, parent: LOCATION_PARENT_SELECT } },
   participants: {
     select: {
       crewMember: { select: { id: true, ...nameSelect } },
@@ -232,7 +232,7 @@ export async function listCalendarOptions(
       : null,
     rights.canReadLocations
       ? prisma.location
-          .findMany({ where: { projectId }, select: { id: true, name: true, sublocation: true, sortOrder: true, parent: LOCATION_PARENT_SELECT } })
+          .findMany({ where: { projectId }, select: { id: true, name: true, sortOrder: true, parent: LOCATION_PARENT_SELECT } })
           .then((rows) => rows.sort(compareLocations))
       : null,
     prisma.department.findMany({

@@ -22,7 +22,7 @@ const sceneBriefSelect = {
   scriptDay: true,
   locations: {
     include: {
-      location: { select: { id: true, name: true, sublocation: true, parent: LOCATION_PARENT_SELECT } },
+      location: { select: { id: true, name: true, parent: LOCATION_PARENT_SELECT } },
     },
   },
   shootDayScenes: {
@@ -127,7 +127,7 @@ export async function getCharacterDetail(
             include: {
               locations: {
                 include: {
-                  location: { select: { id: true, name: true, sublocation: true, parent: LOCATION_PARENT_SELECT } },
+                  location: { select: { id: true, name: true, parent: LOCATION_PARENT_SELECT } },
                 },
               },
             },

@@ -28,7 +28,7 @@ import {
 
 const initial: ScoutActionState = {};
 
-type LocationOpt = { id: string; name: string; sublocation: string | null; parent: { name: string } | null };
+type LocationOpt = { id: string; name: string; parent: { name: string } | null };
 
 function locationLabel(loc: LocationNameSource) {
   return formatLocationTitle(loc, " / ");

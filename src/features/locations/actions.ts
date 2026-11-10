@@ -180,7 +180,6 @@ export async function updateLocationAction(
     where: { id: locationId, projectId },
     select: {
       name: true,
-      sublocation: true,
       parentId: true,
       parent: LOCATION_PARENT_SELECT,
       address: true,
@@ -280,7 +279,7 @@ export async function moveSubLocationAction(
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`location-order:${location.parentId}`}))`;
     const siblings = await tx.location.findMany({
       where: { projectId, parentId: location.parentId },
-      select: { id: true, name: true, sublocation: true, sortOrder: true, parent: LOCATION_PARENT_SELECT },
+      select: { id: true, name: true, sortOrder: true, parent: LOCATION_PARENT_SELECT },
     });
     siblings.sort(compareLocations);
     const index = siblings.findIndex((s) => s.id === locationId);
@@ -406,7 +405,6 @@ export async function deleteLocationAction(
     where: { id: locationId, projectId },
     select: {
       name: true,
-      sublocation: true,
       parent: LOCATION_PARENT_SELECT,
       _count: { select: { children: true } },
     },
@@ -786,7 +784,6 @@ export async function saveLocationSchemeAction(
     where: { id: checked.locationId, projectId },
     select: {
       name: true,
-      sublocation: true,
       parent: LOCATION_PARENT_SELECT,
       latitude: true,
       longitude: true,

@@ -37,7 +37,7 @@ export default async function ScriptDictionaryPage({ params }: Props) {
     prisma.character.findMany({ where: { projectId }, select: { id: true, name: true } }),
     prisma.location.findMany({
       where: { projectId },
-      select: { id: true, name: true, sublocation: true, parent: LOCATION_PARENT_SELECT },
+      select: { id: true, name: true, parent: LOCATION_PARENT_SELECT },
     }),
   ]);
 

@@ -211,8 +211,8 @@ describe("модель листа вызывного", () => {
     const live = source.day.scenes.filter((row) => !row.scene.cutAt).map((row) => row.scene);
     const house = { name: "Дом Е2Е", address: "ул. Лесная, 1" };
     live[0]!.locations = [
-      { location: { name: "Детская", sublocation: null, parent: house, address: null } },
-      { location: { name: "Кухня", sublocation: null, parent: house, address: "Павильон 3" } },
+      { location: { name: "Детская", parent: house, address: null } },
+      { location: { name: "Кухня", parent: house, address: "Павильон 3" } },
     ];
     const m = model(source);
     const forest = m.locations.find((g) => g.address === "ул. Лесная, 1");
@@ -228,7 +228,7 @@ describe("модель листа вызывного", () => {
     const source = clone(FULL_DAY_SOURCE);
     const cut = source.day.scenes.find((row) => row.scene.number === "16")!.scene;
     assert.ok(cut.cutAt, "в фикстуре сцена 16 вырезана");
-    cut.locations = [{ location: { name: "Подвал (только в вырезанной)", sublocation: null, parent: null, address: null } }];
+    cut.locations = [{ location: { name: "Подвал (только в вырезанной)", parent: null, address: null } }];
     const slot = source.day.timeSlots.find((s) => s.scene?.number === "16")!;
     slot.scene = cut;
 

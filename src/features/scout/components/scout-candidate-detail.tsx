@@ -27,7 +27,7 @@ import { useActionSuccess } from "@/shared/ui/unsaved/use-action-success";
 
 const initial: ScoutActionState = {};
 
-type LocationOpt = { id: string; name: string; sublocation: string | null; parent: { name: string } | null };
+type LocationOpt = { id: string; name: string; parent: { name: string } | null };
 
 function mediaUrls(value: unknown): { url: string }[] {
   if (!Array.isArray(value)) return [];
