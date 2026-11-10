@@ -10,7 +10,7 @@ export type LibrettoExportColumn = ExportColumn;
 /** Все поля, доступные для экспорта */
 export const LIBRETTO_EXPORT_FIELDS: LibrettoFieldDef[] = [
   { id: "number", label: "Сцена" },
-  { id: "location", label: "Локация" },
+  { id: "location", label: "Объект / подобъекты" },
   { id: "place", label: "Место" },
   { id: "summary", label: "Описание" },
   { id: "characters", label: "Персонажи" },

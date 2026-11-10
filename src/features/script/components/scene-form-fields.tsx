@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ElementType,
   ProjectType,
@@ -12,7 +12,12 @@ import {
   type IntExt,
   type ProductionSceneFactStatus,
 } from "@prisma/client";
-import { quickCreateLocationAction } from "@/features/locations/actions";
+import {
+  quickCreateLocationAction,
+  quickCreateSubLocationAction,
+} from "@/features/locations/actions";
+import { cardPlaces, sceneLinkOf } from "@/features/script/lib/scene-locations";
+import { useOnChange } from "@/shared/hooks/use-on-change";
 import { loadScreenplayBlocksAction } from "@/features/screenplay/actions";
 import { quickCreateCharacterAction } from "@/features/script/actions";
 import {
@@ -62,7 +67,10 @@ export type SceneEditData = {
   intExt: IntExt | null;
   dayNight: DayNight | null;
   status: SceneStatus;
-  locations: { locationId: string; location: { id: string; name: string } }[];
+  locations: {
+    locationId: string;
+    location: { id: string; name: string; parent: { id: string; name: string } | null };
+  }[];
   characters: { characterId: string; character: { id: string; name: string } }[];
   elements: {
     element: { id: string; name: string; type: ElementType };
@@ -89,7 +97,8 @@ export type SceneEditData = {
   }>;
 };
 
-type Option = { id: string; name: string };
+/** Вариант выбора. У объектов: `shortName` — своё название, `parentId` — объект подобъекта. */
+type Option = { id: string; name: string; shortName?: string; parentId?: string | null };
 
 function timingValue(seconds: number | null | undefined) {
   if (seconds == null) return "";
@@ -171,6 +180,28 @@ export function SceneFormFields({
   const isSeries = projectType === ProjectType.SERIES;
   const [loadingScript, setLoadingScript] = useState(false);
 
+  // Объект и подобъекты: карточка правит объект первой привязки, другие объекты сцены — пометкой.
+  const shown = useMemo(() => cardPlaces((scene?.locations ?? []).map(sceneLinkOf)), [scene]);
+  const [subIds, setSubIds] = useState<string[]>(() =>
+    shown.objectId && shown.objectId === locationId ? shown.subIds : [],
+  );
+  useOnChange([shown], () => setSubIds(shown.subIds));
+  const objectOptions = useMemo(
+    () => locations.filter((l) => !l.parentId).map((l) => ({ id: l.id, name: l.shortName ?? l.name })),
+    [locations],
+  );
+  const subOptions = useMemo(
+    () =>
+      locations
+        .filter((l) => l.parentId && l.parentId === locationId)
+        .map((l) => ({ id: l.id, name: l.shortName ?? l.name })),
+    [locations, locationId],
+  );
+  const otherObjects = shown.otherObjectIds
+    .map((id) => locations.find((l) => l.id === id)?.shortName ?? locations.find((l) => l.id === id)?.name)
+    .filter(Boolean)
+    .join(", ");
+
   return (
     <fieldset disabled={readOnly} className="min-w-0 space-y-5 border-0 p-0">
       <div className="grid gap-4 md:grid-cols-3">
@@ -234,26 +265,62 @@ export function SceneFormFields({
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
-        <div>
-          <Label>Локация *</Label>
-          <CreatableSelect
-            name="locationId"
-            options={locations}
-            value={locationId}
-            required
-            onChange={setLocationId}
-            onCreate={async (name) => {
-              const result = await quickCreateLocationAction(projectId, name);
-              if ("id" in result) {
-                setLocations((prev) =>
-                  prev.some((l) => l.id === result.id)
-                    ? prev
-                    : [...prev, result],
-                );
-              }
-              return result;
-            }}
-          />
+        <div className="space-y-3">
+          <div>
+            <Label>Объект *</Label>
+            <CreatableSelect
+              name="locationId"
+              options={objectOptions}
+              value={locationId}
+              required
+              onChange={(id) => {
+                setLocationId(id);
+                setSubIds(id === shown.objectId ? shown.subIds : []);
+              }}
+              onCreate={async (name) => {
+                const result = await quickCreateLocationAction(projectId, name);
+                if ("id" in result) {
+                  setLocations((prev) =>
+                    prev.some((l) => l.id === result.id)
+                      ? prev
+                      : [...prev, { ...result, shortName: result.name, parentId: null }],
+                  );
+                }
+                return result;
+              }}
+            />
+            {isEdit ? <input type="hidden" name="prevObjectId" value={shown.objectId} /> : null}
+          </div>
+          <div>
+            <Label>Подобъекты</Label>
+            <CreatableMultiSelect
+              name="subLocationIds"
+              placeholder="Поиск подобъекта…"
+              options={subOptions}
+              value={subIds}
+              onChange={setSubIds}
+              onCreate={async (name) => {
+                if (!locationId) return { error: "Сначала выберите объект" };
+                const result = await quickCreateSubLocationAction(projectId, locationId, name);
+                if ("id" in result) {
+                  setLocations((prev) =>
+                    prev.some((l) => l.id === result.id)
+                      ? prev
+                      : [...prev, { id: result.id, name: result.name, shortName: result.name, parentId: result.parentId }],
+                  );
+                }
+                return result;
+              }}
+            />
+            <p className="mt-1 text-xs text-[var(--muted-fg)]">
+              Несколько — смежная сцена («ДЕТСКАЯ / КОРИДОР»). Пусто — объект целиком.
+            </p>
+            {otherObjects ? (
+              <p className="mt-1 text-xs text-[var(--tone-warning-strong)]">
+                В сцене ещё объект: {otherObjects} — привязка сохранится (два объекта в шапке).
+              </p>
+            ) : null}
+          </div>
         </div>
         <div>
           <Label htmlFor="objectType">Тип объекта</Label>

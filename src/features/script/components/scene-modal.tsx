@@ -22,7 +22,8 @@ export type { SceneEditData };
 
 const initial: ActionState = {};
 
-type Option = { id: string; name: string };
+/** Вариант выбора. У объектов: `shortName` — своё название, `parentId` — объект подобъекта. */
+type Option = { id: string; name: string; shortName?: string; parentId?: string | null };
 
 /** Модалка только для создания сцены. Редактирование — на странице /libretto/[sceneId]. */
 export function SceneModal({

@@ -25,10 +25,12 @@ import { useActionSuccess } from "@/shared/ui/unsaved/use-action-success";
 import { useFormGuard } from "@/shared/ui/unsaved/use-form-guard";
 import { submitKeepingFields } from "@/shared/ui/forms/submit-keeping-fields";
 import { useOnChange } from "@/shared/hooks/use-on-change";
+import { cardPlaces, sceneLinkOf } from "@/features/script/lib/scene-locations";
 
 const initial: ActionState = {};
 
-type Option = { id: string; name: string };
+/** Вариант выбора. У объектов: `shortName` — своё название, `parentId` — объект подобъекта. */
+type Option = { id: string; name: string; shortName?: string; parentId?: string | null };
 
 type Neighbor = {
   id: string;
@@ -75,7 +77,7 @@ export function SceneEditor({
   const [locations, setLocations] = useState(initialLocations);
   const [characters, setCharacters] = useState(initialCharacters);
   const [locationId, setLocationId] = useState(
-    scene.locations[0]?.locationId ?? "",
+    () => cardPlaces(scene.locations.map(sceneLinkOf)).objectId,
   );
   const [characterIds, setCharacterIds] = useState(
     () => scene.characters.map((c) => c.characterId) ?? [],
@@ -94,7 +96,7 @@ export function SceneEditor({
   });
 
   useOnChange([scene], () => {
-    setLocationId(scene.locations[0]?.locationId ?? "");
+    setLocationId(cardPlaces(scene.locations.map(sceneLinkOf)).objectId);
     setCharacterIds(scene.characters.map((c) => c.characterId));
     setFormKey((k) => k + 1);
     setDupError(null);

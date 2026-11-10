@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import {
   compareLocations,
+  formatScenePlaces,
   formatLocationTitle,
   locationAsPair,
   locationObjectName,
@@ -66,5 +67,30 @@ describe("два объекта с одним названием", () => {
     const b1 = { id: "b1", name: "БАНЯ", sublocation: null, parent: { id: "b", name: "ДОМ" }, sortOrder: 1 };
     const sorted = [b1, a1, b, a].sort(compareLocations).map((l) => l.id);
     assert.deepEqual(sorted, ["a", "a1", "b", "b1"]);
+  });
+});
+
+describe("колонка «Объект / подобъекты»", () => {
+  const home = { id: "h", name: "ДОМ", sublocation: null, parent: null };
+  const kids = { id: "k", name: "ДЕТСКАЯ", sublocation: null, parent: { id: "h", name: "ДОМ" }, sortOrder: 1 };
+  const hall = { id: "c", name: "КОРИДОР", sublocation: null, parent: { id: "h", name: "ДОМ" }, sortOrder: 2 };
+  const yard = { id: "y", name: "ДВОР ДОМА", sublocation: null, parent: null };
+  const forest = { id: "f", name: "ОПУШКА ЛЕСА", sublocation: null, parent: null };
+
+  test("смежные подобъекты — при своём объекте, по порядку", () => {
+    assert.equal(formatScenePlaces([hall, kids]), "ДОМ · ДЕТСКАЯ / КОРИДОР");
+  });
+
+  test("два объекта без подобъектов", () => {
+    assert.equal(formatScenePlaces([yard, forest]), "ДВОР ДОМА / ОПУШКА ЛЕСА");
+  });
+
+  test("объект целиком и объект с подобъектом", () => {
+    assert.equal(formatScenePlaces([home]), "ДОМ");
+    assert.equal(formatScenePlaces([kids, yard]), "ДВОР ДОМА; ДОМ · ДЕТСКАЯ");
+  });
+
+  test("мест нет — прочерк", () => {
+    assert.equal(formatScenePlaces([]), "—");
   });
 });

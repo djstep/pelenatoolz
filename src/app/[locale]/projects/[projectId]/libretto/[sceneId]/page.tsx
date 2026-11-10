@@ -37,6 +37,9 @@ export default async function ScenePage({ params }: Props) {
   const locationOptions = locations.map((l) => ({
     id: l.id,
     name: formatLocationTitle(l),
+    // Карточка сцены: объект и его подобъекты отдельными полями.
+    shortName: l.name,
+    parentId: l.parent?.id ?? null,
   }));
 
   return (

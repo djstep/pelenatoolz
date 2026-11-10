@@ -2,7 +2,7 @@ import type { ProjectType } from "@prisma/client";
 import { sceneStatusLabels } from "@/shared/i18n/domain-labels";
 import { formatDateShort } from "@/shared/i18n/format-date";
 import type { listScenes } from "@/features/script/queries";
-import { formatLocationTitle } from "@/features/locations/lib/format-location";
+import { formatScenePlaces } from "@/features/locations/lib/format-location";
 
 export type LibrettoScene = Awaited<ReturnType<typeof listScenes>>[number];
 
@@ -17,10 +17,9 @@ export function formatSceneNumber(
   return num;
 }
 
-export function formatLocationCell(scene: LibrettoScene) {
-  const loc = scene.locations[0]?.location;
-  if (!loc) return "—";
-  return formatLocationTitle(loc);
+/** «Объект / подобъекты»: все привязки сцены, подобъекты — при своём объекте. */
+export function formatLocationCell(scene: Pick<LibrettoScene, "locations">) {
+  return formatScenePlaces(scene.locations.map((l) => l.location));
 }
 
 export function formatPlaceCell(scene: LibrettoScene) {
