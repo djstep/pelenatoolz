@@ -1,6 +1,8 @@
 import { randomBytes } from "node:crypto";
 import { expect, test, type Browser, type Page } from "@playwright/test";
 import { REGISTRATION_CLOSED_MESSAGE } from "../src/features/auth/lib/registration-access";
+import { parsePermissionMatrix } from "../src/features/roles/permissions-matrix";
+import { ROLE_PRESETS } from "../src/features/roles/role-presets";
 import { E2E_PROJECT_NAME, E2E_REGISTRATION_EMAILS } from "./fixtures/data";
 import { e2eDb } from "./helpers/db";
 
@@ -120,7 +122,9 @@ test.describe("закрытая регистрация", () => {
     await page.waitForURL(/\/projects\/c/);
     const project = await db.project.findFirstOrThrow({
       where: { name: "Проверка выработки", owner: { email } },
+      orderBy: { createdAt: "desc" },
       select: {
+        id: true,
         plannedDailyOutputMin: true,
         budgetSettings: { select: { reservePercent: true, agencyPercent: true } },
         _count: { select: { expenseTypes: true, paymentForms: true, counterpartyPaymentForms: true } },
@@ -137,6 +141,21 @@ test.describe("закрытая регистрация", () => {
       { key: "DNI_PODGOTOVKI", value: null },
       { key: "NEDELI", value: null },
     ]);
+
+    // Шаблоны ролей группы — в каждом новом проекте, обычными ролями, с правами из кода.
+    const roles = await db.projectRoleDefinition.findMany({
+      where: { projectId: project.id },
+      select: { name: true, isSystem: true, presetKey: true, permissions: true },
+    });
+    expect(roles.filter((r) => r.isSystem).map((r) => r.name).sort()).toEqual(["Наблюдатель", "Продюсер"]);
+    const presets = roles.filter((r) => r.presetKey);
+    expect(presets.map((r) => r.presetKey).sort()).toEqual(ROLE_PRESETS.map((p) => p.key).sort());
+    for (const preset of ROLE_PRESETS) {
+      const row = presets.find((r) => r.presetKey === preset.key)!;
+      expect(row.name).toBe(preset.name);
+      expect(row.isSystem).toBe(false);
+      expect(parsePermissionMatrix(row.permissions)).toEqual(preset.permissions);
+    }
     await context.close();
   });
 

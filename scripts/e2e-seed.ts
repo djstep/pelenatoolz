@@ -191,7 +191,14 @@ async function createProject(users: Record<E2ERoleKey, string>) {
       const roles = new Map<string, string>();
       for (const role of getDefaultProjectRoles()) {
         const row = await tx.projectRoleDefinition.create({
-          data: { projectId, name: role.name, note: role.note, isSystem: role.isSystem, permissions: role.permissions },
+          data: {
+            projectId,
+            name: role.name,
+            note: role.note,
+            isSystem: role.isSystem,
+            permissions: role.permissions,
+            presetKey: role.presetKey,
+          },
         });
         roles.set(role.name, row.id);
       }

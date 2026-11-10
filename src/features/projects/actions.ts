@@ -217,6 +217,7 @@ export async function createProjectAction(
             note: role.note,
             isSystem: role.isSystem,
             permissions: role.permissions,
+            presetKey: role.presetKey,
           },
         }),
       ),
