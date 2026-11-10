@@ -20,7 +20,11 @@ function anyOf(...permissions: Permission[]): AuditVisibility {
   return (viewer) => permissions.some((p) => viewer.can(p));
 }
 
-const scenes = anyOf("script:read");
+const screenplay = anyOf("screenplay:read");
+const scenes = anyOf("scenes:read");
+const locations = anyOf("locations:read");
+const resources = anyOf("resources:read");
+const characters = anyOf("characters:read");
 const cast = anyOf("cast:read");
 const schedule = anyOf("schedule:read");
 const finance = anyOf("finance:read");
@@ -34,18 +38,19 @@ const smetaAll: AuditVisibility = (v) => v.isProducer || v.can("smeta:read_all")
  */
 const AUDIT_ENTITY_VISIBILITY: Record<AuditEntityTypeValue, AuditVisibility> = {
   [AuditEntityType.scene]: scenes,
-  [AuditEntityType.scriptVersion]: scenes,
-  [AuditEntityType.scriptImport]: scenes,
-  [AuditEntityType.scriptDictionaryRule]: scenes,
-  [AuditEntityType.scriptComment]: scenes,
-  [AuditEntityType.location]: scenes,
-  [AuditEntityType.locationPhoto]: scenes,
-  [AuditEntityType.scoutCandidate]: scenes,
-  [AuditEntityType.resourceCategory]: scenes,
-  [AuditEntityType.resourceItem]: scenes,
-  [AuditEntityType.projectFile]: anyOf("script:read", "project:read"),
-  [AuditEntityType.cloudFileLink]: anyOf("script:read", "project:read"),
-  [AuditEntityType.character]: cast,
+  [AuditEntityType.scriptVersion]: screenplay,
+  [AuditEntityType.scriptImport]: screenplay,
+  [AuditEntityType.scriptDictionaryRule]: screenplay,
+  [AuditEntityType.scriptComment]: screenplay,
+  [AuditEntityType.location]: locations,
+  [AuditEntityType.locationPhoto]: locations,
+  [AuditEntityType.scoutCandidate]: locations,
+  [AuditEntityType.resourceCategory]: resources,
+  [AuditEntityType.resourceItem]: resources,
+  [AuditEntityType.projectFile]: anyOf("screenplay:read", "project:read"),
+  [AuditEntityType.cloudFileLink]: anyOf("screenplay:read", "project:read"),
+  // В записи персонажа нет контактов и кандидатов: видна с правом на персонажей.
+  [AuditEntityType.character]: characters,
   [AuditEntityType.actor]: cast,
   [AuditEntityType.castingPerson]: cast,
   [AuditEntityType.castingCandidate]: cast,

@@ -37,6 +37,9 @@ const CAST_STATUS_LABELS = {
   OPEN: "Открыт",
 } as const;
 
+/** Колонки про кандидатов кастинга: только с правом «Актёры». */
+const CAST_ONLY_COLUMNS = new Set(["candidateCount", "castStatus"]);
+
 type SortDir = "asc" | "desc";
 
 function sortValue(row: CharacterWithStats, colId: string): string | number {
@@ -70,22 +73,32 @@ export function CharactersWorkspace({
   projectType,
   characters,
   canWrite,
+  canReadCast,
 }: {
   projectId: string;
   locale: string;
   projectType: ProjectType;
   characters: CharacterWithStats[];
   canWrite: boolean;
+  /** Право «Актёры»: без него нет колонок про кандидатов и ссылки на кастинг. */
+  canReadCast: boolean;
 }) {
   const toast = useToast();
   const confirmDelete = useConfirm();
+  const columns = useMemo(
+    () =>
+      canReadCast
+        ? CHARACTER_COLUMNS
+        : CHARACTER_COLUMNS.filter((col) => !CAST_ONLY_COLUMNS.has(col.id)),
+    [canReadCast],
+  );
   const {
     visibleIds,
     setVisibleIds,
     widths,
     startResize,
     visibleColumns,
-  } = useTableLayout(`characters:${projectId}`, CHARACTER_COLUMNS);
+  } = useTableLayout(`characters:${projectId}`, columns);
 
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState<CharacterFilters>(emptyCharacterFilters);
@@ -185,16 +198,20 @@ export function CharactersWorkspace({
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-[var(--muted-fg)]">
-        Справочник персонажей проекта. Подбор актёров — в{" "}
-        <Link
-          href={`/${locale}/projects/${projectId}/preproduction/casting`}
-          className="text-[var(--accent)] hover:underline"
-        >
-          Кастинге
-        </Link>
-        .
-      </p>
+      {canReadCast ? (
+        <p className="text-sm text-[var(--muted-fg)]">
+          Справочник персонажей проекта. Подбор актёров — в{" "}
+          <Link
+            href={`/${locale}/projects/${projectId}/preproduction/casting`}
+            className="text-[var(--accent)] hover:underline"
+          >
+            Кастинге
+          </Link>
+          .
+        </p>
+      ) : (
+        <p className="text-sm text-[var(--muted-fg)]">Справочник персонажей проекта.</p>
+      )}
 
       <div className="flex flex-wrap items-center gap-2">
         <Input
@@ -223,7 +240,7 @@ export function CharactersWorkspace({
           </Button>
           {columnsOpen ? (
             <div className="absolute right-0 top-full z-20 mt-1 min-w-[12rem] glass-panel p-2 shadow-lg">
-              {CHARACTER_COLUMNS.map((col) => (
+              {columns.map((col) => (
                 <label key={col.id} className="flex items-center gap-2 px-2 py-1 text-sm">
                   <input
                     type="checkbox"

@@ -208,7 +208,7 @@ export async function createSceneAction(
   formData: FormData,
 ): Promise<ActionState> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:write")) {
+  if (!ctx.can("scenes:write")) {
     return { error: "Недостаточно прав" };
   }
 
@@ -333,7 +333,7 @@ export async function updateSceneAction(
   formData: FormData,
 ): Promise<ActionState> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:write")) {
+  if (!ctx.can("scenes:write")) {
     return { error: "Недостаточно прав" };
   }
 
@@ -501,7 +501,7 @@ export async function duplicateSceneAction(
   sceneId: string,
 ): Promise<{ error?: string; newSceneId?: string }> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:write")) {
+  if (!ctx.can("scenes:write")) {
     return { error: "Недостаточно прав" };
   }
 
@@ -622,7 +622,7 @@ export async function bulkUpdateSceneStatusAction(
   status: import("@prisma/client").SceneStatus,
 ) {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:write")) {
+  if (!ctx.can("scenes:write")) {
     throw new Error("FORBIDDEN");
   }
   if (sceneIds.length === 0) return;
@@ -648,7 +648,7 @@ export async function bulkDeleteScenesAction(
   sceneIds: string[],
 ): Promise<{ error?: string }> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:write")) {
+  if (!ctx.can("scenes:write")) {
     return { error: "Недостаточно прав" };
   }
   if (!Array.isArray(sceneIds) || sceneIds.some((id) => typeof id !== "string")) {
@@ -779,7 +779,7 @@ export async function getScenesDeleteImpactAction(
   sceneIds: string[],
 ): Promise<string[]> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:write") || sceneIds.length === 0) return [];
+  if (!ctx.can("scenes:write") || sceneIds.length === 0) return [];
   return scenesDeleteRefusalLines(prisma, projectId, ctx.project.type, sceneIds);
 }
 
@@ -789,7 +789,7 @@ export async function getSceneCutImpactAction(
   sceneId: string,
 ): Promise<string[]> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:write")) return [];
+  if (!ctx.can("scenes:write")) return [];
   const scene = { id: sceneId, projectId };
   const [dayLinks, reportRows, attempts] = await Promise.all([
     prisma.shootDayScene.findMany({
@@ -822,7 +822,7 @@ export async function setSceneCutAction(
   mode: "cut" | "restore",
 ): Promise<{ error?: string }> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:write")) {
+  if (!ctx.can("scenes:write")) {
     return { error: "Недостаточно прав" };
   }
   if (mode !== "cut" && mode !== "restore") return { error: "Некорректные данные" };
@@ -912,7 +912,7 @@ export async function quickCreateCharacterAction(
   name: string,
 ): Promise<{ id: string; name: string } | { error: string }> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:write")) {
+  if (!ctx.can("scenes:write")) {
     return { error: "Недостаточно прав" };
   }
 

@@ -89,7 +89,7 @@ export async function previewScriptImportAction(
   formData: FormData,
 ): Promise<ScriptPreviewState> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:write")) return { error: NO_RIGHTS };
+  if (!ctx.can("screenplay:write")) return { error: NO_RIGHTS };
 
   const read = await readScriptFile(formData);
   if ("error" in read) return { error: read.error };
@@ -137,7 +137,7 @@ export async function importScriptAction(
   formData: FormData,
 ): Promise<ScriptImportState> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:write")) return { error: NO_RIGHTS };
+  if (!ctx.can("screenplay:write")) return { error: NO_RIGHTS };
 
   const read = await readScriptFile(formData);
   if ("error" in read) return { error: read.error };
@@ -263,7 +263,7 @@ export async function syncScriptAction(
   formData: FormData,
 ): Promise<ScriptImportState> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:write")) return { error: NO_RIGHTS_SYNC };
+  if (!ctx.can("screenplay:write")) return { error: NO_RIGHTS_SYNC };
 
   const source = await loadVersionSource(projectId, versionId);
   if (!source) return { error: "Версия не найдена" };

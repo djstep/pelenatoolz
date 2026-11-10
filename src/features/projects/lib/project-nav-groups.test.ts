@@ -131,7 +131,7 @@ describe("пункт меню с вкладками", () => {
 
 describe("Словарь сценария в меню проекта", () => {
   test("пункт в «Настройках», адрес тот же, на странице словаря активен он", () => {
-    const groups = nav.filterNavGroups(nav.projectNavGroups, access(["script:read"]));
+    const groups = nav.filterNavGroups(nav.projectNavGroups, access(["screenplay:read"]));
     const settings = groups.find((group) => group.id === "settings")!;
     assert.ok(settings.items.some((item) => item.href === "/screenplay/dictionary"));
     assert.equal(groups.find((group) => group.id === "home")!.items.some((item) => item.label === "Словарь сценария"), false);
@@ -246,8 +246,8 @@ describe("Контрагенты в меню проекта", () => {
   });
 
   test("без прав: ни пункта, ни адресов", () => {
-    assert.equal(item(["script:read"]), undefined);
-    assert.ok(!JSON.stringify(groups(["script:read"])).includes("/counterparties"));
+    assert.equal(item(["scenes:read"]), undefined);
+    assert.ok(!JSON.stringify(groups(["scenes:read"])).includes("/counterparties"));
   });
 
   test("полоса на карточках; выбранная вкладка по адресу", () => {
@@ -277,7 +277,7 @@ describe("Контрагенты в меню проекта", () => {
 });
 
 describe("Локации в меню проекта", () => {
-  const groups = () => nav.filterNavGroups(nav.projectNavGroups, access(["script:read"]));
+  const groups = () => nav.filterNavGroups(nav.projectNavGroups, access(["locations:read"]));
 
   test("пункт в «Планировании», вкладки Объекты и Скаут; Скаута в «Препродакшне» нет", () => {
     const item = groups()
@@ -314,7 +314,7 @@ describe("Персонажи в меню проекта", () => {
   const AVAILABILITY = `${BASE}/schedule/availability`;
 
   test("один пункт и две вкладки", () => {
-    const planning = groups(["cast:read", "schedule:read"]).find((group) => group.id === "planning")!;
+    const planning = groups(["characters:read", "schedule:read"]).find((group) => group.id === "planning")!;
     const item = planning.items.find((entry) => entry.label === "Персонажи")!;
     assert.equal(item.href, "/characters");
     assert.deepEqual(item.tabs, [
@@ -325,7 +325,7 @@ describe("Персонажи в меню проекта", () => {
   });
 
   test("подсветка на занятости: «Персонажи», а не «КПП» с более коротким адресом", () => {
-    const all = groups(["cast:read", "schedule:read"]);
+    const all = groups(["characters:read", "schedule:read"]);
     const items = all.flatMap((group) => group.items);
     assert.equal(findActiveNavHref(items, BASE, AVAILABILITY), "/characters");
     assert.equal(findActiveNavHref(items, BASE, `${BASE}/schedule`), "/schedule");
@@ -374,7 +374,7 @@ describe("Съёмочный день в меню проекта", () => {
   });
 
   test("без прав пункта нет", () => {
-    assert.equal(dayItem(groups(["script:read"])), undefined);
+    assert.equal(dayItem(groups(["scenes:read"])), undefined);
   });
 
   test("доступные адреса — пункты и их вкладки, скрытых нет", () => {
@@ -440,7 +440,7 @@ describe("Кастинг в меню проекта", () => {
   });
 
   test("без права — ни пункта, ни адресов", () => {
-    const json = JSON.stringify(allItems(["script:read"]));
+    const json = JSON.stringify(allItems(["scenes:read"]));
     assert.ok(!json.includes("/preproduction/casting"));
     assert.ok(!json.includes("/preproduction/auditions"));
   });
@@ -459,5 +459,37 @@ describe("Кастинг в меню проекта", () => {
     assert.equal(activeNavTabs(groups, BASE, `${BASE}/preproduction/auditions`)?.length, 2);
     assert.equal(activeNavTabs(groups, BASE, `${BASE}/preproduction/casting/person`), null);
     assert.equal(activeNavTabs(groups, BASE, `${BASE}/preproduction/scout`), null);
+  });
+});
+
+describe("Бывшие «Сцены» в меню: у каждого пункта своё право", () => {
+  const hrefs = (granted: string[]) =>
+    nav.navHrefs(nav.filterNavGroups(nav.projectNavGroups, access(granted)));
+  const cases: [string, string[]][] = [
+    ["screenplay:read", ["/screenplay", "/files", "/screenplay/dictionary"]],
+    ["scenes:read", ["/libretto"]],
+    ["locations:read", ["/locations", "/preproduction/scout"]],
+    ["characters:read", ["/characters"]],
+    ["resources:read", ["/settings/resources"]],
+  ];
+  const all = cases.flatMap(([, list]) => list);
+
+  for (const [permission, own] of cases) {
+    test(`${permission} открывает только свои пункты`, () => {
+      const visible = hrefs([permission]);
+      for (const href of all) {
+        assert.equal(visible.includes(href), own.includes(href), href);
+      }
+    });
+  }
+
+  test("«Персонажи» без кастинга: кандидатов и проб нет", () => {
+    const visible = hrefs(["characters:read"]);
+    assert.ok(!visible.includes("/preproduction/casting"));
+    assert.ok(!visible.includes("/preproduction/auditions"));
+  });
+
+  test("«Актёры» без «Персонажей» персонажей не открывают", () => {
+    assert.ok(!hrefs(["cast:read"]).includes("/characters"));
   });
 });

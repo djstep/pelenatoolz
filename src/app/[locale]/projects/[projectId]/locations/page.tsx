@@ -14,7 +14,7 @@ export default async function LocationsPage({ params }: Props) {
   const { locale, projectId } = await params;
   const ctx = await requireProjectContext(projectId);
 
-  if (!ctx.can("script:read")) {
+  if (!ctx.can("locations:read")) {
     return <p className="text-sm text-[var(--danger)]">Нет доступа к объектам</p>;
   }
 
@@ -38,7 +38,7 @@ export default async function LocationsPage({ params }: Props) {
           projectType={ctx.project.type}
           locations={locations}
           addresses={addresses}
-          canWrite={ctx.can("script:write")}
+          canWrite={ctx.can("locations:write")}
         />
       </Card>
     </div>

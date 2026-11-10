@@ -18,7 +18,7 @@ export default async function ProjectFilesPage({ params, searchParams }: Props) 
   const query = await searchParams;
   const ctx = await requireProjectContext(projectId);
 
-  if (!ctx.can("script:read") && !ctx.can("project:read")) {
+  if (!ctx.can("screenplay:read") && !ctx.can("project:read")) {
     return <p className="text-sm text-[var(--danger)]">Нет доступа к файлам</p>;
   }
 
@@ -29,7 +29,7 @@ export default async function ProjectFilesPage({ params, searchParams }: Props) 
   ]);
   const notice = cloudOAuthNotice(query, connections);
 
-  const canWrite = ctx.can("script:write") || ctx.can("project:write");
+  const canWrite = ctx.can("screenplay:write") || ctx.can("project:write");
 
   return (
     <>

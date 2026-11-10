@@ -330,6 +330,21 @@ describe("Волна 8: права «Команда»", () => {
     assert.equal(hasPermission(m, "crew:contacts"), false);
   });
 
+  test("роль без раздела «Сценарий» (сохранена до разделения) — сценарий по «Сценам», остальное нет", () => {
+    const m = parsePermissionMatrix({ scenes: { access: true, read: true, update: true } });
+    assert.equal(hasPermission(m, "screenplay:read"), true);
+    assert.equal(hasPermission(m, "screenplay:write"), true);
+    assert.equal(hasPermission(m, "locations:read"), false);
+    assert.equal(hasPermission(m, "characters:read"), false);
+    // Свой раздел «Сценарий» — по нему, «Сцены» не подмешиваются.
+    const own = parsePermissionMatrix({
+      scenes: { access: true, read: true, update: true },
+      screenplay: { access: true, read: true },
+    });
+    assert.equal(hasPermission(own, "screenplay:read"), true);
+    assert.equal(hasPermission(own, "screenplay:write"), false);
+  });
+
   test("нельзя выдать «Контакты» шире своих прав", () => {
     const actor = { crew: { access: true, read: true, update: true } };
     assert.equal(isPermissionSubset({ crew_contacts: { access: true } }, actor), false);

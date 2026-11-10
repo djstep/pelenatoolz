@@ -62,7 +62,7 @@ function revalidateLocations(projectId: string, locationId?: string) {
 
 async function assertScriptWrite(projectId: string) {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:write")) {
+  if (!ctx.can("locations:write")) {
     return { error: "Недостаточно прав" } as const;
   }
   return { ctx } as const;

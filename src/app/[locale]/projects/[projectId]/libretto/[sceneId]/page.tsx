@@ -19,7 +19,7 @@ export default async function ScenePage({ params }: Props) {
   const { locale, projectId, sceneId } = await params;
   const ctx = await requireProjectContext(projectId);
 
-  if (!ctx.can("script:read")) {
+  if (!ctx.can("scenes:read")) {
     return <p className="text-sm text-[var(--danger)]">Нет доступа к сценам</p>;
   }
 
@@ -60,7 +60,7 @@ export default async function ScenePage({ params }: Props) {
         countable: c.countable,
         items: c.items,
       }))}
-      canWrite={ctx.can("script:write")}
+      canWrite={ctx.can("scenes:write")}
     />
   );
 }

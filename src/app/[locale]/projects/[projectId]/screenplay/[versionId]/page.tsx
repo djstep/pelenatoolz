@@ -25,7 +25,7 @@ export default async function ScreenplayVersionPage({ params, searchParams }: Pr
   const { sceneId } = await searchParams;
   const ctx = await requireProjectContext(projectId);
 
-  if (!ctx.can("script:read")) {
+  if (!ctx.can("screenplay:read")) {
     return <p className="text-sm text-[var(--danger)]">Нет доступа к сценарию</p>;
   }
 
@@ -70,7 +70,7 @@ export default async function ScreenplayVersionPage({ params, searchParams }: Pr
         pageToMinuteRatio={Number(meta.pageToMinuteRatio)}
         sceneTimings={sceneTimings}
         scrollToSceneId={sceneId ?? null}
-        canWrite={ctx.can("script:write") && !version.isLocked}
+        canWrite={ctx.can("screenplay:write") && !version.isLocked}
       />
     </>
   );

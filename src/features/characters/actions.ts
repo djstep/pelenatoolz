@@ -67,7 +67,7 @@ export async function updateCharacterRequirementsAction(
   formData: FormData,
 ): Promise<CharacterActionState> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:write")) return { error: "Недостаточно прав" };
+  if (!ctx.can("characters:write")) return { error: "Недостаточно прав" };
 
   const parsed = requirementsSchema.safeParse({
     description: formData.get("description") || undefined,
@@ -186,7 +186,7 @@ export async function createCharacterRecordAction(
   formData: FormData,
 ): Promise<CharacterActionState> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:write")) return { error: "Недостаточно прав" };
+  if (!ctx.can("characters:write")) return { error: "Недостаточно прав" };
 
   const parsed = characterRecordSchema.safeParse({
     name: formData.get("name"),
@@ -222,7 +222,7 @@ export async function updateCharacterRecordAction(
   formData: FormData,
 ): Promise<CharacterActionState> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:write")) return { error: "Недостаточно прав" };
+  if (!ctx.can("characters:write")) return { error: "Недостаточно прав" };
 
   const parsed = characterRecordSchema.safeParse({
     name: formData.get("name"),
@@ -268,7 +268,7 @@ export async function updateCharacterRecordAction(
 
 export async function deleteCharacterAction(projectId: string, characterId: string) {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:write")) throw new Error("FORBIDDEN");
+  if (!ctx.can("characters:write")) throw new Error("FORBIDDEN");
 
   const character = await prisma.character.findFirst({
     where: { id: characterId, projectId },
@@ -306,7 +306,7 @@ export async function getCharacterDeleteImpactAction(
   characterId: string,
 ): Promise<string[]> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:write")) return [];
+  if (!ctx.can("characters:write")) return [];
   const character = { id: characterId, projectId };
   const [candidates, scenes, actors, auditions] = await Promise.all([
     prisma.castingCandidate.count({ where: { character } }),

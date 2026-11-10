@@ -19,7 +19,7 @@ export default async function ScreenplayComparePage({
   const { a, b } = await searchParams;
   const ctx = await requireProjectContext(projectId);
 
-  if (!ctx.can("script:read")) {
+  if (!ctx.can("screenplay:read")) {
     return <p className="text-sm text-[var(--danger)]">Нет доступа</p>;
   }
 

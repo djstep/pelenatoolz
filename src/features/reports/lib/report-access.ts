@@ -39,11 +39,11 @@ export function workRowAccess(viewer: ReportViewer, source: WorkRowSource): Work
       target = "actors";
       break;
     case "LOCATION":
-      sourceRead = viewer.can("script:read");
+      sourceRead = viewer.can("locations:read");
       target = "locations";
       break;
     case "RESOURCE":
-      sourceRead = viewer.can("script:read");
+      sourceRead = viewer.can("resources:read");
       target = source.categoryId ? { categoryId: source.categoryId } : null;
       break;
     case "TRANSPORT":

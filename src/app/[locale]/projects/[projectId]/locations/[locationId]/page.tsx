@@ -15,7 +15,7 @@ export default async function LocationDetailPage({ params }: Props) {
   const { locale, projectId, locationId } = await params;
   const ctx = await requireProjectContext(projectId);
 
-  if (!ctx.can("script:read")) {
+  if (!ctx.can("locations:read")) {
     return <p className="text-sm text-[var(--danger)]">Нет доступа</p>;
   }
 
@@ -33,7 +33,7 @@ export default async function LocationDetailPage({ params }: Props) {
         projectId={projectId}
         location={location}
         addresses={addresses}
-        canWrite={ctx.can("script:write")}
+        canWrite={ctx.can("locations:write")}
         canFinanceRead={ctx.canFinanceRead("locations")}
         canFinanceWrite={ctx.canFinanceWrite("locations")}
       />
@@ -47,7 +47,7 @@ export default async function LocationDetailPage({ params }: Props) {
             defaultBudgetItemId: location.defaultBudgetItemId ?? null,
             overtimeBudgetItemId: location.overtimeBudgetItemId ?? null,
           }}
-          canEdit={ctx.can("script:write") && ctx.canFinanceWrite("locations")}
+          canEdit={ctx.can("locations:write") && ctx.canFinanceWrite("locations")}
         />
       ) : null}
     </div>

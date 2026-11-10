@@ -66,11 +66,11 @@ export const projectNavGroups: NavGroupDef[] = [
     id: "home",
     items: [
       { href: "", label: "Обзор" },
-      { href: "/screenplay", label: "Сценарий", visible: anyOf("script:read") },
+      { href: "/screenplay", label: "Сценарий", visible: anyOf("screenplay:read") },
       {
         href: "/files",
         label: "Файлы",
-        visible: anyOf("script:read", "project:read"),
+        visible: anyOf("screenplay:read", "project:read"),
       },
     ],
   },
@@ -97,18 +97,18 @@ export const projectNavGroups: NavGroupDef[] = [
     title: "Планирование",
     defaultOpen: true,
     items: [
-      { href: "/libretto", label: "Сцены (либретто)", visible: anyOf("script:read") },
+      { href: "/libretto", label: "Сцены (либретто)", visible: anyOf("scenes:read") },
       {
         label: "Объекты",
         tabs: [
-          { href: "/locations", label: "Объекты", visible: anyOf("script:read") },
-          { href: "/preproduction/scout", label: "Скаут", visible: anyOf("script:read") },
+          { href: "/locations", label: "Объекты", visible: anyOf("locations:read") },
+          { href: "/preproduction/scout", label: "Скаут", visible: anyOf("locations:read") },
         ],
       },
       {
         label: "Персонажи",
         tabs: [
-          { href: "/characters", label: "Персонажи", visible: anyOf("cast:read") },
+          { href: "/characters", label: "Персонажи", visible: anyOf("characters:read") },
           {
             href: "/schedule/availability",
             label: "Занятость",
@@ -203,7 +203,7 @@ export const projectNavGroups: NavGroupDef[] = [
         label: "Настройки проекта",
         visible: (a) => canOpenProjectSettings(a.can),
       },
-      { href: "/settings/resources", label: "Ресурсы", visible: anyOf("script:read") },
+      { href: "/settings/resources", label: "Ресурсы", visible: anyOf("resources:read") },
       {
         href: "/settings/call-sheet-template",
         label: "Шаблон вызывного",
@@ -224,7 +224,7 @@ export const projectNavGroups: NavGroupDef[] = [
       {
         href: "/screenplay/dictionary",
         label: "Словарь сценария",
-        visible: anyOf("script:read"),
+        visible: anyOf("screenplay:read"),
       },
       {
         href: "/audit",

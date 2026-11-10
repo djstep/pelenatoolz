@@ -12,7 +12,7 @@ export default async function ScoutPage({ params }: Props) {
   const { locale, projectId } = await params;
   const ctx = await requireProjectContext(projectId);
 
-  if (!ctx.can("script:read")) {
+  if (!ctx.can("locations:read")) {
     return <p className="text-sm text-[var(--danger)]">Нет доступа</p>;
   }
 
@@ -35,7 +35,7 @@ export default async function ScoutPage({ params }: Props) {
           locale={locale}
           candidates={candidates}
           locations={locations}
-          canWrite={ctx.can("script:write")}
+          canWrite={ctx.can("locations:write")}
           finance={financeAccess(ctx.canFinanceRead("locations"), ctx.canFinanceWrite("locations"))}
         />
       </Card>

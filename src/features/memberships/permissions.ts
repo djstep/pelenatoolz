@@ -10,8 +10,16 @@ export const PERMISSIONS = [
   "project:archive",
   "members:read",
   "members:manage",
-  "script:read",
-  "script:write",
+  "screenplay:read",
+  "screenplay:write",
+  "scenes:read",
+  "scenes:write",
+  "locations:read",
+  "locations:write",
+  "characters:read",
+  "characters:write",
+  "resources:read",
+  "resources:write",
   "schedule:read",
   "schedule:write",
   "callsheet:read",
@@ -57,8 +65,21 @@ const PERMISSION_TO_SECTION: Record<
   "project:archive": { section: "project_settings", action: "manage" },
   "members:read": { section: "members", action: "read" },
   "members:manage": { section: "members", action: "manage" },
-  "script:read": { section: "scenes", action: "read" },
-  "script:write": { section: "scenes", action: "write" },
+  /** Сценарий: версии, импорт, словарь, сравнение, «Файлы» проекта. */
+  "screenplay:read": { section: "screenplay", action: "read" },
+  "screenplay:write": { section: "screenplay", action: "write" },
+  /** Сцены (либретто), номера сцен, выгрузки либретто; персонаж, созданный из сцены. */
+  "scenes:read": { section: "scenes", action: "read" },
+  "scenes:write": { section: "scenes", action: "write" },
+  /** Объекты, подобъекты, схема, скаут. */
+  "locations:read": { section: "locations", action: "read" },
+  "locations:write": { section: "locations", action: "write" },
+  /** Персонажи. Кандидаты, контакты и снимок актёра — дополнительно `cast:read`. */
+  "characters:read": { section: "characters", action: "read" },
+  "characters:write": { section: "characters", action: "write" },
+  /** «Настройки → Ресурсы»: категории и позиции. */
+  "resources:read": { section: "elements", action: "read" },
+  "resources:write": { section: "elements", action: "write" },
   "schedule:read": { section: "schedule", action: "read" },
   "schedule:write": { section: "schedule", action: "write" },
   "callsheet:read": { section: "schedule", action: "read" },
@@ -94,6 +115,18 @@ export function hasPermission(
   const mapping = PERMISSION_TO_SECTION[permission];
   return can(matrix, mapping.section, mapping.action);
 }
+
+/**
+ * Права бывшего общего раздела «Сцены»: картинки к объектам, скауту, персонажам и сценам
+ * загружает тот, кто правит хоть один из этих разделов.
+ */
+export const CONTENT_WRITE_PERMISSIONS: readonly Permission[] = [
+  "screenplay:write",
+  "scenes:write",
+  "locations:write",
+  "characters:write",
+  "resources:write",
+];
 
 export function canManageMembers(matrix: PermissionMatrix): boolean {
   return hasPermission(matrix, "members:manage");

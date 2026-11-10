@@ -2,6 +2,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { nanoid } from "nanoid";
 import { NextResponse } from "next/server";
+import { CONTENT_WRITE_PERMISSIONS } from "@/features/memberships/permissions";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { uploadsRoot } from "@/shared/lib/upload-storage";
 
@@ -18,7 +19,7 @@ export async function POST(
     const ctx = await requireProjectContext(projectId);
     if (
       !ctx.can("project:write") &&
-      !ctx.can("script:write") &&
+      !CONTENT_WRITE_PERMISSIONS.some((p) => ctx.can(p)) &&
       !ctx.can("schedule:write")
     ) {
       return NextResponse.json({ error: "Недостаточно прав" }, { status: 403 });

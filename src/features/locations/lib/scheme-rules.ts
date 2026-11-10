@@ -102,9 +102,9 @@ export function parseLocationScheme(
 
 /** Право правки схемы — как у правки карточки объекта: «Сценарий: правка». */
 export function canEditLocationScheme(access: {
-  can: (permission: "script:write") => boolean;
+  can: (permission: "locations:write") => boolean;
 }): boolean {
-  return access.can("script:write");
+  return access.can("locations:write");
 }
 
 /** Проверка, что объект принадлежит проекту. false — чужой или нет записи. */

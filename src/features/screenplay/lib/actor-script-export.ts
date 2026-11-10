@@ -147,7 +147,7 @@ export async function exportCharacterScriptAction(
   payload: SingleActorScriptPayload,
 ): Promise<ActorScriptResult> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:read")) return { error: "Недостаточно прав" };
+  if (!ctx.can("screenplay:read")) return { error: "Недостаточно прав" };
 
   const [allScenes, currentVersion, project] = await Promise.all([
     listScenes(projectId),
@@ -261,7 +261,7 @@ export async function exportMultiCharacterScriptsAction(
   payload: MultiActorScriptPayload,
 ): Promise<ActorScriptResult> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:read")) return { error: "Недостаточно прав" };
+  if (!ctx.can("screenplay:read")) return { error: "Недостаточно прав" };
 
   if (payload.characterIds.length === 0)
     return { error: "Выберите хотя бы одного персонажа" };

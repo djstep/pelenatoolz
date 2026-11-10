@@ -4,7 +4,7 @@ import type { Permission } from "@/features/memberships/permissions";
 import { formatSceneNumber } from "@/features/script/lib/libretto-display";
 
 /** Право на авто- и ручную перенумерацию сцен. */
-export const SCENE_NUMBERS_WRITE_PERMISSION: Permission = "script:write";
+export const SCENE_NUMBERS_WRITE_PERMISSION: Permission = "scenes:write";
 
 export function sceneNumbersAccessRefusal(can: (permission: Permission) => boolean) {
   return can(SCENE_NUMBERS_WRITE_PERMISSION) ? null : "Недостаточно прав";

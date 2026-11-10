@@ -12,7 +12,7 @@ export default async function SettingsResourceCategoryPage({ params }: Props) {
   const { locale, projectId, categoryId } = await params;
   const ctx = await requireProjectContext(projectId);
 
-  if (!ctx.can("script:read")) {
+  if (!ctx.can("resources:read")) {
     return <p className="text-sm text-[var(--danger)]">Нет доступа</p>;
   }
 
@@ -30,7 +30,7 @@ export default async function SettingsResourceCategoryPage({ params }: Props) {
         locale={locale}
         projectType={ctx.project.type}
         category={category}
-        canWrite={ctx.can("script:write")}
+        canWrite={ctx.can("resources:write")}
         canFinanceRead={ctx.canFinanceRead({ categoryId })}
         canFinanceWrite={ctx.canFinanceWrite({ categoryId })}
       />

@@ -66,7 +66,7 @@ export async function saveDefaultBudgetItemsAction(
         select: { defaultBudgetItemId: true, overtimeBudgetItemId: true },
       });
     } else if (target === "location") {
-      if (!ctx.can("script:write") || !ctx.canFinanceWrite("locations")) {
+      if (!ctx.can("locations:write") || !ctx.canFinanceWrite("locations")) {
         return { error: "Недостаточно прав" };
       }
       await assertInProject("Location", entityId, projectId);
@@ -85,7 +85,7 @@ export async function saveDefaultBudgetItemsAction(
           mileageBudgetItemId: true,
         },
       });
-      if (!ctx.can("script:write") || !ctx.canFinanceWrite({ categoryId: item.categoryId })) {
+      if (!ctx.can("resources:write") || !ctx.canFinanceWrite({ categoryId: item.categoryId })) {
         return { error: "Недостаточно прав" };
       }
       current = item;

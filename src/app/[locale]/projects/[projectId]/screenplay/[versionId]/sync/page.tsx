@@ -13,7 +13,7 @@ export default async function ScreenplaySyncPage({ params }: Props) {
   const { locale, projectId, versionId } = await params;
   const ctx = await requireProjectContext(projectId);
 
-  if (!ctx.can("script:write")) {
+  if (!ctx.can("screenplay:write")) {
     return (
       <p className="text-sm text-[var(--danger)]">
         Нет доступа: обновить либретто из версии можно только с правом правки сценария

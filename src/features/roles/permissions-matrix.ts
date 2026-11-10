@@ -1,4 +1,6 @@
 export const PERMISSION_SECTIONS = [
+  /** Сценарий: версии, импорт, словарь, сравнение, «Файлы» проекта. */
+  { id: "screenplay", label: "Сценарий" },
   { id: "scenes", label: "Сцены (либретто)" },
   { id: "script_import", label: "Импорт сценария" },
   { id: "schedule", label: "КПП и вызывные" },
@@ -8,9 +10,12 @@ export const PERMISSION_SECTIONS = [
   { id: "calendar", label: "Календарь препродакшена" },
   { id: "post_edit_timing", label: "Хронометраж монтажа" },
   { id: "actors", label: "Актёры" },
+  /** Персонажи без кастинга: кандидаты и контакты актёров — по праву «Актёры». */
   { id: "characters", label: "Персонажи" },
+  /** Объекты, подобъекты и скаут; фин. колонки — ставки объектов. */
   { id: "locations", label: "Объекты и места" },
-  { id: "elements", label: "Прочие ресурсы (новые категории)" },
+  /** «Настройки → Ресурсы»: категории и позиции; фин. колонки — ставки категорий без своей строки. */
+  { id: "elements", label: "Ресурсы" },
   { id: "smeta_all", label: "Сметы — просмотр всех" },
   { id: "reports", label: "Производственные отчёты" },
   { id: "finance", label: "Финансы" },
@@ -200,8 +205,11 @@ export function buildViewerMatrix(): PermissionMatrix {
 export function parsePermissionMatrix(raw: unknown): PermissionMatrix {
   const base = buildEmptyMatrix();
   if (!raw || typeof raw !== "object") return base;
+  const doc = raw as Record<string, unknown>;
   for (const section of PERMISSION_SECTIONS) {
-    const value = (raw as Record<string, unknown>)[section.id];
+    // «Сценарий» отделён от «Сцен» миграцией 20261111120000. Роль без этого раздела сохранена
+    // старым кодом (окно выкатки) — сценарий для неё, как раньше, по «Сценам».
+    const value = doc[section.id] ?? (section.id === "screenplay" ? doc.scenes : undefined);
     if (!value || typeof value !== "object") continue;
     const v = value as Record<string, unknown>;
     base[section.id] = restrictSectionFlags(section.id, {

@@ -34,7 +34,11 @@ const sceneBriefSelect = {
   },
 } as const;
 
-export async function listCharactersWithCasting(projectId: string) {
+/**
+ * `canReadCast` — право «Актёры» (`cast:read`). Без него число кандидатов не уходит в браузер
+ * (0): с одними «Персонажами» кастинг не виден. Имя утверждённого актёра остаётся.
+ */
+export async function listCharactersWithCasting(projectId: string, canReadCast: boolean) {
   const characters = await prisma.character.findMany({
     where: { projectId },
     include: {
@@ -86,10 +90,21 @@ export async function listCharactersWithCasting(projectId: string) {
             .join(" ")
         : null;
 
+    // Запись кандидата, актёр и счётчики нужны только здесь, для имени и числа — в браузер не уходят:
+    // в кандидате заметки и оценка, их видят только с правом «Актёры».
+    const {
+      castingCandidates: _candidates,
+      actors: _actors,
+      _count: _counts,
+      ...open
+    } = pickFinanceFields(c, CHARACTER_FIELDS, false);
+    void _candidates;
+    void _actors;
+    void _counts;
     return {
-      ...pickFinanceFields(c, CHARACTER_FIELDS, false),
+      ...open,
       sceneCount: c._count.scenes,
-      candidateCount: c._count.castingCandidates,
+      candidateCount: canReadCast ? c._count.castingCandidates : 0,
       planSeconds,
       isApproved,
       approvedPersonName,
@@ -112,11 +127,16 @@ export type CharacterEditSource = Pick<
   | "costumeOffsetMin"
 >;
 
-/** `canFinanceRead` — фин. просмотр актёров (`ctx.canFinanceRead("actors")`). */
+/**
+ * `canFinanceRead` — фин. просмотр актёров (`ctx.canFinanceRead("actors")`).
+ * `canReadCast` — право «Актёры» (`cast:read`). Без него кандидаты, карточка актёра и снимок
+ * (телефоны, агент) не уходят в браузер — только имя утверждённого актёра.
+ */
 export async function getCharacterDetail(
   projectId: string,
   characterId: string,
   canFinanceRead: boolean,
+  canReadCast: boolean,
 ) {
   const character = await prisma.character.findFirst({
     where: { id: characterId, projectId },
@@ -161,8 +181,13 @@ export async function getCharacterDetail(
     (sum, sc) => sum + (sc.scene.cutAt ? 0 : (sc.scene.planSeconds ?? 0)),
     0,
   );
+  const approvedCandidate = character.castingCandidates.find((c) => c.status === "APPROVED");
+  const approvedSource = snapshot ?? approvedCandidate?.person ?? null;
+  const approvedActorName = approvedSource
+    ? [approvedSource.lastName, approvedSource.firstName].filter(Boolean).join(" ") || null
+    : null;
 
-  return {
+  const detail = {
     ...pickFinanceFields(character, CHARACTER_FIELDS, false),
     castingCandidates: character.castingCandidates.map((c) => ({
       ...c,
@@ -209,5 +234,13 @@ export async function getCharacterDetail(
       ? pickFinanceFields(snapshot, CAST_SNAPSHOT_FIELDS, canFinanceRead)
       : null,
     planSeconds,
+    approvedActorName,
+  };
+  if (canReadCast) return detail;
+  return {
+    ...detail,
+    castingCandidates: [] as typeof detail.castingCandidates,
+    actors: [] as typeof detail.actors,
+    snapshot: null,
   };
 }

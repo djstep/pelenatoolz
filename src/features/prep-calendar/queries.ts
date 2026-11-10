@@ -66,7 +66,7 @@ export function calendarRights(can: (permission: Permission) => boolean): Calend
     canWrite: can("calendar:write"),
     canReadCast: can("cast:read"),
     canReadCrew: can("crew:read"),
-    canReadLocations: can("script:read"),
+    canReadLocations: can("locations:read"),
     canReadSchedule: can("schedule:read"),
   };
 }
