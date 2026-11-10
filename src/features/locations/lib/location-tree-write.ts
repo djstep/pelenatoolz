@@ -1,5 +1,5 @@
 import "server-only";
-import { parsePlace } from "@/features/import/normalize/heading";
+import { parsePlace, usesLegacySlash } from "@/features/import/normalize/heading";
 import { cleanSpaces, compareKey } from "@/features/import/normalize/text";
 import type { prisma } from "@/shared/db/prisma";
 
@@ -98,7 +98,9 @@ export async function ensurePlace(
   place: string,
   created: CreatedLocation[],
 ) {
-  const pieces = parsePlace(cleanSpaces(place).toUpperCase().slice(0, 300));
+  const text = cleanSpaces(place).toUpperCase().slice(0, 300);
+  // Одна шапка: старая запись («КВАРТИРА/СПАЛЬНЯ///КОРИДОР») — по «///» в ней самой.
+  const pieces = parsePlace(text, { legacySlash: usesLegacySlash([text]) });
   let first: { id: string; name: string } | null = null;
   for (const piece of pieces) {
     const object = await findOrCreateObject(tx, projectId, piece.object, null, created);
