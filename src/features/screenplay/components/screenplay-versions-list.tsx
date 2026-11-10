@@ -232,7 +232,7 @@ export function ScreenplayVersionsList({
         </div>
       ) : (
         <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
-          <table className="screenplay-versions-table w-full min-w-[52rem] text-left text-sm">
+          <table className="screenplay-versions-table w-full min-w-[60rem] text-left text-sm">
             <colgroup>
               <col className="screenplay-versions-col-num" />
               <col className="screenplay-versions-col-name" />
@@ -275,7 +275,8 @@ export function ScreenplayVersionsList({
                       if (canWrite && !version.isLocked) event.stopPropagation();
                     }}
                   >
-                    <div className="flex items-center gap-2">
+                    {/* Узкая колонка: плашки переносятся под название, не налезают на хронометраж. */}
+                    <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
                       <ScriptVersionTitleEditor
                         projectId={projectId}
                         versionId={version.id}
@@ -283,6 +284,7 @@ export function ScreenplayVersionsList({
                         title={version.title}
                         canWrite={canWrite && !version.isLocked}
                         variant="table"
+                        className="min-w-0 max-w-full"
                       />
                       {version.isLocked ? (
                         <span

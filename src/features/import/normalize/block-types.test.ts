@@ -507,6 +507,91 @@ describe("строка «Персонажи:» по тексту", () => {
   });
 });
 
+describe("перечень персонажей без «Персонажи:» — имена заглавными сразу под шапкой", () => {
+  const types = (list: DocxParagraph[]) => classify(list).blocks.map((b) => b.type);
+
+  test("один персонаж: перечень, следующий абзац — описание", () => {
+    assert.deepEqual(
+      types([
+        paragraph("2. ИНТ. ДОМ. ДЕТСКАЯ — РАССВЕТ (00:45)"),
+        paragraph("АННА"),
+        paragraph("На столе детской комнаты стоит лампа-ночник."),
+      ]),
+      ["SLUGLINE", "SCENE_CAST", "ACTION"],
+    );
+  });
+
+  test("несколько персонажей, в том числе пять имён и пробел в конце", () => {
+    assert.deepEqual(
+      types([
+        paragraph("4. ИНТ. ДОМ. КУХНЯ — УТРО (02:30)"),
+        paragraph("АННА, МАМА, ПАПА, СОФИЯ "),
+        paragraph("Просторная кухня немного захламлена."),
+        paragraph("10. ИНТ. ДОМ. ПРИХОЖАЯ / ДЕТСКАЯ — ДЕНЬ (02:10)"),
+        paragraph("АННА, МАМА, ПАПА, СОФИЯ, ДИАНА"),
+        paragraph("У входа папа надевает куртку."),
+      ]),
+      ["SLUGLINE", "SCENE_CAST", "ACTION", "SLUGLINE", "SCENE_CAST", "ACTION"],
+    );
+  });
+
+  test("сцена без персонажей: сразу описание", () => {
+    assert.deepEqual(
+      types([
+        paragraph("1. НАТ. ЗАГОРОДНЫЙ ДОМ — РАССВЕТ (00:15)"),
+        paragraph("Пасмурное утро ноября."),
+        paragraph("АННА"),
+        paragraph("Привет."),
+      ]),
+      ["SLUGLINE", "ACTION", "CHARACTER", "DIALOGUE"],
+    );
+  });
+
+  test("перечень, описание, потом реплика — реплика распознаётся", () => {
+    assert.deepEqual(
+      types([
+        paragraph("3. ИНТ. ДОМ. КОРИДОР — УТРО (01:05)"),
+        paragraph("АННА, МАМА"),
+        paragraph("Сквозь темный коридор виднеется проем."),
+        paragraph("МАМА"),
+        paragraph("Останься сегодня."),
+      ]),
+      ["SLUGLINE", "SCENE_CAST", "ACTION", "CHARACTER", "DIALOGUE"],
+    );
+  });
+
+  test("имя со стилем, отступом или скобками под шапкой — по-прежнему реплика", () => {
+    assert.deepEqual(
+      types([
+        paragraph("ИНТ. КУХНЯ — ДЕНЬ"),
+        paragraph("АННА", { styleIds: ["c"], styleNames: ["Имя героя"] }),
+        paragraph("Привет.", { styleIds: ["d"], styleNames: ["Реплика"] }),
+        paragraph("ИНТ. КУХНЯ — НОЧЬ"),
+        paragraph("АННА (ЗК)"),
+        paragraph("Привет."),
+        paragraph("ИНТ. КУХНЯ — УТРО"),
+        paragraph("АННА", { align: "center" }),
+        paragraph("Привет."),
+      ]),
+      ["SLUGLINE", "CHARACTER", "DIALOGUE", "SLUGLINE", "CHARACTER", "DIALOGUE", "SLUGLINE", "CHARACTER", "DIALOGUE"],
+    );
+  });
+
+  test("не перечень: строчные буквы, фраза с точкой, переход", () => {
+    assert.deepEqual(
+      types([
+        paragraph("ИНТ. КУХНЯ — ДЕНЬ"),
+        paragraph("Анна, Мама"),
+        paragraph("ИНТ. КУХНЯ — НОЧЬ"),
+        paragraph("ТЕМНО."),
+        paragraph("ИНТ. КУХНЯ — УТРО"),
+        paragraph("ЗТМ"),
+      ]).filter((t) => t !== "SLUGLINE"),
+      ["ACTION", "ACTION", "TRANSITION"],
+    );
+  });
+});
+
 describe("лимиты распаковки и проверка по содержимому", () => {
   const isCode = (code: string) => (error: unknown) =>
     error instanceof DocxReadError && error.code === code;

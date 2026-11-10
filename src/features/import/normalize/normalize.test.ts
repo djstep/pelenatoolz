@@ -834,6 +834,30 @@ describe("имена, реплики, строка «Персонажи» (со�
     assert.equal(result.blocks[1]!.text, "Персонажи: МАМА, АННА");
   });
 
+  test("перечень заглавными под шапкой: каждый герой один раз, текст строки как в файле", () => {
+    const result = normalizeDocx(
+      p("1. НАТ. ДВОР — РАССВЕТ (00:15)") + p("Пасмурное утро.") +
+        p("2. ИНТ. ДЕТСКАЯ — РАССВЕТ (00:45)") + p("АННА") + p("На столе стоит ночник.") +
+        p("3. ИНТ. КУХНЯ — УТРО (02:30)") + p("АННА, МАМА,  ПАПА, СОФИЯ, АННА") + p("Завтракают.") +
+        p("МАМА") + p("Ешь кашу."),
+    );
+    assert.deepEqual(
+      result.characters.map((c) => [c.name, c.scenes]).sort(),
+      [["АННА", [1, 2]], ["МАМА", [2]], ["ПАПА", [2]], ["СОФИЯ", [2]]],
+    );
+    assert.deepEqual(result.scenes.map((s) => s.castLine), [null, ["АННА"], ["АННА", "МАМА", "ПАПА", "СОФИЯ"]]);
+    const cast = result.blocks.filter((b) => b.type === "SCENE_CAST");
+    assert.deepEqual(cast.map((b) => b.text), ["АННА", "АННА, МАМА, ПАПА, СОФИЯ, АННА"]);
+    assert.deepEqual(
+      result.blocks.filter((b) => b.sceneIndex === 1).map((b) => b.type),
+      ["SLUGLINE", "SCENE_CAST", "ACTION"],
+    );
+    assert.deepEqual(
+      result.blocks.filter((b) => b.sceneIndex === 2).map((b) => [b.type, b.speaker]),
+      [["SLUGLINE", null], ["SCENE_CAST", null], ["ACTION", null], ["CHARACTER", "МАМА"], ["DIALOGUE", "МАМА"]],
+    );
+  });
+
   test("ремарка после реплики и второй абзац — та же реплика", () => {
     const result = normalizeDocx(
       p("1. ИНТ. КУХНЯ — ДЕНЬ") + p("АННА (5)") + p("Привет.") + p("(пауза)") + p("Пока.") + p("Анна уходит."),

@@ -1480,8 +1480,9 @@ main {
   width: 3rem;
 }
 
+/* Название шире: плашка «Текущая» и кнопка «Сделать текущей» помещаются в ячейку. */
 .screenplay-versions-col-name {
-  width: 14%;
+  width: 16%;
 }
 
 .screenplay-versions-col-timing {
@@ -1501,7 +1502,7 @@ main {
 }
 
 .screenplay-versions-col-note {
-  width: 22%;
+  width: 20%;
   min-width: 10rem;
 }
 

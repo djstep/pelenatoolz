@@ -164,6 +164,18 @@ export function isCastLineText(text: string) {
   return CAST_LINE_RE.test(cleanForMatch(text));
 }
 
+/**
+ * Перечень персонажей без «Персонажи:»: «АННА» или «АННА, МАМА, СОФИЯ» — каждое имя
+ * заглавными. Строка со скобками («АННА (ЗК)», «АННА (5)») — имя перед репликой, не перечень.
+ */
+export function isCastListText(text: string) {
+  const t = cleanForMatch(text);
+  if (isSluglineText(t) || isTransitionText(t) || isNoteText(t)) return false;
+  if (/[()]/.test(t)) return false;
+  const parts = t.split(/[,;]/).map((part) => part.trim());
+  return parts.every((part) => part !== "" && isUppercaseName(part));
+}
+
 function isParentheticalText(text: string) {
   const t = cleanForMatch(text);
   return t.length >= 2 && t.startsWith("(") && t.endsWith(")");
@@ -203,6 +215,15 @@ function styleType(paragraph: DocxParagraph) {
 
 function bucket(indent: number) {
   return Math.round(indent / INDENT_BUCKET);
+}
+
+/** Абзац без отступа и без центровки: тип решает только текст. */
+function isPlainParagraph(paragraph: DocxParagraph) {
+  return (
+    bucket(paragraph.indentLeft) === 0 &&
+    paragraph.align !== "center" &&
+    paragraph.align !== "right"
+  );
 }
 
 /**
@@ -338,10 +359,12 @@ export function classifyParagraphs(paragraphs: DocxParagraph[]): BlockTypingResu
     const previous = blocks.length > 0 ? blocks[blocks.length - 1]!.type : null;
 
     // «Персонажи: …» сразу после шапки — строка персонажей, даже без стиля.
+    // Без стиля и отступа строка из имён заглавными сразу после шапки — тоже перечень:
+    // реплика может начаться только после первого описания.
     if (
       previous === "SLUGLINE" &&
-      (!byStyle || byStyle.type === "ACTION") &&
-      isCastLineText(text)
+      (((!byStyle || byStyle.type === "ACTION") && isCastLineText(text)) ||
+        (!byStyle && isPlainParagraph(paragraph) && isCastListText(text)))
     ) {
       blocks.push({
         ...base,
