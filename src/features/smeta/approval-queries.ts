@@ -846,7 +846,8 @@ export async function getDepartmentVersion(
     workbook,
     sheetsMeta: [{ id: sheetKey, name: v.sheetName ?? "Смета", sortOrder: 0, pinned: false }],
   };
-  return { ...meta, format: "SHEET", lines: v.lines.map(sheetLineSource), sheetBook };
+  // Коды строк на экран не идут (они — только в Excel).
+  return { ...meta, format: "SHEET", lines: v.lines.map((l) => ({ ...sheetLineSource(l), code: "" })), sheetBook };
 }
 
 /** Сравнение двух версий цеха: что добавлено, удалено, изменено (по суммам и полям). */

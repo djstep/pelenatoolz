@@ -43,7 +43,7 @@ export function BudgetItemsVersionView({ snapshot }: { snapshot: ItemsSnapshot }
       ) : null}
 
       <section className="overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--surface)]">
-        <table className="w-full min-w-[860px] table-fixed text-sm" aria-label="Утверждённая версия">
+        <table className="w-full min-w-[1040px] table-fixed text-sm xl:min-w-0" aria-label="Утверждённая версия">
           <colgroup>
             <col />
             <col className="w-[110px]" />

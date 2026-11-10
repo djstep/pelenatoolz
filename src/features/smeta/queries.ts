@@ -632,6 +632,9 @@ export async function persistDepartmentBudget(
       .filter((s) => s.data && storedJson.get(s.key) !== stableJson(s.data))
       .map((s) => s.key),
   );
+  // Основной лист старой табличной сметы больше не правится: смета ведётся по статьям, а вкладка
+  // «Черновики» его не показывает. Прислали его данные — подделанный или устаревший запрос.
+  if (mainKey && (dataChanged.has(mainKey) || incoming.some((s) => s.key === mainKey))) return { error: "bad_sheets" };
   const metaChanged = incoming.filter((s) => {
     const old = storedByKey.get(s.key);
     return old && (old.name !== s.name || old.sortOrder !== s.sortOrder);

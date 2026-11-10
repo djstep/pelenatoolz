@@ -9,9 +9,12 @@ import {
   canReadDepartmentSmeta,
   type SmetaAccessContext,
 } from "@/features/smeta/lib/smeta-access";
-import type { BudgetItemOption } from "@/features/smeta/lib/budget-item-option";
+import { budgetItemPath, type BudgetItemOption } from "@/features/smeta/lib/budget-item-option";
 import { ACTIVE_BUDGET_ITEM, isItemArchived } from "@/features/smeta/lib/item-where";
 import { prisma } from "@/shared/db/prisma";
+
+/** Статья и подстатья строки — для подписи без кода. */
+const PATH_SELECT = { select: { name: true, article: { select: { templateArticle: { select: { name: true } } } } } } as const;
 
 /** Цеха, чьи сметы пользователь видит: "all" или список id. */
 export function visibleDepartments(access: SmetaAccessContext): "all" | readonly string[] {
@@ -36,16 +39,16 @@ export async function listVisibleBudgetItems(
     },
     select: {
       id: true,
-      code: true,
       name: true,
       department: { select: { name: true } },
+      subarticle: PATH_SELECT,
     },
     orderBy: [{ department: { sortOrder: "asc" } }, { sortOrder: "asc" }],
   });
   return rows.map((r) => ({
     id: r.id,
-    code: r.code,
     name: r.name,
+    path: budgetItemPath(r),
     departmentName: r.department.name,
     archived: false,
   }));
@@ -66,11 +69,11 @@ export async function describeBudgetItems(
     where: { projectId, id: { in: unique } },
     select: {
       id: true,
-      code: true,
       name: true,
       departmentId: true,
       archivedAt: true,
       department: { select: { name: true } },
+      subarticle: PATH_SELECT,
     },
   });
   const out: Record<string, BudgetItemOption> = {};
@@ -78,12 +81,12 @@ export async function describeBudgetItems(
     out[r.id] = canReadDepartmentSmeta(access, r.departmentId)
       ? {
           id: r.id,
-          code: r.code,
           name: r.name,
+          path: budgetItemPath(r),
           departmentName: r.department.name,
           archived: r.archivedAt !== null,
         }
-      : { id: r.id, code: "", name: "", departmentName: "", archived: false, hidden: true };
+      : { id: r.id, name: "", path: "", departmentName: "", archived: false, hidden: true };
   }
   return out;
 }

@@ -335,6 +335,8 @@ async function allScreens(): Promise<Screen[]> {
   const p = (name: string, rest: string, fit = false): Screen => ({ name, path: projectPath(ctx, rest), fit });
   const db = e2eDb();
   const actor = await db.actor.findFirst({ where: { projectId: ctx.projectId }, select: { id: true } });
+  // Смета по статьям (сид волны «Смета по статьям»): цех с утверждённой версией по статьям.
+  const sound = await db.department.findFirst({ where: { projectId: ctx.projectId, name: "Звуковой цех" }, select: { id: true } });
   await db.$disconnect();
   const dep = ctx.smetaDepartmentId ?? ctx.departmentId;
   const fitted = new Set(["screenplay-version"]);
@@ -353,6 +355,10 @@ async function allScreens(): Promise<Screen[]> {
     p("smeta-editor", `/smeta/${dep}`, true),
     p("smeta-review", `/smeta/${dep}/review`),
     p("smeta-versions", `/smeta/${dep}/versions`),
+    p("smeta-drafts", `/smeta/${dep}?tab=drafts`, true),
+    p("smeta-template", "/smeta/template"),
+    p("smeta-summary-articles", "/smeta/summary?drafts=1&view=articles"),
+    ...(sound ? [p("smeta-version-items", `/smeta/${sound.id}/versions/1`)] : []),
   ];
 }
 
@@ -425,8 +431,11 @@ test.describe("design crawl", () => {
         const height = width === 390 ? 844 : 900;
         const authed = await browser.newContext({ storageState: storageStatePath("producer"), viewport: { width, height } });
         const anonymous = await browser.newContext({ viewport: { width, height } });
-        const a = await crawl(await authed.newPage(), await allScreens(), theme, width);
-        const b = await crawl(await anonymous.newPage(), PUBLIC_SCREENS, theme, width);
+        // DESIGN_FILTER — только экраны, чьё имя начинается с него (например, «smeta»).
+        const only = process.env.DESIGN_FILTER ?? "";
+        const pick = (list: Screen[]) => (only ? list.filter((s) => s.name.startsWith(only) || s.name === "plan-fact") : list);
+        const a = await crawl(await authed.newPage(), pick(await allScreens()), theme, width);
+        const b = await crawl(await anonymous.newPage(), only ? [] : PUBLIC_SCREENS, theme, width);
         await authed.close();
         await anonymous.close();
         writeFileSync(

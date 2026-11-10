@@ -300,7 +300,7 @@ export function ItemsSummaryView({
       {recalcPanel}
 
       <section className="overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--surface)]">
-        <table className="w-full min-w-[860px] table-fixed text-sm" aria-label="Сводная по сметам">
+        <table className="w-full min-w-[1000px] table-fixed text-sm xl:min-w-0" aria-label="Сводная по сметам">
           <colgroup>
             <col />
             <col className="w-[96px]" />

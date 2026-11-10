@@ -47,7 +47,7 @@ export function BudgetItemSelect({
     const q = query.trim().toLocaleLowerCase("ru-RU");
     if (!q) return options;
     return options.filter((o) =>
-      `${o.code} ${o.name} ${o.departmentName}`.toLocaleLowerCase("ru-RU").includes(q),
+      `${o.name} ${o.path} ${o.departmentName}`.toLocaleLowerCase("ru-RU").includes(q),
     );
   }, [options, query]);
   // Первая строка — «без статьи», дальше найденные статьи.
@@ -117,7 +117,7 @@ export function BudgetItemSelect({
           <input
             autoFocus
             value={query}
-            placeholder="Код, наименование или цех…"
+            placeholder="Наименование, статья или цех…"
             className="glass-input w-full rounded-lg px-2 py-1.5 text-sm text-[var(--foreground)] placeholder:text-[var(--muted)]"
             onChange={(e) => {
               setQuery(e.target.value);
@@ -143,11 +143,9 @@ export function BudgetItemSelect({
             >
               {choice ? (
                 <>
-                  <span className="block truncate">
-                    <span className="tabular-nums text-xs">{choice.code}</span> · {choice.name}
-                  </span>
+                  <span className="block truncate">{choice.name}</span>
                   <span className="block truncate text-xs text-[var(--muted-fg)]">
-                    {choice.departmentName}
+                    {choice.departmentName} · {choice.path}
                   </span>
                 </>
               ) : (

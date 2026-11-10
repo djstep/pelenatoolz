@@ -844,3 +844,21 @@ test.describe.serial("смета цеха по статьям: экран", () =
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// Шаг 9. Коды строк не видны и вне сметы: выбор строки в начислениях
+// ---------------------------------------------------------------------------
+
+test("начисления: в выборе строки сметы — название и «статья / подстатья», без внутреннего кода", async ({ page }) => {
+  await page.goto(projectPath(ctx, "/accruals"));
+  await page.getByRole("button", { name: "+ Разовое начисление" }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.locator("#budgetItemId").click();
+  const list = page.getByRole("listbox");
+  // Строка сида «Операторского цеха» — по статье и подстатье; запись старой таблицы — «Прежняя таблица».
+  const operator = list.getByRole("option", { name: /Оператор-постановщик/ });
+  await expect(operator.filter({ hasText: "Операторская группа / Персонал" })).toHaveCount(1);
+  if ((await operator.count()) > 1) await expect(operator.filter({ hasText: "Прежняя таблица" })).toHaveCount(1);
+  expect(await list.innerText()).not.toMatch(/[A-Z]{2,6}-\d{2}/);
+  expect(await page.locator("main").innerText()).not.toMatch(/[A-Z]{2,6}-\d{2}\.\d{2}/);
+});
