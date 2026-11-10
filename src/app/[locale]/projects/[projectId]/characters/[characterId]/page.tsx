@@ -19,14 +19,16 @@ export default async function CharacterDetailPage({ params }: Props) {
   const { locale, projectId, characterId } = await params;
   const ctx = await requireProjectContext(projectId);
 
-  if (!ctx.can("cast:read")) {
+  if (!ctx.can("characters:read")) {
     return <p className="text-sm text-[var(--danger)]">Нет доступа</p>;
   }
 
+  // Кандидаты, актёр, его занятость и каст-лист (с телефонами) — только с правом «Актёры».
+  const canReadCast = ctx.can("cast:read");
   const [character, availability, castBundle] = await Promise.all([
-    getCharacterDetail(projectId, characterId, ctx.canFinanceRead("actors")),
-    getAvailabilityMiniBundle(projectId),
-    loadCastListExportBundle(projectId, characterId, locale),
+    getCharacterDetail(projectId, characterId, ctx.canFinanceRead("actors"), canReadCast),
+    canReadCast ? getAvailabilityMiniBundle(projectId) : null,
+    canReadCast ? loadCastListExportBundle(projectId, characterId, locale) : null,
   ]);
   if (!character) notFound();
 
@@ -43,12 +45,14 @@ export default async function CharacterDetailPage({ params }: Props) {
           castListBundle={
             castBundle ? serializeCastListBundle(castBundle) : null
           }
-          canWriteScript={ctx.can("script:write")}
-          canWriteCast={ctx.can("cast:write")}
+          canWriteScript={ctx.can("characters:write")}
+          canReadScreenplay={ctx.can("screenplay:read")}
+          canReadCast={canReadCast}
+          canWriteCast={canReadCast && ctx.can("cast:write")}
           canFinanceRead={ctx.canFinanceRead("actors")}
           canFinanceWrite={ctx.canFinanceWrite("actors")}
           availabilityMini={
-            actorId
+            actorId && availability
               ? {
                   rowId: availability.rowByActorId[actorId],
                   actorId,

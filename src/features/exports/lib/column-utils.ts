@@ -44,8 +44,8 @@ const EXPORT_LAYOUT_PERMISSIONS: Record<
   ExportLayoutKey,
   { read: Permission; write: Permission }
 > = {
-  libretto: { read: "script:read", write: "script:write" },
-  directorsScript: { read: "script:read", write: "script:write" },
+  libretto: { read: "scenes:read", write: "scenes:write" },
+  directorsScript: { read: "scenes:read", write: "scenes:write" },
   kppFull: { read: "schedule:read", write: "schedule:write" },
   kppShort: { read: "schedule:read", write: "schedule:write" },
   crew: { read: "crew:read", write: "crew:write" },

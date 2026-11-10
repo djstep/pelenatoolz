@@ -19,7 +19,7 @@ export async function deleteDictionaryRuleAction(
   ruleId: string,
 ): Promise<{ error?: string; success?: string }> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:write")) return { error: "Недостаточно прав" };
+  if (!ctx.can("screenplay:write")) return { error: "Недостаточно прав" };
   try {
     await assertInProject("ScriptDictionaryRule", ruleId, projectId);
   } catch (error) {

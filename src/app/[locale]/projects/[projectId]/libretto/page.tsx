@@ -22,7 +22,7 @@ export default async function LibrettoPage({ params }: Props) {
   const { locale, projectId } = await params;
   const ctx = await requireProjectContext(projectId);
 
-  if (!ctx.can("script:read")) {
+  if (!ctx.can("scenes:read")) {
     return <p className="text-sm text-[var(--danger)]">Нет доступа к сценам</p>;
   }
 
@@ -43,7 +43,7 @@ export default async function LibrettoPage({ params }: Props) {
     parentId: l.parent?.id ?? null,
   }));
 
-  const canWrite = ctx.can("script:write");
+  const canWrite = ctx.can("scenes:write");
 
   const sceneResourceCategories = resourceCategories.map((c) => ({
     id: c.id,

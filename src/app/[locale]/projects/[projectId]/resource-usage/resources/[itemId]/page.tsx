@@ -14,7 +14,7 @@ export default async function ResourceUsageResourceDetailPage({
   const { locale, projectId, itemId } = await params;
   const ctx = await requireProjectContext(projectId);
 
-  if (!ctx.can("finance:read") && !ctx.can("script:read")) {
+  if (!ctx.can("finance:read") && !ctx.can("resources:read")) {
     return (
       <p className="text-sm text-[var(--danger)]">Нет доступа к ведомости</p>
     );
@@ -47,7 +47,7 @@ export default async function ResourceUsageResourceDetailPage({
       )}
       cardLabel="Карточка ресурса"
       rows={detail.rows}
-      canEdit={ctx.can("script:write") || ctx.can("finance:write")}
+      canEdit={ctx.can("resources:write") || ctx.can("finance:write")}
     />
   );
 }

@@ -107,6 +107,12 @@ export const createInviteSchema = z.object({
     .pipe(z.email().max(255).optional()),
   roleId: z.string().cuid(),
   expiresInDays: z.coerce.number().int().min(1).max(30).default(7),
+  /** Цех, главой которого человек станет, приняв приглашение. Пусто — без цеха. */
+  departmentId: z
+    .string()
+    .trim()
+    .transform((value) => (value === "" ? undefined : value))
+    .pipe(z.string().cuid().optional()),
 });
 
 export const updateMemberRoleSchema = z.object({

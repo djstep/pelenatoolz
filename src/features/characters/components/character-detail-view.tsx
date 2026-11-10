@@ -50,6 +50,8 @@ export function CharacterDetailView({
   character,
   castListBundle,
   canWriteScript,
+  canReadScreenplay,
+  canReadCast,
   canWriteCast,
   canFinanceRead = false,
   canFinanceWrite = false,
@@ -60,6 +62,10 @@ export function CharacterDetailView({
   character: CharacterDetail;
   castListBundle: CastListExportBundleClient | null;
   canWriteScript: boolean;
+  /** «Сценарий: просмотр» — для кнопки «Сценарий персонажа». */
+  canReadScreenplay: boolean;
+  /** Право «Актёры»: без него нет кандидатов, снимка и карточки актёра — только его имя. */
+  canReadCast: boolean;
   canWriteCast: boolean;
   canFinanceRead?: boolean;
   canFinanceWrite?: boolean;
@@ -144,13 +150,22 @@ export function CharacterDetailView({
             ? formatSecondsMmSs(character.planSeconds)
             : "—"}
         </p>
+        {!canReadCast && character.approvedActorName ? (
+          <p className="mt-1 text-sm">
+            <span className="text-[var(--muted-fg)]">Утверждённый актёр: </span>
+            {character.approvedActorName}
+          </p>
+        ) : null}
         {canWriteScript && (
           <div className="mt-3 flex flex-wrap gap-2">
-            <CharacterScriptButton
-              projectId={projectId}
-              characterId={character.id}
-              characterName={character.name}
-            />
+            {/* Сценарий персонажа собирается из сценария — сервер требует «Сценарий: просмотр». */}
+            {canReadScreenplay ? (
+              <CharacterScriptButton
+                projectId={projectId}
+                characterId={character.id}
+                characterName={character.name}
+              />
+            ) : null}
             {castListBundle ? (
               <CastListExportButton
                 projectId={projectId}
@@ -205,6 +220,7 @@ export function CharacterDetailView({
         </form>
       </section>
 
+      {canReadCast ? (
       <section className="glass-card space-y-4 p-5">
         <div className="flex items-center justify-between gap-3">
           <h2 className="font-semibold">Кандидаты на роль</h2>
@@ -260,6 +276,7 @@ export function CharacterDetailView({
           </ul>
         )}
       </section>
+      ) : null}
 
       {snapshot && availabilityMini?.actorId ? (
         <AvailabilityMiniPreview

@@ -65,7 +65,7 @@ export async function attachCloudLinkAction(
   input: { name: string; url: string },
 ): Promise<CloudActionState> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("project:write") && !ctx.can("script:write")) {
+  if (!ctx.can("project:write") && !ctx.can("screenplay:write")) {
     return { error: "Недостаточно прав" };
   }
 
@@ -104,7 +104,7 @@ export async function deleteCloudFileLinkAction(
   linkId: string,
 ): Promise<CloudActionState> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("project:write") && !ctx.can("script:write")) {
+  if (!ctx.can("project:write") && !ctx.can("screenplay:write")) {
     return { error: "Недостаточно прав" };
   }
 

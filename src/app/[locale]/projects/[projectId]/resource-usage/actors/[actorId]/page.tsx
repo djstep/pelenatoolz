@@ -11,7 +11,7 @@ export default async function ResourceUsageActorDetailPage({ params }: Props) {
   const { locale, projectId, actorId } = await params;
   const ctx = await requireProjectContext(projectId);
 
-  if (!ctx.can("finance:read") && !ctx.can("script:read")) {
+  if (!ctx.can("finance:read") && !ctx.can("scenes:read")) {
     return (
       <p className="text-sm text-[var(--danger)]">Нет доступа к ведомости</p>
     );

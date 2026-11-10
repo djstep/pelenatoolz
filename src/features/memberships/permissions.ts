@@ -10,8 +10,16 @@ export const PERMISSIONS = [
   "project:archive",
   "members:read",
   "members:manage",
-  "script:read",
-  "script:write",
+  "screenplay:read",
+  "screenplay:write",
+  "scenes:read",
+  "scenes:write",
+  "locations:read",
+  "locations:write",
+  "characters:read",
+  "characters:write",
+  "resources:read",
+  "resources:write",
   "schedule:read",
   "schedule:write",
   "callsheet:read",
@@ -25,6 +33,8 @@ export const PERMISSIONS = [
   "cast:read",
   "cast:write",
   "smeta:read_all",
+  "smeta:return",
+  "smeta:settings",
   "report:read",
   "report:write",
   "finance:read",
@@ -57,8 +67,21 @@ const PERMISSION_TO_SECTION: Record<
   "project:archive": { section: "project_settings", action: "manage" },
   "members:read": { section: "members", action: "read" },
   "members:manage": { section: "members", action: "manage" },
-  "script:read": { section: "scenes", action: "read" },
-  "script:write": { section: "scenes", action: "write" },
+  /** Сценарий: версии, импорт, словарь, сравнение, «Файлы» проекта. */
+  "screenplay:read": { section: "screenplay", action: "read" },
+  "screenplay:write": { section: "screenplay", action: "write" },
+  /** Сцены (либретто), номера сцен, выгрузки либретто; персонаж, созданный из сцены. */
+  "scenes:read": { section: "scenes", action: "read" },
+  "scenes:write": { section: "scenes", action: "write" },
+  /** Объекты, подобъекты, схема, скаут. */
+  "locations:read": { section: "locations", action: "read" },
+  "locations:write": { section: "locations", action: "write" },
+  /** Персонажи. Кандидаты, контакты и снимок актёра — дополнительно `cast:read`. */
+  "characters:read": { section: "characters", action: "read" },
+  "characters:write": { section: "characters", action: "write" },
+  /** «Настройки → Ресурсы»: категории и позиции. */
+  "resources:read": { section: "elements", action: "read" },
+  "resources:write": { section: "elements", action: "write" },
   "schedule:read": { section: "schedule", action: "read" },
   "schedule:write": { section: "schedule", action: "write" },
   "callsheet:read": { section: "schedule", action: "read" },
@@ -75,6 +98,10 @@ const PERMISSION_TO_SECTION: Record<
   "cast:write": { section: "actors", action: "write" },
   /** Сметы цехов: просмотр всех (без правки и утверждения). Продюсер видит их и без флага. */
   "smeta:read_all": { section: "smeta_all", action: "read" },
+  /** Вернуть смету главе с комментарием — смету, которую видишь. Утверждает только продюсер. */
+  "smeta:return": { section: "smeta_return", action: "access" },
+  /** Переменные, резерв, агентские и справочники сметы. Продюсер может и без флага. */
+  "smeta:settings": { section: "smeta_settings", action: "access" },
   "report:read": { section: "reports", action: "read" },
   "report:write": { section: "reports", action: "write" },
   "finance:read": { section: "finance", action: "finance" },
@@ -93,6 +120,40 @@ export function hasPermission(
 ): boolean {
   const mapping = PERMISSION_TO_SECTION[permission];
   return can(matrix, mapping.section, mapping.action);
+}
+
+/**
+ * Права бывшего общего раздела «Сцены»: картинки к объектам, скауту, персонажам и сценам
+ * загружает тот, кто правит хоть один из этих разделов.
+ */
+export const CONTENT_WRITE_PERMISSIONS: readonly Permission[] = [
+  "screenplay:write",
+  "scenes:write",
+  "locations:write",
+  "characters:write",
+  "resources:write",
+];
+
+/**
+ * Быстрое создание «по названию» из раздела, который человек правит: пустая запись — только
+ * название. Детали (адрес, ставки, контакты) — по-прежнему только с правкой своего раздела.
+ */
+export const QUICK_CREATE_PERMISSIONS = {
+  /** Персонаж из карточки сцены или из реплики сценария. */
+  character: ["characters:write", "scenes:write", "screenplay:write"],
+  /** Объект и подобъект из карточки сцены. */
+  location: ["locations:write", "scenes:write"],
+  /** Объект и подобъекты из шапки сценария. */
+  place: ["locations:write", "screenplay:write"],
+  /** Позиция ресурса из карточки сцены. */
+  resourceItem: ["resources:write", "scenes:write"],
+} as const satisfies Record<string, readonly Permission[]>;
+
+export function canQuickCreate(
+  can: (permission: Permission) => boolean,
+  target: keyof typeof QUICK_CREATE_PERMISSIONS,
+): boolean {
+  return QUICK_CREATE_PERMISSIONS[target].some((p) => can(p));
 }
 
 export function canManageMembers(matrix: PermissionMatrix): boolean {

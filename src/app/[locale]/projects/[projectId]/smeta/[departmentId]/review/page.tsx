@@ -10,6 +10,7 @@ import { requireProjectContext } from "@/features/projects/lib/project-context";
 import {
   canApproveSmeta,
   canReadDepartmentSmeta,
+  canReturnSmeta,
 } from "@/features/smeta/lib/smeta-access";
 import { prisma } from "@/shared/db/prisma";
 import { formatDateTimeShort } from "@/shared/i18n/format-date";
@@ -39,7 +40,8 @@ export default async function BudgetReviewPage({ params }: Props) {
   const canApprove = canApproveSmeta(ctx);
   // Строки без суммы и пустая смета не утверждаются — сервер тоже откажет.
   const canApproveNow = canApprove && info.status === "SUBMITTED" && incomplete === 0 && lineCount > 0;
-  const canReturn = canApprove && (info.status === "SUBMITTED" || changedAfterSubmit);
+  const canReturn =
+    canReturnSmeta(ctx, department.id) && (info.status === "SUBMITTED" || changedAfterSubmit);
   const beforeLabel = info.lastVersion
     ? `утверждённой версии ${info.lastVersion.number}`
     : "пустого плана";

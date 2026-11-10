@@ -74,7 +74,7 @@ export async function loadScreenplayBlocksAction(
   versionId?: string,
 ) {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:read")) {
+  if (!ctx.can("screenplay:read")) {
     return { error: "Недостаточно прав" as const };
   }
 
@@ -104,7 +104,7 @@ export async function createFirstScriptVersionAction(
   projectId: string,
 ): Promise<ScreenplayActionState> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:write")) {
+  if (!ctx.can("screenplay:write")) {
     return { error: "Недостаточно прав" };
   }
   if ((await prisma.scriptVersion.count({ where: { projectId } })) > 0) {
@@ -147,7 +147,7 @@ export async function saveScreenplayVersionAction(
   title?: string,
 ): Promise<ScreenplayActionState> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:write")) {
+  if (!ctx.can("screenplay:write")) {
     return { error: "Недостаточно прав" };
   }
 
@@ -200,7 +200,7 @@ export async function duplicateScriptVersionAction(
   title?: string,
 ): Promise<ScreenplayActionState> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:write")) {
+  if (!ctx.can("screenplay:write")) {
     return { error: "Недостаточно прав" };
   }
 
@@ -233,7 +233,7 @@ export async function syncSceneSluglineAction(
   sceneId: string,
 ): Promise<void> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:write")) return;
+  if (!ctx.can("screenplay:write")) return;
   try {
     await assertInProject("Scene", sceneId, projectId);
   } catch (error) {
@@ -257,7 +257,7 @@ export async function exportScreenplayFountainAction(
   versionId: string,
 ): Promise<{ content: string; fileName: string } | { error: string }> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:read")) {
+  if (!ctx.can("screenplay:read")) {
     return { error: "Недостаточно прав" };
   }
 
@@ -277,7 +277,7 @@ export async function exportScreenplayDocxAction(
   versionId: string,
 ): Promise<{ base64: string; fileName: string } | { error: string }> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:read")) {
+  if (!ctx.can("screenplay:read")) {
     return { error: "Недостаточно прав" };
   }
 
@@ -297,7 +297,7 @@ export async function exportScreenplayPrintHtmlAction(
   versionId: string,
 ): Promise<{ html: string; fileName: string } | { error: string }> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:read")) {
+  if (!ctx.can("screenplay:read")) {
     return { error: "Недостаточно прав" };
   }
 
@@ -343,7 +343,7 @@ export async function exportSceneScriptAction(
   | { error: string }
 > {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:read")) {
+  if (!ctx.can("screenplay:read")) {
     return { error: "Недостаточно прав" };
   }
 
@@ -426,7 +426,7 @@ export async function setScriptVersionCurrentAction(
   versionId: string,
 ): Promise<ScreenplayActionState> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:write")) {
+  if (!ctx.can("screenplay:write")) {
     return { error: "Недостаточно прав" };
   }
 
@@ -456,7 +456,7 @@ export async function renameScriptVersionAction(
   title: string,
 ): Promise<ScreenplayActionState> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:write")) {
+  if (!ctx.can("screenplay:write")) {
     return { error: "Недостаточно прав" };
   }
 
@@ -483,7 +483,7 @@ export async function updateScriptVersionNoteAction(
   note: string,
 ): Promise<ScreenplayActionState> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:write")) {
+  if (!ctx.can("screenplay:write")) {
     return { error: "Недостаточно прав" };
   }
 
@@ -510,7 +510,7 @@ export async function setScriptVersionLockedAction(
   locked: boolean,
 ): Promise<ScreenplayActionState> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:write")) {
+  if (!ctx.can("screenplay:write")) {
     return { error: "Недостаточно прав" };
   }
 
@@ -533,7 +533,7 @@ export async function deleteScriptVersionAction(
   versionId: string,
 ): Promise<ScreenplayActionState> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:write")) {
+  if (!ctx.can("screenplay:write")) {
     return { error: "Недостаточно прав" };
   }
 
@@ -565,7 +565,7 @@ export async function listScriptCommentsAction(
   versionId: string,
 ) {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:read")) {
+  if (!ctx.can("screenplay:read")) {
     return { error: "Недостаточно прав" as const };
   }
 
@@ -607,7 +607,7 @@ export async function createScriptCommentAction(
   },
 ): Promise<ScreenplayActionState & { commentId?: string }> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:write")) {
+  if (!ctx.can("screenplay:write")) {
     return { error: "Недостаточно прав" };
   }
 
@@ -649,7 +649,7 @@ export async function replyScriptCommentAction(
   content: string,
 ): Promise<ScreenplayActionState> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:write")) {
+  if (!ctx.can("screenplay:write")) {
     return { error: "Недостаточно прав" };
   }
 
@@ -692,7 +692,7 @@ export async function resolveScriptCommentAction(
   resolved: boolean,
 ): Promise<ScreenplayActionState> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:write")) {
+  if (!ctx.can("screenplay:write")) {
     return { error: "Недостаточно прав" };
   }
 
@@ -717,7 +717,7 @@ export async function deleteScriptCommentAction(
   commentId: string,
 ): Promise<ScreenplayActionState> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:write")) {
+  if (!ctx.can("screenplay:write")) {
     return { error: "Недостаточно прав" };
   }
 
@@ -751,7 +751,7 @@ export async function updateProjectTimingAction(
   pageToMinuteRatio?: number,
 ): Promise<ScreenplayActionState> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:write")) {
+  if (!ctx.can("screenplay:write")) {
     return { error: "Недостаточно прав" };
   }
 

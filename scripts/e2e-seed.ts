@@ -109,6 +109,9 @@ function noFinanceMatrix(): PermissionMatrix {
   const empty = buildEmptyMatrix();
   m.finance = empty.finance;
   m.smeta_all = empty.smeta_all;
+  // Возврат смет и настройки сметы — как у всех, кроме продюсера: выключены.
+  m.smeta_return = empty.smeta_return;
+  m.smeta_settings = empty.smeta_settings;
   m.callsheet_approve = empty.callsheet_approve;
   // Как у всех, кроме продюсера: календарь только смотрят.
   m.calendar = { ...empty.calendar, access: true, read: true };
@@ -188,7 +191,14 @@ async function createProject(users: Record<E2ERoleKey, string>) {
       const roles = new Map<string, string>();
       for (const role of getDefaultProjectRoles()) {
         const row = await tx.projectRoleDefinition.create({
-          data: { projectId, name: role.name, note: role.note, isSystem: role.isSystem, permissions: role.permissions },
+          data: {
+            projectId,
+            name: role.name,
+            note: role.note,
+            isSystem: role.isSystem,
+            permissions: role.permissions,
+            presetKey: role.presetKey,
+          },
         });
         roles.set(role.name, row.id);
       }

@@ -13,7 +13,7 @@ export default async function SettingsResourcesPage({ params }: Props) {
   const { locale, projectId } = await params;
   const ctx = await requireProjectContext(projectId);
 
-  if (!ctx.can("script:read")) {
+  if (!ctx.can("resources:read")) {
     return <p className="text-sm text-[var(--danger)]">Нет доступа</p>;
   }
 
@@ -36,7 +36,7 @@ export default async function SettingsResourcesPage({ params }: Props) {
           projectId={projectId}
           locale={locale}
           categories={categories}
-          canWrite={ctx.can("script:write")}
+          canWrite={ctx.can("resources:write")}
           sections={sections
             // Спецтранспорт правится в своём блоке, «Прочее» — это «без раздела».
             .filter((s) => s.key !== SPECIAL_TRANSPORT_KEY && s.key !== OTHER_SECTION_KEY)

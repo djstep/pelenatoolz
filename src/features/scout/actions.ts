@@ -58,7 +58,7 @@ export async function createScoutCandidateAction(
   formData: FormData,
 ): Promise<ScoutActionState> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:write")) return { error: "Недостаточно прав" };
+  if (!ctx.can("locations:write")) return { error: "Недостаточно прав" };
 
   const locationIds = parseLocationIds(formData);
   // Стоимость — фин. условие объектов: без фин. правки присланное значение отбрасывается.
@@ -115,7 +115,7 @@ export async function updateScoutCandidateAction(
   formData: FormData,
 ): Promise<ScoutActionState> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:write")) return { error: "Недостаточно прав" };
+  if (!ctx.can("locations:write")) return { error: "Недостаточно прав" };
 
   const existing = await prisma.scoutCandidate.findFirst({
     where: { id: candidateId, projectId },
@@ -189,7 +189,7 @@ export async function updateScoutCandidateStatusAction(
   status: ScoutCandidateStatus,
 ) {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:write")) return { error: "Недостаточно прав" };
+  if (!ctx.can("locations:write")) return { error: "Недостаточно прав" };
 
   if (status === ScoutCandidateStatus.APPROVED) {
     try {
@@ -223,7 +223,7 @@ export async function deleteScoutCandidateAction(
   candidateId: string,
 ) {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:write")) return { error: "Недостаточно прав" };
+  if (!ctx.can("locations:write")) return { error: "Недостаточно прав" };
 
   const candidate = await prisma.scoutCandidate.findFirst({
     where: { id: candidateId, projectId },

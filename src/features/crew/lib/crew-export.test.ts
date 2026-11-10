@@ -113,7 +113,7 @@ describe("колонки по правам", () => {
   test("раскладку сохраняет только тот, кому доступны все колонки", () => {
     assert.deepEqual(exportLayoutSavePermissions("crew"), ["crew:write", "crew:contacts", "contracts:read"]);
     assert.equal(exportLayoutPermission("crew", "read"), "crew:read");
-    assert.deepEqual(exportLayoutSavePermissions("libretto"), ["script:write"]);
+    assert.deepEqual(exportLayoutSavePermissions("libretto"), ["scenes:write"]);
   });
 });
 

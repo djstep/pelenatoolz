@@ -44,10 +44,11 @@ function errorOf(result: { error: string } | { data: unknown }) {
 }
 
 describe("права на схему объекта", () => {
-  test("правка — только с «Сценарий: правка», как у карточки объекта", () => {
+  test("правка — только с «Объекты и места: правка», как у карточки объекта", () => {
     const access = (granted: string[]) => ({ can: (p: string) => granted.includes(p) });
-    assert.equal(canEditLocationScheme(access(["script:read"])), false);
-    assert.equal(canEditLocationScheme(access(["script:write"])), true);
+    assert.equal(canEditLocationScheme(access(["locations:read"])), false);
+    assert.equal(canEditLocationScheme(access(["scenes:write", "screenplay:write"])), false);
+    assert.equal(canEditLocationScheme(access(["locations:write"])), true);
   });
 
   test("без права — отказ, база не трогается", async () => {

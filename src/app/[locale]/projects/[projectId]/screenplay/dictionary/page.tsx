@@ -16,7 +16,7 @@ export default async function ScriptDictionaryPage({ params }: Props) {
   const { projectId } = await params;
   const ctx = await requireProjectContext(projectId);
 
-  if (!ctx.can("script:read")) {
+  if (!ctx.can("screenplay:read")) {
     return <p className="text-sm text-[var(--danger)]">Нет доступа к сценарию</p>;
   }
 
@@ -71,7 +71,7 @@ export default async function ScriptDictionaryPage({ params }: Props) {
           они применяются молча. Удалите правило — вопрос задастся снова.
         </p>
       </div>
-      <DictionaryList projectId={projectId} rows={rows} canWrite={ctx.can("script:write")} />
+      <DictionaryList projectId={projectId} rows={rows} canWrite={ctx.can("screenplay:write")} />
     </div>
   );
 }

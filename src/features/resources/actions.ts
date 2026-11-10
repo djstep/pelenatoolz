@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { canQuickCreate } from "@/features/memberships/permissions";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { parseHhMmToMinutes } from "@/shared/i18n/domain-labels";
 import { AuditEntityType } from "@/shared/audit/entity-types";
@@ -134,7 +135,7 @@ export async function createResourceCategoryAction(
   formData: FormData,
 ): Promise<ResourceActionState> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:write")) return { error: "Недостаточно прав" };
+  if (!ctx.can("resources:write")) return { error: "Недостаточно прав" };
 
   const parsed = categorySchema.safeParse({
     name: formData.get("name"),
@@ -148,7 +149,7 @@ export async function createResourceCategoryAction(
 
   // Раздел вызывного по умолчанию (точное название) — только здесь, при создании.
   const section = await checkCategorySection(
-    { canEdit: ctx.can("script:write"), sectionKey: sectionKeyInProject(projectId) },
+    { canEdit: ctx.can("resources:write"), sectionKey: sectionKeyInProject(projectId) },
     formData.get("callSheetSection"),
     { name: parsed.data.name, perShift: parsed.data.perShift ?? false, creating: true },
   );
@@ -200,7 +201,7 @@ export async function updateResourceCategoryAction(
   formData: FormData,
 ): Promise<ResourceActionState> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:write")) return { error: "Недостаточно прав" };
+  if (!ctx.can("resources:write")) return { error: "Недостаточно прав" };
 
   const parsed = categorySchema.safeParse({
     name: formData.get("name"),
@@ -220,7 +221,7 @@ export async function updateResourceCategoryAction(
 
   // Раздел вызывного меняется только руками: из формы, без подбора по названию.
   const section = await checkCategorySection(
-    { canEdit: ctx.can("script:write"), sectionKey: sectionKeyInProject(projectId) },
+    { canEdit: ctx.can("resources:write"), sectionKey: sectionKeyInProject(projectId) },
     formData.get("callSheetSection"),
     { name: parsed.data.name, perShift: parsed.data.perShift ?? false, creating: false },
   );
@@ -272,7 +273,7 @@ export async function deleteResourceCategoryAction(
   categoryId: string,
 ): Promise<{ error?: string }> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:write")) return { error: "Недостаточно прав" };
+  if (!ctx.can("resources:write")) return { error: "Недостаточно прав" };
 
   const itemCount = await prisma.resourceItem.count({
     where: { categoryId, category: { projectId } },
@@ -325,7 +326,7 @@ export async function createResourceItemAction(
   formData: FormData,
 ): Promise<ResourceActionState> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:write")) return { error: "Недостаточно прав" };
+  if (!ctx.can("resources:write")) return { error: "Недостаточно прав" };
 
   const category = await prisma.resourceCategory.findFirst({
     where: { id: categoryId, projectId },
@@ -398,7 +399,7 @@ export async function updateResourceItemAction(
   formData: FormData,
 ): Promise<ResourceActionState> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:write")) return { error: "Недостаточно прав" };
+  if (!ctx.can("resources:write")) return { error: "Недостаточно прав" };
 
   const parsed = itemSchema.safeParse(parseItemForm(formData));
   if (!parsed.success) return { error: "Проверьте данные" };
@@ -497,7 +498,7 @@ export async function deleteResourceItemAction(
   itemId: string,
 ): Promise<{ error?: string }> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:write")) return { error: "Недостаточно прав" };
+  if (!ctx.can("resources:write")) return { error: "Недостаточно прав" };
 
   const usage = await prisma.sceneResourceItem.count({
     where: { itemId, item: { categoryId, category: { projectId } } },
@@ -534,7 +535,8 @@ export async function quickCreateResourceItemAction(
   name: string,
 ): Promise<{ id: string; name: string } | { error: string }> {
   const ctx = await requireProjectContext(projectId);
-  if (!ctx.can("script:write")) return { error: "Недостаточно прав" };
+  // Пустая позиция по названию — и из карточки сцены (см. canQuickCreate).
+  if (!canQuickCreate(ctx.can, "resourceItem")) return { error: "Недостаточно прав" };
 
   const trimmed = name.trim();
   if (!trimmed) return { error: "Пустое название" };

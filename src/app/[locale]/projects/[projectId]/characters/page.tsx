@@ -12,18 +12,21 @@ export default async function CharactersPage({ params }: Props) {
   const { locale, projectId } = await params;
   const ctx = await requireProjectContext(projectId);
 
-  if (!ctx.can("cast:read")) {
+  if (!ctx.can("characters:read")) {
     return <p className="text-sm text-[var(--danger)]">Нет доступа</p>;
   }
 
-  const characters = await listCharactersWithCasting(projectId);
+  const canReadCast = ctx.can("cast:read");
+  const characters = await listCharactersWithCasting(projectId, canReadCast);
 
   return (
     <div className="space-y-6">
       <div>
         <h2 className="font-display text-[27px] font-bold leading-tight">Персонажи</h2>
         <p className="mt-1 text-sm text-[var(--muted-fg)]">
-          Роли по сценарию и утверждённый каст. Подбор кандидатов — в разделе Кастинг.
+          {canReadCast
+            ? "Роли по сценарию и утверждённый каст. Подбор кандидатов — в разделе Кастинг."
+            : "Роли по сценарию и утверждённый каст."}
         </p>
       </div>
       <Card>
@@ -32,7 +35,8 @@ export default async function CharactersPage({ params }: Props) {
           locale={locale}
           projectType={ctx.project.type}
           characters={serializeForClient(characters)}
-          canWrite={ctx.can("script:write")}
+          canWrite={ctx.can("characters:write")}
+          canReadCast={canReadCast}
         />
       </Card>
     </div>

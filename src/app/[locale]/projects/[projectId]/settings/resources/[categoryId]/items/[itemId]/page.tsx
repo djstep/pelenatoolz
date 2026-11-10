@@ -18,7 +18,7 @@ export default async function SettingsResourceItemPage({ params }: Props) {
   const { locale, projectId, categoryId, itemId } = await params;
   const ctx = await requireProjectContext(projectId);
 
-  if (!ctx.can("script:read")) {
+  if (!ctx.can("resources:read")) {
     return <p className="text-sm text-[var(--danger)]">Нет доступа</p>;
   }
 
@@ -52,7 +52,7 @@ export default async function SettingsResourceItemPage({ params }: Props) {
             overtimeBudgetItemId: item.overtimeBudgetItemId ?? null,
             mileageBudgetItemId: item.mileageBudgetItemId ?? null,
           }}
-          canEdit={ctx.can("script:write") && ctx.canFinanceWrite({ categoryId })}
+          canEdit={ctx.can("resources:write") && ctx.canFinanceWrite({ categoryId })}
           showMileage={item.category.tracksMileage}
         />
       ) : null}

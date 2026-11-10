@@ -44,7 +44,7 @@ export async function POST(
   try {
     const ctx = await requireProjectContext(projectId);
     if (
-      !ctx.can("script:write") &&
+      !ctx.can("screenplay:write") &&
       !ctx.can("project:write") &&
       !ctx.can("finance:write") &&
       !ctx.can("contracts:write")

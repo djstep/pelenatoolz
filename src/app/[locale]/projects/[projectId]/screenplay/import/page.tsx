@@ -10,7 +10,7 @@ export default async function ScreenplayImportPage({ params }: Props) {
   const { locale, projectId } = await params;
   const ctx = await requireProjectContext(projectId);
 
-  if (!ctx.can("script:write")) {
+  if (!ctx.can("screenplay:write")) {
     return (
       <p className="text-sm text-[var(--danger)]">
         Нет доступа: импорт сценария доступен только с правом правки сценария

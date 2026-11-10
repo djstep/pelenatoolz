@@ -50,10 +50,10 @@ export function projectFileHeaders(mimeType: string, originalName: string) {
 /** Файл договора или акта открывает и меняет только право на договоры. */
 export function canReadProjectFile(can: Can, contractsOnly: boolean) {
   if (contractsOnly) return can("contracts:read");
-  return can("cast:read") || can("project:read") || can("script:read");
+  return can("cast:read") || can("project:read") || can("screenplay:read");
 }
 
 export function canDeleteProjectFile(can: Can, contractsOnly: boolean) {
-  if (!can("script:write") && !can("project:write")) return false;
+  if (!can("screenplay:write") && !can("project:write")) return false;
   return !contractsOnly || can("contracts:write");
 }

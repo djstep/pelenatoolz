@@ -11,14 +11,21 @@ const can =
 describe("чтение файла проекта", () => {
   test("закрытый файл открывает только право на договоры", () => {
     assert.equal(canReadProjectFile(can("contracts:read"), true), true);
-    assert.equal(canReadProjectFile(can("cast:read", "project:read", "script:read"), true), false);
+    assert.equal(canReadProjectFile(can("cast:read", "project:read", "screenplay:read"), true), false);
   });
 
   test("обычный файл открывают разделы проекта, а не договоры", () => {
-    for (const permission of ["cast:read", "project:read", "script:read"] as const) {
+    for (const permission of ["cast:read", "project:read", "screenplay:read"] as const) {
       assert.equal(canReadProjectFile(can(permission), false), true);
     }
     assert.equal(canReadProjectFile(can("contracts:read"), false), false);
+  });
+
+  test("либретто, объекты, персонажи и ресурсы «Файлы» не открывают — только «Сценарий»", () => {
+    for (const permission of ["scenes:read", "locations:read", "characters:read", "resources:read"] as const) {
+      assert.equal(canReadProjectFile(can(permission), false), false, permission);
+      assert.equal(canDeleteProjectFile(can(permission.replace(":read", ":write") as Permission), false), false, permission);
+    }
   });
 });
 
@@ -94,9 +101,9 @@ test("тип видео по расширению", () => {
 
 describe("удаление файла проекта", () => {
   test("файл договора требует права менять договоры", () => {
-    assert.equal(canDeleteProjectFile(can("script:write"), true), false);
+    assert.equal(canDeleteProjectFile(can("screenplay:write"), true), false);
     assert.equal(canDeleteProjectFile(can("contracts:write"), true), false);
-    assert.equal(canDeleteProjectFile(can("script:write", "contracts:write"), true), true);
+    assert.equal(canDeleteProjectFile(can("screenplay:write", "contracts:write"), true), true);
   });
 
   test("обычный файл удаляется как раньше", () => {

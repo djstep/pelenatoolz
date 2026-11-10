@@ -71,7 +71,6 @@ describe("visibleAuditEntityTypes", () => {
   test("сцены без финансов и договоров — нет финансовых записей", () => {
     const visible = visibleAuditEntityTypes(viewer(readOnly("scenes"))) ?? [];
     assert.ok(visible.includes(AuditEntityType.scene));
-    assert.ok(visible.includes(AuditEntityType.resourceItem));
     for (const type of [
       AuditEntityType.financeOp,
       AuditEntityType.accrual,
@@ -85,6 +84,27 @@ describe("visibleAuditEntityTypes", () => {
     ]) {
       assert.ok(!visible.includes(type), type);
     }
+  });
+
+  test("бывшие «Сцены» разделены: сценарий, объекты, ресурсы, персонажи — каждый по своему праву", () => {
+    const cases: [PermissionSectionId, string[]][] = [
+      ["screenplay", [AuditEntityType.scriptVersion, AuditEntityType.scriptImport, AuditEntityType.projectFile]],
+      ["scenes", [AuditEntityType.scene]],
+      ["locations", [AuditEntityType.location, AuditEntityType.locationPhoto, AuditEntityType.scoutCandidate]],
+      ["elements", [AuditEntityType.resourceCategory, AuditEntityType.resourceItem]],
+      ["characters", [AuditEntityType.character]],
+    ];
+    const all = cases.flatMap(([, types]) => types);
+    for (const [section, own] of cases) {
+      const visible = visibleAuditEntityTypes(viewer(readOnly(section))) ?? [];
+      for (const type of all) {
+        assert.equal(visible.includes(type), own.includes(type), `${section}: ${type}`);
+      }
+    }
+    // Персонажи без «Актёров» — без кандидатов и актёров.
+    const charactersOnly = visibleAuditEntityTypes(viewer(readOnly("characters"))) ?? [];
+    assert.ok(!charactersOnly.includes(AuditEntityType.castingCandidate));
+    assert.ok(!charactersOnly.includes(AuditEntityType.actor));
   });
 
   test("«Наблюдатель»: сметы и цеха не видны", () => {

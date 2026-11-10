@@ -25,8 +25,8 @@ describe("exportLayoutPermission", () => {
 
   test("либретто и режиссёрский сценарий — раздел «Сцены»", () => {
     for (const key of ["libretto", "directorsScript"] as const) {
-      assert.equal(exportLayoutPermission(key, "read"), "script:read");
-      assert.equal(exportLayoutPermission(key, "write"), "script:write");
+      assert.equal(exportLayoutPermission(key, "read"), "scenes:read");
+      assert.equal(exportLayoutPermission(key, "write"), "scenes:write");
     }
   });
 
