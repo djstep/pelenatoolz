@@ -19,6 +19,7 @@ import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { AuditEntityType } from "@/shared/audit/entity-types";
 import { auditMutation } from "@/shared/audit/with-audit";
 import { prisma } from "@/shared/db/prisma";
+import { LOCATION_PARENT_SELECT } from "@/features/locations/lib/location-fields";
 
 export type PrepEventActionResult = {
   error?: string;
@@ -126,7 +127,7 @@ export async function savePrepEventAction(
           locationId: true,
           locationText: true,
           type: { select: { name: true } },
-          location: { select: { name: true, sublocation: true } },
+          location: { select: { name: true, sublocation: true, parent: LOCATION_PARENT_SELECT } },
           participants: { select: { crewMemberId: true, actorId: true, castingPersonId: true } },
           departments: { select: { departmentId: true } },
         },
@@ -172,7 +173,7 @@ export async function savePrepEventAction(
   const location = locationId
     ? await prisma.location.findFirst({
         where: { id: locationId, projectId },
-        select: { name: true, sublocation: true },
+        select: { name: true, sublocation: true, parent: LOCATION_PARENT_SELECT },
       })
     : null;
 

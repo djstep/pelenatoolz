@@ -692,3 +692,43 @@ describe("хронометраж совпавших сцен с новым те�
     assert.deepEqual(result.timingUpdates, []);
   });
 });
+
+describe("план: объекты и подобъекты", () => {
+  const body = [
+    p("1. ИНТ. ДОМ. ДЕТСКАЯ / КОРИДОР — НОЧЬ", "Heading 1"),
+    p("Текст."),
+    p("2. НАТ. ДВОР — ДЕНЬ", "Heading 1"),
+    p("Текст."),
+  ].join("");
+
+  test("новый объект создаётся раньше своих подобъектов, подобъекты ссылаются на него", () => {
+    const empty: ExistingRecords = { characters: [], locations: [], scenes: [] };
+    const result = run(body, empty);
+    const plan = planImport(result, confirmAll(result), empty, TIMING);
+    const titles = plan.locations.map((l) => (l.sublocation ? `${l.name}.${l.sublocation}` : l.name));
+    assert.deepEqual(titles, ["ДОМ", "ДОМ.ДЕТСКАЯ", "ДОМ.КОРИДОР", "ДВОР"]);
+    const home = plan.locations[0]!;
+    assert.equal(home.parent, null);
+    for (const sub of plan.locations.slice(1, 3)) assert.deepEqual(sub.parent, { key: home.key });
+    assert.equal(plan.locations[3]!.parent, null);
+    // Сцена 1 — смежная: два подобъекта, без строки объекта.
+    assert.equal(plan.scenes[0]!.locations.length, 2);
+  });
+
+  test("объект уже есть в проекте — новый подобъект ссылается на его id, объект не создаётся", () => {
+    const existing: ExistingRecords = {
+      characters: [],
+      locations: [
+        { id: "home", name: "ДОМ", sublocation: null },
+        { id: "kids", name: "ДОМ", sublocation: "ДЕТСКАЯ" },
+      ],
+      scenes: [],
+    };
+    const result = run(body, existing);
+    const plan = planImport(result, confirmAll(result), existing, TIMING);
+    const titles = plan.locations.map((l) => (l.sublocation ? `${l.name}.${l.sublocation}` : l.name));
+    assert.deepEqual(titles, ["ДОМ.КОРИДОР", "ДВОР"]);
+    assert.deepEqual(plan.locations[0]!.parent, { id: "home" });
+    assert.deepEqual(plan.scenes[0]!.locations[0], { id: "kids" });
+  });
+});

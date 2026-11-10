@@ -48,7 +48,11 @@ export type PlanMissingScene = { id: string; sortOrder: number; cut: boolean };
 export type ImportPlan = {
   titlePage: TitlePage | null;
   characters: { key: string; name: string }[];
-  locations: { key: string; name: string; sublocation: string | null }[];
+  /**
+   * Новые объекты и подобъекты: `name` — объект, `sublocation` — подобъект. У подобъекта
+   * `parent` — его объект (существующий или созданный этим же импортом, он идёт раньше).
+   */
+  locations: { key: string; name: string; sublocation: string | null; parent: PlanRef | null }[];
   scenes: PlanScene[];
   missing: PlanMissingScene[];
   /** Блоки версии по порядку; `scene` — индекс сцены файла. */
@@ -116,7 +120,11 @@ export function planImport(
     const key = placeKey(object, sub);
     const id = rows.get(key);
     if (id) return { id };
-    if (!locations.has(key)) locations.set(key, { key, name: object, sublocation: sub });
+    if (!locations.has(key)) {
+      // Объект подобъекта — раньше подобъекта: при записи его id уже есть.
+      const parent = sub ? locationRef(object, null) : null;
+      locations.set(key, { key, name: object, sublocation: sub, parent });
+    }
     return { key };
   };
 

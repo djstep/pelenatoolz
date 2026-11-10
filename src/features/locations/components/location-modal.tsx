@@ -9,6 +9,10 @@ import {
   type LocationActionState,
 } from "@/features/locations/actions";
 import type { LocationEditSource } from "@/features/locations/queries";
+import {
+  locationObjectName,
+  locationSubName,
+} from "@/features/locations/lib/format-location";
 import { locationKindLabels } from "@/shared/i18n/domain-labels";
 import { Button } from "@/shared/ui/button";
 import { submitKeepingFields } from "@/shared/ui/forms/submit-keeping-fields";
@@ -28,12 +32,18 @@ export function LocationModal({
   onClose,
   location,
   addresses,
+  objectName,
+  objectKind,
 }: {
   projectId: string;
   open: boolean;
   onClose: () => void;
   location?: LocationEditSource | null;
   addresses: string[];
+  /** Новый подобъект этого объекта («+ подобъект» в списке): название объекта заполнено. */
+  objectName?: string | null;
+  /** Тип нового подобъекта по умолчанию — от объекта. */
+  objectKind?: LocationKind | null;
 }) {
   const isEdit = Boolean(location);
   const bound = location
@@ -56,7 +66,7 @@ export function LocationModal({
       guardUnsaved
       open={open}
       onClose={onClose}
-      title={isEdit ? "Редактирование локации" : "Добавление локации"}
+      title={isEdit ? "Редактирование объекта" : "Добавление объекта"}
       wide
       footer={
         <div className="flex flex-wrap items-center gap-3">
@@ -86,25 +96,30 @@ export function LocationModal({
       <form id="location-form" onSubmit={submitKeepingFields(action)} className="space-y-4">
         <div className="grid gap-4 md:grid-cols-2">
           <div>
-            <Label htmlFor="loc-name">Название локации *</Label>
+            <Label htmlFor="loc-name">Объект *</Label>
             <Input
               id="loc-name"
               name="name"
               required
-              defaultValue={location?.name ?? ""}
+              defaultValue={location ? locationObjectName(location) : (objectName ?? "")}
               placeholder="Госпиталь"
             />
           </div>
           <div>
-            <Label htmlFor="loc-sublocation">Подлокация</Label>
+            <Label htmlFor="loc-sublocation">Подобъект</Label>
             <Input
               id="loc-sublocation"
               name="sublocation"
-              defaultValue={location?.sublocation ?? ""}
+              defaultValue={location ? (locationSubName(location) ?? "") : ""}
               placeholder="Кабинет"
+              autoFocus={Boolean(objectName)}
             />
           </div>
         </div>
+        <p className="-mt-2 text-xs text-[var(--muted-fg)]">
+          Подобъект пустой — объект целиком. Заполнен — подобъект этого объекта (объекта нет — он
+          создастся). Чтобы перенести подобъект в другой объект, смените объект.
+        </p>
 
         <div>
           <Label className="mb-2 block">Тип *</Label>
@@ -115,8 +130,8 @@ export function LocationModal({
                   type="radio"
                   name="locationKind"
                   value={kind}
-                  defaultChecked={location?.locationKind === kind}
-                  required={!location?.locationKind}
+                  defaultChecked={(location ? location.locationKind : objectKind) === kind}
+                  required={!(location ? location.locationKind : objectKind)}
                 />
                 {locationKindLabels[kind]}
               </label>
@@ -175,7 +190,7 @@ export function LocationModal({
 
         <label className="flex items-center gap-2 text-sm text-[var(--muted-fg)]">
           <input type="checkbox" name="applyAddressToSiblings" />
-          Установить адрес для всех подлокаций с тем же названием локации
+          Этот адрес — объекту и всем его подобъектам
         </label>
       </form>
     </Modal>

@@ -10,6 +10,10 @@ import {
   SPECIAL_TRANSPORT_KEY,
   type ElementValues,
 } from "@/features/call-sheets/lib/sections";
+import {
+  formatLocationTitle,
+  type LocationNameSource,
+} from "@/features/locations/lib/format-location";
 import { SHIFT_TIMES } from "@/features/call-sheets/print/print-blocks";
 import { timeSlotTypeLabels } from "@/features/day-docs/lib/slot-labels";
 import { minutesBetweenTimes } from "@/features/day-docs/lib/time-utils";
@@ -164,7 +168,12 @@ type PrintSourceScene = {
   planSeconds: number | null;
   cutAt: Date | string | null;
   locations: {
-    location: { name: string; sublocation: string | null; address: string | null };
+    location: {
+      name: string;
+      sublocation: string | null;
+      parent: { name: string } | null;
+      address: string | null;
+    };
   }[];
   characters: { character: { id: string; name: string } }[];
 };
@@ -247,6 +256,7 @@ export type CallSheetPrintSource = {
     schemeLocation: {
       name: string;
       sublocation: string | null;
+      parent: { name: string } | null;
       address: string | null;
       directions: string | null;
       parking: string | null;
@@ -356,8 +366,8 @@ function personName(lastName: string, firstName: string | null) {
   return joinText([lastName, firstName], " ");
 }
 
-function locationName(location: { name: string; sublocation: string | null }) {
-  return joinText([location.name, location.sublocation], ". ");
+function locationName(location: LocationNameSource) {
+  return text(formatLocationTitle(location, ". "));
 }
 
 function castTransport(

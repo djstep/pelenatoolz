@@ -24,6 +24,7 @@ import { Select } from "@/shared/ui/select";
 import { useActionToast } from "@/shared/ui/toast";
 import { useActionSuccess } from "@/shared/ui/unsaved/use-action-success";
 import { useFormGuard } from "@/shared/ui/unsaved/use-form-guard";
+import { formatLocationTitle } from "@/features/locations/lib/format-location";
 
 type Leader = {
   key: string;
@@ -132,9 +133,7 @@ export function CallSheetSheetEditor({
           ...locations,
           {
             id: callSheet.schemeLocation.id,
-            label: [callSheet.schemeLocation.name, callSheet.schemeLocation.sublocation]
-              .filter(Boolean)
-              .join(". "),
+            label: formatLocationTitle(callSheet.schemeLocation, ". "),
           },
         ]
       : locations;

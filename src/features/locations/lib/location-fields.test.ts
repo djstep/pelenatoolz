@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import {
   LOCATION_FIELDS,
+  LOCATION_PARENT_SELECT,
   SCENE_LOCATION_SELECT,
   SCOUT_SNAPSHOT_FIELDS,
   SCOUT_SNAPSHOT_INPUT_FIELDS,
@@ -82,6 +83,11 @@ describe("объект в сценах (либретто, КПП, вызывно
     const finance: readonly string[] = LOCATION_FIELDS.finance;
     assert.deepEqual(keys.filter((key) => finance.includes(key)), []);
     assert.equal(keys.includes("scoutSnapshot"), false);
+  });
+
+  test("родитель подобъекта — только id и название, без ставок и снимка скаута", () => {
+    assert.deepEqual(LOCATION_PARENT_SELECT, { select: { id: true, name: true } });
+    assert.equal(SCENE_LOCATION_SELECT.parent, LOCATION_PARENT_SELECT);
   });
 
   test("название и вид объекта есть — по ним работают сцены и фильтры либретто", () => {

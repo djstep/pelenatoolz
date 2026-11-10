@@ -7,6 +7,8 @@ import {
 } from "@/features/accruals/lib/counterparty-hint";
 import { prisma } from "@/shared/db/prisma";
 import { serializeForClient } from "@/shared/db/serialize-decimal";
+import { locationObjectName } from "@/features/locations/lib/format-location";
+import { LOCATION_PARENT_SELECT } from "@/features/locations/lib/location-fields";
 import type { EntityFinanceTarget } from "@/features/roles/permissions-matrix";
 
 export type AccrualFilters = {
@@ -181,6 +183,7 @@ export async function listShiftEntryRows(
       select: {
         id: true,
         name: true,
+        parent: LOCATION_PARENT_SELECT,
         defaultBudgetItemId: true,
         shiftRate: true,
         taxPercent: true,
@@ -261,10 +264,10 @@ export async function listShiftEntryRows(
     rows.push({
       key,
       kind: "location",
-      name: l.name,
+      name: locationObjectName(l),
       hint: null,
       budgetItemId: l.defaultBudgetItemId!,
-      counterpartyId: pickCounterparty({ locationId: l.id, names: [l.name] }, hints),
+      counterpartyId: pickCounterparty({ locationId: l.id, names: [locationObjectName(l)] }, hints),
       amount: locationsFinance ? (num(l.shiftRate) ?? 0) : 0,
       taxPercent: locationsFinance ? num(l.taxPercent) : null,
       onDay: onDay.has(key),

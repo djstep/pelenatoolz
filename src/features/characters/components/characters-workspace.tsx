@@ -144,7 +144,7 @@ export function CharactersWorkspace({
     const names = new Set<string>();
     for (const link of row.scenes) {
       for (const loc of link.scene.locations) {
-        names.add(formatLocationTitle(loc.location.name, loc.location.sublocation));
+        names.add(formatLocationTitle(loc.location));
       }
     }
     return Array.from(names).sort((a, b) => a.localeCompare(b, "ru")).join(", ");

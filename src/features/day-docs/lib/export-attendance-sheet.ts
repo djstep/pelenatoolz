@@ -11,6 +11,7 @@ import {
   type AttendanceSheetSettings,
 } from "@/features/exports/types";
 import { formatDateLong, formatFileDate } from "@/shared/i18n/format-date";
+import { locationObjectName } from "@/features/locations/lib/format-location";
 
 export type AttendancePersonRow = {
   name: string;
@@ -275,7 +276,7 @@ export function buildAttendancePlaceLine(bundle: DayDocBundle) {
   const places: string[] = [];
   for (const row of bundle.day.scenes) {
     for (const link of row.scene.locations) {
-      const place = link.location.address?.trim() || link.location.name.trim();
+      const place = link.location.address?.trim() || locationObjectName(link.location).trim();
       if (place && !places.includes(place)) places.push(place);
     }
   }

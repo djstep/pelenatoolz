@@ -15,7 +15,7 @@ export default async function LocationsPage({ params }: Props) {
   const ctx = await requireProjectContext(projectId);
 
   if (!ctx.can("script:read")) {
-    return <p className="text-sm text-[var(--danger)]">Нет доступа к локациям</p>;
+    return <p className="text-sm text-[var(--danger)]">Нет доступа к объектам</p>;
   }
 
   const [locations, addresses] = await Promise.all([
@@ -26,9 +26,9 @@ export default async function LocationsPage({ params }: Props) {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="font-display text-[27px] font-bold leading-tight">Локации</h2>
+        <h2 className="font-display text-[27px] font-bold leading-tight">Объекты</h2>
         <p className="mt-1 text-sm text-[var(--muted-fg)]">
-          Справочник площадок съёмки: название, подлокация, адрес, статистика по сценам.
+          Справочник площадок съёмки: объекты и их подобъекты, адрес, статистика по сценам.
         </p>
       </div>
       <Card>

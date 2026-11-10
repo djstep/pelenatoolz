@@ -1,3 +1,4 @@
+import { locationObjectName } from "@/features/locations/lib/format-location";
 import { notFound } from "next/navigation";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { ScreenplayWorkspace } from "@/features/screenplay/components/screenplay-workspace";
@@ -64,7 +65,7 @@ export default async function ScreenplayVersionPage({ params, searchParams }: Pr
         blocks={blocks}
         comments={comments}
         characters={characters}
-        locations={locations}
+        locations={locations.map((l) => ({ id: l.id, name: locationObjectName(l) }))}
         timingMode={meta.timingMode}
         pageToMinuteRatio={Number(meta.pageToMinuteRatio)}
         sceneTimings={sceneTimings}

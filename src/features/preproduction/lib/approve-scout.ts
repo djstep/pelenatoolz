@@ -3,6 +3,8 @@ import { ScoutCandidateStatus } from "@prisma/client";
 import type { LocationScoutSnapshot } from "@/features/preproduction/lib/snapshots";
 import { resolveApprovedScoutCost } from "@/features/preproduction/lib/approve-finance";
 import { prisma } from "@/shared/db/prisma";
+import { LOCATION_PARENT_SELECT } from "@/features/locations/lib/location-fields";
+import { locationObjectName } from "@/features/locations/lib/format-location";
 
 export function buildScoutSnapshot(candidate: {
   title: string;
@@ -43,7 +45,7 @@ export async function approveScoutCandidate(
   const candidate = await prisma.scoutCandidate.findFirst({
     where: { id: candidateId, projectId },
     include: {
-      locationLinks: { include: { location: true } },
+      locationLinks: { include: { location: { include: { parent: LOCATION_PARENT_SELECT } } } },
     },
   });
   if (!candidate) throw new Error("SCOUT_NOT_FOUND");
@@ -101,7 +103,7 @@ export async function approveScoutCandidate(
 
   return {
     locationIds,
-    locationNames: candidate.locationLinks.map((l) => l.location.name),
+    locationNames: candidate.locationLinks.map((l) => locationObjectName(l.location)),
     scoutTitle: candidate.title,
   };
 }

@@ -7,6 +7,7 @@ import {
   sceneStatusLabels,
 } from "@/shared/i18n/domain-labels";
 import { defaultArrivalTime } from "@/features/day-docs/lib/time-utils";
+import { locationObjectName, type LocationObjectSource } from "@/features/locations/lib/format-location";
 
 export type DayDocBundle = NonNullable<
   Awaited<ReturnType<typeof getShootDayDocument>>
@@ -119,7 +120,7 @@ export function buildDayStats(day: Pick<DayDocBundle["day"], "scenes">) {
     if (pages != null) totalPages += Number(pages);
     if (row.scene.status === "SHOT") shot += 1;
     for (const link of row.scene.locations) {
-      locations.add(link.location.name);
+      locations.add(locationObjectName(link.location));
     }
   }
 
@@ -469,7 +470,7 @@ export function buildShootingSlotDetails(
     sceneNumber: formatSceneNumber(scene),
     planLabel: planParts.join(" · ") || "—",
     scriptDay: scene.scriptDay,
-    location: loc?.name ?? null,
+    location: loc ? locationObjectName(loc) : null,
     locationAddress: loc?.address ?? null,
     summary: scene.summary ?? scene.title ?? null,
     characters: scene.characters.map((c) => c.character.name),
@@ -501,11 +502,12 @@ export function inferDayNightLabel(day: DayDocBundle["day"]) {
 
 export function formatSceneLine(
   scene: Pick<SceneRow, "episodeNumber" | "number" | "postfix" | "intExt" | "dayNight"> & {
-    locations: Array<{ location: { name: string } }>;
+    locations: Array<{ location: LocationObjectSource }>;
   },
 ) {
   const num = formatSceneNumber(scene);
-  const loc = scene.locations[0]?.location.name;
+  const first = scene.locations[0]?.location;
+  const loc = first ? locationObjectName(first) : null;
   // Как slugline / плашка КПП: № · Инт/Нат · Локация · День/Ночь
   const parts = [num];
   if (scene.intExt) parts.push(intExtLabels[scene.intExt]);

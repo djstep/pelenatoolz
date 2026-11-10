@@ -21,7 +21,7 @@ const PAGES: { name: string; path: string; heading: RegExp }[] = [
   { name: "кастинг", path: projectPath(ctx, "/preproduction/casting"), heading: /Кастинг/ },
   { name: "сметы", path: projectPath(ctx, "/smeta"), heading: /^Сметы$|Нет доступа к сметам/ },
   { name: "персонаж", path: projectPath(ctx, `/characters/${ctx.characterId}`), heading: /Иван/ },
-  { name: "локации", path: projectPath(ctx, "/locations"), heading: /Локации/ },
+  { name: "объекты", path: projectPath(ctx, "/locations"), heading: /Объекты/ },
 ];
 
 for (const role of ["producer", "nofin"] as const) {

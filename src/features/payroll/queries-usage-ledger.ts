@@ -7,6 +7,8 @@ import {
   listResourceOvertimeHistory,
 } from "@/features/payroll/queries";
 import type { ProductionReportWorkExtra } from "@/features/reports/types";
+import { LOCATION_PARENT_SELECT } from "@/features/locations/lib/location-fields";
+import { formatLocationTitle } from "@/features/locations/lib/format-location";
 
 export type UsageLedgerKind = "ACTOR" | "RESOURCE" | "TRANSPORT" | "LOCATION";
 
@@ -100,7 +102,7 @@ export async function listUsageLedgerSummary(
         },
       },
       location: {
-        select: { id: true, name: true, sublocation: true },
+        select: { id: true, name: true, sublocation: true, parent: LOCATION_PARENT_SELECT },
       },
       report: {
         select: { shootDayId: true },
@@ -148,9 +150,7 @@ export async function listUsageLedgerSummary(
     } else if (row.locationId && row.location) {
       key = `location:${row.locationId}`;
       kind = "LOCATION";
-      label = row.location.sublocation
-        ? `${row.location.name}.${row.location.sublocation}`
-        : row.location.name;
+      label = formatLocationTitle(row.location);
       categoryLabel = categoryLabel || "Локации";
     } else {
       key = `transport:${row.sourceKey}`;

@@ -18,6 +18,7 @@ import {
   shootDayTypeLabels,
 } from "@/shared/i18n/domain-labels";
 import { formatDateShort } from "@/shared/i18n/format-date";
+import { formatLocationTitle } from "@/features/locations/lib/format-location";
 
 const CELL_FONT = { name: "Calibri", size: 11 } as const;
 
@@ -52,7 +53,7 @@ function formatSceneNumber(
 function formatLocation(scene: KppExportScene): string {
   const loc = scene.locations[0]?.location;
   if (!loc) return "—";
-  return loc.sublocation ? `${loc.name}.${loc.sublocation}` : loc.name;
+  return formatLocationTitle(loc);
 }
 
 function formatCharacters(scene: KppExportScene): string {
@@ -254,7 +255,7 @@ export function getKppShortCellValue(
       for (const link of scene.locations) {
         const loc = link.location;
         set.add(
-          loc.sublocation ? `${loc.name}.${loc.sublocation}` : loc.name,
+          formatLocationTitle(loc),
         );
       }
     }

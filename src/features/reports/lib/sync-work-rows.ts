@@ -1,6 +1,8 @@
 import type { Prisma } from "@prisma/client";
 import { sumExtrasPay } from "@/features/payroll/lib/parse-extra-payments";
 import { prisma } from "@/shared/db/prisma";
+import { formatLocationTitle } from "@/features/locations/lib/format-location";
+import { LOCATION_PARENT_SELECT } from "@/features/locations/lib/location-fields";
 import {
   computeWorkPay,
   OVERTIME_MODE_LABELS,
@@ -74,6 +76,7 @@ async function loadCandidates(projectId: string, shootDayId: string) {
                       id: true,
                       name: true,
                       sublocation: true,
+                      parent: LOCATION_PARENT_SELECT,
                       shiftRate: true,
                       shiftHoursMin: true,
                       unpaidOvertimeMin: true,
@@ -259,9 +262,7 @@ async function loadCandidates(projectId: string, shootDayId: string) {
       if (seenLocations.has(link.locationId)) continue;
       seenLocations.add(link.locationId);
       const loc = link.location;
-      const label = loc.sublocation
-        ? `${loc.name}.${loc.sublocation}`
-        : loc.name;
+      const label = formatLocationTitle(loc);
       candidates.push({
         sourceKey: `location:${link.locationId}`,
         kind: "LOCATION",

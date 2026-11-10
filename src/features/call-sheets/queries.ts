@@ -179,6 +179,7 @@ export type CallSheetBlocks = {
     id: string;
     name: string;
     sublocation: string | null;
+    parent: { id: string; name: string } | null;
     latitude: number | null;
     longitude: number | null;
     /** Для листа схемы объекта. */

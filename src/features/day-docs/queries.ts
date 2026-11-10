@@ -2,7 +2,10 @@ import {
   SCENE_ACTOR_SELECT,
   SCENE_CHARACTER_SELECT,
 } from "@/features/characters/lib/character-fields";
-import { SCENE_LOCATION_SELECT } from "@/features/locations/lib/location-fields";
+import {
+  LOCATION_PARENT_SELECT,
+  SCENE_LOCATION_SELECT,
+} from "@/features/locations/lib/location-fields";
 import { SCENE_RESOURCE_ITEM_SELECT } from "@/features/resources/lib/item-fields";
 import { prisma } from "@/shared/db/prisma";
 import { selectFields } from "@/shared/lib/finance-fields";
@@ -111,7 +114,7 @@ const projectSceneOptionSelect = {
   intExt: true,
   dayNight: true,
   locations: {
-    select: { location: { select: { name: true } } },
+    select: { location: { select: { name: true, parent: LOCATION_PARENT_SELECT } } },
     take: 1,
   },
 } as const;

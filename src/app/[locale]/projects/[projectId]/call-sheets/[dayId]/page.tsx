@@ -5,6 +5,7 @@ import { CallSheetTemplateBlocks } from "@/features/call-sheets/components/call-
 import { SheetBlock } from "@/features/call-sheets/components/sheet-block";
 import { getCallSheetElementsEditor } from "@/features/call-sheets/elements-queries";
 import { pickAstroPoint } from "@/features/call-sheets/lib/astro-point";
+import { formatLocationTitle } from "@/features/locations/lib/format-location";
 import {
   canReadCallSheet,
   getWorkingDayPosition,
@@ -236,7 +237,7 @@ export default async function CallSheetDayPage({ params, searchParams }: Props) 
               departments={departments.map((d) => ({ id: d.id, name: d.name }))}
               locations={dayLocations.map((l) => ({
                 id: l.id,
-                label: [l.name, l.sublocation].filter(Boolean).join(". "),
+                label: formatLocationTitle(l, ". "),
               }))}
             />
             {elements ? (

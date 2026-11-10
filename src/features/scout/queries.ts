@@ -1,4 +1,6 @@
 import { prisma } from "@/shared/db/prisma";
+import { LOCATION_PARENT_SELECT } from "@/features/locations/lib/location-fields";
+import { compareLocations } from "@/features/locations/lib/format-location";
 import { dec } from "@/shared/db/serialize-decimal";
 import { SCOUT_CANDIDATE_FIELDS } from "@/features/scout/lib/scout-fields";
 import { pickFinanceFields } from "@/shared/lib/finance-fields";
@@ -6,7 +8,7 @@ import { pickFinanceFields } from "@/shared/lib/finance-fields";
 const scoutInclude = {
   locationLinks: {
     include: {
-      location: { select: { id: true, name: true, sublocation: true } },
+      location: { select: { id: true, name: true, sublocation: true, parent: LOCATION_PARENT_SELECT } },
     },
   },
 } as const;
@@ -39,11 +41,11 @@ export async function getScoutCandidate(
 }
 
 export async function listLocationsForScout(projectId: string) {
-  return prisma.location.findMany({
+  const rows = await prisma.location.findMany({
     where: { projectId },
-    select: { id: true, name: true, sublocation: true },
-    orderBy: [{ name: "asc" }, { sublocation: "asc" }],
+    select: { id: true, name: true, sublocation: true, sortOrder: true, parent: LOCATION_PARENT_SELECT },
   });
+  return rows.sort(compareLocations);
 }
 
 export type ScoutCandidateRow = Awaited<

@@ -279,13 +279,13 @@ describe("Контрагенты в меню проекта", () => {
 describe("Локации в меню проекта", () => {
   const groups = () => nav.filterNavGroups(nav.projectNavGroups, access(["script:read"]));
 
-  test("пункт в «Планировании», вкладки Локации и Скаут; Скаута в «Препродакшне» нет", () => {
+  test("пункт в «Планировании», вкладки Объекты и Скаут; Скаута в «Препродакшне» нет", () => {
     const item = groups()
       .find((group) => group.id === "planning")!
-      .items.find((entry) => entry.label === "Локации")!;
+      .items.find((entry) => entry.label === "Объекты")!;
     assert.equal(item.href, "/locations");
     assert.deepEqual(item.tabs, [
-      { href: "/locations", label: "Локации" },
+      { href: "/locations", label: "Объекты" },
       { href: "/preproduction/scout", label: "Скаут" },
     ]);
     const defs = nav.projectNavGroups.find((group) => group.id === "preproduction")!;

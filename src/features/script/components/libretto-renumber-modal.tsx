@@ -3,7 +3,10 @@
 import { useMemo, useState, useTransition } from "react";
 import type { ProjectType } from "@prisma/client";
 import { manualRenumberScenesAction } from "@/features/script/actions";
-import type { LibrettoScene } from "@/features/script/lib/libretto-display";
+import {
+  formatLocationCell,
+  type LibrettoScene,
+} from "@/features/script/lib/libretto-display";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Modal } from "@/shared/ui/modal";
@@ -53,10 +56,7 @@ export function LibrettoRenumberModal({
         number: s.number,
         postfix: s.postfix,
         cut: s.cutAt !== null,
-        locationLabel:
-          s.locations[0]?.location.sublocation
-            ? `${s.locations[0].location.name}.${s.locations[0].location.sublocation}`
-            : s.locations[0]?.location.name ?? "—",
+        locationLabel: formatLocationCell(s),
         characters: s.characters.map((c) => c.character.name).join(", ") || "—",
       })),
     );
@@ -73,10 +73,7 @@ export function LibrettoRenumberModal({
         number: s.number,
         postfix: s.postfix,
         cut: s.cutAt !== null,
-        locationLabel:
-          s.locations[0]?.location.sublocation
-            ? `${s.locations[0].location.name}.${s.locations[0].location.sublocation}`
-            : s.locations[0]?.location.name ?? "—",
+        locationLabel: formatLocationCell(s),
         characters: s.characters.map((c) => c.character.name).join(", ") || "—",
       })),
     );

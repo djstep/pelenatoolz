@@ -13,6 +13,10 @@ import {
   formatPagesMinutes,
   formatSceneBrief,
 } from "@/features/schedule/lib/day-summary";
+import {
+  locationObjectName,
+  type LocationObjectSource,
+} from "@/features/locations/lib/format-location";
 
 export type SceneDetails = {
   id: string;
@@ -30,7 +34,7 @@ export type SceneDetails = {
   scriptDay: number | null;
   /** Сцена вырезана (пусто — нет). */
   cutAt?: Date | string | null;
-  locations: { location: { name: string } }[];
+  locations: { location: LocationObjectSource }[];
   characters: { character: { id: string; name: string } }[];
 };
 
@@ -48,7 +52,7 @@ export function SceneDetailsModal({
 }) {
   if (!scene) return null;
 
-  const locations = scene.locations.map((l) => l.location.name).join(", ");
+  const locations = scene.locations.map((l) => locationObjectName(l.location)).join(", ");
   const characters = scene.characters.map((c) => c.character.name).join(", ");
   const statusLabel =
     sceneStatusLabels[scene.status as keyof typeof sceneStatusLabels] ??

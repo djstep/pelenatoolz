@@ -1,5 +1,6 @@
 import { SCENE_CHARACTER_SELECT } from "@/features/characters/lib/character-fields";
 import { SCENE_LOCATION_SELECT } from "@/features/locations/lib/location-fields";
+import { compareLocations } from "@/features/locations/lib/format-location";
 import { SCENE_RESOURCE_ITEM_SELECT } from "@/features/resources/lib/item-fields";
 import { prisma } from "@/shared/db/prisma";
 import { selectFields } from "@/shared/lib/finance-fields";
@@ -119,12 +120,13 @@ export async function getSceneNeighbors(projectId: string, sceneId: string) {
   };
 }
 
+/** Объекты для выбора в сцене и сценарии: по объекту, внутри — подобъекты по порядку. */
 export async function listLocations(projectId: string) {
-  return prisma.location.findMany({
+  const rows = await prisma.location.findMany({
     where: { projectId },
     select: SCENE_LOCATION_SELECT,
-    orderBy: { name: "asc" },
   });
+  return rows.sort(compareLocations);
 }
 
 export async function listCharacters(projectId: string) {

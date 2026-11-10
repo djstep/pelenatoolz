@@ -9,6 +9,11 @@ import { pairMembers } from "@/features/import/normalize/similar";
 import { SCRIPT_BLOCK_LABELS } from "@/features/screenplay/lib/block-types";
 import type { ScriptBlockType } from "@prisma/client";
 
+/** Объект проекта парой (`ExistingRecords.locations`): «ДОМ. КУХНЯ» или «ДОМ». */
+function pairTitle(row: { name: string; sublocation: string | null }) {
+  return row.sublocation ? `${row.name}. ${row.sublocation}` : row.name;
+}
+
 export const GROUP_TITLES: Record<QuestionGroup, string> = {
   title: "Титульная страница",
   scenes: "Сцены",
@@ -204,8 +209,8 @@ export function optionLabel(
       return found ? `«${found.name}»` : option;
     }
     case QUESTION_TYPES.recordLocation: {
-      const rows = existing.locations.filter((l) => l.id === option);
-      return rows[0] ? `«${rows[0].name}»` : option;
+      const row = existing.locations.find((l) => l.id === option);
+      return row ? `«${pairTitle(row)}»` : option;
     }
     default:
       return option;
@@ -246,10 +251,10 @@ export function ruleText(
   if (!answer && action === "same") answer = `одно: «${name}»`;
   if (!answer && action === "sub") answer = `подобъект «${name}»`;
   if (!answer) {
-    const record =
-      existing.characters.find((c) => c.id === rule.answer) ??
-      existing.locations.find((l) => l.id === rule.answer);
-    answer = record ? `запись «${record.name}»` : rule.answer;
+    const character = existing.characters.find((c) => c.id === rule.answer);
+    const location = existing.locations.find((l) => l.id === rule.answer);
+    const recordName = character?.name ?? (location ? pairTitle(location) : null);
+    answer = recordName ? `запись «${recordName}»` : rule.answer;
   }
   const subject = (pairMembers(rule.subject) ?? [rule.subject]).join(" ~ ");
   return `${RULE_TYPE_TITLES[rule.type] ?? rule.type}: ${subject} → ${answer}`;

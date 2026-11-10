@@ -105,9 +105,9 @@ const SECTIONS = [
 // ---------------------------------------------------------------------------
 
 const IRP_ADDRESS = "пр. Стачек, 47Е";
-const GATE: Location = { name: "Завод", sublocation: "Проходная 3", address: IRP_ADDRESS };
-const BMW_CABIN: Location = { name: "Кабина БМВ", sublocation: null, address: IRP_ADDRESS };
-const TRACTOR_CABIN: Location = { name: "Завод", sublocation: "Кабина трактора", address: IRP_ADDRESS };
+const GATE: Location = { name: "Завод", sublocation: "Проходная 3", parent: null, address: IRP_ADDRESS };
+const BMW_CABIN: Location = { name: "Кабина БМВ", sublocation: null, parent: null, address: IRP_ADDRESS };
+const TRACTOR_CABIN: Location = { name: "Завод", sublocation: "Кабина трактора", parent: null, address: IRP_ADDRESS };
 const COLLECTOR_1 = character("ch-c1", "Коллектор 1");
 const COLLECTOR_2 = character("ch-c2", "Коллектор 2");
 
@@ -222,7 +222,7 @@ export const IRP_DAY_SOURCE: CallSheetPrintSource = {
     actorRestrictions: null,
     schemeLocation: {
       name: "Завод",
-      sublocation: null,
+      sublocation: null, parent: null,
       address: IRP_ADDRESS,
       directions: "Ближайшее метро — «Кировский завод», дальше пешком до проходной 3",
       parking: null,
@@ -319,13 +319,13 @@ export const IRP_DAY_SOURCE: CallSheetPrintSource = {
 
 const FLAT: Location = {
   name: "Квартира Орловых",
-  sublocation: "Кухня",
+  sublocation: "Кухня", parent: null,
   address: "ул. Рубинштейна, 23, кв. 14 (вход со двора, код 2314)",
 };
-const YARD: Location = { name: "Двор-колодец", sublocation: null, address: "ул. Рубинштейна, 23" };
+const YARD: Location = { name: "Двор-колодец", sublocation: null, parent: null, address: "ул. Рубинштейна, 23" };
 const EMBANKMENT: Location = {
   name: "Набережная Мойки",
-  sublocation: "Певческий мост",
+  sublocation: "Певческий мост", parent: null,
   address: "наб. реки Мойки, 20",
 };
 
@@ -481,7 +481,7 @@ export const FULL_DAY_SOURCE: CallSheetPrintSource = {
       "Соколова М. — до 19:00 (спектакль). Ветров А. — только до 12:00. Петрова Е. (8 лет) — не более 4 часов на площадке, с законным представителем.",
     schemeLocation: {
       name: "Двор-колодец",
-      sublocation: null,
+      sublocation: null, parent: null,
       address: "ул. Рубинштейна, 23",
       directions: "От м. «Достоевская» 7 минут пешком по ул. Правды, вход во двор через арку дома 23.",
       parking: "Машины группы — на ул. Правды, нечётная сторона. Во двор не заезжать.",
@@ -587,7 +587,7 @@ export const MIN_DAY_SOURCE: CallSheetPrintSource = {
     weatherPrecip: null,
     scenes: [
       {
-        scene: scene("1", { name: "Парк", sublocation: null, address: null }, {
+        scene: scene("1", { name: "Парк", sublocation: null, parent: null, address: null }, {
           intExt: "EXT",
           characters: [character("ch-hero", "Герой")],
         }),
@@ -607,7 +607,7 @@ export const MIN_DAY_SOURCE: CallSheetPrintSource = {
     actorRestrictions: "  ",
     schemeLocation: {
       name: "Парк",
-      sublocation: null,
+      sublocation: null, parent: null,
       address: null,
       directions: " ",
       parking: null,

@@ -99,9 +99,9 @@ export const projectNavGroups: NavGroupDef[] = [
     items: [
       { href: "/libretto", label: "Сцены (либретто)", visible: anyOf("script:read") },
       {
-        label: "Локации",
+        label: "Объекты",
         tabs: [
-          { href: "/locations", label: "Локации", visible: anyOf("script:read") },
+          { href: "/locations", label: "Объекты", visible: anyOf("script:read") },
           { href: "/preproduction/scout", label: "Скаут", visible: anyOf("script:read") },
         ],
       },

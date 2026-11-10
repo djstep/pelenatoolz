@@ -24,6 +24,7 @@ import {
   sceneNumbersAccessRefusal,
 } from "@/features/script/lib/scene-numbers";
 import { scenesDeleteRefusal } from "@/features/script/lib/scene-delete";
+import { keptSceneLocationIds } from "@/features/script/lib/scene-locations";
 import { impactLines } from "@/shared/lib/plural";
 
 export type ActionState = { error?: string; success?: string; keepOpen?: boolean };
@@ -309,7 +310,7 @@ export async function updateSceneAction(
 
   const existing = await prisma.scene.findFirst({
     where: { id: sceneId, projectId },
-    select: { id: true, status: true },
+    select: { id: true, status: true, locations: { select: { locationId: true } } },
   });
   if (!existing) {
     return { error: "Сцена не найдена" };
@@ -344,6 +345,10 @@ export async function updateSceneAction(
     ...new Set([...(parsed.data.elementIds ?? []), ...tagElementIds]),
   ];
   const statusChanged = parsed.data.status && parsed.data.status !== existing.status;
+  const locationIds = keptSceneLocationIds(
+    existing.locations.map((l) => l.locationId),
+    parsed.data.locationId,
+  );
 
   try {
     await prisma.$transaction([
@@ -377,7 +382,7 @@ export async function updateSceneAction(
           dayNight: parsed.data.dayNight ?? null,
           status: parsed.data.status,
           statusDate: statusChanged ? new Date() : undefined,
-          locations: { create: [{ locationId: parsed.data.locationId }] },
+          locations: { create: locationIds.map((locationId) => ({ locationId })) },
           characters: parsed.data.characterIds?.length
             ? {
                 create: parsed.data.characterIds.map((characterId) => ({

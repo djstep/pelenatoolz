@@ -210,27 +210,58 @@ export async function writeScript(input: ScriptWriteInput): Promise<ScriptWriteR
       const byName = new Map(created.map((c) => [compareKey(c.name), c.id]));
       for (const c of plan.characters) characterIds.set(c.key, byName.get(compareKey(c.name))!);
     }
+    // Объекты и подобъекты: сначала объекты, затем подобъекты с `parentId` объекта.
+    // `createdLocations` — парой «объект + подобъект», как их видит словарь ниже.
     const locationIds = new Map<string, string>();
     const createdLocations: { id: string; name: string; sublocation: string | null }[] = [];
-    if (plan.locations.length > 0) {
+    const locationId = (ref: PlanRef) => ("id" in ref ? ref.id : locationIds.get(ref.key)!);
+    const newObjects = plan.locations.filter((l) => l.sublocation == null);
+    const newSubs = plan.locations.filter((l) => l.sublocation != null && l.parent);
+    if (newObjects.length > 0) {
       const created = await q(
         tx.location.createManyAndReturn({
-          data: plan.locations.map((l) => ({
-            projectId,
-            name: l.name,
-            sublocation: l.sublocation,
-          })),
-          select: { id: true, name: true, sublocation: true },
+          data: newObjects.map((l) => ({ projectId, name: l.name })),
+          select: { id: true, name: true },
         }),
       );
-      createdLocations.push(...created);
-      const byKey = new Map(
-        created.map((l) => [`${compareKey(l.name)}|${l.sublocation ? compareKey(l.sublocation) : ""}`, l.id]),
+      const byName = new Map(created.map((l) => [compareKey(l.name), l.id]));
+      for (const l of newObjects) {
+        const id = byName.get(compareKey(l.name))!;
+        locationIds.set(l.key, id);
+        createdLocations.push({ id, name: l.name, sublocation: null });
+      }
+    }
+    if (newSubs.length > 0) {
+      // Новые подобъекты — в конец своего объекта.
+      const parentIds = [...new Set(newSubs.map((l) => locationId(l.parent!)))];
+      const last = await q(
+        tx.location.groupBy({
+          by: ["parentId"],
+          where: { projectId, parentId: { in: parentIds } },
+          _max: { sortOrder: true },
+        }),
       );
-      for (const l of plan.locations) locationIds.set(l.key, byKey.get(l.key)!);
+      const nextOrder = new Map(last.map((g) => [g.parentId!, (g._max.sortOrder ?? 0) + 1]));
+      const data = newSubs.map((l) => {
+        const parentId = locationId(l.parent!);
+        const sortOrder = nextOrder.get(parentId) ?? 1;
+        nextOrder.set(parentId, sortOrder + 1);
+        return { projectId, parentId, name: l.sublocation!, sortOrder };
+      });
+      const created = await q(
+        tx.location.createManyAndReturn({
+          data,
+          select: { id: true, name: true, parentId: true },
+        }),
+      );
+      const byKey = new Map(created.map((l) => [`${l.parentId}|${compareKey(l.name)}`, l.id]));
+      for (const l of newSubs) {
+        const id = byKey.get(`${locationId(l.parent!)}|${compareKey(l.sublocation!)}`)!;
+        locationIds.set(l.key, id);
+        createdLocations.push({ id, name: l.name, sublocation: l.sublocation });
+      }
     }
     const characterId = (ref: PlanRef) => ("id" in ref ? ref.id : characterIds.get(ref.key)!);
-    const locationId = (ref: PlanRef) => ("id" in ref ? ref.id : locationIds.get(ref.key)!);
 
     // Новые сцены.
     const sceneIds = new Map<number, string>();

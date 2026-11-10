@@ -2,8 +2,10 @@ import { prisma } from "@/shared/db/prisma";
 import { parseScoutSnapshot } from "@/features/preproduction/lib/snapshots";
 import {
   LOCATION_FIELDS,
+  LOCATION_PARENT_SELECT,
   SCOUT_SNAPSHOT_FIELDS,
 } from "@/features/locations/lib/location-fields";
+import { compareLocations } from "@/features/locations/lib/format-location";
 import { serializeForClient } from "@/shared/db/serialize-decimal";
 import { pickFinanceFields } from "@/shared/lib/finance-fields";
 
@@ -33,6 +35,7 @@ export async function listLocationsWithStats(projectId: string, canFinanceRead: 
   const locations = await prisma.location.findMany({
     where: { projectId },
     include: {
+      parent: LOCATION_PARENT_SELECT,
       scenes: {
         include: {
           scene: { select: sceneBriefSelect },
@@ -41,9 +44,10 @@ export async function listLocationsWithStats(projectId: string, canFinanceRead: 
       photos: { orderBy: { sortOrder: "asc" } },
       _count: { select: { scenes: true, photos: true } },
     },
-    orderBy: [{ name: "asc" }, { sublocation: "asc" }],
   });
-  return locations.map((location) => locationForClient(location, canFinanceRead));
+  return locations
+    .sort(compareLocations)
+    .map((location) => locationForClient(location, canFinanceRead));
 }
 
 function locationForClient<T extends { scoutSnapshot: unknown }>(
@@ -80,6 +84,7 @@ export async function getLocationDetail(
   const location = await prisma.location.findFirst({
     where: { id: locationId, projectId },
     include: {
+      parent: LOCATION_PARENT_SELECT,
       photos: { orderBy: { sortOrder: "asc" } },
       overtimeRates: { orderBy: { hourNumber: "asc" } },
       points: {
@@ -125,6 +130,7 @@ export type LocationEditSource = Pick<
   | "id"
   | "name"
   | "sublocation"
+  | "parent"
   | "locationKind"
   | "hasDecoration"
   | "address"

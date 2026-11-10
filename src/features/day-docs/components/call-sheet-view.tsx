@@ -25,6 +25,7 @@ import { formatDateShort } from "@/shared/i18n/format-date";
 import { Badge } from "@/shared/ui/badge";
 import type { getNextShootDayBrief } from "@/features/day-docs/queries";
 import type { DayDocsExportResourceCategory } from "@/features/day-docs/components/day-docs-export-menu";
+import { locationObjectName } from "@/features/locations/lib/format-location";
 
 export function CallSheetView({
   locale,
@@ -199,7 +200,7 @@ export function CallSheetView({
               {[
                 ...new Set(
                   nextDay.scenes.flatMap((s) =>
-                    s.scene.locations.map((l) => l.location.name),
+                    s.scene.locations.map((l) => locationObjectName(l.location)),
                   ),
                 ),
               ].join(", ")}

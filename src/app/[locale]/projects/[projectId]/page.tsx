@@ -72,7 +72,7 @@ export default async function ProjectOverviewPage({ params }: Props) {
                 ) : null}
                 {stats.locations !== null ? (
                   <div className="flex justify-between">
-                    <dt className="text-[var(--muted-fg)]">Локации</dt>
+                    <dt className="text-[var(--muted-fg)]">Объекты</dt>
                     <dd className="font-medium">{stats.locations}</dd>
                   </div>
                 ) : null}

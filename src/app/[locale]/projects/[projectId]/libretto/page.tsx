@@ -37,7 +37,7 @@ export default async function LibrettoPage({ params }: Props) {
 
   const locationOptions = locations.map((l) => ({
     id: l.id,
-    name: formatLocationTitle(l.name, l.sublocation),
+    name: formatLocationTitle(l),
   }));
 
   const canWrite = ctx.can("script:write");
