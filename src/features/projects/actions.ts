@@ -485,6 +485,7 @@ export async function createInviteAction(
     email: formData.get("email") ?? "",
     roleId: formData.get("roleId"),
     expiresInDays: formData.get("expiresInDays") || 7,
+    departmentId: formData.get("departmentId") ?? "",
   });
 
   if (!parsed.success) {
@@ -504,6 +505,23 @@ export async function createInviteAction(
     return { error: "Нельзя пригласить с правами шире ваших собственных" };
   }
 
+  // Цех из браузера — только цех этого проекта. Назначать глав может тот, кто приглашает
+  // (`members:manage`, как canManageDepartments).
+  let department: { id: string; name: string } | null = null;
+  if (parsed.data.departmentId) {
+    try {
+      await assertInProject("Department", parsed.data.departmentId, projectId);
+    } catch (error) {
+      if (isNotInProjectError(error)) return { error: "Цех не найден" };
+      throw error;
+    }
+    department = await prisma.department.findFirst({
+      where: { id: parsed.data.departmentId, projectId },
+      select: { id: true, name: true },
+    });
+    if (!department) return { error: "Цех не найден" };
+  }
+
   const token = nanoid(32);
   const expiresAt = new Date();
   expiresAt.setDate(expiresAt.getDate() + parsed.data.expiresInDays);
@@ -518,6 +536,7 @@ export async function createInviteAction(
       token,
       expiresAt,
       createdById: user.id!,
+      departmentId: department?.id ?? null,
     },
     select: { id: true },
   });
@@ -527,11 +546,14 @@ export async function createInviteAction(
     entityType: AuditEntityType.invite,
     entityId: invite.id,
     action: "CREATE",
-    summary: `Создано приглашение с ролью «${roleExists.name}»`,
+    summary: department
+      ? `Создано приглашение с ролью «${roleExists.name}», глава цеха «${department.name}»`
+      : `Создано приглашение с ролью «${roleExists.name}»`,
     changes: {
       roleId: roleExists.id,
       expiresAt: expiresAt.toISOString(),
       forSpecificEmail: email != null,
+      ...(department ? { departmentId: department.id, departmentName: department.name } : {}),
     },
   });
 
@@ -819,7 +841,15 @@ export async function acceptInviteAction(token: string): Promise<ActionState> {
   const ownerRefusal = memberChangeRefusal(user.id!, invite.project.ownerUserId);
   if (ownerRefusal) return { error: ownerRefusal };
 
-  const { membershipId, previousRole } = await prisma.$transaction(async (tx) => {
+  const accepted = await prisma.$transaction(async (tx) => {
+    // Приглашение отмечается первым и только если оно ещё действует: одновременное второе
+    // принятие той же ссылки или отзыв в ту же секунду — отказ, а не второй участник.
+    const marked = await tx.projectInvite.updateMany({
+      where: { id: invite.id, acceptedAt: null, revokedAt: null, expiresAt: { gt: new Date() } },
+      data: { acceptedAt: new Date() },
+    });
+    if (marked.count === 0) return null;
+
     const existing = await tx.projectMembership.findUnique({
       where: {
         projectId_userId: {
@@ -847,14 +877,29 @@ export async function acceptInviteAction(token: string): Promise<ActionState> {
           },
         });
 
-    await tx.projectInvite.update({
-      where: { id: invite.id },
-      data: { acceptedAt: new Date() },
-    });
+    // Цех из приглашения: человек становится его главой. Цех удалён — поле уже пустое;
+    // цех другого проекта сюда не попадёт (проверка при создании и здесь). Строка цеха
+    // блокируется: одновременное удаление цеха ждёт и не обрывает принятие ошибкой.
+    let headOf: { id: string; name: string } | null = null;
+    if (invite.departmentId) {
+      const rows = await tx.$queryRaw<{ id: string; name: string }[]>`
+        SELECT "id", "name" FROM "Department"
+        WHERE "id" = ${invite.departmentId} AND "projectId" = ${invite.projectId}
+        FOR UPDATE`;
+      headOf = rows[0] ?? null;
+      if (headOf) {
+        await tx.departmentHead.createMany({
+          data: [{ departmentId: headOf.id, membershipId: membership.id }],
+          skipDuplicates: true,
+        });
+      }
+    }
 
     // Прежняя запись участия — возврат в проект; роль до возврата пишется в журнал.
-    return { membershipId: membership.id, previousRole: existing?.role ?? null };
+    return { membershipId: membership.id, previousRole: existing?.role ?? null, headOf };
   });
+  if (!accepted) return { error: "Приглашение недействительно" };
+  const { membershipId, previousRole, headOf } = accepted;
 
   // Возврат пишется тем же действием CREATE, что и первое принятие, — отличается по returned.
   await recordAudit({ user: { id: user.id! } }, {
@@ -862,14 +907,17 @@ export async function acceptInviteAction(token: string): Promise<ActionState> {
     entityType: AuditEntityType.membership,
     entityId: membershipId,
     action: "CREATE",
-    summary: previousRole
-      ? `Принято приглашение с ролью «${invite.role.name}» — возврат в проект (была роль «${previousRole.name}»)`
-      : `Принято приглашение с ролью «${invite.role.name}»`,
+    summary:
+      (previousRole
+        ? `Принято приглашение с ролью «${invite.role.name}» — возврат в проект (была роль «${previousRole.name}»)`
+        : `Принято приглашение с ролью «${invite.role.name}»`) +
+      (headOf ? `, назначен главой цеха «${headOf.name}»` : ""),
     changes: {
       inviteId: invite.id,
       userId: user.id!,
       roleId: invite.roleId,
       roleName: invite.role.name,
+      ...(headOf ? { headOfDepartmentId: headOf.id, headOfDepartmentName: headOf.name } : {}),
       ...(previousRole
         ? {
             returned: true,

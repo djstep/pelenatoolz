@@ -9,6 +9,8 @@ type InviteRow = {
   token: string;
   email: string | null;
   role: { name: string };
+  /** Цех, главой которого станет принявший. */
+  department?: { name: string } | null;
   expiresAt: Date;
 };
 
@@ -43,6 +45,7 @@ export function InvitesList({
               <div className="text-sm">
                 <p className="font-medium">
                   {invite.email ?? "Открытая ссылка"} · {invite.role.name}
+                  {invite.department ? ` · глава цеха «${invite.department.name}»` : ""}
                 </p>
                 <p className="break-all text-[var(--muted-fg)]">{url}</p>
               </div>

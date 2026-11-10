@@ -14,6 +14,8 @@ import {
   listProjectMembers,
   listProjectRoles,
 } from "@/features/memberships/queries";
+import { ROLE_PRESETS } from "@/features/roles/role-presets";
+import { prisma } from "@/shared/db/prisma";
 import { Card } from "@/shared/ui/card";
 
 // Vercel (Fluid compute, потолок 300 с): выгрузка на диск (до 50 с) и пересчёт доступов к папкам после ответа
@@ -25,7 +27,7 @@ type Props = {
 };
 
 export default async function ProjectMembersPage({ params }: Props) {
-  const { projectId } = await params;
+  const { locale, projectId } = await params;
   const ctx = await requireProjectContext(projectId);
   const t = await getTranslations("members");
 
@@ -34,13 +36,33 @@ export default async function ProjectMembersPage({ params }: Props) {
   }
 
   const manage = canManageMembers(ctx.matrix);
-  const [members, invites, roles, drive] = await Promise.all([
+  const [members, invites, roles, drive, departments] = await Promise.all([
     listProjectMembers(projectId),
     manage ? listProjectInvites(projectId) : Promise.resolve([]),
     listProjectRoles(projectId),
     // Хранитель активного диска проекта — предупреждение в окнах смены роли и удаления.
     manage ? getProjectDriveState(projectId) : Promise.resolve(null),
+    // Цех в приглашении: кто примет — станет его главой.
+    manage
+      ? prisma.department.findMany({
+          where: { projectId },
+          select: { id: true, name: true },
+          orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+        })
+      : Promise.resolve([]),
   ]);
+  // Роли из шаблонов — кнопки быстрого выбора в порядке ROLE_PRESETS; список ролей — как был.
+  const presetIndex = new Map(ROLE_PRESETS.map((p, index) => [p.key as string, index]));
+  const inviteRoles = roles.map((r) => {
+    const index = r.presetKey ? presetIndex.get(r.presetKey) : undefined;
+    return {
+      id: r.id,
+      name: r.name,
+      note: r.note,
+      presetOrder: index ?? null,
+      departmentHead: index !== undefined && ROLE_PRESETS[index]!.departmentHead,
+    };
+  });
   const driveKeeperMembershipId =
     drive?.status === "ACTIVE" ? drive.keeperMembershipId : null;
 
@@ -90,12 +112,22 @@ export default async function ProjectMembersPage({ params }: Props) {
               </h3>
               <InviteForm
                 projectId={projectId}
-                roles={roleOptions.map((r) => ({ id: r.id, name: r.name }))}
+                locale={locale}
+                roles={inviteRoles}
+                departments={departments}
               />
             </Card>
             <InvitesList
               projectId={projectId}
-              invites={invites}
+              // В браузер — только то, что показывает список (без прав роли и автора).
+              invites={invites.map((invite) => ({
+                id: invite.id,
+                token: invite.token,
+                email: invite.email,
+                role: { name: invite.role.name },
+                department: invite.department,
+                expiresAt: invite.expiresAt,
+              }))}
               appUrl={appUrl}
             />
           </div>

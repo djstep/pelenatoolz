@@ -22,7 +22,7 @@ export default async function InvitePage({ params }: Props) {
 
   const invite = await prisma.projectInvite.findUnique({
     where: { token },
-    include: { project: true, role: true },
+    include: { project: true, role: true, department: { select: { name: true } } },
   });
 
   const invalid =
@@ -64,6 +64,12 @@ export default async function InvitePage({ params }: Props) {
             <dt className="text-[var(--muted-fg)]">{t("role")}</dt>
             <dd className="font-medium">{invite.role.name}</dd>
           </div>
+          {invite.department ? (
+            <div className="flex justify-between gap-4">
+              <dt className="text-[var(--muted-fg)]">Глава цеха</dt>
+              <dd className="font-medium">{invite.department.name}</dd>
+            </div>
+          ) : null}
         </dl>
 
         {session?.user ? (

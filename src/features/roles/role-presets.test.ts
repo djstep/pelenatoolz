@@ -28,15 +28,35 @@ function migrationRows(): Row[] {
   }));
 }
 
+/** Описания, уточнённые следующими миграциями: ключ шаблона → [было, стало]. */
+function laterNotes(): Map<string, [string, string]> {
+  const sql = readFileSync(
+    path.join(process.cwd(), "prisma/migrations/20261111150000_production_manager_note/migration.sql"),
+    "utf8",
+  );
+  const m = /SET "note" = '((?:[^']|'')*)'[\s\S]*?"presetKey" = '([a-z_]+)'[\s\S]*?"note" = '((?:[^']|'')*)'/.exec(sql);
+  assert.ok(m, "миграция описания директора картины не разобрана");
+  const un = (s: string) => s.replace(/''/g, "'");
+  return new Map([[m[2]!, [un(m[3]!), un(m[1]!)]]]);
+}
+
 describe("миграция шаблонов ролей = шаблоны в коде", () => {
   test("те же ключи, названия, описания и права", () => {
     const rows = migrationRows();
+    const later = laterNotes();
     assert.equal(rows.length, ROLE_PRESETS.length);
     for (const preset of ROLE_PRESETS) {
       const row = rows.find((r) => r.key === preset.key);
       assert.ok(row, preset.key);
       assert.equal(row.name, preset.name);
-      assert.equal(row.note, preset.note);
+      const update = later.get(preset.key);
+      if (update) {
+        // Следующая миграция меняет ровно прежнее описание на то, что в коде.
+        assert.equal(update[0], row.note, preset.key);
+        assert.equal(update[1], preset.note, preset.key);
+      } else {
+        assert.equal(row.note, preset.note);
+      }
       assert.deepEqual(row.permissions, presetPermissionsDocument(preset), preset.key);
     }
   });

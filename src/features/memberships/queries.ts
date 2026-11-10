@@ -62,7 +62,7 @@ export async function listProjectInvites(projectId: string) {
       revokedAt: null,
       expiresAt: { gt: new Date() },
     },
-    include: { role: true },
+    include: { role: true, department: { select: { name: true } } },
     orderBy: { createdAt: "desc" },
   });
 }

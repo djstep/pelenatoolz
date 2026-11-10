@@ -439,6 +439,7 @@ model Department {
   driveFolders               DriveFolder[]
   crewMembers                CrewMember[]
   prepEventLinks             PrepEventDepartment[]
+  invites                    ProjectInvite[]
 
   @@unique([projectId, name])
   @@unique([projectId, codePrefix])
@@ -529,13 +530,17 @@ model ProjectInvite {
   revokedAt   DateTime?
   createdById String
   createdAt   DateTime  @default(now())
+  /// Цех, главой которого человек станет, приняв приглашение (смета своего цеха). Цех удалён — пусто.
+  departmentId String?
 
-  project   Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  role      ProjectRoleDefinition @relation(fields: [roleId], references: [id])
-  createdBy User                  @relation("InviteCreator", fields: [createdById], references: [id])
+  project    Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  role       ProjectRoleDefinition @relation(fields: [roleId], references: [id])
+  createdBy  User                  @relation("InviteCreator", fields: [createdById], references: [id])
+  department Department?           @relation(fields: [departmentId], references: [id], onDelete: SetNull)
 
   @@index([projectId])
   @@index([email])
+  @@index([departmentId])
 }
 
 model Scene {
