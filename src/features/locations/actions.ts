@@ -41,6 +41,11 @@ import {
   nextSubOrder,
   type CreatedLocation,
 } from "@/features/locations/lib/location-tree-write";
+import {
+  applyLocationMerge,
+  MERGE_REFUSALS,
+  planLocationMerge,
+} from "@/features/locations/lib/location-merge";
 import { cleanSpaces } from "@/features/import/normalize/text";
 import { z } from "zod";
 
@@ -299,6 +304,94 @@ export async function moveSubLocationAction(
     summary: `Подобъект «${formatLocationTitle(moved)}» перемещён ${dir.data === "up" ? "выше" : "ниже"}`,
   });
   revalidateLocations(projectId);
+}
+
+const mergeIdsSchema = z.object({ sourceId: z.string().min(1).max(64), targetId: z.string().min(1).max(64) });
+
+async function mergeGate(projectId: string, sourceId: string, targetId: string) {
+  const gate = await assertScriptWrite(projectId);
+  if ("error" in gate) return { error: gate.error ?? "Недостаточно прав" } as const;
+  const ids = mergeIdsSchema.safeParse({ sourceId, targetId });
+  if (!ids.success) return { error: LOCATION_NOT_FOUND } as const;
+  try {
+    await assertInProject("Location", [ids.data.sourceId, ids.data.targetId], projectId);
+  } catch (error) {
+    if (isNotInProjectError(error)) return { error: LOCATION_NOT_FOUND } as const;
+    throw error;
+  }
+  return { ctx: gate.ctx, ...ids.data } as const;
+}
+
+/** Что будет при объединении «sourceId» → «targetId»: строки для окна или отказ. */
+export async function getLocationMergeImpactAction(
+  projectId: string,
+  sourceId: string,
+  targetId: string,
+): Promise<{ lines: string[] } | { error: string }> {
+  const gate = await mergeGate(projectId, sourceId, targetId);
+  if ("error" in gate) return { error: gate.error ?? LOCATION_NOT_FOUND };
+  const plan = await planLocationMerge(
+    prisma,
+    projectId,
+    gate.sourceId,
+    gate.targetId,
+    gate.ctx.canFinanceWrite("locations"),
+  );
+  if ("refusal" in plan) return { error: MERGE_REFUSALS[plan.refusal] };
+  const { counts } = plan;
+  return {
+    lines: [
+      `«${formatLocationTitle(plan.source)}» исчезнет, его связи перейдут к «${formatLocationTitle(plan.target)}»`,
+      ...impactLines([
+        [counts.scenes, "Сцен с привязкой"],
+        [counts.subsMoved, "Подобъектов перейдёт"],
+        [counts.subsMerged, "Одноимённых подобъектов сольётся"],
+        [counts.reportRows, "Строк отчётов смены перейдёт"],
+        [counts.ratesDropped, "Ставок переработки объединяемого не перейдёт (у оставшегося свои)"],
+      ]),
+      "Поля оставшегося не меняются; пустые заполнятся из объединяемого",
+    ],
+  };
+}
+
+/** Объединить «sourceId» с «targetId»: первый исчезает, все связи — у второго. Отказ — текстом. */
+export async function mergeLocationsAction(
+  projectId: string,
+  sourceId: string,
+  targetId: string,
+): Promise<string | undefined> {
+  const gate = await mergeGate(projectId, sourceId, targetId);
+  if ("error" in gate) return gate.error;
+  const canWriteFinance = gate.ctx.canFinanceWrite("locations");
+
+  const result = await prisma.$transaction(
+    async (tx) => {
+      // Одно объединение в проекте за раз: план и запись видят одни и те же данные.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`location-merge:${projectId}`}))`;
+      const plan = await planLocationMerge(tx, projectId, gate.sourceId, gate.targetId, canWriteFinance);
+      if ("refusal" in plan) return { refusal: MERGE_REFUSALS[plan.refusal] } as const;
+      const summary = await applyLocationMerge(tx, plan, canWriteFinance);
+      return { summary, counts: plan.counts } as const;
+    },
+    { timeout: 30_000 },
+  );
+  if ("refusal" in result) return result.refusal;
+
+  await recordAudit(gate.ctx, {
+    projectId,
+    entityType: AuditEntityType.location,
+    entityId: gate.targetId,
+    action: "UPDATE",
+    summary: `${result.summary} (сцен: ${result.counts.scenes}, подобъектов перешло: ${result.counts.subsMoved}, слилось: ${result.counts.subsMerged})`,
+  });
+  await recordAudit(gate.ctx, {
+    projectId,
+    entityType: AuditEntityType.location,
+    entityId: gate.sourceId,
+    action: "DELETE",
+    summary: `${result.summary}: объединяемый удалён`,
+  });
+  revalidateLocations(projectId, gate.targetId);
 }
 
 /** Отказ (текст для окна подтверждения) — у объекта есть подобъекты. */

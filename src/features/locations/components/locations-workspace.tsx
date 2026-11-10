@@ -10,6 +10,7 @@ import {
 } from "@/features/locations/actions";
 import { LocationsFiltersModal } from "@/features/locations/components/locations-filters-modal";
 import { LocationModal } from "@/features/locations/components/location-modal";
+import { LocationMergeModal } from "@/features/locations/components/location-merge-modal";
 import { LocationRowMenu } from "@/features/locations/components/location-row-menu";
 import {
   applyLocationFilters,
@@ -64,6 +65,8 @@ export function LocationsWorkspace({
   const [columnsOpen, setColumnsOpen] = useState(false);
   /** «+ подобъект»: окно создания с заполненным объектом. */
   const [subOf, setSubOf] = useState<LocationWithStats | null>(null);
+  /** «Объединить с…»: объект или подобъект, который исчезнет. */
+  const [mergeOf, setMergeOf] = useState<LocationWithStats | null>(null);
   /** Свёрнутые объекты (их подобъекты не показываются). */
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const [moveError, setMoveError] = useState<string | null>(null);
@@ -361,6 +364,10 @@ export function LocationsWorkspace({
                               },
                             },
                             {
+                              label: "Объединить с…",
+                              onSelect: () => setMergeOf(loc),
+                            },
+                            {
                               label: "Удалить",
                               danger: true,
                               onSelect: () =>
@@ -392,6 +399,24 @@ export function LocationsWorkspace({
         objectName={subOf?.name ?? null}
         objectKind={subOf?.locationKind ?? null}
         addresses={addresses}
+      />
+
+      <LocationMergeModal
+        key={mergeOf?.id ?? "merge"}
+        projectId={projectId}
+        source={
+          mergeOf
+            ? { id: mergeOf.id, title: cell(mergeOf, "name"), isSub: Boolean(mergeOf.parentId) }
+            : null
+        }
+        candidates={
+          mergeOf
+            ? locations
+                .filter((l) => l.id !== mergeOf.id && Boolean(l.parentId) === Boolean(mergeOf.parentId))
+                .map((l) => ({ id: l.id, label: cell(l, "name") }))
+            : []
+        }
+        onClose={() => setMergeOf(null)}
       />
 
       <LocationsFiltersModal
