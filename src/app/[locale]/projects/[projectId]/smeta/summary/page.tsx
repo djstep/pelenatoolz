@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { SummaryBookView } from "@/features/smeta/components/summary-book-view";
+import { listDepartmentsForSmeta } from "@/features/departments/queries";
+import { listRecalcCandidates } from "@/features/smeta/approval-queries";
+import { BudgetRecalcPanel } from "@/features/smeta/components/budget-recalc-panel";
+import { ItemsSummaryView } from "@/features/smeta/components/items-summary-view";
 import { getBudgetSummaryDriveButton } from "@/features/smeta/drive-queries";
-import { canReadAllSmeta } from "@/features/smeta/lib/smeta-access";
-import type { BudgetClient } from "@/features/smeta/queries";
-import { getSummaryBook } from "@/features/smeta/summary-queries";
+import { getItemsSummary } from "@/features/smeta/items-summary-queries";
+import { canApproveSmeta, canReadAllSmeta } from "@/features/smeta/lib/smeta-access";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 
 // Vercel (Fluid compute, потолок 300 с): сборка сводной, выгрузка на диск (до 50 с) и пересчёт доступов
@@ -25,36 +27,49 @@ export default async function SummaryBookPage({ params, searchParams }: Props) {
   if (!canReadAllSmeta(ctx)) notFound();
 
   const drafts = sp.drafts === "1";
-  const [book, driveButton] = await Promise.all([
-    getSummaryBook(projectId, ctx, { drafts }),
+  const view = sp.view === "articles" ? "articles" : "departments";
+  const canApprove = canApproveSmeta(ctx);
+  const [summary, driveButton, candidates] = await Promise.all([
+    getItemsSummary(projectId, { drafts }),
     getBudgetSummaryDriveButton(ctx),
+    canApprove
+      ? listDepartmentsForSmeta(projectId, null).then((ds) => listRecalcCandidates(projectId, ds.map((d) => d.id)))
+      : Promise.resolve([]),
   ]);
-  // Книга с id «summary-…» только для показа: сервер сохраняет только книгу черновика цеха.
-  const sheetBook: BudgetClient = {
-    id: `${book.workbook.id}-${drafts ? "drafts" : "versions"}`,
-    departmentId: "summary",
-    name: book.workbook.name,
-    revision: 0,
-    updatedAt: new Date().toISOString(),
-    mainSheetKey: null,
-    workbook: book.workbook,
-    sheetsMeta: book.sheetsMeta,
-  };
   const listHref = `/${locale}/projects/${projectId}/smeta`;
+  const base = `${listHref}/summary`;
+  const query = (d: boolean, v: string) => {
+    const params = new URLSearchParams();
+    if (d) params.set("drafts", "1");
+    if (v === "articles") params.set("view", "articles");
+    const s = params.toString();
+    return s ? `${base}?${s}` : base;
+  };
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <Link href={listHref} className="text-sm text-[var(--muted-fg)] hover:underline">
         ← Сметы
       </Link>
-      <h2 className="font-display text-[27px] font-bold leading-tight">Сводная книга</h2>
-      <SummaryBookView
+      <h2 className="font-display text-[27px] leading-tight font-bold">Сводная</h2>
+      <ItemsSummaryView
         projectId={projectId}
-        book={sheetBook}
-        drafts={drafts}
-        baseHref={`${listHref}/summary`}
-        listHref={listHref}
+        summary={summary}
+        view={view}
+        hrefs={{
+          versions: query(false, view),
+          drafts: query(true, view),
+          departments: query(drafts, "departments"),
+          articles: query(drafts, "articles"),
+        }}
         driveButton={driveButton}
+        recalcPanel={
+          <BudgetRecalcPanel
+            projectId={projectId}
+            candidates={candidates}
+            smetaHref={listHref}
+          />
+        }
       />
     </div>
   );

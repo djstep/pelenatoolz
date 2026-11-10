@@ -71,6 +71,12 @@ export default async function BudgetVersionPage({ params }: Props) {
           {version.format === "ITEMS" ? "Строк" : "Статей"}: {version.itemCount},
           итого {formatRub(version.total)}. Только чтение — версию нельзя изменить.
         </p>
+        {version.recalcByVariables ? (
+          <p className="text-sm text-[var(--tone-warning)]" data-version-recalc>
+            Пересчёт по переменным: строки не менялись, продюсер утвердил новые значения переменных без
+            отправки главой.
+          </p>
+        ) : null}
         {version.submitComment ? (
           <p className="text-sm">
             Комментарий главы{version.submittedByName ? ` (${version.submittedByName})` : ""}:{" "}

@@ -2387,6 +2387,9 @@ model BudgetVersion {
   styles          Json                @default("{}")
   /// ITEMS: снимок структуры — статьи, подстатьи, строки и значения переменных на момент утверждения.
   snapshot        Json?
+  /// Версия — пересчёт по переменным: продюсер утвердил черновик, где строки не менялись,
+  /// изменились только значения переменных (без отправки главой).
+  recalcByVariables Boolean           @default(false)
 
   project    Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
   department Department          @relation(fields: [departmentId], references: [id], onDelete: NoAction)

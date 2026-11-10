@@ -70,6 +70,11 @@ export default async function BudgetVersionsPage({ params }: Props) {
                       {index === 0 ? (
                         <span className="ml-2 text-xs text-[var(--muted-fg)]">план</span>
                       ) : null}
+                      {v.recalcByVariables ? (
+                        <span className="block text-xs text-[var(--tone-warning)]" data-version-recalc>
+                          пересчёт по переменным
+                        </span>
+                      ) : null}
                     </td>
                     <td className="px-3 py-2 whitespace-nowrap">
                       {formatDateTimeShort(v.approvedAt)}

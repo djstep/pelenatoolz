@@ -111,6 +111,13 @@ export function buildPlanFactWorkbook(
     sheet.addRow([]);
     numbersRow(sheet, ["", "Без статьи", "начисления и платежи без кода"], report.unassigned);
   }
+  // Резерв и агентские входят в план проекта — отдельными строками, чтобы итог сходился.
+  if (report.reserve) {
+    numbersRow(sheet, ["", `Резерв, ${report.reserve.ratePercent}%`, "от плана цехов с налогом"], report.reserve);
+  }
+  if (report.agency) {
+    numbersRow(sheet, ["", `Агентские, ${report.agency.ratePercent}%`, "от плана цехов с налогом"], report.agency);
+  }
   sheet.addRow([]);
   numbersRow(
     sheet,

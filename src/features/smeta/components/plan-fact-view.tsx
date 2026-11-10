@@ -81,8 +81,8 @@ function TableHead() {
   return (
     <thead className="text-left text-xs text-[var(--muted-fg)]">
       <tr>
-        <th className="px-3 py-2 font-medium">Код</th>
         <th className="px-3 py-2 font-medium">Наименование</th>
+        <th className="px-3 py-2 font-medium">Статья / подстатья</th>
         <th className="px-3 py-2 text-right font-medium">План</th>
         <th className="px-3 py-2 text-right font-medium">Начислено</th>
         <th className="px-3 py-2 text-right font-medium">Оплачено</th>
@@ -198,7 +198,6 @@ export function PlanFactView({
                         r.overrun && "bg-[var(--row-danger)]",
                       )}
                     >
-                      <td className="px-3 py-1.5 tabular-nums text-xs whitespace-nowrap">{r.code}</td>
                       <td className="px-3 py-1.5">
                         {r.name}
                         {r.kind !== "plan" ? (
@@ -207,15 +206,16 @@ export function PlanFactView({
                         {r.removedFromDraft ? <Mark tone="muted">убрана из черновика</Mark> : null}
                         {r.overrun ? <Mark tone="danger">перерасход</Mark> : null}
                       </td>
+                      <td className="px-3 py-1.5 text-xs text-[var(--muted-fg)]">{r.group}</td>
                       <NumberCells n={r} />
                     </tr>
                   ))}
                   <tr className="border-t-2 border-[var(--border)]">
-                    <td />
                     <td className="px-3 py-1.5 font-semibold">
                       Итого по цеху
                       {d.totals.overrun ? <Mark tone="danger">перерасход</Mark> : null}
                     </td>
+                    <td />
                     <NumberCells n={d.totals} bold />
                   </tr>
                 </tbody>
@@ -225,7 +225,7 @@ export function PlanFactView({
         </Card>
       ))}
 
-      {report.unassigned || report.departments.length > 1 ? (
+      {report.unassigned || report.reserve || report.departments.length > 1 ? (
         <Card>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[760px] text-sm">
@@ -233,22 +233,36 @@ export function PlanFactView({
               <tbody>
                 {report.unassigned ? (
                   <tr className="border-t border-[var(--border)]/60">
-                    <td />
                     <td className="px-3 py-1.5">
                       Без статьи
                       <span className="block text-xs text-[var(--muted-fg)]">
-                        начисления и строки платежей без кода статьи
+                        начисления и строки платежей без статьи сметы
                       </span>
                     </td>
+                    <td />
                     <NumberCells n={report.unassigned} />
                   </tr>
                 ) : null}
+                {report.reserve ? (
+                  <tr className="border-t border-[var(--border)]/60" data-plan-fact-reserve>
+                    <td className="px-3 py-1.5">Резерв, {report.reserve.ratePercent.toLocaleString("ru-RU")}%</td>
+                    <td className="px-3 py-1.5 text-xs text-[var(--muted-fg)]">от плана цехов с налогом</td>
+                    <NumberCells n={report.reserve} />
+                  </tr>
+                ) : null}
+                {report.agency ? (
+                  <tr className="border-t border-[var(--border)]/60" data-plan-fact-agency>
+                    <td className="px-3 py-1.5">Агентские, {report.agency.ratePercent.toLocaleString("ru-RU")}%</td>
+                    <td className="px-3 py-1.5 text-xs text-[var(--muted-fg)]">от плана цехов с налогом</td>
+                    <NumberCells n={report.agency} />
+                  </tr>
+                ) : null}
                 <tr className="border-t-2 border-[var(--border)]">
-                  <td />
                   <td className="px-3 py-1.5 font-semibold">
                     Итого по проекту
                     {report.project.overrun ? <Mark tone="danger">перерасход</Mark> : null}
                   </td>
+                  <td />
                   <NumberCells n={report.project} bold />
                 </tr>
               </tbody>

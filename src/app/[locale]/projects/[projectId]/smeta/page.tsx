@@ -3,6 +3,8 @@ import { CreateDepartmentBudgetButton } from "@/features/smeta/components/create
 import { SmetaStatusBadge } from "@/features/smeta/components/smeta-status-badge";
 import { formatRub } from "@/features/smeta/lib/money";
 import { listDepartmentBudgetSummaries } from "@/features/smeta/queries";
+import { listRecalcCandidates } from "@/features/smeta/approval-queries";
+import { BudgetRecalcPanel } from "@/features/smeta/components/budget-recalc-panel";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { listDepartmentsForSmeta } from "@/features/departments/queries";
 import {
@@ -36,6 +38,8 @@ export default async function SmetaPage({ params }: Props) {
     departments.map((d) => d.id),
   );
   const base = `/${locale}/projects/${projectId}/smeta`;
+  // Пересчитаны после смены переменных — продюсер может утвердить сам.
+  const recalc = canApproveSmeta(ctx) ? await listRecalcCandidates(projectId, departments.map((d) => d.id)) : [];
   // Ждут продюсера: отправленные и изменённые после отправки.
   const pending = canApproveSmeta(ctx)
     ? departments.filter((d) => {
@@ -66,11 +70,12 @@ export default async function SmetaPage({ params }: Props) {
               href={`${base}/summary`}
               className="rounded-md border border-[var(--border)] px-3 py-1 hover:bg-[var(--nav-hover-bg)]"
             >
-              Сводная книга
+              Сводная
             </Link>
           ) : null}
         </div>
       </div>
+      <BudgetRecalcPanel projectId={projectId} candidates={recalc} smetaHref={base} />
       {pending.length > 0 ? (
         <Card>
           <h3 className="font-display text-base font-bold">На утверждении</h3>

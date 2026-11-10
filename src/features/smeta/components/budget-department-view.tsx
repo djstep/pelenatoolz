@@ -17,6 +17,8 @@ import type { BudgetDriveButton } from "@/features/smeta/drive-queries";
 import type { DepartmentItemsTree, ItemsDictionaries } from "@/features/smeta/items-queries";
 import type { BudgetClient } from "@/features/smeta/queries";
 import type { VariableChange } from "@/features/smeta/lib/items-snapshot";
+import type { RecalcCandidateInfo } from "@/features/smeta/approval-queries";
+import { ApproveRecalcButton } from "@/features/smeta/components/budget-recalc-panel";
 import { cn } from "@/shared/lib/cn";
 
 const SmetaSpreadsheetEditor = dynamic(
@@ -59,6 +61,8 @@ export function BudgetDepartmentView({
     info: BudgetApprovalInfo;
     /** Переменные, изменившиеся после утверждения (пометка над сметой). */
     variableChanges: VariableChange[];
+    /** Смета ушла в черновик только из-за переменных — продюсер утверждает пересчёт сам. */
+    recalc: RecalcCandidateInfo | null;
     /** Пояс проекта: даты в плашке одинаковы на сервере и в браузере. */
     timeZone: string;
     canApprove: boolean;
@@ -135,6 +139,14 @@ export function BudgetDepartmentView({
           <SmetaVariableChangesBanner
             changes={approval.variableChanges}
             versionNumber={approval.info.lastVersion?.number ?? null}
+            action={
+              approval.recalc ? (
+                <>
+                  <span>Строки главой не менялись — можно утвердить пересчёт без отправки.</span>
+                  <ApproveRecalcButton projectId={projectId} candidate={approval.recalc} />
+                </>
+              ) : undefined
+            }
           />
         </div>
       ) : null}

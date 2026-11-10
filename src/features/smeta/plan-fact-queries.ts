@@ -7,6 +7,10 @@ import {
 } from "@/features/memberships/assert-in-project";
 import { loadFacts } from "@/features/smeta/facts";
 import { buildPlanFact, type PlanFactReport } from "@/features/smeta/lib/plan-fact";
+import { isItemArchived } from "@/features/smeta/lib/item-where";
+
+/** Записи старой табличной сметы (до сметы по статьям) — отдельной группой в плане/факте. */
+const OLD_TABLE_GROUP = "Прежняя таблица (до сметы по статьям)";
 import {
   canReadAllSmeta,
   canReadDepartmentSmeta,
@@ -89,7 +93,7 @@ export async function getPlanFact(
         }
       : undefined;
 
-  const [versions, facts] = await Promise.all([
+  const [versions, facts, settings] = await Promise.all([
     departmentIds.length === 0
       ? Promise.resolve([])
       : prisma.budgetVersion.findMany({
@@ -107,6 +111,9 @@ export async function getPlanFact(
           },
         }),
     loadFacts(prisma, projectId, { departments: departmentIds, dateRange, withUnassigned }),
+    withUnassigned
+      ? prisma.projectBudgetSettings.findUnique({ where: { projectId }, select: { reservePercent: true, agencyPercent: true } })
+      : Promise.resolve(null),
   ]);
 
   const plannedIds = new Set(versions.flatMap((v) => v.lines.map((l) => l.budgetItemId)));
@@ -116,7 +123,16 @@ export async function getPlanFact(
       ? Promise.resolve([])
       : prisma.budgetItem.findMany({
           where: { projectId, id: { in: [...plannedIds, ...factOnlyIds] } },
-          select: { id: true, code: true, name: true, departmentId: true, archivedAt: true },
+          select: {
+            id: true,
+            code: true,
+            name: true,
+            departmentId: true,
+            archivedAt: true,
+            subarticle: {
+              select: { name: true, archivedAt: true, article: { select: { archivedAt: true, templateArticle: { select: { name: true } } } } },
+            },
+          },
         }),
     // Была ли статья с фактом хоть в одной версии — тогда она «вне плана», а не «без плана».
     factOnlyIds.length === 0
@@ -152,13 +168,20 @@ export async function getPlanFact(
         {
           code: i.code,
           name: i.name,
+          // Строка сметы по статьям — «Статья / Подстатья»; запись старой таблицы — отдельной группой.
+          group: i.subarticle ? `${i.subarticle.article.templateArticle.name} / ${i.subarticle.name}` : OLD_TABLE_GROUP,
           departmentId: i.departmentId,
-          archived: i.archivedAt !== null,
+          archived: isItemArchived(i),
           inAnyVersion: inVersion.has(i.id),
         },
       ]),
     ),
     facts: facts.byItem,
     unassigned: withUnassigned ? facts.unassigned : null,
+    percents: withUnassigned && settings
+      ? { reserve: Number(settings.reservePercent), agency: Number(settings.agencyPercent) }
+      : withUnassigned
+        ? { reserve: 0, agency: 0 }
+        : null,
   });
 }

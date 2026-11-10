@@ -29,10 +29,13 @@ export type SnapshotLine = {
   name: string;
   unit: string | null;
   expenseType: string | null;
+  /** Id типа и формы — для сравнения строения (название в справочнике можно переименовать). */
+  expenseTypeId?: string | null;
   quantity: string | null;
   rate: string | null;
   multipliers: SnapshotMultiplier[];
   paymentForm: string | null;
+  paymentFormId?: string | null;
   taxPercent: string | null;
   amount: string | null;
   tax: string | null;
@@ -76,6 +79,8 @@ export type SnapshotSourceArticle = {
       taxPercent: DecimalLike | null;
       expenseType: string | null;
       paymentForm: string | null;
+      expenseTypeId?: string | null;
+      paymentFormId?: string | null;
       multiplier1VariableId: string | null;
       multiplier1Value: DecimalLike | null;
       multiplier2VariableId: string | null;
@@ -115,6 +120,7 @@ export function buildItemsSnapshot(articles: readonly SnapshotSourceArticle[], v
           name: item.name,
           unit: item.unit,
           expenseType: item.expenseType,
+          expenseTypeId: item.expenseTypeId ?? null,
           quantity: str(item.quantity),
           rate: str(item.rate),
           multipliers: multipliers.map((m) => {
@@ -126,6 +132,7 @@ export function buildItemsSnapshot(articles: readonly SnapshotSourceArticle[], v
             return { value: m.value.toString() };
           }),
           paymentForm: item.paymentForm,
+          paymentFormId: item.paymentFormId ?? null,
           taxPercent: str(item.taxPercent),
           amount: calc.amount?.toFixed(2) ?? null,
           tax: calc.tax?.toFixed(2) ?? null,
@@ -240,4 +247,35 @@ export function parseItemsSnapshot(raw: unknown): ItemsSnapshot | null {
   const s = raw as Partial<ItemsSnapshot>;
   if (s.version !== 1 || !Array.isArray(s.articles) || !Array.isArray(s.variables) || !s.totals) return null;
   return s as ItemsSnapshot;
+}
+
+/**
+ * Строение снимка без значений переменных и сумм: статьи, подстатьи, строки и всё, что в них
+ * ввели (кол-во, ставка, какие множители, налог %, тип, форма оплаты). Одинаковое строение у
+ * черновика и версии — значит, глава ничего не менял, разница только в переменных.
+ */
+export function snapshotStructureKey(snapshot: ItemsSnapshot): string {
+  const num = (v: string | null) => (v == null ? null : Number(v));
+  return JSON.stringify(
+    snapshot.articles.map((a) => [
+      // Название статьи — из шаблона (его ведёт продюсер), в строение не входит.
+      a.id,
+      a.templateArticleId,
+      a.subarticles.map((s) => [
+        s.id,
+        s.name,
+        s.lines.map((l) => [
+          l.id,
+          l.name,
+          l.unit,
+          l.expenseTypeId !== undefined ? l.expenseTypeId : l.expenseType,
+          num(l.quantity),
+          num(l.rate),
+          l.multipliers.map((m) => (m == null ? null : "variableId" in m ? { v: m.variableId } : { n: Number(m.value) })),
+          l.paymentFormId !== undefined ? l.paymentFormId : l.paymentForm,
+          num(l.taxPercent),
+        ]),
+      ]),
+    ]),
+  );
 }

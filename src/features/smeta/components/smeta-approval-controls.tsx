@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { submitBudgetAction } from "@/features/smeta/actions";
 import type { BudgetApprovalInfo } from "@/features/smeta/approval-queries";
 import type { VariableChange } from "@/features/smeta/lib/items-snapshot";
@@ -143,9 +143,12 @@ function variableValueText(value: string | null): string {
 export function SmetaVariableChangesBanner({
   changes,
   versionNumber,
+  action,
 }: {
   changes: readonly VariableChange[];
   versionNumber: number | null;
+  /** «Утвердить пересчёт» — продюсеру, если строки не менялись. */
+  action?: ReactNode;
 }) {
   if (changes.length === 0) return null;
   return (
@@ -163,6 +166,7 @@ export function SmetaVariableChangesBanner({
         </span>
       ))}
       . Суммы черновика пересчитаны, утверждённая версия не изменилась.
+      {action ? <div className="mt-2 flex flex-wrap items-center gap-3">{action}</div> : null}
     </div>
   );
 }

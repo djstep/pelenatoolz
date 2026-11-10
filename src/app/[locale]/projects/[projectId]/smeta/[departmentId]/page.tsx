@@ -4,7 +4,11 @@ import { CreateDepartmentBudgetButton } from "@/features/smeta/components/create
 import { BudgetDepartmentView } from "@/features/smeta/components/budget-department-view";
 import { getDepartmentDraftsBook } from "@/features/smeta/queries";
 import { getDepartmentItemsTree, getItemsDictionaries } from "@/features/smeta/items-queries";
-import { getBudgetApprovalInfo, getVariableChangesSinceApproval } from "@/features/smeta/approval-queries";
+import {
+  getBudgetApprovalInfo,
+  getVariableChangesSinceApproval,
+  listRecalcCandidates,
+} from "@/features/smeta/approval-queries";
 import { getBudgetDriveButton } from "@/features/smeta/drive-queries";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import {
@@ -74,9 +78,10 @@ export default async function DepartmentSmetaPage({ params, searchParams }: Prop
   }
 
   const tab = tabParam === "drafts" ? "drafts" : "items";
-  const [approvalInfo, variableChanges, driveButton, tree, dictionaries, drafts] = await Promise.all([
+  const [approvalInfo, variableChanges, recalc, driveButton, tree, dictionaries, drafts] = await Promise.all([
     getBudgetApprovalInfo(projectId, department.id),
     getVariableChangesSinceApproval(projectId, department.id),
+    canApproveSmeta(ctx) ? listRecalcCandidates(projectId, [department.id]) : Promise.resolve([]),
     getBudgetDriveButton(ctx, department.id),
     tab === "items" ? getDepartmentItemsTree(projectId, department.id) : Promise.resolve(null),
     tab === "items" ? getItemsDictionaries(projectId, budget.id) : Promise.resolve(null),
@@ -101,6 +106,7 @@ export default async function DepartmentSmetaPage({ params, searchParams }: Prop
           ? {
               info: approvalInfo,
               variableChanges,
+              recalc: recalc[0] ?? null,
               timeZone: ctx.project.timezone,
               canApprove: canApproveSmeta(ctx),
               reviewHref: `${departmentHref}/review`,

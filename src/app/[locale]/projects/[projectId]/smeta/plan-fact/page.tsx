@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PlanFactView } from "@/features/smeta/components/plan-fact-view";
+import { withoutPlanFactCodes } from "@/features/smeta/lib/plan-fact";
 import { canOpenSmeta } from "@/features/smeta/lib/smeta-access";
 import {
   getPlanFact,
@@ -51,7 +52,7 @@ export default async function PlanFactPage({ params, searchParams }: Props) {
       <h2 className="font-display text-[27px] font-bold leading-tight">План/факт</h2>
       <PlanFactView
         projectId={projectId}
-        report={report}
+        report={withoutPlanFactCodes(report)}
         departments={departments.map((d) => ({ id: d.id, name: d.name }))}
         filters={{
           departmentId: filters.departmentId ?? "",

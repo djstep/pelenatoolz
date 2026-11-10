@@ -1,3 +1,5 @@
+import { percentOf } from "@/features/smeta/lib/summary-money";
+
 /**
  * План/факт по статьям смет. Только расчёт, без базы: на входе последние утверждённые
  * версии, статьи и факт (всё с налогом), на выходе строки и итоги.
@@ -31,8 +33,11 @@ export type PlanFactNumbers = {
 
 export type PlanFactRow = PlanFactNumbers & {
   itemId: string;
+  /** Внутренний код — только для выгрузки в Excel; на экране не показывается. */
   code: string;
   name: string;
+  /** Где строка: «Статья / Подстатья»; у записей старой таблицы — «Прежняя таблица». */
+  group: string;
   kind: PlanFactKind;
   /** Статья в плане, но из черновика её уже убрали (в архиве). */
   removedFromDraft: boolean;
@@ -52,6 +57,12 @@ export type PlanFactReport = {
   departments: PlanFactDepartment[];
   /** «Без статьи»: только тем, кто видит все сметы, и только без фильтра по цеху. */
   unassigned: PlanFactNumbers | null;
+  /**
+   * Резерв и агентские — % от плана цехов с налогом; входят в план проекта. Факта на них нет.
+   * Как и «Без статьи» — только без фильтра по цеху и тем, кто видит все сметы.
+   */
+  reserve: (PlanFactNumbers & { ratePercent: number }) | null;
+  agency: (PlanFactNumbers & { ratePercent: number }) | null;
   project: PlanFactNumbers;
 };
 
@@ -69,11 +80,18 @@ export type PlanFactInput = {
   /** Статьи из строк версий и с фактом. */
   items: Map<
     string,
-    { code: string; name: string; departmentId: string; archived: boolean; inAnyVersion: boolean }
+    { code: string; name: string; group: string; departmentId: string; archived: boolean; inAnyVersion: boolean }
   >;
   facts: Map<string, { accrued: number; paid: number }>;
   unassigned: { accrued: number; paid: number } | null;
+  /** Проценты резерва и агентских; null — не показывать (фильтр по цеху или нет прав). */
+  percents: { reserve: number; agency: number } | null;
 };
+
+/** Процент от плана до копеек (половина — вверх) — тот же расчёт, что в сводной (Decimal). */
+export function planPercent(base: number, percent: number): number {
+  return Number(percentOf(base.toFixed(2), String(percent)));
+}
 
 const EPS = 0.005;
 
@@ -143,6 +161,7 @@ export function buildPlanFact(input: PlanFactInput): PlanFactReport {
         // В плане — код и наименование на момент утверждения.
         code: line.code,
         name: line.name,
+        group: input.items.get(line.itemId)?.group ?? "",
         kind: "plan",
         removedFromDraft: input.items.get(line.itemId)?.archived ?? false,
         ...planFactNumbers(line.total, fact?.accrued ?? 0, fact?.paid ?? 0),
@@ -159,6 +178,7 @@ export function buildPlanFact(input: PlanFactInput): PlanFactReport {
         itemId,
         code: item.code,
         name: item.name,
+        group: item.group,
         kind: unplannedKind(item.inAnyVersion),
         removedFromDraft: false,
         ...planFactNumbers(0, fact.accrued, fact.paid),
@@ -181,9 +201,24 @@ export function buildPlanFact(input: PlanFactInput): PlanFactReport {
   const unassigned = input.unassigned
     ? unassignedNumbers(input.unassigned.accrued, input.unassigned.paid)
     : null;
+  const base = sumNumbers(departments.map((d) => d.totals)).plan;
+  const extra = (ratePercent: number) => ({ ratePercent, ...planFactNumbers(planPercent(base, ratePercent), 0, 0) });
+  // Процент не задан (0) — строки нет.
+  const reserve = input.percents && input.percents.reserve > 0 ? extra(input.percents.reserve) : null;
+  const agency = input.percents && input.percents.agency > 0 ? extra(input.percents.agency) : null;
   const project = sumNumbers([
     ...departments.map((d) => d.totals),
     ...(unassigned ? [unassigned] : []),
+    ...(reserve ? [reserve] : []),
+    ...(agency ? [agency] : []),
   ]);
-  return { departments, unassigned, project };
+  return { departments, unassigned, reserve, agency, project };
+}
+
+/** Для экрана: внутренние коды строк не уходят в браузер (в выгрузку Excel — уходят). */
+export function withoutPlanFactCodes(report: PlanFactReport): PlanFactReport {
+  return {
+    ...report,
+    departments: report.departments.map((d) => ({ ...d, rows: d.rows.map((r) => ({ ...r, code: "" })) })),
+  };
 }

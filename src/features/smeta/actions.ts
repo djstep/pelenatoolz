@@ -19,6 +19,7 @@ import {
 } from "@/features/smeta/lib/import-xlsx";
 import {
   approveBudget,
+  approveVariableRecalc,
   returnBudget,
   submitBudget,
 } from "@/features/smeta/approval-queries";
@@ -424,4 +425,70 @@ export async function toggleBudgetSheetPinnedAction(
 
   revalidateSmeta(projectId, departmentId);
   return { success: true as const, sheetId: saved.sheetKey, pinned: saved.pinned };
+}
+
+/**
+ * Утвердить пересчёт по переменным (продюсер): смета ушла в черновик только из-за смены
+ * переменных, строки не менялись. Новая версия с пометкой «пересчёт по переменным».
+ */
+export async function approveVariableRecalcAction(
+  projectId: string,
+  departmentId: string,
+  payload: unknown,
+): Promise<{ error?: string; success?: string; number?: number }> {
+  const access = await requireApprover(projectId, departmentId);
+  if (!access.ok) return { error: access.error };
+  const parsed = z.object({ fingerprint: z.string().regex(/^[0-9a-f]{64}$/) }).safeParse(payload);
+  if (!parsed.success) return { error: "Некорректные данные" };
+  const result = await approveVariableRecalc(access.ctx, {
+    projectId,
+    departmentId,
+    fingerprint: parsed.data.fingerprint,
+  });
+  if (!result.ok) return { error: result.error };
+  revalidateSmeta(projectId, departmentId);
+  return { success: `Пересчёт утверждён: версия ${result.number}`, number: result.number };
+}
+
+/**
+ * «Утвердить все пересчитанные» (продюсер): каждая смета — отдельно, со своим отпечатком с экрана.
+ * Что изменилось после показа или уже не пересчёт — не утверждается и называется в ответе.
+ */
+export async function approveAllVariableRecalcAction(
+  projectId: string,
+  payload: unknown,
+): Promise<{ error?: string; success?: string; approved?: number; failed?: string[] }> {
+  const ctx = await requireProjectContext(projectId);
+  if (!canApproveSmeta(ctx)) return { error: NO_RIGHTS };
+  const parsed = z
+    .object({
+      items: z
+        .array(z.object({ departmentId: z.string().min(1).max(64), fingerprint: z.string().regex(/^[0-9a-f]{64}$/) }))
+        .min(1)
+        .max(200),
+    })
+    .safeParse(payload);
+  if (!parsed.success) return { error: "Некорректные данные" };
+
+  let approved = 0;
+  const failed: string[] = [];
+  for (const item of parsed.data.items) {
+    try {
+      await assertInProject("Department", item.departmentId, projectId);
+    } catch (error) {
+      if (!isNotInProjectError(error)) throw error;
+      failed.push(`Цех не найден`);
+      continue;
+    }
+    const result = await approveVariableRecalc(ctx, { projectId, ...item });
+    if (result.ok) approved++;
+    else failed.push(`${await departmentName(projectId, item.departmentId)}: ${result.error}`);
+    revalidateSmeta(projectId, item.departmentId);
+  }
+  return {
+    success: approved > 0 ? `Утверждено пересчётов: ${approved}` : undefined,
+    error: approved === 0 ? (failed[0] ?? "Нечего утверждать") : undefined,
+    approved,
+    failed,
+  };
 }

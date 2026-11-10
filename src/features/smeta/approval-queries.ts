@@ -13,6 +13,7 @@ import {
   changedVariables,
   parseItemsSnapshot,
   snapshotDiffSources,
+  snapshotStructureKey,
   snapshotVariableIds,
   type ItemsSnapshot,
   type SnapshotVariable,
@@ -64,6 +65,8 @@ export async function loadItemsSnapshot(db: Db, projectId: string, budgetId: str
                 quantity: true,
                 rate: true,
                 taxPercent: true,
+                expenseTypeId: true,
+                paymentFormId: true,
                 expenseType: { select: { name: true } },
                 paymentForm: { select: { name: true } },
                 multiplier1VariableId: true,
@@ -261,6 +264,117 @@ export async function submitBudget(
   );
 }
 
+/**
+ * Неизменяемая версия из снимка и статус «утверждена» — общее для утверждения отправленной
+ * сметы и пересчёта по переменным. Вызывать под блокировкой сметы.
+ */
+async function createItemsVersion(
+  tx: Tx,
+  ctx: AuditContext,
+  input: {
+    projectId: string;
+    departmentId: string;
+    budgetId: string;
+    departmentName: string;
+    revision: number;
+    snapshot: ItemsSnapshot;
+    approvedByHead: boolean;
+    submitted: { byId: string | null; byName: string | null; at: Date | null; comment: string | null };
+    /** Пересчёт по переменным: какие переменные изменились. */
+    recalc: VariableChange[] | null;
+  },
+): Promise<number> {
+  const { projectId, departmentId, snapshot } = input;
+  const approver = await tx.user.findUniqueOrThrow({ where: { id: ctx.user.id }, select: { name: true } });
+  const last = await tx.budgetVersion.findFirst({
+    where: { projectId, departmentId },
+    orderBy: { number: "desc" },
+    select: { number: true },
+  });
+  const number = (last?.number ?? 0) + 1;
+  // Строки плана — точными Decimal из строк снимка (не через число JS).
+  const lines = snapshot.articles.flatMap((a) => a.subarticles.flatMap((s) => s.lines));
+  const dec = (v: string | null) => (v == null ? null : new Prisma.Decimal(v));
+  const recalcText = input.recalc
+    ? ` — пересчёт по переменным (${input.recalc.map((c) => `${c.label} ${c.before ?? "не задана"} → ${c.after ?? "не задана"}`).join(", ")})`
+    : "";
+
+  await auditMutation(
+    ctx,
+    () =>
+      tx.budgetVersion.create({
+        data: {
+          projectId,
+          departmentId,
+          budgetId: input.budgetId,
+          number,
+          revision: input.revision,
+          approvedById: ctx.user.id,
+          approvedByName: approver.name,
+          approvedByHead: input.approvedByHead,
+          submittedById: input.submitted.byId,
+          submittedByName: input.submitted.byName,
+          submittedAt: input.submitted.at,
+          submitComment: input.submitted.comment,
+          total: new Prisma.Decimal(snapshot.totals.total),
+          itemCount: snapshot.lineCount,
+          format: BudgetVersionFormat.ITEMS,
+          snapshot: snapshot as unknown as Prisma.InputJsonValue,
+          recalcByVariables: input.recalc !== null,
+          // Строки версии — план цеха для плана/факта (по id строки).
+          lines: {
+            create: lines.map((l, index) => ({
+              budgetItemId: l.id,
+              code: l.code,
+              name: l.name,
+              unit: l.unit,
+              quantity: dec(l.quantity),
+              rate: dec(l.rate),
+              days: null,
+              // Строки без суммы до утверждения не доходят (проверка у вызывающего).
+              amount: dec(l.amount) ?? new Prisma.Decimal(0),
+              taxPercent: dec(l.taxPercent),
+              tax: dec(l.tax) ?? new Prisma.Decimal(0),
+              total: dec(l.total) ?? new Prisma.Decimal(0),
+              sortOrder: index,
+            })),
+          },
+        },
+        select: { id: true },
+      }),
+    undefined,
+    {
+      projectId,
+      entityType: AuditEntityType.budgetVersion,
+      action: "CREATE",
+      entityId: (_input, r) => r.id,
+      summary: `Смета цеха «${input.departmentName}»: утверждена версия ${number}${input.approvedByHead ? " (утвердил глава цеха)" : ""}${recalcText}`,
+      changes: {
+        number,
+        total: snapshot.totals.total,
+        itemCount: snapshot.lineCount,
+        approvedByHead: input.approvedByHead,
+        recalcByVariables: input.recalc !== null,
+        variables: Object.fromEntries(snapshot.variables.map((v) => [v.label, v.value])),
+      },
+    },
+    { db: tx },
+  );
+
+  await tx.budget.update({
+    where: { id: input.budgetId },
+    data: {
+      status: BudgetStatus.APPROVED,
+      submittedAt: null,
+      submittedById: null,
+      submitComment: null,
+      submittedRevision: null,
+      changedAfterSubmitAt: null,
+    },
+  });
+  return number;
+}
+
 /** Утвердить смету (продюсер): неизменяемая версия ровно из того снимка, который он видел. */
 export async function approveBudget(
   ctx: AuditContext,
@@ -303,87 +417,21 @@ export async function approveBudget(
       const incomplete = incompleteError(snapshot);
       if (incomplete) return { ok: false, error: incomplete } as const;
 
-      const approver = await tx.user.findUniqueOrThrow({ where: { id: ctx.user.id }, select: { name: true } });
-      const last = await tx.budgetVersion.findFirst({
-        where: { projectId, departmentId },
-        orderBy: { number: "desc" },
-        select: { number: true },
-      });
-      const number = (last?.number ?? 0) + 1;
-      // Строки плана — точными Decimal из строк снимка (не через число JS).
-      const lines = snapshot.articles.flatMap((a) => a.subarticles.flatMap((s) => s.lines));
-      const dec = (v: string | null) => (v == null ? null : new Prisma.Decimal(v));
-
-      await auditMutation(
-        ctx,
-        () =>
-          tx.budgetVersion.create({
-            data: {
-              projectId,
-              departmentId,
-              budgetId: locked.id,
-              number,
-              revision: budget.revision,
-              approvedById: ctx.user.id,
-              approvedByName: approver.name,
-              approvedByHead: input.approvedByHead,
-              submittedById: budget.submittedById,
-              submittedByName: budget.submittedBy?.name ?? null,
-              submittedAt: budget.submittedAt,
-              submitComment: budget.submitComment,
-              total: new Prisma.Decimal(snapshot.totals.total),
-              itemCount: snapshot.lineCount,
-              format: BudgetVersionFormat.ITEMS,
-              snapshot: snapshot as unknown as Prisma.InputJsonValue,
-              // Строки версии — план цеха для плана/факта (по id строки).
-              lines: {
-                create: lines.map((l, index) => ({
-                  budgetItemId: l.id,
-                  code: l.code,
-                  name: l.name,
-                  unit: l.unit,
-                  quantity: dec(l.quantity),
-                  rate: dec(l.rate),
-                  days: null,
-                  // Строки без суммы до утверждения не доходят (проверка выше).
-                  amount: dec(l.amount) ?? new Prisma.Decimal(0),
-                  taxPercent: dec(l.taxPercent),
-                  tax: dec(l.tax) ?? new Prisma.Decimal(0),
-                  total: dec(l.total) ?? new Prisma.Decimal(0),
-                  sortOrder: index,
-                })),
-              },
-            },
-            select: { id: true },
-          }),
-        undefined,
-        {
-          projectId,
-          entityType: AuditEntityType.budgetVersion,
-          action: "CREATE",
-          entityId: (_input, r) => r.id,
-          summary: `Смета цеха «${locked.departmentName}»: утверждена версия ${number}${input.approvedByHead ? " (утвердил глава цеха)" : ""}`,
-          changes: {
-            number,
-            total: snapshot.totals.total,
-            itemCount: snapshot.lineCount,
-            approvedByHead: input.approvedByHead,
-            variables: Object.fromEntries(snapshot.variables.map((v) => [v.label, v.value])),
-          },
+      const number = await createItemsVersion(tx, ctx, {
+        projectId,
+        departmentId,
+        budgetId: locked.id,
+        departmentName: locked.departmentName,
+        revision: budget.revision,
+        snapshot,
+        approvedByHead: input.approvedByHead,
+        submitted: {
+          byId: budget.submittedById,
+          byName: budget.submittedBy?.name ?? null,
+          at: budget.submittedAt,
+          comment: budget.submitComment,
         },
-        { db: tx },
-      );
-
-      await tx.budget.update({
-        where: { id: locked.id },
-        data: {
-          status: BudgetStatus.APPROVED,
-          submittedAt: null,
-          submittedById: null,
-          submitComment: null,
-          submittedRevision: null,
-          changedAfterSubmitAt: null,
-        },
+        recalc: null,
       });
       return { ok: true, number } as const;
     },
@@ -437,6 +485,134 @@ export async function returnBudget(
     );
     return { ok: true } as const;
   });
+}
+
+// ---------------------------------------------------------------------------
+// Пересчёт по переменным: продюсер утверждает сам, без отправки главой
+// ---------------------------------------------------------------------------
+
+type RecalcCandidate = {
+  budgetId: string;
+  departmentName: string;
+  revision: number;
+  snapshot: ItemsSnapshot;
+  fingerprint: string;
+  versionNumber: number;
+  changes: VariableChange[];
+  totalBefore: string;
+};
+
+/**
+ * Смета ушла в черновик только из-за смены переменных: последняя версия — по статьям, строки
+ * с тех пор не менялись (то же строение без учёта значений переменных), изменились суммы,
+ * строк без суммы нет. Если глава что-то правил — пересчёт сам не утверждается.
+ */
+async function recalcCandidate(tx: Tx, projectId: string, departmentId: string): Promise<RecalcCandidate | null> {
+  const budget = await tx.budget.findFirst({
+    where: { projectId, departmentId },
+    select: { id: true, status: true, revision: true, changedAfterSubmitAt: true, department: { select: { name: true } } },
+  });
+  if (!budget || budget.status !== BudgetStatus.DRAFT || budget.changedAfterSubmitAt) return null;
+  const last = await lastVersion(tx, projectId, departmentId);
+  if (!last || last.format !== BudgetVersionFormat.ITEMS) return null;
+  const approved = parseItemsSnapshot(last.snapshot);
+  if (!approved) return null;
+  const draft = await loadItemsSnapshot(tx, projectId, budget.id);
+  if (draft.totals.incomplete > 0 || draft.lineCount === 0) return null;
+  if (snapshotStructureKey(draft) !== snapshotStructureKey(approved)) return null;
+  const changes = variableChangesOf(last, draft.variables, draft);
+  if (changes.length === 0) return null;
+  return {
+    budgetId: budget.id,
+    departmentName: budget.department.name,
+    revision: budget.revision,
+    snapshot: draft,
+    fingerprint: snapshotFingerprint(draft),
+    versionNumber: last.number,
+    changes,
+    totalBefore: approved.totals.total,
+  };
+}
+
+export type RecalcCandidateInfo = {
+  departmentId: string;
+  departmentName: string;
+  versionNumber: number;
+  fingerprint: string;
+  changes: VariableChange[];
+  totalBefore: string;
+  totalAfter: string;
+};
+
+/** Сметы, которые продюсер может утвердить как пересчёт по переменным, — для списка и сводной. */
+export async function listRecalcCandidates(projectId: string, departmentIds: readonly string[]): Promise<RecalcCandidateInfo[]> {
+  if (departmentIds.length === 0) return [];
+  return prisma.$transaction(
+    async (tx) => {
+      // Кандидаты — только черновики с версией по статьям: остальные не читаем.
+      const drafts = await tx.budget.findMany({
+        where: { projectId, departmentId: { in: [...departmentIds] }, status: BudgetStatus.DRAFT, changedAfterSubmitAt: null },
+        select: { departmentId: true },
+      });
+      const out: RecalcCandidateInfo[] = [];
+      for (const { departmentId } of drafts) {
+        const c = await recalcCandidate(tx, projectId, departmentId);
+        if (!c) continue;
+        out.push({
+          departmentId,
+          departmentName: c.departmentName,
+          versionNumber: c.versionNumber,
+          fingerprint: c.fingerprint,
+          changes: c.changes,
+          totalBefore: c.totalBefore,
+          totalAfter: c.snapshot.totals.total,
+        });
+      }
+      return out.sort((a, b) => a.departmentName.localeCompare(b.departmentName, "ru"));
+    },
+    { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead, timeout: 20_000 },
+  );
+}
+
+/**
+ * Утвердить пересчёт по переменным (продюсер): новая версия с пометкой «пересчёт по переменным»
+ * ровно из того черновика, который он видел (отпечаток). Глава что-то менял — отказ: обычный
+ * порядок через отправку.
+ */
+export async function approveVariableRecalc(
+  ctx: AuditContext,
+  input: { projectId: string; departmentId: string; fingerprint: string },
+): Promise<Fail | { ok: true; number: number }> {
+  const { projectId, departmentId } = input;
+  return prisma.$transaction(
+    async (tx) => {
+      const locked = await lockedBudget(tx, projectId, departmentId);
+      if (!locked) return NOT_FOUND;
+      const candidate = await recalcCandidate(tx, projectId, departmentId);
+      if (!candidate) {
+        return {
+          ok: false,
+          error: "Это не пересчёт по переменным: смету меняли или она не в черновике — утверждение через отправку главой",
+        } as const;
+      }
+      if (candidate.fingerprint !== input.fingerprint) {
+        return { ok: false, error: "Смета или значения переменных изменились — обновите страницу" } as const;
+      }
+      const number = await createItemsVersion(tx, ctx, {
+        projectId,
+        departmentId,
+        budgetId: locked.id,
+        departmentName: locked.departmentName,
+        revision: candidate.revision,
+        snapshot: candidate.snapshot,
+        approvedByHead: false,
+        submitted: { byId: null, byName: null, at: null, comment: null },
+        recalc: candidate.changes,
+      });
+      return { ok: true, number } as const;
+    },
+    { timeout: 20_000 },
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -571,6 +747,7 @@ export async function listDepartmentVersions(projectId: string, departmentId: st
       total: true,
       itemCount: true,
       format: true,
+      recalcByVariables: true,
     },
   });
   return rows.map((r) => ({ ...r, approvedAt: r.approvedAt.toISOString(), total: Number(r.total) }));
@@ -590,6 +767,7 @@ const versionSelect = {
   total: true,
   itemCount: true,
   format: true,
+  recalcByVariables: true,
   snapshot: true,
   sheetName: true,
   sheetData: true,
@@ -607,6 +785,8 @@ type VersionMeta = {
   submitComment: string | null;
   total: number;
   itemCount: number;
+  /** Пересчёт по переменным: утвердил продюсер без отправки главой. */
+  recalcByVariables: boolean;
 };
 
 export type DepartmentVersion =
@@ -631,6 +811,7 @@ export async function getDepartmentVersion(
     submitComment: v.submitComment,
     total: Number(v.total),
     itemCount: v.itemCount,
+    recalcByVariables: v.recalcByVariables,
   };
   if (v.format === BudgetVersionFormat.ITEMS) {
     const snapshot = parseItemsSnapshot(v.snapshot);
