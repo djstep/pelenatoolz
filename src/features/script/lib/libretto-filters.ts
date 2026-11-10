@@ -4,6 +4,7 @@ import {
   formatLocationTitle,
   locationObjectName,
   locationSubName,
+  placeOf,
 } from "@/features/locations/lib/format-location";
 
 export type TextMatchMode = "one_of" | "exclude" | "all" | "exact";
@@ -187,7 +188,7 @@ export function applyLibrettoFilters(
     }
 
     const places = scene.locations
-      .map((l) => l.location.address ?? "")
+      .map((l) => placeOf(l.location).address ?? "")
       .filter(Boolean);
     if (!matchText(places, filters.placeQuery, filters.placeMode)) {
       return false;

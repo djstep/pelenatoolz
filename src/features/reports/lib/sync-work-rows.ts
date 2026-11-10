@@ -1,8 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import { sumExtrasPay } from "@/features/payroll/lib/parse-extra-payments";
 import { prisma } from "@/shared/db/prisma";
-import { formatLocationTitle } from "@/features/locations/lib/format-location";
-import { LOCATION_PARENT_SELECT } from "@/features/locations/lib/location-fields";
+import { formatLocationTitle, hasOwnPlace } from "@/features/locations/lib/format-location";
 import {
   computeWorkPay,
   OVERTIME_MODE_LABELS,
@@ -19,11 +18,39 @@ import { dec } from "@/shared/db/serialize-decimal";
 import {
   newRowFields,
   refreshedRowFields,
+  rekeyLocationRows,
   splitWorkRows,
   timesAfterRefresh,
   transportCandidate,
   type SeedCandidate,
 } from "@/features/reports/lib/work-row-sync-rules";
+
+/** Условия аренды места (строка отчёта смены «Локация»). */
+const RENT_SELECT = {
+  id: true,
+  name: true,
+  shiftRate: true,
+  shiftHoursMin: true,
+  unpaidOvertimeMin: true,
+  taxPercent: true,
+  overtimeMode: true,
+  unpaidOvertimeMode: true,
+} as const satisfies Prisma.LocationSelect;
+
+type RentRow = Prisma.LocationGetPayload<{ select: typeof RENT_SELECT }>;
+
+/**
+ * Чья аренда у привязки сцены: подобъект со своим адресом — его, без адреса — объекта
+ * (одно реальное место — одна строка в день; решение владельца).
+ */
+function rentOwner(
+  location: RentRow & { sublocation: string | null; address: string | null; parent: RentRow | null },
+) {
+  if (location.parent && !hasOwnPlace(location)) {
+    return { ...location.parent, sublocation: null, parent: null };
+  }
+  return location;
+}
 
 function actorName(a: {
   lastName: string;
@@ -73,16 +100,11 @@ async function loadCandidates(projectId: string, shootDayId: string) {
                   locationId: true,
                   location: {
                     select: {
-                      id: true,
-                      name: true,
                       sublocation: true,
-                      parent: LOCATION_PARENT_SELECT,
-                      shiftRate: true,
-                      shiftHoursMin: true,
-                      unpaidOvertimeMin: true,
-                      taxPercent: true,
-                      overtimeMode: true,
-                      unpaidOvertimeMode: true,
+                      address: true,
+                      // Подобъект без своего адреса снимается на месте объекта: аренда — объекта.
+                      parent: { select: RENT_SELECT },
+                      ...RENT_SELECT,
                     },
                   },
                 },
@@ -148,7 +170,7 @@ async function loadCandidates(projectId: string, shootDayId: string) {
           in: [
             ...new Set(
               day.scenes.flatMap((s) =>
-                s.scene.locations.map((l) => l.locationId),
+                s.scene.locations.map((l) => rentOwner(l.location).id),
               ),
             ),
           ],
@@ -256,19 +278,34 @@ async function loadCandidates(projectId: string, shootDayId: string) {
     candidates.push(transportCandidate({ ...t, kmRate: dec(t.kmRate) }, order++));
   }
 
+  // Аренда — одна строка на реальное место в день: подобъекты без своего адреса — строка объекта.
+  // `rentMoves` — старая строка места (подобъект или объект привязки) → ключ нынешнего владельца:
+  // им строки отчёта переносятся, а не удаляются (`rekeyLocationRows`). Неоднозначные — не переносятся.
   const seenLocations = new Set<string>();
+  const rentMoves = new Map<string, string>();
+  const ambiguous = new Set<string>();
+  const noteMove = (fromId: string, key: string) => {
+    if (ambiguous.has(fromId)) return;
+    const prev = rentMoves.get(fromId);
+    if (prev && prev !== key) {
+      rentMoves.delete(fromId);
+      ambiguous.add(fromId);
+    } else rentMoves.set(fromId, key);
+  };
   for (const row of day.scenes) {
     for (const link of row.scene.locations) {
-      if (seenLocations.has(link.locationId)) continue;
-      seenLocations.add(link.locationId);
-      const loc = link.location;
+      const loc = rentOwner(link.location);
+      noteMove(link.location.id, `location:${loc.id}`);
+      if (link.location.parent) noteMove(link.location.parent.id, `location:${loc.id}`);
+      if (seenLocations.has(loc.id)) continue;
+      seenLocations.add(loc.id);
       const label = formatLocationTitle(loc);
       candidates.push({
-        sourceKey: `location:${link.locationId}`,
+        sourceKey: `location:${loc.id}`,
         kind: "LOCATION",
         displayName: label,
         categoryLabel: "Локация",
-        locationId: link.locationId,
+        locationId: loc.id,
         factStart: null,
         factEnd: null,
         shiftHoursMin: loc.shiftHoursMin,
@@ -292,7 +329,7 @@ async function loadCandidates(projectId: string, shootDayId: string) {
     return [];
   }
 
-  return { candidates, ratesFor };
+  return { candidates, ratesFor, rentMoves };
 }
 
 type ExistingRow = Prisma.ProductionReportWorkRowGetPayload<{
@@ -455,6 +492,8 @@ type LoadedPlan = WorkRowSyncPlan & {
   candidates: SeedCandidate[];
   ratesFor: (c: SeedCandidate) => RateRow[];
   existing: ExistingRow[];
+  /** Строки аренды, переносимые на нового владельца места (записываются в `applyWorkRowSync`). */
+  rekeyed: { id: string; sourceKey: string; locationId: string }[];
 };
 
 async function loadPlan(
@@ -473,7 +512,8 @@ async function loadPlan(
   ]);
   if (!loaded) return null;
   const { candidates, ratesFor } = loaded;
-  const split = splitWorkRows(candidates, existing);
+  const { rows: existingRows, rekeyed } = rekeyLocationRows(candidates, existing, loaded.rentMoves);
+  const split = splitWorkRows(candidates, existingRows);
 
   const rateChanges: WorkRowRateChange[] = [];
   const otherChanged: string[] = [];
@@ -512,7 +552,8 @@ async function loadPlan(
   return {
     candidates,
     ratesFor,
-    existing,
+    existing: existingRows,
+    rekeyed,
     added: split.added.map((c) => c.displayName),
     removed: split.removed.map((r) => r.displayName),
     rateChanges,
@@ -546,7 +587,14 @@ export async function applyWorkRowSync(
 ): Promise<WorkRowSyncPlan | null> {
   const plan = await loadPlan(projectId, shootDayId, reportId);
   if (!plan) return null;
-  const { candidates, ratesFor, existing } = plan;
+  const { candidates, ratesFor, existing, rekeyed } = plan;
+  // Сначала перенос строк аренды на нового владельца места — потом сверка.
+  for (const row of rekeyed) {
+    await prisma.productionReportWorkRow.update({
+      where: { id: row.id },
+      data: { sourceKey: row.sourceKey, locationId: row.locationId },
+    });
+  }
   const { kept, removed } = splitWorkRows(candidates, existing);
   const keptByKey = new Map(kept.map(({ prev }) => [prev.sourceKey, prev]));
 

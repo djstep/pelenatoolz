@@ -2,7 +2,7 @@ import type { ProjectType } from "@prisma/client";
 import { sceneStatusLabels } from "@/shared/i18n/domain-labels";
 import { formatDateShort } from "@/shared/i18n/format-date";
 import type { listScenes } from "@/features/script/queries";
-import { formatScenePlaces } from "@/features/locations/lib/format-location";
+import { formatScenePlaces, placeOf } from "@/features/locations/lib/format-location";
 
 export type LibrettoScene = Awaited<ReturnType<typeof listScenes>>[number];
 
@@ -22,8 +22,12 @@ export function formatLocationCell(scene: Pick<LibrettoScene, "locations">) {
   return formatScenePlaces(scene.locations.map((l) => l.location));
 }
 
-export function formatPlaceCell(scene: LibrettoScene) {
-  return scene.locations[0]?.location.address ?? "—";
+/** «Место»: реальные адреса мест сцены (у подобъекта без своего — адрес объекта), без повторов. */
+export function formatPlaceCell(scene: Pick<LibrettoScene, "locations">) {
+  const addresses = [
+    ...new Set(scene.locations.map((l) => placeOf(l.location).address).filter((a): a is string => Boolean(a))),
+  ];
+  return addresses.join("; ") || "—";
 }
 
 export function getActorNames(scene: LibrettoScene) {

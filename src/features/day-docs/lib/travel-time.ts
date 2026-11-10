@@ -1,4 +1,8 @@
-import { locationObjectName, type LocationObjectSource } from "@/features/locations/lib/format-location";
+import {
+  locationObjectName,
+  placeOf,
+  type LocationObjectSource,
+} from "@/features/locations/lib/format-location";
 
 type GeoPoint = { lat: number; lon: number };
 
@@ -68,9 +72,11 @@ export async function estimateTravelMinutes(
 }
 
 export function scenePrimaryAddress(scene: {
-  locations: Array<{ location: LocationObjectSource & { address: string | null } }>;
+  locations: Array<{
+    location: LocationObjectSource & { address: string | null; parent: { name: string; address?: string | null } | null };
+  }>;
 }): string | null {
   const loc = scene.locations[0]?.location;
   if (!loc) return null;
-  return loc.address?.trim() || locationObjectName(loc).trim() || null;
+  return placeOf(loc).address || locationObjectName(loc).trim() || null;
 }

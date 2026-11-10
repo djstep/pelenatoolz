@@ -12,6 +12,8 @@ import {
 } from "@/features/call-sheets/lib/sections";
 import {
   formatLocationTitle,
+  hasOwnPlace,
+  placeOf,
   type LocationNameSource,
 } from "@/features/locations/lib/format-location";
 import { SHIFT_TIMES } from "@/features/call-sheets/print/print-blocks";
@@ -171,7 +173,8 @@ type PrintSourceScene = {
     location: {
       name: string;
       sublocation: string | null;
-      parent: { name: string } | null;
+      // Подобъект без своего адреса снимается по адресу объекта (`placeOf`).
+      parent: { name: string; address?: string | null } | null;
       address: string | null;
     };
   }[];
@@ -256,7 +259,15 @@ export type CallSheetPrintSource = {
     schemeLocation: {
       name: string;
       sublocation: string | null;
-      parent: { name: string } | null;
+      // Схема подобъекта без своего адреса — схема объекта.
+      parent: {
+        name: string;
+        address?: string | null;
+        directions?: string | null;
+        parking?: string | null;
+        onSiteNotes?: string | null;
+        points?: { number: string; name: string; description: string | null }[];
+      } | null;
       address: string | null;
       directions: string | null;
       parking: string | null;
@@ -724,7 +735,7 @@ function buildLocations(
     for (const { location } of scene.locations) {
       const name = locationName(location);
       if (!name) continue;
-      const address = text(location.address);
+      const address = placeOf(location).address;
       const key = `${address ?? ""}\n${name}`;
       let row = rows.get(key);
       if (!row) {
@@ -772,19 +783,22 @@ function buildCrewCalls(
 function buildScheme(sheet: CallSheetPrintSource["sheet"]): CallSheetPrintScheme | null {
   const loc = sheet?.schemeLocation;
   if (!loc) return null;
+  // Своё место подобъекта — его схема; нет — схема объекта целиком.
+  const own = hasOwnPlace(loc) || !loc.parent;
+  const src = own ? loc : { ...loc.parent!, points: loc.parent!.points ?? [] };
   const scheme = {
     title: locationName(loc) ?? loc.name,
-    address: text(loc.address),
-    points: loc.points
+    address: text(src.address),
+    points: src.points
       .filter((p) => text(p.name) || text(p.number))
       .map((p) => ({
         number: text(p.number) ?? "",
         name: text(p.name) ?? "",
         description: text(p.description),
       })),
-    directions: text(loc.directions),
-    parking: text(loc.parking),
-    onSite: text(loc.onSiteNotes),
+    directions: text(src.directions),
+    parking: text(src.parking),
+    onSite: text(src.onSiteNotes),
   };
   // Ни точек, ни текстов (карты пока нет) — листа схемы нет.
   const hasContent =

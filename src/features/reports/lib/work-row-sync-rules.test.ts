@@ -3,6 +3,7 @@ import { describe, test } from "node:test";
 import {
   newRowFields,
   refreshedRowFields,
+  rekeyLocationRows,
   splitWorkRows,
   timesAfterRefresh,
   transportCandidate,
@@ -114,5 +115,37 @@ describe("спецтранспорт в отчёте смены", () => {
     });
     const noEnd = transportCandidate(transport({ wrapTime: null }), 0);
     assert.equal(timesAfterRefresh({ factStart: null, factEnd: null }, noEnd).factEnd, null);
+  });
+});
+
+describe("строки аренды: сменился владелец места", () => {
+  const rent = (key: string) =>
+    ({ sourceKey: key, kind: "LOCATION", displayName: key, categoryLabel: "Локация", sortOrder: 0 }) as SeedCandidate;
+  const row = (id: string, key: string) => ({ id, sourceKey: key, locationId: key.slice("location:".length) });
+
+  test("подобъекту стёрли адрес — строка подобъекта переходит на объект, не удаляется", () => {
+    const { rows, rekeyed } = rekeyLocationRows(
+      [rent("location:home")],
+      [row("r1", "location:kids")],
+      new Map([["kids", "location:home"]]),
+    );
+    assert.deepEqual(rekeyed, [{ id: "r1", sourceKey: "location:home", locationId: "home" }]);
+    assert.deepEqual(splitWorkRows([rent("location:home")], rows).removed, []);
+  });
+
+  test("строка нового владельца уже есть — старая не переносится (уйдёт по общему правилу)", () => {
+    const { rekeyed } = rekeyLocationRows(
+      [rent("location:home")],
+      [row("r1", "location:kids"), row("r2", "location:home")],
+      new Map([["kids", "location:home"]]),
+    );
+    assert.deepEqual(rekeyed, []);
+  });
+
+  test("ключ ещё среди кандидатов или владельца не узнать — строка как есть", () => {
+    const same = rekeyLocationRows([rent("location:kids")], [row("r1", "location:kids")], new Map());
+    assert.deepEqual(same.rekeyed, []);
+    const unknown = rekeyLocationRows([rent("location:home")], [row("r1", "location:gone")], new Map());
+    assert.deepEqual(unknown.rekeyed, []);
   });
 });

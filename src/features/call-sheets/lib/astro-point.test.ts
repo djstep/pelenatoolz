@@ -35,7 +35,18 @@ describe("восход и закат — где считать", () => {
 
 describe("восход и закат — подобъект", () => {
   test("подобъект с родителем — подпись «Объект. Подобъект»", () => {
-    const kitchen = { name: "Кухня", sublocation: null, parent: { name: "Дом" }, latitude: 1, longitude: 2 };
+    const kitchen = { name: "Кухня", sublocation: null, address: "Павильон 3", parent: { name: "Дом" }, latitude: 1, longitude: 2 };
     assert.equal(pickAstroPoint(kitchen, [])?.label, "Дом. Кухня");
+  });
+
+  test("подобъект без своего адреса — координаты объекта", () => {
+    const hall = {
+      name: "Коридор",
+      sublocation: null,
+      parent: { name: "Дом", address: "ул. Лесная, 1", latitude: 55, longitude: 37 },
+      latitude: 1,
+      longitude: 2,
+    };
+    assert.deepEqual(pickAstroPoint(hall, []), { latitude: 55, longitude: 37, label: "Дом. Коридор" });
   });
 });

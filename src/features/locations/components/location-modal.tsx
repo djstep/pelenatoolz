@@ -176,6 +176,10 @@ export function LocationModal({
               <option key={a.id} value={a.name} />
             ))}
           </datalist>
+          <p className="mt-1 text-xs text-[var(--muted-fg)]">
+            У подобъекта: пусто — снимается на месте объекта (адрес, схема, аренда объекта); свой
+            адрес — своё место (например, интерьер в павильоне).
+          </p>
         </div>
 
         <div>

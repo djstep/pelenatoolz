@@ -3,6 +3,8 @@ import { describe, test } from "node:test";
 import {
   compareLocations,
   formatScenePlaces,
+  hasOwnPlace,
+  placeOf,
   formatLocationTitle,
   locationAsPair,
   locationObjectName,
@@ -92,5 +94,21 @@ describe("колонка «Объект / подобъекты»", () => {
 
   test("мест нет — прочерк", () => {
     assert.equal(formatScenePlaces([]), "—");
+  });
+});
+
+describe("действующее место (адрес подобъекта или объекта)", () => {
+  const house = { address: "ул. Лесная, 1", latitude: 55, longitude: 37 };
+  test("подобъект со своим адресом — своё место целиком", () => {
+    const facade = { address: "Павильон 3", latitude: null, longitude: null, parent: house };
+    assert.deepEqual(placeOf(facade), { own: true, address: "Павильон 3", latitude: null, longitude: null });
+  });
+  test("подобъект без адреса — место объекта (адрес и координаты)", () => {
+    const kitchen = { address: "  ", latitude: 1, longitude: 2, parent: house };
+    assert.deepEqual(placeOf(kitchen), { own: false, address: "ул. Лесная, 1", latitude: 55, longitude: 37 });
+  });
+  test("объект — всегда своё", () => {
+    assert.deepEqual(placeOf({ ...house, parent: null }), { own: true, address: "ул. Лесная, 1", latitude: 55, longitude: 37 });
+    assert.equal(hasOwnPlace({ address: null, parent: null }), true);
   });
 });

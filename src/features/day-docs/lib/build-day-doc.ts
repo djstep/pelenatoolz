@@ -7,7 +7,11 @@ import {
   sceneStatusLabels,
 } from "@/shared/i18n/domain-labels";
 import { defaultArrivalTime } from "@/features/day-docs/lib/time-utils";
-import { locationObjectName, type LocationObjectSource } from "@/features/locations/lib/format-location";
+import {
+  locationObjectName,
+  placeOf,
+  type LocationObjectSource,
+} from "@/features/locations/lib/format-location";
 
 export type DayDocBundle = NonNullable<
   Awaited<ReturnType<typeof getShootDayDocument>>
@@ -471,7 +475,7 @@ export function buildShootingSlotDetails(
     planLabel: planParts.join(" · ") || "—",
     scriptDay: scene.scriptDay,
     location: loc ? locationObjectName(loc) : null,
-    locationAddress: loc?.address ?? null,
+    locationAddress: loc ? placeOf(loc).address : null,
     summary: scene.summary ?? scene.title ?? null,
     characters: scene.characters.map((c) => c.character.name),
     extras,
