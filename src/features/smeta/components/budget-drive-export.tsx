@@ -241,7 +241,7 @@ function BudgetDriveModal({
                     onChange={(e) => setVersion(e.target.value)}
                   >
                     {!approved && !fixedVersion ? (
-                      <option value={CURRENT}>{`Текущий лист — ${BUDGET_DRIVE_STATUS_LABELS[state.status]}`}</option>
+                      <option value={CURRENT}>{`Черновик — ${BUDGET_DRIVE_STATUS_LABELS[state.status]}`}</option>
                     ) : null}
                     {versions.map((v) => (
                       <option key={v.version} value={String(v.version)}>

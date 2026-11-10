@@ -54,7 +54,7 @@ export function departmentExportInfo(input: {
     document: `Смета цеха «${input.departmentName}»`,
     project: input.projectName,
     status: budgetDriveStatusLabel(source),
-    version: source.kind === "version" ? `версия ${source.number}` : "текущий лист (не утверждён)",
+    version: source.kind === "version" ? `версия ${source.number}` : "черновик (не утверждён)",
     approved: approved
       ? `${formatExportDateTime(approved.at, timezone)}, ${approved.byName}${
           approved.byHead ? " (утвердил глава цеха)" : ""
@@ -65,11 +65,11 @@ export function departmentExportInfo(input: {
   };
 }
 
-/** Что выгружено — в журнал и сообщение: «версия 3 (утверждена)» / «текущий лист (на утверждении)». */
+/** Что выгружено — в журнал и сообщение: «версия 3 (утверждена)» / «черновик (на утверждении)». */
 export function departmentExportLabel(source: BudgetDriveSource): string {
   return source.kind === "version"
     ? `версия ${source.number} (утверждена)`
-    : `текущий лист (${budgetDriveStatusLabel(source)})`;
+    : `черновик (${budgetDriveStatusLabel(source)})`;
 }
 
 /** Знаки, недопустимые в имени файла (Windows, macOS), и управляющие — убираются. */

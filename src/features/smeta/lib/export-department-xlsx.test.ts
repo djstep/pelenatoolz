@@ -23,7 +23,7 @@ const INFO: ExportInfo = {
   document: "Смета цеха «Звук»",
   project: "Проект",
   status: "на утверждении",
-  version: "текущий лист (не утверждён)",
+  version: "черновик (не утверждён)",
   approved: null,
   exportedBy: "Глава Звука",
   exportedAt: "03.11.2026 14:20",
@@ -110,7 +110,7 @@ describe("Excel сметы цеха", () => {
       "Статус",
       "на утверждении",
       "Версия",
-      "текущий лист (не утверждён)",
+      "черновик (не утверждён)",
       "Выгрузил",
       "Глава Звука",
       "Когда",
@@ -160,7 +160,7 @@ describe("строки и имена", () => {
 
   test("метка в журнал и имя файла", () => {
     assert.equal(departmentExportLabel({ kind: "version", number: 3 }), "версия 3 (утверждена)");
-    assert.equal(departmentExportLabel({ kind: "current", status: "SUBMITTED" }), "текущий лист (на утверждении)");
+    assert.equal(departmentExportLabel({ kind: "current", status: "SUBMITTED" }), "черновик (на утверждении)");
     assert.equal(
       departmentExportFileName("Звук", { kind: "version", number: 3 }, at, "Europe/Moscow"),
       "Смета · Звук · версия 3 (утверждена).xlsx",

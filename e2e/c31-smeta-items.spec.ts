@@ -1,4 +1,6 @@
 import { expect, test, type Browser, type Page } from "@playwright/test";
+import { readFileSync } from "node:fs";
+import ExcelJS from "exceljs";
 import { E2E_ROLES } from "./fixtures/data";
 import { e2eDb } from "./helpers/db";
 import { e2eContext, projectPath, storageStatePath } from "./helpers/session";
@@ -721,6 +723,82 @@ test.describe.serial("смета цеха по статьям: экран", () =
     await page.getByRole("button", { name: "Колонки" }).click();
     await page.getByRole("button", { name: "Как было по умолчанию" }).click();
     await expect(table.locator("thead th")).toHaveCount(6);
+  });
+
+  test("импорт из Excel: наша выгрузка → правка в файле → строки по «Коду» обновляются, новые добавляются; ошибка — ничего не загружено", async ({
+    page,
+  }, testInfo) => {
+    const tonvagen = `Тонваген ${RUN}`;
+    await page.goto(smetaPath());
+    // Выгрузка: окно колонок, «Код» — по умолчанию.
+    await page.getByRole("button", { name: "Экспорт Excel" }).click();
+    const exportDialog = page.getByRole("dialog", { name: "Экспорт сметы в Excel" });
+    const [download] = await Promise.all([
+      page.waitForEvent("download"),
+      exportDialog.getByRole("button", { name: "Экспортировать Excel" }).click(),
+    ]);
+    const book = new ExcelJS.Workbook();
+    await book.xlsx.load(readFileSync((await download.path())!) as unknown as Parameters<ExcelJS.Xlsx["load"]>[0]);
+    const sheet = book.getWorksheet("Смета")!;
+    let cameraRow = 0;
+    sheet.eachRow((row, n) => {
+      if (row.getCell(2).value === camera) cameraRow = n;
+    });
+    expect(cameraRow).toBeGreaterThan(0);
+    const cameraCode = String(sheet.getRow(cameraRow).getCell(1).value);
+    sheet.getRow(cameraRow).getCell(6).value = 16000;
+    sheet.addRow(["", tonvagen, "", "смена", 1, 5000, "", "", 0]);
+    const good = testInfo.outputPath("import-good.xlsx");
+    await book.xlsx.writeFile(good);
+    // Тот же файл с чужим кодом в новой строке — ошибка строки.
+    const last = sheet.lastRow!;
+    last.getCell(1).value = "ZZ-99.99.99";
+    const bad = testInfo.outputPath("import-bad.xlsx");
+    await book.xlsx.writeFile(bad);
+
+    const linesBefore = await db.budgetItem.count({ where: { projectId: ctx.projectId, subarticle: { name: sub } } });
+    const openImport = async (file: string) => {
+      await page.getByRole("button", { name: "Импорт из Excel" }).click();
+      const dialog = page.getByRole("dialog", { name: "Импорт из Excel в смету" });
+      await dialog.locator("#items-import-file").setInputFiles(file);
+      await expect(dialog.getByText(/Предпросмотр: строк к загрузке/)).toBeVisible();
+      await dialog.locator("#items-import-target-trigger").click();
+      await page.getByRole("option", { name: `${transport} / ${sub}` }).click();
+      return dialog;
+    };
+
+    // Ошибка строки: ничего не загружено, номер строки листа — в сообщении.
+    const failing = await openImport(bad);
+    await failing.getByRole("button", { name: /^Загрузить/ }).click();
+    const result = failing.locator("[data-import-result]");
+    await expect(result).toContainText("Ничего не загружено");
+    await expect(result).toContainText(`строка ${last.number}: Код ZZ-99.99.99 не найден в этой смете`);
+    expect(await db.budgetItem.count({ where: { projectId: ctx.projectId, subarticle: { name: sub } } })).toBe(linesBefore);
+    await failing.getByRole("button", { name: "Отмена" }).or(failing.getByRole("button", { name: "Закрыть" })).first().click();
+
+    // Проверка и загрузка: одна строка обновлена по коду, одна добавлена, остальные без изменений.
+    const dialog = await openImport(good);
+    // Строки статьи, подстатьи и «Итого» из выгрузки пропускаются — и это видно, не молча.
+    await expect(dialog.locator("[data-import-skipped]")).toContainText("Пропущено строк");
+    await dialog.getByRole("button", { name: "Проверить" }).click();
+    await expect(dialog.locator("[data-import-result]")).toContainText("будет добавлено — 1, обновлено — 1");
+    await dialog.getByRole("button", { name: /^Загрузить/ }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(line(page, tonvagen)).toBeVisible();
+    const cam = await db.budgetItem.findMany({ where: { projectId: ctx.projectId, name: camera } });
+    expect(cam.map((c) => [c.code, c.rate?.toString()])).toEqual([[cameraCode, "16000"]]);
+    const added = await db.budgetItem.findFirstOrThrow({
+      where: { projectId: ctx.projectId, name: tonvagen },
+      select: { rate: true, quantity: true, subarticle: { select: { name: true } } },
+    });
+    expect([added.rate?.toString(), added.quantity?.toString(), added.subarticle?.name]).toEqual(["5000", "1", sub]);
+    const journal = await db.auditLog.findFirst({
+      where: { projectId: ctx.projectId, summary: { contains: "импорт из Excel" } },
+      orderBy: { createdAt: "desc" },
+      select: { summary: true },
+    });
+    expect(journal?.summary).toContain("добавлено строк — 1, обновлено — 1");
+    await db.budgetItem.updateMany({ where: { projectId: ctx.projectId, name: camera }, data: { rate: 15000 } });
   });
 
   test("вкладка «Черновики»: листы Excel без основного листа сметы", async ({ page }) => {

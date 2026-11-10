@@ -376,7 +376,7 @@ test("журнал: «Выгрузка смет» без сумм, ссылок 
   });
   expect(rows.length).toBeGreaterThanOrEqual(3);
   expect(rows.map((r) => r.summary)).toContain(
-    "Смета цеха «Транспортный цех» выгружена на диск проекта: текущий лист (на утверждении)",
+    "Смета цеха «Транспортный цех» выгружена на диск проекта: черновик (на утверждении)",
   );
   const text = JSON.stringify(rows);
   expect(text).not.toContain(MONEY.budgetRate.split(".")[0]);

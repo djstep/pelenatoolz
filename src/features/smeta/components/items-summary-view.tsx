@@ -152,7 +152,6 @@ export function ItemsSummaryView({
   hrefs,
   driveButton,
   recalcPanel,
-  exportsReady = false,
 }: {
   projectId: string;
   summary: ItemsSummary;
@@ -160,8 +159,6 @@ export function ItemsSummaryView({
   hrefs: { versions: string; drafts: string; departments: string; articles: string };
   driveButton: BudgetDriveButton | null;
   recalcPanel?: ReactNode;
-  /** Выгрузка сводной по сметам по статьям готова (шаг 8 волны). */
-  exportsReady?: boolean;
 }) {
   const toast = useToast();
   const [pending, start] = useTransition();
@@ -270,31 +267,28 @@ export function ItemsSummaryView({
             По статьям
           </Link>
         </nav>
-        {/* Выгрузка сводной в Excel и на Диск собирает файл по старой табличной смете и с экраном
-            не сходится — до перехода выгрузки на сметы по статьям она не показывается. */}
-        {exportsReady ? (
-          <div className="ml-auto flex flex-wrap items-center gap-2">
-            <BudgetSummaryDriveExport projectId={projectId} drafts={drafts} button={driveButton} />
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={pending}
-              onClick={() => {
-                start(async () => {
-                  const res = await exportSummaryBookAction(projectId, { drafts });
-                  if (res.error !== undefined) {
-                    toast.error(res.error);
-                    return;
-                  }
-                  downloadBase64Xlsx(res.base64, res.fileName);
-                  toast.success("Excel скачан");
-                });
-              }}
-            >
-              {pending ? "…" : "Экспорт Excel"}
-            </Button>
-          </div>
-        ) : null}
+        {/* Выгрузка — тот же расчёт, что на экране: «Свод», листы цехов с колонкой «Код». */}
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          <BudgetSummaryDriveExport projectId={projectId} drafts={drafts} button={driveButton} />
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={pending}
+            onClick={() => {
+              start(async () => {
+                const res = await exportSummaryBookAction(projectId, { drafts });
+                if (res.error !== undefined) {
+                  toast.error(res.error);
+                  return;
+                }
+                downloadBase64Xlsx(res.base64, res.fileName);
+                toast.success("Excel скачан");
+              });
+            }}
+          >
+            {pending ? "…" : "Экспорт Excel"}
+          </Button>
+        </div>
       </div>
       <p className="text-sm text-[var(--muted-fg)]">
         {drafts

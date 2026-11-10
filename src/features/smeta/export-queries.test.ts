@@ -3,7 +3,6 @@ import { readFileSync } from "node:fs";
 import nodeModule from "node:module";
 import { before, describe, test } from "node:test";
 import type { ExportDb } from "@/features/smeta/export-queries";
-import { MAIN_HEADERS } from "@/features/smeta/lib/main-sheet";
 import { canReadDepartmentSmeta, type SmetaAccessContext } from "@/features/smeta/lib/smeta-access";
 
 // export-queries.ts и smeta-access.ts — серверные модули ("server-only"): берём их с условием react-server.
@@ -35,44 +34,26 @@ before(async () => {
   ({ canReadDepartmentSmeta: canRead } = await import("@/features/smeta/lib/smeta-access"));
 });
 
-/** Основной лист с шапкой сметы: статья в строке 1 (sortOrder 1), Сумма / Налог / Итого — формулы. */
-function mainSheetData() {
-  return {
-    id: "main",
-    name: "Смета",
-    cellData: {
-      0: Object.fromEntries(MAIN_HEADERS.map((h, i) => [i, { v: h, t: 1 }])),
-      1: {
-        0: { v: "ЗВ-01.01", t: 1 },
-        6: { v: 1, t: 2, f: "=D2*E2*F2" },
-        8: { v: 1, t: 2, f: "=G2*H2/100" },
-        9: { v: 1, t: 2, f: "=G2+I2" },
-      },
-      2: { 9: { v: 1, t: 2, f: "=СУММ(J2:J2)" } },
-    },
-  };
-}
-
 type Call = { model: string; args: Record<string, unknown> };
+
+/** Снимок черновика: подставляется вместо расчёта по базе. */
+const DRAFT = { version: 1, variables: [], articles: [], totals: { amount: "0.00", tax: "0.00", total: "0.00", incomplete: 0 }, lineCount: 0 } as const;
 
 function fakeDb(opts: {
   budget: { status: "DRAFT" | "SUBMITTED" | "RETURNED" | "APPROVED" } | null;
   versions?: number[];
+  /** Номера старых версий табличного формата. */
+  sheetVersions?: number[];
 }) {
   const calls: Call[] = [];
   const versions = opts.versions ?? [];
+  const sheetVersions = new Set(opts.sheetVersions ?? []);
   const db = {
     budget: {
       findFirst: async (args: Record<string, unknown>) => {
         calls.push({ model: "budget", args });
         if (!opts.budget) return null;
-        return {
-          status: opts.budget.status,
-          styles: { s1: { bl: 1 } },
-          mainSheet: { name: "Смета", data: { data: mainSheetData() } },
-          // Черновые листы, если бы их кто-то запросил, — выгрузка их не читает.
-          sheets: [{ name: "Черновик главы", data: { data: { cellData: { 0: { 0: { v: "секрет" } } } } } }],
-        };
+        return { id: "b1", status: opts.budget.status };
       },
     },
     budgetVersion: {
@@ -83,9 +64,12 @@ function fakeDb(opts: {
           return latest ? { number: latest } : null;
         }
         if (!versions.includes(args.where.number)) return null;
+        const sheet = sheetVersions.has(args.where.number);
         return {
+          format: sheet ? "SHEET" : "ITEMS",
+          snapshot: sheet ? null : { ...DRAFT, totals: { ...DRAFT.totals, total: `${args.where.number}00.00` } },
           sheetName: `Смета v${args.where.number}`,
-          sheetData: { cellData: { 0: { 0: { v: `версия ${args.where.number}`, t: 1 } } } },
+          sheetData: sheet ? { cellData: { 0: { 0: { v: `версия ${args.where.number}`, t: 1, f: "=A2" } } } } : null,
           styles: {},
           approvedAt: new Date("2026-11-01T10:00:00.000Z"),
           approvedByName: "Продюсер",
@@ -93,52 +77,37 @@ function fakeDb(opts: {
         };
       },
     },
-    budgetItem: {
-      findMany: async (args: Record<string, unknown>) => {
-        calls.push({ model: "budgetItem", args });
-        return [{ sortOrder: 1, amount: 1000, tax: 130, total: 1130 }];
-      },
-    },
   };
   return { db: db as unknown as ExportDb, calls };
 }
 
-function hasFormula(data: Record<string, unknown>) {
-  const cells = (data.cellData ?? {}) as Record<string, Record<string, Record<string, unknown>>>;
-  return Object.values(cells).some((line) => Object.values(line).some((c) => c && "f" in c));
-}
-
 describe("что выгружается из сметы цеха", () => {
-  test("черновик: текущий основной лист, формулы → значения, Сумма / Налог / Итого — расчёт сервера", async () => {
+  test("черновик: смета по статьям, пересчитанная сейчас (не листы-черновики)", async () => {
     const { db, calls } = fakeDb({ budget: { status: "SUBMITTED" }, versions: [1, 2] });
-    const res = await loadDepartmentBudgetExport(db, "p1", "d1", undefined);
+    const asked: string[] = [];
+    const res = await loadDepartmentBudgetExport(db, "p1", "d1", undefined, async (budgetId) => {
+      asked.push(budgetId);
+      return DRAFT as never;
+    });
     assert.ok(!("error" in res));
     assert.deepEqual(res.source, { kind: "current", status: "SUBMITTED" });
-    assert.equal(res.sheet.name, "Смета");
-    assert.equal(hasFormula(res.sheet.data), false);
-    const cells = res.sheet.data.cellData as Record<number, Record<number, { v: unknown }>>;
-    assert.equal(cells[1]![6]!.v, 1000);
-    assert.equal(cells[1]![8]!.v, 130);
-    assert.equal(cells[1]![9]!.v, 1130);
-    assert.equal(cells[2]![9]!.v, 1130, "подытог пересчитан");
+    assert.equal(res.content.kind, "items");
+    assert.deepEqual(asked, ["b1"]);
     assert.equal(res.approved, null);
-    // Из книги читается только основной лист, черновые листы не запрашиваются.
+    // Из сметы читаются только id и статус: листы книги не запрашиваются.
     const budgetSelect = calls.find((c) => c.model === "budget")!.args.select as Record<string, unknown>;
-    assert.deepEqual(Object.keys(budgetSelect).sort(), ["mainSheet", "status", "styles"]);
-    assert.ok(!JSON.stringify(res).includes("секрет"));
-    // Только действующие статьи этого цеха и проекта.
-    const itemsWhere = calls.find((c) => c.model === "budgetItem")!.args.where;
-    assert.deepEqual(itemsWhere, { projectId: "p1", departmentId: "d1", archivedAt: null });
+    assert.deepEqual(Object.keys(budgetSelect).sort(), ["id", "status"]);
   });
 
-  test("утверждена: по умолчанию — последняя утверждённая версия", async () => {
+  test("утверждена: по умолчанию — последняя утверждённая версия, её снимок", async () => {
     const { db, calls } = fakeDb({ budget: { status: "APPROVED" }, versions: [1, 2] });
-    const res = await loadDepartmentBudgetExport(db, "p1", "d1", undefined);
+    const res = await loadDepartmentBudgetExport(db, "p1", "d1", undefined, async () => {
+      throw new Error("черновик не читается");
+    });
     assert.ok(!("error" in res));
     assert.deepEqual(res.source, { kind: "version", number: 2 });
-    assert.equal(res.sheet.name, "Смета v2");
+    assert.ok(res.content.kind === "items" && res.content.snapshot.totals.total === "200.00");
     assert.equal(res.approved?.byName, "Продюсер");
-    assert.equal(calls.some((c) => c.model === "budgetItem"), false, "черновик не читается");
     for (const c of calls.filter((x) => x.model === "budgetVersion")) {
       const where = c.args.where as Record<string, unknown>;
       assert.equal(where.projectId, "p1");
@@ -146,17 +115,27 @@ describe("что выгружается из сметы цеха", () => {
     }
   });
 
+  test("старая табличная версия — её лист, формулы заменены значениями", async () => {
+    const { db } = fakeDb({ budget: { status: "APPROVED" }, versions: [1], sheetVersions: [1] });
+    const res = await loadDepartmentBudgetExport(db, "p1", "d1", 1, async () => DRAFT as never);
+    assert.ok(!("error" in res) && res.content.kind === "sheet");
+    assert.equal(res.content.sheet.name, "Смета v1");
+    assert.ok(!JSON.stringify(res.content.sheet.data).includes('"f"'));
+  });
+
   test("выбранная версия — она; чужой номер — «Версия не найдена»", async () => {
     const { db } = fakeDb({ budget: { status: "DRAFT" }, versions: [1, 2] });
-    const one = await loadDepartmentBudgetExport(db, "p1", "d1", 1);
+    const one = await loadDepartmentBudgetExport(db, "p1", "d1", 1, async () => DRAFT as never);
     assert.ok(!("error" in one));
     assert.deepEqual(one.source, { kind: "version", number: 1 });
-    assert.deepEqual(await loadDepartmentBudgetExport(db, "p1", "d1", 7), { error: "Версия не найдена" });
+    assert.deepEqual(await loadDepartmentBudgetExport(db, "p1", "d1", 7, async () => DRAFT as never), {
+      error: "Версия не найдена",
+    });
   });
 
   test("сметы нет — понятный отказ", async () => {
     const { db } = fakeDb({ budget: null });
-    assert.deepEqual(await loadDepartmentBudgetExport(db, "p1", "d1", undefined), {
+    assert.deepEqual(await loadDepartmentBudgetExport(db, "p1", "d1", undefined, async () => DRAFT as never), {
       error: "Смета ещё не создана",
     });
   });
@@ -256,6 +235,6 @@ describe("права на Excel сметы цеха", () => {
     assert.match(body, /summaryExportFileName\(/);
     const file = readFileSync(new URL("./export-file.ts", import.meta.url), "utf8");
     const summary = file.slice(file.indexOf("export async function buildSummaryBudgetFile"));
-    assert.ok(summary.indexOf("getSummaryBook(") < summary.indexOf("addExportInfoSheet("));
+    assert.ok(summary.indexOf("getItemsSummaryForExport(") < summary.indexOf("addExportInfoSheet("));
   });
 });

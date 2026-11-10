@@ -17,6 +17,7 @@ import {
   workbookToBase64,
 } from "@/features/smeta/lib/export-plan-fact-xlsx";
 import { planFactPeriodLabel } from "@/features/smeta/lib/plan-fact";
+import { smetaExportColumns } from "@/features/smeta/lib/items-export-columns";
 import {
   canOpenSmeta,
   canReadAllSmeta,
@@ -115,7 +116,7 @@ export async function exportSummaryBookAction(
     entityType: AuditEntityType.smetaExport,
     entityId: projectId,
     action: "CREATE",
-    summary: `Выгрузка сводной книги в Excel: все цеха, ${
+    summary: `Выгрузка сводной в Excel: все цеха, ${
       drafts ? "черновики" : "утверждённые версии"
     }`,
     changes: { export: "summary_book", drafts },
@@ -127,9 +128,10 @@ export async function exportSummaryBookAction(
 }
 
 /**
- * Смета цеха в Excel: основной лист (утверждённая версия или текущий лист со значениями вместо
- * формул) + «О выгрузке». Права — как у просмотра сметы цеха (глава этого цеха, продюсер,
- * «Сметы — просмотр всех»). Из браузера — только id цеха и номер версии. Журнал — без сумм.
+ * Смета цеха в Excel: смета по статьям с колонкой «Код» (утверждённая версия или черновик)
+ * + «О выгрузке». Права — как у просмотра сметы цеха (глава этого цеха, продюсер, «Сметы —
+ * просмотр всех»). Из браузера — id цеха, номер версии и колонки конструктора (только известные
+ * поля). Журнал — без сумм.
  */
 export async function exportDepartmentBudgetAction(
   projectId: string,
@@ -148,12 +150,14 @@ export async function exportDepartmentBudgetAction(
   }
   const version = parseDepartmentExportVersion(payload);
   if (version === false) return { error: "Некорректные данные" };
+  const columns = smetaExportColumns((payload as { columns?: unknown } | null)?.columns);
 
-  // Тот же файл, что уходит на диск проекта.
+  // Тот же файл, что уходит на диск проекта (на диск — колонки по умолчанию).
   const file = await buildDepartmentBudgetFile({
     projectId,
     departmentId,
     version,
+    columns,
     projectName: ctx.project.name,
     timezone: ctx.project.timezone,
     exportedBy: auditMemberName(ctx.user.name),

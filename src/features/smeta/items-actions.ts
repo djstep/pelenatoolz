@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { assertInProject, isNotInProjectError } from "@/features/memberships/assert-in-project";
 import { requireProjectContext } from "@/features/projects/lib/project-context";
 import { loadBudgetVariables, variableValueMap } from "@/features/smeta/items-queries";
-import { calcItem, MAX_LINE_MONEY } from "@/features/smeta/lib/item-calc";
+import { calcItem, MAX_LINE_MONEY, multipliersOf, type VariableValues } from "@/features/smeta/lib/item-calc";
 import { isItemArchived } from "@/features/smeta/lib/item-where";
 import { isId, lineCode, parseLineInput, parseName, type LineInput } from "@/features/smeta/lib/item-input";
 import { canEditDepartmentSmeta } from "@/features/smeta/lib/smeta-access";
@@ -13,6 +13,15 @@ import { lockBudget, statusAfterEdit, type Tx } from "@/features/smeta/queries";
 import { AuditEntityType } from "@/shared/audit/entity-types";
 import { auditMutation } from "@/shared/audit/with-audit";
 import { prisma } from "@/shared/db/prisma";
+import { z } from "zod";
+import { checkZipLimits, IMPORT_LIMITS, ImportError } from "@/features/smeta/lib/import-xlsx";
+import {
+  IMPORT_FIELD_IDS,
+  IMPORT_MAX_COLUMNS,
+  IMPORT_MAX_ROWS,
+  parseMultipliersText,
+  type ImportFieldId,
+} from "@/features/smeta/lib/items-import";
 
 /**
  * Действия над сметой цеха по статьям: взять статью из шаблона, добавить подстатью и строку,
@@ -86,6 +95,7 @@ async function editBudget(
   access: Access,
   action: AuditAction,
   write: (tx: Tx) => Promise<WriteResult>,
+  options: { timeout?: number } = {},
 ): Promise<{ error: string } | { unchanged: true } | { result: WriteResult; revision: number }> {
   const { ctx, budget } = access;
   try {
@@ -122,7 +132,7 @@ async function editBudget(
         }
         return { result, revision: updated.revision };
       },
-      { timeout: 20_000 },
+      { timeout: options.timeout ?? 20_000 },
     );
     return result;
   } catch (error) {
@@ -193,7 +203,7 @@ export async function takeTemplateArticleAction(
 async function articleOfBudget(tx: Tx, projectId: string, budgetId: string, articleId: string) {
   const article = await tx.budgetArticle.findFirst({
     where: { id: articleId, projectId, budgetId },
-    select: { id: true, archivedAt: true, templateArticle: { select: { name: true } } },
+    select: { id: true, archivedAt: true, templateArticle: { select: { name: true, number: true } } },
   });
   if (!article) throw new ItemsError(NOT_FOUND);
   return article;
@@ -327,8 +337,14 @@ async function formTaxPercent(tx: Tx, paymentFormId: string | null): Promise<str
 }
 
 /** Поля строки для записи: значения, множители, кэш сумм (без суммы — 0, см. расчёт в дереве). */
-async function lineData(tx: Tx, projectId: string, input: LineInput, taxPercent: string | null) {
-  const values = variableValueMap(await loadBudgetVariables(projectId, tx));
+async function lineData(
+  tx: Tx,
+  projectId: string,
+  input: LineInput,
+  taxPercent: string | null,
+  preloaded?: VariableValues,
+) {
+  const values = preloaded ?? variableValueMap(await loadBudgetVariables(projectId, tx));
   const calc = calcItem(
     { quantity: input.quantity, rate: input.rate, multipliers: input.multipliers, taxPercent },
     values,
@@ -389,22 +405,7 @@ export async function addLineAction(
     const sub = await subarticleOfBudget(tx, projectId, access.budget.id, subarticleId);
     if (sub.archivedAt || sub.article.archivedAt) throw new ItemsError("Подстатья в архиве — сначала верните её");
 
-    // Номер строки из счётчика подстатьи; код с таким номером уже занят (например, вписан
-    // вручную в старой таблице) — берётся следующий номер.
-    let number = 0;
-    let code = "";
-    for (let attempt = 0; attempt < 20; attempt++) {
-      ({ lastLineNumber: number } = await tx.budgetSubarticle.update({
-        where: { id: sub.id },
-        data: { lastLineNumber: { increment: 1 } },
-        select: { lastLineNumber: true },
-      }));
-      code = lineCode(access.budget.codePrefix, sub.article.templateArticle.number, sub.number, number);
-      const taken = await tx.budgetItem.findUnique({ where: { projectId_code: { projectId, code } }, select: { id: true } });
-      if (!taken) break;
-      code = "";
-    }
-    if (!code) throw new ItemsError("Не удалось выдать номер строки — попробуйте ещё раз");
+    const { number, code } = await allocateLine(tx, projectId, access, sub);
 
     const taxPercent = input.taxPercent !== undefined ? input.taxPercent : await formTaxPercent(tx, input.paymentFormId);
     const { data } = await lineData(tx, projectId, input, taxPercent);
@@ -677,4 +678,432 @@ export async function setItemsNodeArchivedAction(
     return { entityId: id, summary: `${what} «${name}» ${archived ? "убрана в архив" : "возвращена из архива"}` };
   });
   return done(projectId, departmentId, outcome, archived ? "Убрано в архив" : "Возвращено");
+}
+
+// ---------------------------------------------------------------------------
+// Импорт из Excel в статьи
+// ---------------------------------------------------------------------------
+
+type SubForLine = { id: string; number: number; article: { templateArticle: { number: number } } };
+
+/**
+ * Номер и код новой строки из счётчика подстатьи; код с таким номером уже занят (например,
+ * вписан вручную в старой таблице) — берётся следующий номер.
+ */
+async function allocateLine(tx: Tx, projectId: string, access: Access, sub: SubForLine) {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const { lastLineNumber: number } = await tx.budgetSubarticle.update({
+      where: { id: sub.id },
+      data: { lastLineNumber: { increment: 1 } },
+      select: { lastLineNumber: true },
+    });
+    const code = lineCode(access.budget.codePrefix, sub.article.templateArticle.number, sub.number, number);
+    const taken = await tx.budgetItem.findUnique({ where: { projectId_code: { projectId, code } }, select: { id: true } });
+    if (!taken) return { number, code };
+  }
+  throw new ItemsError("Не удалось выдать номер строки — попробуйте ещё раз");
+}
+
+export type ImportSheet = { name: string; rows: string[][] };
+
+/** Предел ответа чтения файла: ячеек и знаков на все листы вместе (одна общая строка Excel может стоять в каждой ячейке). */
+const IMPORT_READ_CELLS = IMPORT_LIMITS.cells;
+const IMPORT_READ_CHARS = 4_000_000;
+
+/** Значение ячейки Excel строкой: числа — с точкой и без «хвостов» плавающей точки. */
+function cellText(value: unknown): string {
+  if (value == null) return "";
+  if (typeof value === "number") return Number.isFinite(value) ? String(Number(value.toFixed(6))) : "";
+  if (typeof value === "string") return value;
+  if (typeof value === "boolean") return value ? "да" : "нет";
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  if (typeof value === "object") {
+    const v = value as { result?: unknown; richText?: { text: string }[]; text?: unknown };
+    if (v.richText) return v.richText.map((r) => r.text).join("");
+    if ("result" in v) return cellText(v.result);
+    if (typeof v.text === "string") return v.text;
+  }
+  return "";
+}
+
+/**
+ * Импорт, шаг 1: прочитать файл .xlsx и отдать листы (значения ячеек строками) — для выбора
+ * листа, колонок и предпросмотра. В базу ничего не пишет. Только глава этого цеха. Пустые строки
+ * и колонки в конце листа отбрасываются; на все листы вместе — предел ячеек и знаков.
+ */
+export async function readItemsImportFileAction(
+  projectId: string,
+  departmentId: string,
+  formData: FormData,
+): Promise<{ error: string } | { sheets: ImportSheet[] }> {
+  const access = await editorAccess(projectId, departmentId);
+  if (!access.ok) return { error: access.error };
+  const file = formData.get("file");
+  if (!(file instanceof File)) return { error: "Файл не получен" };
+  if (/\.xls$/i.test(file.name)) return { error: "Старый формат .xls не поддерживается — сохраните файл как .xlsx" };
+  if (!/\.xlsx$/i.test(file.name)) return { error: "Нужен файл Excel в формате .xlsx" };
+  if (file.size > IMPORT_LIMITS.fileBytes) return { error: "Файл больше 3,5 МБ — такой не импортируется" };
+  const tooBig = "В файле слишком много данных — оставьте в нём только нужный лист со сметой";
+  try {
+    const buffer = Buffer.from(await file.arrayBuffer());
+    checkZipLimits(buffer);
+    const ExcelJS = (await import("exceljs")).default;
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(buffer as unknown as ArrayBuffer);
+    const sheets: ImportSheet[] = [];
+    let cells = 0;
+    let chars = 0;
+    for (const sheet of workbook.worksheets.slice(0, IMPORT_LIMITS.sheetsPerImport)) {
+      const rows: string[][] = [];
+      const last = Math.min(sheet.rowCount, IMPORT_MAX_ROWS + 50);
+      const width = Math.min(sheet.columnCount, IMPORT_MAX_COLUMNS);
+      for (let r = 1; r <= last; r++) {
+        const row = sheet.getRow(r);
+        const values = Array.from({ length: width }, (_, c) => cellText(row.getCell(c + 1).value).slice(0, 500));
+        while (values.length > 0 && values[values.length - 1] === "") values.pop();
+        cells += values.length;
+        chars += values.reduce((s, v) => s + v.length, 0);
+        if (cells > IMPORT_READ_CELLS || chars > IMPORT_READ_CHARS) return { error: tooBig };
+        rows.push(values);
+      }
+      while (rows.length > 0 && rows[rows.length - 1].length === 0) rows.pop();
+      sheets.push({ name: sheet.name, rows });
+    }
+    if (sheets.length === 0) return { error: "В файле нет листов" };
+    return { sheets };
+  } catch (error) {
+    if (error instanceof ImportError) return { error: error.message };
+    console.error("[readItemsImportFile]", error);
+    return { error: "Не удалось прочитать файл — проверьте, что это .xlsx" };
+  }
+}
+
+const importSchema = z.object({
+  fileName: z.string().max(260).optional(),
+  fields: z.array(z.enum(IMPORT_FIELD_IDS as unknown as [ImportFieldId, ...ImportFieldId[]])).max(20),
+  rows: z
+    .array(
+      z.object({
+        row: z.number().int().min(1).max(1_000_000),
+        values: z.record(z.string(), z.string().max(500)),
+      }),
+    )
+    .max(IMPORT_MAX_ROWS),
+  target: z
+    .union([
+      z.object({ subarticleId: z.string().min(1).max(64) }),
+      z.object({ articleId: z.string().min(1).max(64), newSubarticleName: z.string().max(200) }),
+    ])
+    .nullable(),
+  dryRun: z.boolean(),
+});
+
+type ImportPayload = z.infer<typeof importSchema>;
+
+export type ImportItemsResult = {
+  error?: string;
+  /** Ошибки по строкам листа — ничего не загружено. */
+  errors?: { row: number; message: string }[];
+  success?: string;
+  created?: number;
+  updated?: number;
+  unchanged?: number;
+  revision?: number;
+};
+
+type PreparedRow = { row: number; itemId: string | null; input: LineInput; taxPercent: string | null; same: boolean };
+
+type Prepared = {
+  errors: { row: number; message: string }[];
+  prepared: PreparedRow[];
+  values: VariableValues;
+};
+
+type ImportDb = Pick<
+  Tx,
+  "budgetItem" | "budgetSubarticle" | "budgetArticle" | "project" | "projectFinanceVariable" | "projectExpenseType" | "projectPaymentForm"
+>;
+
+/**
+ * Проверка и сборка строк импорта по текущему состоянию сметы: для записи — внутри транзакции
+ * под блокировкой сметы, чтобы поля, которых нет в листе, взялись у строки как они есть сейчас.
+ * Проверяет и назначение новых строк, и предел суммы строки — «Проверить» видит то же, что запись.
+ */
+async function prepareImport(db: ImportDb, projectId: string, access: Access, data: ImportPayload): Promise<Prepared> {
+  const fields = new Set(data.fields);
+  const [variables, expenseTypes, paymentForms, existing] = await Promise.all([
+    loadBudgetVariables(projectId, db),
+    db.projectExpenseType.findMany({ where: { projectId, archivedAt: null }, select: { id: true, name: true } }),
+    db.projectPaymentForm.findMany({
+      where: { projectId, archivedAt: null },
+      select: { id: true, name: true, defaultTaxPercent: true },
+    }),
+    db.budgetItem.findMany({
+      where: { projectId, subarticle: { article: { budgetId: access.budget.id } } },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        unit: true,
+        quantity: true,
+        rate: true,
+        expenseTypeId: true,
+        paymentFormId: true,
+        taxPercent: true,
+        multiplier1VariableId: true,
+        multiplier1Value: true,
+        multiplier2VariableId: true,
+        multiplier2Value: true,
+        multiplier3VariableId: true,
+        multiplier3Value: true,
+        archivedAt: true,
+        subarticle: { select: { archivedAt: true, article: { select: { archivedAt: true } } } },
+      },
+    }),
+  ]);
+  const values = variableValueMap(variables);
+  const byName = (list: { id: string; name: string }[]) => new Map(list.map((x) => [x.name.trim().toLowerCase(), x.id]));
+  const typeIds = byName(expenseTypes);
+  const formIds = byName(paymentForms);
+  const formTax = new Map(paymentForms.map((f) => [f.id, f.defaultTaxPercent?.toString() ?? null]));
+  const byCode = new Map(existing.map((i) => [i.code.toUpperCase(), i]));
+  const decimal = (d: Prisma.Decimal | null) => d?.toString() ?? null;
+
+  const errors: { row: number; message: string }[] = [];
+  const prepared: PreparedRow[] = [];
+  const seenCodes = new Set<string>();
+  for (const r of data.rows) {
+    const v = r.values as Partial<Record<ImportFieldId, string>>;
+    const fail = (message: string) => errors.push({ row: r.row, message });
+    const code = fields.has("code") ? v.code?.trim().toUpperCase() || undefined : undefined;
+    const item = code ? byCode.get(code) : undefined;
+    if (code) {
+      if (seenCodes.has(code)) {
+        fail(`Код ${code} встречается в листе второй раз`);
+        continue;
+      }
+      seenCodes.add(code);
+      if (!item) {
+        fail(`Код ${code} не найден в этой смете — уберите код, чтобы добавить строку как новую`);
+        continue;
+      }
+      if (isItemArchived(item)) {
+        fail(`Строка с кодом ${code} в архиве — сначала верните её`);
+        continue;
+      }
+    }
+    // Поле загружается — значение из листа (пусто — пусто); не загружается — прежнее у строки.
+    const take = (field: ImportFieldId, current: string | null) => (fields.has(field) ? (v[field] ?? null) : current);
+
+    let expenseTypeId = item?.expenseTypeId ?? null;
+    if (fields.has("expenseType")) {
+      const name = v.expenseType?.trim();
+      expenseTypeId = name ? (typeIds.get(name.toLowerCase()) ?? null) : null;
+      if (name && !expenseTypeId) {
+        fail(`Тип расхода «${name}» не найден в настройках финансов`);
+        continue;
+      }
+    }
+    let paymentFormId = item?.paymentFormId ?? null;
+    if (fields.has("paymentForm")) {
+      const name = v.paymentForm?.trim();
+      paymentFormId = name ? (formIds.get(name.toLowerCase()) ?? null) : null;
+      if (name && !paymentFormId) {
+        fail(`Форма оплаты «${name}» не найдена в настройках финансов`);
+        continue;
+      }
+    }
+    let multipliers: unknown[] = item
+      ? multipliersOf(item).map((m) => (m == null ? null : "variableId" in m ? m : { value: m.value.toString() }))
+      : [null, null, null];
+    if (fields.has("multipliers")) {
+      const m = parseMultipliersText(v.multipliers?.trim() ?? "", variables);
+      if (!m.ok) {
+        fail(m.error);
+        continue;
+      }
+      multipliers = m.value;
+    }
+    // Налог %: колонка есть — из неё; нет, но форма оплаты пришла и сменилась (или строка новая) —
+    // процент формы; иначе прежний.
+    const formChanged = fields.has("paymentForm") && paymentFormId !== (item?.paymentFormId ?? null);
+    const taxFromForm = !fields.has("taxPercent") && (formChanged || (!item && fields.has("paymentForm")));
+    const line = parseLineInput({
+      name: take("name", item?.name ?? null) ?? "",
+      unit: take("unit", item?.unit ?? null),
+      quantity: take("quantity", decimal(item?.quantity ?? null)),
+      rate: take("rate", decimal(item?.rate ?? null)),
+      multipliers,
+      expenseTypeId,
+      paymentFormId,
+      ...(taxFromForm ? {} : { taxPercent: take("taxPercent", decimal(item?.taxPercent ?? null)) ?? "" }),
+    });
+    if (!line.ok) {
+      fail(line.error);
+      continue;
+    }
+    const taxPercent = taxFromForm
+      ? (paymentFormId ? (formTax.get(paymentFormId) ?? null) : null)
+      : (line.value.taxPercent ?? null);
+    const calc = calcItem({ quantity: line.value.quantity, rate: line.value.rate, multipliers: line.value.multipliers, taxPercent }, values);
+    if (calc.total && calc.total.greaterThan(MAX_LINE_MONEY)) {
+      fail("Сумма строки слишком большая — проверьте количество, ставку и множители");
+      continue;
+    }
+    prepared.push({
+      row: r.row,
+      itemId: item?.id ?? null,
+      input: { ...line.value, taxPercent },
+      taxPercent,
+      same: Boolean(item) && sameLine(item!, { ...line.value, taxPercent }),
+    });
+  }
+
+  // Назначение новых строк — та же проверка, что при записи.
+  if (prepared.some((p) => !p.itemId)) {
+    const target = data.target;
+    if (!target) errors.push({ row: 0, message: "Выберите подстатью для новых строк" });
+    else if ("subarticleId" in target) {
+      const sub = isId(target.subarticleId)
+        ? await db.budgetSubarticle.findFirst({
+            where: { id: target.subarticleId, projectId, article: { budgetId: access.budget.id } },
+            select: { archivedAt: true, article: { select: { archivedAt: true } } },
+          })
+        : null;
+      if (!sub) errors.push({ row: 0, message: "Подстатья для новых строк не найдена" });
+      else if (sub.archivedAt || sub.article.archivedAt) errors.push({ row: 0, message: "Подстатья в архиве — сначала верните её" });
+    } else {
+      const article = isId(target.articleId)
+        ? await db.budgetArticle.findFirst({
+            where: { id: target.articleId, projectId, budgetId: access.budget.id },
+            select: { archivedAt: true },
+          })
+        : null;
+      const name = parseName(target.newSubarticleName, 200);
+      if (!article) errors.push({ row: 0, message: "Статья для новой подстатьи не найдена" });
+      else if (article.archivedAt) errors.push({ row: 0, message: "Статья в архиве — сначала верните её" });
+      if (!name.ok) errors.push({ row: 0, message: `Название новой подстатьи: ${name.error.toLowerCase()}` });
+    }
+  }
+  return { errors, prepared, values };
+}
+
+function importCounts(prepared: PreparedRow[]) {
+  return {
+    created: prepared.filter((p) => !p.itemId).length,
+    updated: prepared.filter((p) => p.itemId && !p.same).length,
+    unchanged: prepared.filter((p) => p.same).length,
+  };
+}
+
+/** Ошибка внутри транзакции импорта: строки сметы изменились, пока шёл импорт. */
+class ImportChanged extends ItemsError {}
+
+/**
+ * Импорт, шаг 2: строки листа (уже разложенные по полям) → проверка каждой строки → запись
+ * одной транзакцией. Строка с кодом из этой сметы обновляет ту строку (только загружаемые поля),
+ * без кода — новая строка в выбранной подстатье. Хоть одна ошибка — не пишется ничего, ошибки —
+ * по номерам строк. `dryRun` — только проверка. Только глава этого цеха.
+ */
+export async function importItemsAction(
+  projectId: string,
+  departmentId: string,
+  payload: unknown,
+): Promise<ImportItemsResult> {
+  const access = await editorAccess(projectId, departmentId);
+  if (!access.ok) return { error: access.error };
+  const parsed = importSchema.safeParse(payload);
+  if (!parsed.success) return { error: "Некорректные данные" };
+  const data = parsed.data;
+  const fields = new Set(data.fields);
+  if (data.rows.length === 0) return { error: "В листе нет строк для загрузки" };
+  if (!fields.has("name") && !fields.has("code")) return { error: "Сопоставьте колонку «Наименование» (или «Код»)" };
+
+  const check = await prepareImport(prisma, projectId, access, data);
+  if (check.errors.length > 0) return { errors: check.errors.slice(0, 200) };
+  const counts = importCounts(check.prepared);
+  if (data.dryRun) return { success: "Проверено — ошибок нет", ...counts };
+  if (counts.created + counts.updated === 0) return { success: "Без изменений — всё уже как в листе", ...counts };
+
+  const fileName = data.fileName?.trim() || "файл Excel";
+  let outcome: Awaited<ReturnType<typeof editBudget>>;
+  try {
+    outcome = await editBudget(
+      projectId,
+      access,
+      "UPDATE",
+      async (tx) => {
+        // Заново — под блокировкой сметы: поля, которых нет в листе, — как у строки сейчас.
+        const { errors, prepared, values } = await prepareImport(tx, projectId, access, data);
+        if (errors.length > 0) {
+          throw new ImportChanged("Смета изменилась, пока шёл импорт, — нажмите «Проверить» ещё раз");
+        }
+        const done = importCounts(prepared);
+        const newRows = prepared.filter((p) => !p.itemId);
+        let sub: (SubForLine & { name: string }) | null = null;
+        if (newRows.length > 0 && data.target) {
+          const target = data.target;
+          if ("subarticleId" in target) {
+            sub = await subarticleOfBudget(tx, projectId, access.budget.id, target.subarticleId);
+          } else {
+            const article = await articleOfBudget(tx, projectId, access.budget.id, target.articleId);
+            const name = parseName(target.newSubarticleName, 200);
+            if (!name.ok) throw new ItemsError(name.error);
+            const { lastSubarticleNumber: number } = await tx.budgetArticle.update({
+              where: { id: article.id },
+              data: { lastSubarticleNumber: { increment: 1 } },
+              select: { lastSubarticleNumber: true },
+            });
+            const last = await tx.budgetSubarticle.aggregate({ where: { articleId: article.id }, _max: { sortOrder: true } });
+            const created = await tx.budgetSubarticle.create({
+              data: { projectId, articleId: article.id, number, name: name.value, sortOrder: (last._max.sortOrder ?? -1) + 1 },
+              select: { id: true, number: true, name: true },
+            });
+            sub = { ...created, article: { templateArticle: { number: article.templateArticle.number } } };
+          }
+        }
+
+        for (const p of prepared) {
+          if (!p.itemId || p.same) continue;
+          const { data: line } = await lineData(tx, projectId, p.input, p.taxPercent, values);
+          await tx.budgetItem.update({ where: { id: p.itemId }, data: line });
+        }
+        if (sub) {
+          const last = await tx.budgetItem.aggregate({ where: { subarticleId: sub.id }, _max: { sortOrder: true } });
+          let sortOrder = (last._max.sortOrder ?? -1) + 1;
+          for (const p of newRows) {
+            const { number, code } = await allocateLine(tx, projectId, access, sub);
+            const { data: line } = await lineData(tx, projectId, p.input, p.taxPercent, values);
+            await tx.budgetItem.create({
+              data: { projectId, departmentId: access.budget.departmentId, subarticleId: sub.id, number, code, sortOrder: sortOrder++, ...line },
+              select: { id: true },
+            });
+          }
+        }
+        Object.assign(counts, done);
+        return {
+          entityId: access.budget.id,
+          summary: `импорт из Excel «${fileName}»: добавлено строк — ${done.created}, обновлено — ${done.updated}${
+            sub && done.created > 0 ? ` (новые — в подстатью «${sub.name}»)` : ""
+          }`,
+          changes: { import: { fileName, ...done } },
+        };
+      },
+      { timeout: 60_000 },
+    );
+  } catch (error) {
+    // Не уложились во время транзакции — всё откатилось, данные не тронуты.
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2028") {
+      return { error: "Импорт не успел за отведённое время — ничего не загружено. Разбейте лист на части поменьше" };
+    }
+    throw error;
+  }
+  if ("error" in outcome) return { error: outcome.error };
+  if ("unchanged" in outcome) return { success: "Без изменений", ...counts };
+  revalidate(projectId, departmentId);
+  return {
+    success: `Загружено: добавлено строк — ${counts.created}, обновлено — ${counts.updated}`,
+    ...counts,
+    revision: outcome.revision,
+  };
 }

@@ -1,20 +1,25 @@
 import "server-only";
 
-import type { BudgetStatus } from "@prisma/client";
+import { BudgetVersionFormat, type BudgetStatus } from "@prisma/client";
 import {
   resolveBudgetDriveSource,
   type BudgetDriveSource,
 } from "@/features/cloud/lib/budget-drive-export-rules";
 import type { DepartmentExportSheet } from "@/features/smeta/lib/export-department-xlsx";
-import { findMainColumns, type MainSheetLike } from "@/features/smeta/lib/main-sheet";
+import { parseItemsSnapshot, type ItemsSnapshot } from "@/features/smeta/lib/items-snapshot";
 import { freezeSheetFormulas } from "@/features/smeta/lib/version-snapshot";
 import type { prisma } from "@/shared/db/prisma";
 
 /** Только то, что читает выгрузка (в тестах — поддельный клиент). */
-export type ExportDb = Pick<typeof prisma, "budget" | "budgetVersion" | "budgetItem">;
+export type ExportDb = Pick<typeof prisma, "budget" | "budgetVersion">;
+
+/** Что выгружается: смета по статьям (снимок) или старая табличная версия (лист со значениями). */
+export type DepartmentExportContent =
+  | { kind: "items"; snapshot: ItemsSnapshot }
+  | { kind: "sheet"; sheet: DepartmentExportSheet };
 
 export type DepartmentBudgetExport = {
-  sheet: DepartmentExportSheet;
+  content: DepartmentExportContent;
   source: BudgetDriveSource;
   status: BudgetStatus;
   approved: { at: Date; byName: string; byHead: boolean } | null;
@@ -25,24 +30,22 @@ function isObject(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * Основной лист сметы цеха для выгрузки (Excel и диск): утверждённая версия (снимок) или текущий
- * основной лист — формулы заменены значениями, Сумма / Налог / Итого статей — серверный расчёт,
- * как при утверждении. Другие листы книги не читаются вовсе. Версия не выбрана — утверждена →
- * последняя утверждённая, иначе текущий лист. Права и цех проверяет вызывающий.
+ * Смета цеха для выгрузки (Excel и диск): утверждённая версия (её снимок) или текущий черновик
+ * по статьям, пересчитанный по действующим значениям переменных (`loadDraft`). Листы-черновики
+ * не читаются вовсе. Версия не выбрана: утверждена — последняя утверждённая, иначе черновик.
+ * Старые версии табличного формата — их лист, формулы заменены значениями. Права и цех проверяет
+ * вызывающий.
  */
 export async function loadDepartmentBudgetExport(
   db: ExportDb,
   projectId: string,
   departmentId: string,
   requestedVersion: number | undefined,
+  loadDraft: (budgetId: string) => Promise<ItemsSnapshot>,
 ): Promise<DepartmentBudgetExport | { error: string }> {
   const budget = await db.budget.findFirst({
     where: { projectId, departmentId },
-    select: {
-      status: true,
-      styles: true,
-      mainSheet: { select: { name: true, data: { select: { data: true } } } },
-    },
+    select: { id: true, status: true },
   });
   if (!budget) return { error: "Смета ещё не создана" };
 
@@ -60,6 +63,8 @@ export async function loadDepartmentBudgetExport(
     const version = await db.budgetVersion.findFirst({
       where: { projectId, departmentId, number: source.number },
       select: {
+        format: true,
+        snapshot: true,
         sheetName: true,
         sheetData: true,
         styles: true,
@@ -68,34 +73,28 @@ export async function loadDepartmentBudgetExport(
         approvedByHead: true,
       },
     });
-    if (!version || !isObject(version.sheetData)) return { error: "Версия не найдена" };
+    if (!version) return { error: "Версия не найдена" };
+    const approved = { at: version.approvedAt, byName: version.approvedByName, byHead: version.approvedByHead };
+    if (version.format === BudgetVersionFormat.ITEMS) {
+      const snapshot = parseItemsSnapshot(version.snapshot);
+      if (!snapshot) return { error: "Версия не найдена" };
+      return { content: { kind: "items", snapshot }, source, status: budget.status, approved };
+    }
+    if (!isObject(version.sheetData)) return { error: "Версия не найдена" };
     return {
       // Снимок версии уже без формул; повторная заморозка — на случай старых снимков.
-      sheet: { name: version.sheetName ?? "Смета", data: freezeSheetFormulas(version.sheetData), styles: version.styles },
+      content: {
+        kind: "sheet",
+        sheet: { name: version.sheetName ?? "Смета", data: freezeSheetFormulas(version.sheetData), styles: version.styles },
+      },
       source,
       status: budget.status,
-      approved: { at: version.approvedAt, byName: version.approvedByName, byHead: version.approvedByHead },
+      approved,
     };
   }
 
-  const raw = budget.mainSheet?.data?.data;
-  if (!budget.mainSheet || !isObject(raw)) return { error: "Основной лист сметы не найден" };
-  const items = await db.budgetItem.findMany({
-    where: { projectId, departmentId, archivedAt: null },
-    select: { sortOrder: true, amount: true, tax: true, total: true },
-  });
-  const data = freezeSheetFormulas(
-    raw,
-    findMainColumns(raw as MainSheetLike).columns,
-    items.map((i) => ({
-      row: i.sortOrder,
-      amount: Number(i.amount),
-      tax: Number(i.tax),
-      total: Number(i.total),
-    })),
-  );
   return {
-    sheet: { name: budget.mainSheet.name, data, styles: budget.styles },
+    content: { kind: "items", snapshot: await loadDraft(budget.id) },
     source,
     status: budget.status,
     approved: null,

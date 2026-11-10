@@ -43,10 +43,19 @@ export type SnapshotLine = {
   problems: ItemProblem[];
 };
 
-export type SnapshotSubarticle = { id: string; name: string; totals: SnapshotTotals; lines: SnapshotLine[] };
+export type SnapshotSubarticle = {
+  id: string;
+  /** Внутренний код подстатьи (TR-05.01) — для выгрузки; в старых снимках нет. */
+  code?: string;
+  name: string;
+  totals: SnapshotTotals;
+  lines: SnapshotLine[];
+};
 
 export type SnapshotArticle = {
   id: string;
+  /** Внутренний код статьи (TR-05) — для выгрузки; в старых снимках нет. */
+  code?: string;
   templateArticleId: string;
   name: string;
   totals: SnapshotTotals;
@@ -64,10 +73,12 @@ export type ItemsSnapshot = {
 /** Строки, подстатьи и статьи из базы — уже без архивных, в порядке показа. */
 export type SnapshotSourceArticle = {
   id: string;
+  code?: string;
   templateArticleId: string;
   name: string;
   subarticles: {
     id: string;
+    code?: string;
     name: string;
     items: {
       id: string;
@@ -142,11 +153,18 @@ export function buildItemsSnapshot(articles: readonly SnapshotSourceArticle[], v
       });
       const totals = sumCalcs(calcs);
       subTotals.push(totals);
-      return { id: sub.id, name: sub.name, totals: serialize(totals), lines };
+      return { id: sub.id, ...(sub.code ? { code: sub.code } : {}), name: sub.name, totals: serialize(totals), lines };
     });
     const totals = sumTotals(subTotals);
     articleTotals.push(totals);
-    return { id: article.id, templateArticleId: article.templateArticleId, name: article.name, totals: serialize(totals), subarticles };
+    return {
+      id: article.id,
+      ...(article.code ? { code: article.code } : {}),
+      templateArticleId: article.templateArticleId,
+      name: article.name,
+      totals: serialize(totals),
+      subarticles,
+    };
   });
   return {
     version: 1,

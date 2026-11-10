@@ -30,7 +30,7 @@ import { assembleWorkbookFromSheets, type UniverWorksheetData } from "@/features
 
 type Db = Pick<
   Tx,
-  "budgetArticle" | "budgetVersion" | "project" | "projectFinanceVariable"
+  "budget" | "budgetArticle" | "budgetVersion" | "project" | "projectFinanceVariable"
 >;
 
 // ---------------------------------------------------------------------------
@@ -39,7 +39,7 @@ type Db = Pick<
 
 /** Снимок действующих статей, подстатей и строк сметы по действующим значениям переменных. */
 export async function loadItemsSnapshot(db: Db, projectId: string, budgetId: string): Promise<ItemsSnapshot> {
-  const [variables, articles] = await Promise.all([
+  const [variables, articles, budget] = await Promise.all([
     loadBudgetVariables(projectId, db),
     db.budgetArticle.findMany({
       where: { projectId, budgetId, archivedAt: null },
@@ -47,12 +47,13 @@ export async function loadItemsSnapshot(db: Db, projectId: string, budgetId: str
       select: {
         id: true,
         templateArticleId: true,
-        templateArticle: { select: { name: true } },
+        templateArticle: { select: { name: true, number: true } },
         subarticles: {
           where: { archivedAt: null },
           orderBy: [{ sortOrder: "asc" }, { number: "asc" }],
           select: {
             id: true,
+            number: true,
             name: true,
             items: {
               where: { archivedAt: null },
@@ -81,14 +82,20 @@ export async function loadItemsSnapshot(db: Db, projectId: string, budgetId: str
         },
       },
     }),
+    db.budget.findUnique({ where: { id: budgetId }, select: { department: { select: { codePrefix: true } } } }),
   ]);
+  // Коды статей и подстатей — как у строк (lineCode): префикс цеха и номера уровней.
+  const prefix = budget?.department.codePrefix ?? "";
+  const two = (n: number) => String(n).padStart(2, "0");
   return buildItemsSnapshot(
     articles.map((a) => ({
       id: a.id,
+      code: `${prefix}-${two(a.templateArticle.number)}`,
       templateArticleId: a.templateArticleId,
       name: a.templateArticle.name,
       subarticles: a.subarticles.map((s) => ({
         id: s.id,
+        code: `${prefix}-${two(a.templateArticle.number)}.${two(s.number)}`,
         name: s.name,
         items: s.items.map(({ expenseType, paymentForm, ...item }) => ({
           ...item,

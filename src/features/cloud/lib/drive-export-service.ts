@@ -705,7 +705,7 @@ export async function putBudgetOnProjectDrive(input: {
   content: Buffer;
   version: number | null;
   statusLabel: string;
-  /** «версия 3 (утверждена)» / «текущий лист (на утверждении)». */
+  /** «версия 3 (утверждена)» / «черновик (на утверждении)». */
   label: string;
 }): Promise<ProjectDriveExportResult> {
   const { departmentId } = input;

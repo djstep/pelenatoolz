@@ -31,6 +31,7 @@ import type {
   TreeLine,
   TreeSubarticle,
 } from "@/features/smeta/items-queries";
+import { BudgetItemsImport } from "@/features/smeta/components/budget-items-import";
 import { BudgetMultipliersModal, multipliersText, type VariableOption } from "@/features/smeta/components/budget-multipliers-modal";
 import { useCollapsedIds } from "@/features/smeta/components/use-collapsed-ids";
 import { useStoredString } from "@/features/smeta/components/use-stored-string";
@@ -1324,6 +1325,22 @@ export function BudgetItemsTable({
             >
               Взять статью
             </Button>
+            <BudgetItemsImport
+              projectId={projectId}
+              departmentId={departmentId}
+              articles={tree.articles
+                .filter((a) => !a.archived)
+                .map((a) => ({
+                  id: a.id,
+                  name: a.name,
+                  subarticles: a.subarticles.filter((s) => !s.archived).map((s) => ({ id: s.id, name: s.name })),
+                }))}
+              beforeImport={async () => {
+                for (const save of [...dirtyRows.values()]) if (!(await save())) return false;
+                return true;
+              }}
+              onRevision={onRevision}
+            />
           </div>
         ) : null}
         <div className="ml-auto flex items-center gap-3 text-xs text-[var(--muted-fg)]">

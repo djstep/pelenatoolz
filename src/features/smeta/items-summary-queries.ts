@@ -105,6 +105,7 @@ function snapshotArticles(snapshot: ItemsSnapshot): SummaryDeptArticle[] {
 
 type SheetLine = {
   budgetItemId: string;
+  code: string;
   name: string;
   unit: string | null;
   quantity: Prisma.Decimal | null;
@@ -141,7 +142,26 @@ function sheetArticles(versionId: string, lines: readonly SheetLine[]): SummaryD
   ];
 }
 
+/** Сводная для экрана: без внутренних кодов. */
 export async function getItemsSummary(projectId: string, opts: { drafts: boolean }): Promise<ItemsSummary> {
+  return (await buildItemsSummary(projectId, opts)).summary;
+}
+
+/** Что выгружается листом цеха: снимок сметы по статьям или строки старой табличной версии. */
+export type SummaryExportSource =
+  | { departmentId: string; name: string; kind: "items"; snapshot: ItemsSnapshot }
+  | { departmentId: string; name: string; kind: "sheet"; lines: SheetLine[] }
+  | { departmentId: string; name: string; kind: "none" };
+
+/** Сводная для выгрузки в Excel и на диск: то же, что на экране, и листы цехов (с кодами). */
+export async function getItemsSummaryForExport(projectId: string, opts: { drafts: boolean }) {
+  return buildItemsSummary(projectId, opts);
+}
+
+async function buildItemsSummary(
+  projectId: string,
+  opts: { drafts: boolean },
+): Promise<{ summary: ItemsSummary; sources: SummaryExportSource[] }> {
   const departments = await listDepartmentsForSmeta(projectId, null);
   const ids = departments.map((d) => d.id);
   const [budgets, versions, templates, settings] = await Promise.all([
@@ -166,6 +186,7 @@ export async function getItemsSummary(projectId: string, opts: { drafts: boolean
               orderBy: { sortOrder: "asc" },
               select: {
                 budgetItemId: true,
+                code: true,
                 name: true,
                 unit: true,
                 quantity: true,
@@ -189,6 +210,7 @@ export async function getItemsSummary(projectId: string, opts: { drafts: boolean
   const versionBy = new Map(versions.map((v) => [v.departmentId, v]));
 
   const summaryDepartments: SummaryDepartment[] = [];
+  const sources: SummaryExportSource[] = [];
   for (const d of departments) {
     const budget = budgetBy.get(d.id) ?? null;
     const version = versionBy.get(d.id) ?? null;
@@ -201,19 +223,22 @@ export async function getItemsSummary(projectId: string, opts: { drafts: boolean
         articles = snapshotArticles(snapshot);
         totals = money(snapshot.totals);
         incomplete = snapshot.totals.incomplete;
-      }
+        sources.push({ departmentId: d.id, name: d.name, kind: "items", snapshot });
+      } else sources.push({ departmentId: d.id, name: d.name, kind: "none" });
     } else if (version) {
       if (version.format === BudgetVersionFormat.ITEMS) {
         const snapshot = parseItemsSnapshot(version.snapshot);
         if (snapshot) {
           articles = snapshotArticles(snapshot);
           totals = money(snapshot.totals);
-        }
+          sources.push({ departmentId: d.id, name: d.name, kind: "items", snapshot });
+        } else sources.push({ departmentId: d.id, name: d.name, kind: "none" });
       } else {
         articles = sheetArticles(version.id, version.lines ?? []);
         totals = articles[0]?.totals ?? ZERO;
+        sources.push({ departmentId: d.id, name: d.name, kind: "sheet", lines: version.lines ?? [] });
       }
-    }
+    } else sources.push({ departmentId: d.id, name: d.name, kind: "none" });
     summaryDepartments.push({
       id: d.id,
       name: d.name,
@@ -247,7 +272,7 @@ export async function getItemsSummary(projectId: string, opts: { drafts: boolean
   const agencyPercent = settings?.agencyPercent.toString() ?? "0";
   const reserve = percentOf(subtotal.total, reservePercent);
   const agency = percentOf(subtotal.total, agencyPercent);
-  return {
+  const summary: ItemsSummary = {
     mode: opts.drafts ? "drafts" : "versions",
     departments: summaryDepartments,
     articles,
@@ -256,4 +281,5 @@ export async function getItemsSummary(projectId: string, opts: { drafts: boolean
     agency: { percent: agencyPercent, amount: agency },
     total: new D(subtotal.total).plus(reserve).plus(agency).toFixed(2),
   };
+  return { summary, sources };
 }
